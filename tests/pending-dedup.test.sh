@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+set -u
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+SCRIPT=$ROOT/adapters/openclaw/distill-audit.sh
+TMP_ROOT=${TMPDIR:-/tmp}/pending-dedup-test.$$
+PASS_COUNT=0
+FAIL_COUNT=0
+
+source "$ROOT/tests/lib-wrapper-conformance-fixture.sh"
+
+cleanup() {
+  rm -rf "$TMP_ROOT"
+}
+trap cleanup EXIT HUP INT TERM
+mkdir -p "$TMP_ROOT"
+
+pass() {
+  PASS_COUNT=$((PASS_COUNT + 1))
+  printf 'PASS %s\n' "$1"
+}
+
+fail_case() {
+  FAIL_COUNT=$((FAIL_COUNT + 1))
+  printf 'FAIL %s: %s\n' "$1" "$2"
+}
+
+make_ws() {
+  ws=$TMP_ROOT/ws-$1
+  mkdir -p "$ws/loop/pending" "$ws/skills/_staging" "$ws/input"
+  {
+    printf '%s\n' '## Verified facts'
+    printf '%s\n' '## General rules'
+    printf '%s\n' '## Open failures'
+    printf '%s\n' '## Lessons learned'
+    printf '%s\n' '## Last session'
+  } >"$ws/STATE.md"
+  printf 'transcript\n' >"$ws/input/session.log"
+  printf '%s\n' "$ws"
+}
+
+write_distiller() {
+  path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$DISTILL_REPLY"
+SH
+  chmod +x "$path"
+}
+
+attest_distiller_wrapper() {
+  local wrapper_path=$1
+  local name=$2
+  local provider_path=$TMP_ROOT/$name-provider.sh
+  local probe_path=$TMP_ROOT/$name-probe.sh
+
+  conformance_write_provider "$provider_path"
+  conformance_write_probe "$probe_path"
+  conformance_attest_wrapper "$ROOT" distiller "$wrapper_path" "$provider_path" "$probe_path" "fixture-$name" "fixture-$name-v1"
+}
+
+section_count_text() {
+  text=$1
+  file=$2
+  grep -Fxc -- "$text" "$file" || true
+}
+
+distiller=$TMP_ROOT/fake-distiller.sh
+write_distiller "$distiller"
+attest_distiller_wrapper "$distiller" pending-dedup
+utc_date=$(date -u '+%Y-%m-%d')
+reply_one=$'## LESSONS\n- 2026-07-06 same lesson (source: distill-audit)\n## OPEN_FAILURES\n- 2026-07-06 same failure (source: distill-audit)\n## SKILL_DRAFTS'
+
+ws=$(make_ws repeated)
+output=$(DISTILL_REPLY="$reply_one" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+pending=$ws/loop/pending/distill-$utc_date.md
+lesson_key_one=$(sed -n 's/.*\[dedup_key: \([^]]*\)\]$/\1/p' "$pending" | sed -n '1p')
+if [ "$rc" -eq 0 ] \
+  && [ "$(grep -Ec '^- 2026-07-06 (same lesson|same failure) \(source: distill-audit\) \[dedup_key: [0-9a-f]{64}:[0-9a-f]{64}\]$' "$pending")" -eq 2 ]; then
+  pass "pending lesson and failure bullets carry task_id:lesson_hash keys"
+else
+  fail_case "pending lesson and failure bullets carry task_id:lesson_hash keys" "rc=$rc output=$output"
+fi
+
+# Delete the marker to model a cron re-fire of the same unchanged batch.
+rm -f "$ws/loop/.distill-last-run"
+output=$(DISTILL_REPLY="$reply_one" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+lesson_key_two=$(sed -n 's/.*\[dedup_key: \([^]]*\)\]$/\1/p' "$pending" | sed -n '1p')
+if [ "$rc" -eq 0 ] \
+  && [ "$(section_count_text '- 2026-07-06 same lesson (source: distill-audit)' "$ws/STATE.md")" -eq 1 ] \
+  && [ "$(section_count_text '- 2026-07-06 same failure (source: distill-audit)' "$ws/STATE.md")" -eq 1 ] \
+  && [ "$lesson_key_one" = "$lesson_key_two" ]; then
+  pass "same batch re-fire folds lesson and open failure once and produces the same normalized hash"
+else
+  fail_case "same batch re-fire folds lesson and open failure once and produces the same normalized hash" "rc=$rc output=$output lesson_count=$(section_count_text '- 2026-07-06 same lesson (source: distill-audit)' "$ws/STATE.md") failure_count=$(section_count_text '- 2026-07-06 same failure (source: distill-audit)' "$ws/STATE.md") keys=$lesson_key_one/$lesson_key_two"
+fi
+
+reply_two=$'## LESSONS\n- 2026-07-06   different    lesson (source: distill-audit)\n## OPEN_FAILURES\n## SKILL_DRAFTS'
+rm -f "$ws/loop/.distill-last-run"
+output=$(DISTILL_REPLY="$reply_two" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] \
+  && grep -Fqx -- '- 2026-07-06 same lesson (source: distill-audit)' "$ws/STATE.md" \
+  && grep -Fqx -- '- 2026-07-06   different    lesson (source: distill-audit)' "$ws/STATE.md"; then
+  pass "different lesson text with a different hash folds independently"
+else
+  fail_case "different lesson text with a different hash folds independently" "rc=$rc output=$output"
+fi
+
+ws=$(make_ws normalized)
+reply_normal=$'## LESSONS\n- 2026-07-06 normalized lesson (source: distill-audit)\n## OPEN_FAILURES\n## SKILL_DRAFTS'
+DISTILL_REPLY="$reply_normal" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" >/dev/null 2>&1
+key_normal=$(sed -n 's/.*\[dedup_key: \([^]]*\)\]$/\1/p' "$ws/loop/pending/distill-$utc_date.md" | sed -n '1p')
+rm -f "$ws/loop/.distill-last-run"
+reply_spaced=$'## LESSONS\n- 2026-07-06   normalized    lesson (source: distill-audit)\n## OPEN_FAILURES\n## SKILL_DRAFTS'
+DISTILL_REPLY="$reply_spaced" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" >/dev/null 2>&1
+key_spaced=$(sed -n 's/.*\[dedup_key: \([^]]*\)\]$/\1/p' "$ws/loop/pending/distill-$utc_date.md" | sed -n '1p')
+if [ "$key_normal" = "$key_spaced" ] \
+  && [ "$(section_count_text '- 2026-07-06 normalized lesson (source: distill-audit)' "$ws/STATE.md")" -eq 1 ]; then
+  pass "whitespace-normalized lesson text has a deterministic hash across invocations"
+else
+  fail_case "whitespace-normalized lesson text has a deterministic hash across invocations" "keys=$key_normal/$key_spaced"
+fi
+
+# A malformed legacy annotation must not suppress a new valid key for the same text.
+ws=$(make_ws malformed)
+cat >"$ws/loop/pending/distill-legacy.md" <<'OUT'
+## LESSONS
+- 2026-07-06 legacy distinct lesson (source: distill-audit) [dedup_key: malformed]
+OUT
+reply_legacy=$'## LESSONS\n- 2026-07-06 legacy distinct lesson (source: distill-audit)\n## OPEN_FAILURES\n## SKILL_DRAFTS'
+output=$(DISTILL_REPLY="$reply_legacy" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] \
+  && [ "$(section_count_text '- 2026-07-06 legacy distinct lesson (source: distill-audit)' "$ws/STATE.md")" -eq 1 ]; then
+  pass "malformed or missing legacy keys remain distinct"
+else
+  fail_case "malformed or missing legacy keys remain distinct" "rc=$rc output=$output"
+fi
+
+# Same-day replacements must retain prior keys so A -> B -> whitespace-variant A
+# cannot fold A a second time after B replaces the day's pending record.
+ws=$(make_ws same-day-replace)
+reply_a=$'## LESSONS\n- 2026-07-06 replacement lesson A (source: distill-audit)\n## OPEN_FAILURES\n## SKILL_DRAFTS'
+reply_b=$'## LESSONS\n- 2026-07-06 replacement lesson B (source: distill-audit)\n## OPEN_FAILURES\n## SKILL_DRAFTS'
+reply_a_variant=$'## LESSONS\n- 2026-07-06   replacement    lesson A (source: distill-audit)\n## OPEN_FAILURES\n## SKILL_DRAFTS'
+DISTILL_REPLY="$reply_a" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" >/dev/null 2>&1
+rm -f "$ws/loop/.distill-last-run"
+DISTILL_REPLY="$reply_b" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" >/dev/null 2>&1
+rm -f "$ws/loop/.distill-last-run"
+output=$(DISTILL_REPLY="$reply_a_variant" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] \
+  && [ "$(section_count_text '- 2026-07-06 replacement lesson A (source: distill-audit)' "$ws/STATE.md")" -eq 1 ] \
+  && [ "$(section_count_text '- 2026-07-06 replacement lesson B (source: distill-audit)' "$ws/STATE.md")" -eq 1 ]; then
+  pass "same-day pending replacement preserves A to B to A dedup history"
+else
+  fail_case "same-day pending replacement preserves A to B to A dedup history" "rc=$rc output=$output a_count=$(section_count_text '- 2026-07-06 replacement lesson A (source: distill-audit)' "$ws/STATE.md") b_count=$(section_count_text '- 2026-07-06 replacement lesson B (source: distill-audit)' "$ws/STATE.md")"
+fi
+
+printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+[ "$FAIL_COUNT" -eq 0 ]

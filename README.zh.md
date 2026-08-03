@@ -1,0 +1,202 @@
+# Caty Agent Harness
+
+<div align="center">
+
+[🇺🇸 English](README.md) ｜ [🇯🇵 日本語](README.ja.md) ｜ **🇨🇳 简体中文** ｜ [🇹🇭 ไทย](README.th.md)
+
+![Caty Agent Harness — 自我成长，把任务一路跑到完成](assets/readme/hero.png)
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![runtime](https://img.shields.io/badge/runtime-bash%203.2%2B-4EAA25?logo=gnubash&logoColor=white)
+![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
+![status](https://img.shields.io/badge/status-public--preview-blue)
+
+一遍遍重复的背景说明。莫名消失的上下文。没有任何凭证的「完成了！」。<br>
+Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决掉。<br>
+不是魔法：记住、推进、核查都交给机械来做，AI 只管专心思考——<br>
+一套包在你现有 AI 外面的小机制。
+
+**一个会自我成长、并学会把你交办的任务一路跑到「完成」的工具。**
+
+🔧 [工程指南（英文）](docs/engineering.md) ｜ 📘 [详细规范（英文）](docs/reference.md)
+
+</div>
+
+- [这些情况是否似曾相识？](#problems)
+- [用了之后有什么不同](#what-you-get)
+- [使用前提](#environments)
+- [开始使用](#get-started)
+- [水面之下的全部](#shelf)
+- [Family OS 中的一员](#family-os)
+- [许可证](#license)
+
+---
+
+<a id="problems"></a>
+
+## 这些情况是否似曾相识？
+
+- 每开一个新会话，都要把同样的背景再解释一遍。
+- AI 说任务完成了——但结果不存在，或者你无从核实。
+- 长任务做到一半就找不到位置，悄悄停摆。
+- 上周有效的解决办法，这周的 AI 已经不记得了。
+
+只要有一条让你点头，这个工具就是为你做的。
+
+---
+
+<a id="what-you-get"></a>
+
+## 用了之后有什么不同
+
+```mermaid
+flowchart LR
+    A["记住"] --> B["工作"]
+    B --> C["留下凭证"]
+    C --> D["交接"]
+    D -. 下一次 .-> A
+```
+
+### 🌱 它会自己变聪明
+
+- 一旦出错，原因和凭证会当场被记下来。
+- 下一次尝试必定带着上一次的失败记录，并且禁止走同一条老路——同样的错误不再重复。
+- 好方法也不会因为成功一次就被信任：要在另一个任务里再次通过核查，才会升格为「规则」。
+- 反复出现的好流程，会交给另一个 AI（不是写它的那个）来审查，通过之后才会升格为「技能」。
+- 这一切全部自动发生。你永远不用说「记一下笔记」。
+
+<details>
+<summary><b>它是怎么变聪明的</b></summary>
+
+1. **失败时** — 哪里出了问题、凭证是什么，会被自动记录到项目内的笔记里。
+2. **下次尝试时** — 上一次的失败必定随任务一起交付，并有一条机械规则禁止用同样的方式重试。
+3. **成功时** — 这个方法先只作为「经验」记下。在另一个任务中再次通过核查后，才升格为「规则」。
+4. **反复用到的流程** — 由另一个 AI（不是写它的那个）审查，只有通过的才会存为「技能」，下次自动被参考。
+
+→ 深入了解：[工程指南——从重复的失败中学习（英文）](docs/engineering.md#learning)
+
+</details>
+
+### 🏁 一路跑到终点
+
+- 大任务被拆成一个个有记录的小步骤，由机械一步一步稳稳推进。
+- AI 每次拿到的只有「简短新鲜的上下文 + 现在要做的这一步」——小模型也不会崩。
+- 「模型记不记得住」变成了「机械有没有重读文件」——遗忘在结构上不可能发生。
+- 会话结束、窗口关闭、甚至换了模型，都能从上次的位置接着跑。
+
+<details>
+<summary><b>它是怎么跑到终点的</b></summary>
+
+1. **拆分** — 大任务变成一份带编号的步骤计划，写进文件。
+2. **一步一步** — 调度器每隔几分钟踢一次「下一步」。AI 拿到的只有任务内容 + 目前进度 + 交接笔记：每次都是简短、新鲜的上下文。
+3. **真实核查** — 每走一步，都有可执行的检查脚本核对实际产出。AI 的自我声明从来不算数。
+4. **预算** — 尝试次数和工作时长都有上限，由机械计数。不可能无休止地磨。
+5. **诚实的结局** — 要么跑完，要么在预算用尽时，带着最近几次尝试的摘要和凭证向你报告。
+
+→ 深入了解：[工程指南——完成轨道（英文）](docs/engineering.md#completion)
+
+</details>
+
+### 🔍 「完成」自带凭证
+
+- 「完成」由机械核查对照实际结果来判定——从来不是听一句状态汇报。
+- 负责核查的是拥有全新上下文的独立验证者——从来不是做事的那个 AI 给自己打分。
+- 实在做不动的时候，它不会无限空转：带着凭证诚实地停下来，向你报告。
+
+<a id="safety"></a>
+
+### 🤝 你的 AI 一切如旧
+
+- 你的 AI 的人格、指令文件、积累的记忆一概不动——只是在它周围加几个文件。
+- 安装是一条命令，暂停也是一条命令，学到的东西一点不丢。试一试不需要任何勇气。
+- 它知道的一切都存在纯文本文件里——每一条经验你都能亲眼读到。
+
+---
+
+<a id="environments"></a>
+
+## 使用前提
+
+支持的 AI 工具都运行在终端里——**但敲终端的不是你**。安装和维护都由你的 AI 来做，你只管和它说话。
+
+| 类别 | 支持情况 |
+| --- | --- |
+| 操作系统 | macOS ✅ ／ Linux ✅ |
+| AI 工具 | Claude Code ✅ ／ Codex CLI ✅ ／ Kimi Code CLI ✅ ／ Hermes Agent ✅ ／ OpenClaw ✅ |
+| Shell | bash 3.2+ ✅（macOS 默认版本即可） |
+| Python 3 | hooks 和自动化路径会用到——你的 AI 会替你确认 |
+
+对每个工具的支持深度是刻意不同的——详见[工程指南（英文）](docs/engineering.md)。
+
+---
+
+<a id="get-started"></a>
+
+## 开始使用
+
+### 交给你的 AI
+
+只需一步。在希望它工作的项目文件夹里，打开你常用的 AI 工具，粘贴这段话：
+
+```text
+请把 https://github.com/caty-ai/caty-agent-harness.git 安装到这个项目里：
+阅读仓库中的 docs/agent-guide.md 并照着执行——把当前文件夹作为 workspace 安装，
+运行健康检查，然后用我能听懂的话告诉我：你设置了什么、我接下来能做什么。
+```
+
+就这样。[Agent 指南（英文）](docs/agent-guide.md)会引导你的 AI 完成每个选择、健康检查，以及如何向你汇报。
+
+想亲手敲命令？→ [工程指南（英文）](docs/engineering.md#quickstart)有完整的手动流程。
+
+<details>
+<summary>感觉不对劲时</summary>
+
+- 你的 AI 会运行只读的健康检查（`--check`）并给你看结果——一切正常时最后一行是 `ok: required layout and STATE.md headers present`。
+- 核心正常时，个别行也可能显示 `FAIL`：那是尚未接好的可选自动化项目，哪些需要处理由 Agent 指南告诉你的 AI。
+- 这里的任何东西都不会替换你的 AI、你的文件或你的项目——见[你的 AI 一切如旧](#safety)。
+
+</details>
+
+---
+
+<a id="shelf"></a>
+
+## 水面之下的全部
+
+你刚读完的是简版。内容是真材实料，而且全部有文档。
+
+| 文档 | 内容 |
+| --- | --- |
+| [docs/agent-guide.md](docs/agent-guide.md) | **给安装 AI 的剧本** — 选择、命令、核查、汇报方式，一条路走到底（英文） |
+| [docs/engineering.md](docs/engineering.md) | **完整技术指南** — 哪里强制什么、各工具深度、暂停语义、架构、目录地图（英文） |
+| [docs/reference.md](docs/reference.md) | **精确契约** — 每个参数、每种状态、设计文档索引（英文） |
+| [运行环境设置（英文）](docs/engineering.md#runtime-setup) | **各工具接线** — 5 种 AI 工具各自的 hooks、verifier 与调度 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | **如何提出变更** — issue 优先的流程与 20 个测试套件（一个循环即可全部运行，英文） |
+| [SECURITY.md](SECURITY.md) | **安全地报告问题** — 私密漏洞报告通道（英文） |
+
+---
+
+<a id="family-os"></a>
+
+## Family OS 中的一员
+
+Caty Agent Harness 是 Caty AI 项目 **Family OS**——把多个 AI agent 当作一个家庭来运营的整体蓝图——中的一件工具。它完全可以单独使用，而与下面这些组合时会更加强大：
+
+- **family-os**（公开准备中） — 把整个家庭串联起来的蓝图。本 Harness 在其中负责「纵轴 = 培养单个 agent 并驱动其完成工作」。
+- **[sitter](https://github.com/caty-ai/sitter)** — 从外部盯守长时间运行的 agent 工作的看护者，一旦工作卡住或冻结就会举手示警。
+
+---
+
+<a id="license"></a>
+
+## 许可证
+
+[MIT](LICENSE)。随意使用、研究、集成到任何东西里——包括商业化的 agent 配置。这正是它存在的意义。
+
+---
+
+<div align="center">
+
+**纯文本文件** ｜ **支持 5 种 AI 工具** ｜ **一条命令即可暂停与恢复**
+
+</div>

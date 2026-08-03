@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+set -u
+
+fail() {
+  printf '%s\n' "$1" >&2
+  exit 1
+}
+
+warn() {
+  printf 'WARN: %s\n' "$1" >&2
+}
+
+usage() {
+  fail "usage: tr-enqueue <task-file> <workspace-dir>"
+}
+
+frontmatter_value() {
+  key=$1
+  file=$2
+  awk -v key="$key" '
+    BEGIN { in_fm = 0; seen = 0 }
+    NR == 1 && $0 == "---" { in_fm = 1; seen = 1; next }
+    seen && in_fm && $0 == "---" { exit }
+    in_fm {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      if (line ~ "^" key "[[:space:]]*:") {
+        sub("^[^:]*:[[:space:]]*", "", line)
+        sub(/[[:space:]]+#.*$/, "", line)
+        sub(/^[[:space:]]+/, "", line)
+        sub(/[[:space:]]+$/, "", line)
+        gsub(/^"|"$/, "", line)
+        gsub(/^'\''|'\''$/, "", line)
+        print line
+        exit
+      }
+    }
+  ' "$file"
+}
+
+has_section() {
+  section=$1
+  file=$2
+  grep -Eq "^##[[:space:]]+$section[[:space:]]*$" "$file"
+}
+
+extract_donecheck() {
+  file=$1
+  awk '
+    /^```donecheck[[:space:]]*$/ { in_block = 1; found = 1; next }
+    in_block && /^```[[:space:]]*$/ { exit }
+    in_block { print }
+    END { if (!found) exit 2 }
+  ' "$file"
+}
+
+extract_plan_steps() {
+  file=$1
+  awk '
+    /^##[[:space:]]+Step plan[[:space:]]*$/ { in_plan = 1; next }
+    in_plan && /^##[[:space:]]+/ { exit }
+    in_plan && /^[[:space:]]*[0-9]+[.)][[:space:]]+/ { print }
+  ' "$file"
+}
+
+is_positive_integer() {
+  value=$1
+  case "$value" in
+    ''|*[!0-9]*) return 1 ;;
+    *) [ "$value" -gt 0 ] ;;
+  esac
+}
+
+is_safe_id() {
+  value=$1
+  printf '%s\n' "$value" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+}
+
+strip_donecheck_comments() {
+  input=$1
+  output=$2
+  sed 's/[[:space:]]*#.*$//' "$input" | sed '/^[[:space:]]*$/d' > "$output"
+}
+
+has_receipt_assertion() {
+  file=$1
+  grep -Eq '^[[:space:]]*test[[:space:]]+-(s|f)[[:space:]]+["'\'']?\$ARTIFACT_DIR/out/[^"'\''[:space:]]*receipt[^"'\''[:space:]]*["'\'']?([[:space:]]|$)' "$file" \
+    || grep -Eq '^[[:space:]]*grep[[:space:]]+-q([[:space:]]+[^[:space:]]+)+[[:space:]]+["'\'']?\$ARTIFACT_DIR/out/[^"'\''[:space:]]*receipt[^"'\''[:space:]]*["'\'']?([[:space:]]|$)' "$file"
+}
+
+[ "$#" -eq 2 ] || usage
+
+task_file=$1
+workspace=$2
+step_timeout_min=10
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "$script_dir/lib-pause.sh"
+[ -d "$workspace" ] || fail "workspace dir not found"
+workspace=$(caty_pause_canonical_workspace "$workspace") || fail "invalid workspace"
+pause_state=$(caty_pause_workspace_state "$workspace")
+if [ "$pause_state" != enabled ]; then
+  caty_pause_status_record "$workspace" tr-enqueue
+  exit 3
+fi
+
+[ -f "$task_file" ] || fail "task file not found"
+[ -r "$task_file" ] || fail "task file not readable"
+
+id=$(frontmatter_value id "$task_file")
+[ -n "$id" ] || fail "missing/empty id"
+is_safe_id "$id" || fail "invalid id: must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+
+parent_id=$(frontmatter_value parent_id "$task_file")
+case "$parent_id" in
+  ''|null|'~') ;;
+  *)
+    is_safe_id "$parent_id" || fail "invalid parent_id: must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    ;;
+esac
+
+verify=$(frontmatter_value verify "$task_file")
+[ "$verify" = "mechanical" ] || fail "verify must be mechanical"
+
+attempts_budget=$(frontmatter_value attempts_budget "$task_file")
+is_positive_integer "$attempts_budget" || fail "attempts_budget must be a positive integer"
+
+time_budget_min=$(frontmatter_value time_budget_min "$task_file")
+is_positive_integer "$time_budget_min" || fail "time_budget_min must be a positive integer"
+
+[ "$time_budget_min" -ge "$step_timeout_min" ] || fail "global step_timeout exceeds time_budget_min"
+
+for section in Goal "Done-when" "Step plan" Resources "Non-goals"; do
+  has_section "$section" "$task_file" || fail "missing required body section: $section"
+done
+
+tmp_donecheck=${TMPDIR:-/tmp}/tr-enqueue-donecheck.$$
+tmp_donecheck_clean=${TMPDIR:-/tmp}/tr-enqueue-donecheck.clean.$$
+trap 'rm -f "$tmp_donecheck" "$tmp_donecheck_clean"' EXIT HUP INT TERM
+extract_donecheck "$task_file" > "$tmp_donecheck" || fail "missing donecheck block"
+strip_donecheck_comments "$tmp_donecheck" "$tmp_donecheck_clean"
+
+[ -s "$tmp_donecheck_clean" ] || fail "missing donecheck block"
+has_receipt_assertion "$tmp_donecheck_clean" || fail "donecheck has no delivery receipt assertion"
+bash -n "$tmp_donecheck_clean" >/dev/null 2>&1 || fail "donecheck fails bash -n"
+
+plan_steps=$(extract_plan_steps "$task_file" | wc -l | tr -d ' ')
+[ "$plan_steps" -gt 0 ] || fail "missing plan steps"
+[ "$plan_steps" -le "$attempts_budget" ] || fail "plan-step count exceeds attempts_budget"
+
+last_step=$(extract_plan_steps "$task_file" | tail -n 1)
+printf '%s\n' "$last_step" | grep -Eiq 'deliver' || fail "last Step-plan step does not mention deliver/receipt"
+printf '%s\n' "$last_step" | grep -Eiq 'receipt' || fail "last Step-plan step does not mention deliver/receipt"
+
+loop_dir=$workspace/loop
+queue_dir=$loop_dir/tasks/queue
+delivered_dir=$loop_dir/tasks/delivered
+dlq_dir=$loop_dir/tasks/dlq
+artifacts_root=$loop_dir/artifacts
+artifact_dir=$loop_dir/artifacts/$id
+
+mkdir -p "$queue_dir" "$delivered_dir" "$dlq_dir" >/dev/null 2>&1 || fail "cannot create task ledger dirs"
+mkdir -p "$artifacts_root" >/dev/null 2>&1 || fail "artifacts dir not writable"
+
+if [ -e "$queue_dir/$id.task.md" ] \
+  || [ -e "$delivered_dir/$id" ] \
+  || [ -e "$delivered_dir/$id.task.md" ] \
+  || [ -e "$dlq_dir/$id" ] \
+  || [ -e "$dlq_dir/$id.task.md" ] \
+  || [ -e "$artifact_dir" ] \
+  || [ -e "$artifact_dir/state.json" ]; then
+  fail "duplicate id"
+fi
+
+mkdir "$artifact_dir" >/dev/null 2>&1 || fail "artifacts dir not writable"
+[ -d "$artifact_dir" ] && [ -w "$artifact_dir" ] || fail "artifacts dir not writable"
+
+if [ "$time_budget_min" -lt $((plan_steps * 8)) ]; then
+  warn "time_budget_min is less than plan_steps x 8"
+fi
+
+cp "$task_file" "$queue_dir/$id.task.md" || fail "failed to install task file"
+exit 0

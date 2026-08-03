@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  printf 'Usage: loop-init [--workspace <dir>]\n'
+}
+
+workspace=$(pwd)
+
+while (($# > 0)); do
+  case "$1" in
+    --workspace)
+      if (($# < 2)); then
+        usage >&2
+        exit 2
+      fi
+      workspace=$2
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+script_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+template_dir="$script_root/templates"
+workspace=$(mkdir -p "$workspace" && cd "$workspace" && pwd)
+
+# Runtime task-runner prompt contracts are repo-owned. Workspace template
+# copies created by this initializer are examples/scaffolding only; override
+# STEP-PROMPT explicitly with TR_TEMPLATE_OVERRIDE when intentionally testing a
+# local template.
+
+create_dir() {
+  local path=$1
+
+  if [[ -d "$path" ]]; then
+    printf 'skip: %s\n' "$path"
+  else
+    mkdir -p "$path"
+    printf 'create: %s\n' "$path"
+  fi
+}
+
+create_file_from_template() {
+  local src=$1
+  local dest=$2
+
+  if [[ -e "$dest" ]]; then
+    printf 'skip: %s\n' "$dest"
+  else
+    cp "$src" "$dest"
+    printf 'create: %s\n' "$dest"
+  fi
+}
+
+create_file_with_content() {
+  local dest=$1
+  local content=$2
+
+  if [[ -e "$dest" ]]; then
+    printf 'skip: %s\n' "$dest"
+  else
+    printf '%s\n' "$content" >"$dest"
+    printf 'create: %s\n' "$dest"
+  fi
+}
+
+create_file_from_template "$template_dir/STATE.md" "$workspace/STATE.md"
+create_dir "$workspace/skills"
+create_dir "$workspace/skills/_staging"
+create_dir "$workspace/loop"
+create_file_from_template "$template_dir/RUBRIC.tmpl.md" "$workspace/loop/RUBRIC.tmpl.md"
+create_dir "$workspace/loop/pending"
+create_dir "$workspace/loop/artifacts"
+create_file_with_content "$workspace/loop/VERIFY.log.md" "# VERIFY log — append-only verifier verdict history"

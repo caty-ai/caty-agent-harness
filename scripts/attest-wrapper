@@ -1,0 +1,301 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE' >&2
+Usage:
+  scripts/attest-wrapper --route verifier|distiller --wrapper /abs/wrapper --probe /abs/probe [--evidence /abs/file]
+
+The probe must print exactly these keys as flat KV records:
+  provider_id
+  provider_version
+  provider_path
+  provider_launch
+  provider_relocatable
+  fresh_session
+  persistence_off
+  input_mode
+  tool_requests
+  action_requests
+  permission_requests
+  workspace_access
+USAGE
+}
+
+attest_fail() {
+  printf 'attest-wrapper: %s\n' "$1" >&2
+  exit 1
+}
+
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+source "$repo_root/scripts/lib-bounded.sh"
+source "$repo_root/scripts/lib-wrapper-conformance.sh"
+
+route=
+wrapper_path=
+probe_path=
+evidence_path=
+while (($# > 0)); do
+  case "$1" in
+    --route)
+      (($# >= 2)) || { usage; exit 2; }
+      route=$2
+      shift 2
+      ;;
+    --wrapper)
+      (($# >= 2)) || { usage; exit 2; }
+      wrapper_path=$2
+      shift 2
+      ;;
+    --probe)
+      (($# >= 2)) || { usage; exit 2; }
+      probe_path=$2
+      shift 2
+      ;;
+    --evidence)
+      (($# >= 2)) || { usage; exit 2; }
+      evidence_path=$2
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+[[ "$route" == verifier || "$route" == distiller ]] || { usage; exit 2; }
+wrapper_conformance_validate_executable wrapper_path "$wrapper_path" || attest_fail "$WRAPPER_CONFORMANCE_REASON"
+wrapper_conformance_validate_executable probe_path "$probe_path" || attest_fail "$WRAPPER_CONFORMANCE_REASON"
+wrapper_conformance_require_distinct_file_identity \
+  wrapper_path "$wrapper_path" probe_path "$probe_path" || attest_fail "$WRAPPER_CONFORMANCE_REASON"
+
+if [[ -n "$evidence_path" ]]; then
+  wrapper_conformance_validate_path_value evidence_path "$evidence_path" || attest_fail "$WRAPPER_CONFORMANCE_REASON"
+else
+  evidence_path=${wrapper_path}.conformance
+fi
+if [[ "$evidence_path" == "$wrapper_path" || "$evidence_path" == "$probe_path" ]] \
+  || { [[ -e "$evidence_path" ]] \
+    && { [[ "$evidence_path" -ef "$wrapper_path" ]] || [[ "$evidence_path" -ef "$probe_path" ]]; }; }; then
+  attest_fail 'evidence_path must not identify the wrapper or probe'
+fi
+
+scratch_dir=$(mktemp -d "${TMPDIR:-/tmp}/fable-attest-wrapper.XXXXXX")
+probe_stdout=$(mktemp "${TMPDIR:-/tmp}/fable-attest-wrapper.stdout.XXXXXX")
+probe_stderr=$(mktemp "${TMPDIR:-/tmp}/fable-attest-wrapper.stderr.XXXXXX")
+cleanup() {
+  rm -rf "$scratch_dir"
+  rm -f "$probe_stdout" "$probe_stderr"
+  rm -f "${tmp_evidence:-}"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+chmod 700 "$scratch_dir"
+probe_stdout_fifo="$scratch_dir/probe.stdout.fifo"
+probe_stderr_fifo="$scratch_dir/probe.stderr.fifo"
+mkfifo "$probe_stdout_fifo" "$probe_stderr_fifo"
+probe_capture_bytes=$((WRAPPER_CONFORMANCE_MAX_BYTES + 1))
+
+attest_timeout_s=$(resolve_timeout_env ATTEST_TIMEOUT_S 60 1)
+attest_grace_s=$(resolve_timeout_env ATTEST_GRACE_S 5 1)
+
+head -c "$probe_capture_bytes" "$probe_stdout_fifo" >"$probe_stdout" &
+probe_stdout_reader=$!
+head -c "$probe_capture_bytes" "$probe_stderr_fifo" >"$probe_stderr" &
+probe_stderr_reader=$!
+set +e
+FABLE_WRAPPER_ROUTE="$route" \
+FABLE_WRAPPER_PATH="$wrapper_path" \
+FABLE_ATTEST_SCRATCH_DIR="$scratch_dir" \
+run_bounded "$attest_timeout_s" "$attest_grace_s" "$probe_path" \
+  >"$probe_stdout_fifo" 2>"$probe_stderr_fifo"
+probe_status=$?
+wait "$probe_stdout_reader"
+wait "$probe_stderr_reader"
+set -e
+
+probe_output_bytes=$(wc -c <"$probe_stdout" 2>/dev/null || printf '0')
+probe_output_bytes=${probe_output_bytes//[[:space:]]/}
+probe_stderr_bytes=$(wc -c <"$probe_stderr" 2>/dev/null || printf '0')
+probe_stderr_bytes=${probe_stderr_bytes//[[:space:]]/}
+if [[ ! "$probe_output_bytes" =~ ^[0-9]+$ ]] \
+  || (( probe_output_bytes > WRAPPER_CONFORMANCE_MAX_BYTES )); then
+  attest_fail "probe stdout exceeds ${WRAPPER_CONFORMANCE_MAX_BYTES} bytes"
+fi
+if [[ ! "$probe_stderr_bytes" =~ ^[0-9]+$ ]] \
+  || (( probe_stderr_bytes > WRAPPER_CONFORMANCE_MAX_BYTES )); then
+  attest_fail "probe stderr exceeds ${WRAPPER_CONFORMANCE_MAX_BYTES} bytes"
+fi
+if (( probe_status == 124 )); then
+  attest_fail "probe timed out after ${attest_timeout_s}s"
+fi
+if (( probe_status > 128 )); then
+  attest_fail "probe was killed by signal $((probe_status - 128))"
+fi
+if (( probe_status != 0 )); then
+  cat "$probe_stderr" >&2 || true
+  attest_fail "probe exited $probe_status"
+fi
+
+probe_provider_id=
+probe_provider_version=
+probe_provider_path=
+probe_provider_launch=
+probe_provider_relocatable=
+probe_fresh_session=
+probe_persistence_off=
+probe_input_mode=
+probe_tool_requests=
+probe_action_requests=
+probe_permission_requests=
+probe_workspace_access=
+records=0
+while IFS= read -r line || [[ -n "$line" ]]; do
+  [[ -z "$line" ]] && continue
+  [[ "$line" == \#* ]] && continue
+  records=$((records + 1))
+  if (( records > 12 )); then
+    attest_fail 'probe returned too many records'
+  fi
+  [[ "$line" == *=* ]] || attest_fail "malformed probe record: $line"
+  key=${line%%=*}
+  value=${line#*=}
+  [[ -n "$key" && -n "$value" ]] || attest_fail "malformed probe record: $line"
+  case "$key" in
+    provider_id)
+      [[ -z "$probe_provider_id" ]] || attest_fail 'duplicate probe key: provider_id'
+      probe_provider_id=$value
+      ;;
+    provider_version)
+      [[ -z "$probe_provider_version" ]] || attest_fail 'duplicate probe key: provider_version'
+      probe_provider_version=$value
+      ;;
+    provider_path)
+      [[ -z "$probe_provider_path" ]] || attest_fail 'duplicate probe key: provider_path'
+      probe_provider_path=$value
+      ;;
+    provider_launch)
+      [[ -z "$probe_provider_launch" ]] || attest_fail 'duplicate probe key: provider_launch'
+      probe_provider_launch=$value
+      ;;
+    provider_relocatable)
+      [[ -z "$probe_provider_relocatable" ]] || attest_fail 'duplicate probe key: provider_relocatable'
+      probe_provider_relocatable=$value
+      ;;
+    fresh_session)
+      [[ -z "$probe_fresh_session" ]] || attest_fail 'duplicate probe key: fresh_session'
+      probe_fresh_session=$value
+      ;;
+    persistence_off)
+      [[ -z "$probe_persistence_off" ]] || attest_fail 'duplicate probe key: persistence_off'
+      probe_persistence_off=$value
+      ;;
+    input_mode)
+      [[ -z "$probe_input_mode" ]] || attest_fail 'duplicate probe key: input_mode'
+      probe_input_mode=$value
+      ;;
+    tool_requests)
+      [[ -z "$probe_tool_requests" ]] || attest_fail 'duplicate probe key: tool_requests'
+      probe_tool_requests=$value
+      ;;
+    action_requests)
+      [[ -z "$probe_action_requests" ]] || attest_fail 'duplicate probe key: action_requests'
+      probe_action_requests=$value
+      ;;
+    permission_requests)
+      [[ -z "$probe_permission_requests" ]] || attest_fail 'duplicate probe key: permission_requests'
+      probe_permission_requests=$value
+      ;;
+    workspace_access)
+      [[ -z "$probe_workspace_access" ]] || attest_fail 'duplicate probe key: workspace_access'
+      probe_workspace_access=$value
+      ;;
+    *)
+      attest_fail "unknown probe key: $key"
+      ;;
+  esac
+done <"$probe_stdout"
+
+[[ -n "$probe_provider_id" ]] || attest_fail 'missing probe key: provider_id'
+[[ -n "$probe_provider_version" ]] || attest_fail 'missing probe key: provider_version'
+[[ -n "$probe_provider_path" ]] || attest_fail 'missing probe key: provider_path'
+[[ -n "$probe_provider_launch" ]] || attest_fail 'missing probe key: provider_launch'
+[[ -n "$probe_provider_relocatable" ]] || attest_fail 'missing probe key: provider_relocatable'
+[[ -n "$probe_fresh_session" ]] || attest_fail 'missing probe key: fresh_session'
+[[ -n "$probe_persistence_off" ]] || attest_fail 'missing probe key: persistence_off'
+[[ -n "$probe_input_mode" ]] || attest_fail 'missing probe key: input_mode'
+[[ -n "$probe_tool_requests" ]] || attest_fail 'missing probe key: tool_requests'
+[[ -n "$probe_action_requests" ]] || attest_fail 'missing probe key: action_requests'
+[[ -n "$probe_permission_requests" ]] || attest_fail 'missing probe key: permission_requests'
+[[ -n "$probe_workspace_access" ]] || attest_fail 'missing probe key: workspace_access'
+
+wrapper_conformance_validate_provider_id "$probe_provider_id" || attest_fail "$WRAPPER_CONFORMANCE_REASON"
+wrapper_conformance_validate_provider_version "$probe_provider_version" || attest_fail "$WRAPPER_CONFORMANCE_REASON"
+wrapper_conformance_validate_executable provider_path "$probe_provider_path" || attest_fail "$WRAPPER_CONFORMANCE_REASON"
+wrapper_conformance_require_distinct_file_identity \
+  wrapper_path "$wrapper_path" provider_path "$probe_provider_path" || attest_fail "$WRAPPER_CONFORMANCE_REASON"
+wrapper_conformance_require_distinct_file_identity \
+  probe_path "$probe_path" provider_path "$probe_provider_path" || attest_fail "$WRAPPER_CONFORMANCE_REASON"
+if [[ "$evidence_path" == "$probe_provider_path" ]] \
+  || { [[ -e "$evidence_path" ]] && [[ "$evidence_path" -ef "$probe_provider_path" ]]; }; then
+  attest_fail 'evidence_path must not identify the provider'
+fi
+
+[[ "$probe_fresh_session" == pass ]] || attest_fail 'fresh_session must equal pass'
+[[ "$probe_persistence_off" == pass ]] || attest_fail 'persistence_off must equal pass'
+[[ "$probe_input_mode" == host-inline ]] || attest_fail 'input_mode must equal host-inline'
+[[ "$probe_tool_requests" == auto-deny ]] || attest_fail 'tool_requests must equal auto-deny'
+[[ "$probe_action_requests" == auto-deny ]] || attest_fail 'action_requests must equal auto-deny'
+[[ "$probe_permission_requests" == auto-deny ]] || attest_fail 'permission_requests must equal auto-deny'
+[[ "$probe_workspace_access" == none ]] || attest_fail 'workspace_access must equal none'
+[[ "$probe_provider_launch" == host-staged-env ]] || attest_fail 'provider_launch must equal host-staged-env'
+[[ "$probe_provider_relocatable" == pass ]] || attest_fail 'provider_relocatable must equal pass'
+
+checked_at_epoch=$(wrapper_conformance_now_epoch) || attest_fail "$WRAPPER_CONFORMANCE_REASON"
+expires_at_epoch=$((10#$checked_at_epoch + WRAPPER_CONFORMANCE_MAX_TTL_S))
+wrapper_sha=$(wrapper_conformance_sha256_file "$wrapper_path") || attest_fail 'sha256 tooling is required'
+provider_sha=$(wrapper_conformance_sha256_file "$probe_provider_path") || attest_fail 'sha256 tooling is required'
+probe_sha=$(wrapper_conformance_sha256_file "$probe_path") || attest_fail 'sha256 tooling is required'
+wrapper_conformance_require_distinct_content \
+  wrapper_path "$wrapper_sha" probe_path "$probe_sha" || attest_fail "$WRAPPER_CONFORMANCE_REASON"
+wrapper_conformance_require_distinct_content \
+  wrapper_path "$wrapper_sha" provider_path "$provider_sha" || attest_fail "$WRAPPER_CONFORMANCE_REASON"
+wrapper_conformance_require_distinct_content \
+  probe_path "$probe_sha" provider_path "$provider_sha" || attest_fail "$WRAPPER_CONFORMANCE_REASON"
+
+mkdir -p "$(dirname "$evidence_path")"
+tmp_evidence=$(mktemp "${evidence_path}.tmp.XXXXXX")
+cat >"$tmp_evidence" <<EOF
+schema=fable-wrapper-conformance/v1
+route=$route
+wrapper_path=$wrapper_path
+wrapper_sha256=$wrapper_sha
+provider_id=$probe_provider_id
+provider_version=$probe_provider_version
+provider_path=$probe_provider_path
+provider_sha256=$provider_sha
+provider_launch=host-staged-env
+provider_relocatable=pass
+probe_path=$probe_path
+probe_sha256=$probe_sha
+checked_at_epoch=$checked_at_epoch
+expires_at_epoch=$expires_at_epoch
+fresh_session=pass
+persistence_off=pass
+input_mode=host-inline
+tool_requests=auto-deny
+action_requests=auto-deny
+permission_requests=auto-deny
+workspace_access=none
+EOF
+chmod 600 "$tmp_evidence"
+mv -f "$tmp_evidence" "$evidence_path"
+tmp_evidence=
+printf '%s\n' "$evidence_path"

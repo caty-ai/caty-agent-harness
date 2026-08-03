@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  fable-loop LaunchAgent template v1
+
+  macOS scheduling for any tick that shells out to the claude CLI. crontab
+  sessions cannot reach the user Keychain, so `claude -p` fails there with
+  "Not logged in"; a LaunchAgent in the gui/<uid> domain works. See
+  adapters/claude-code/INSTALL.md, "macOS scheduling".
+
+  Copy to ~/Library/LaunchAgents/<your-label>.plist, replace the
+  /absolute/path/to/... placeholders and the com.example label, then:
+
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/<your-label>.plist
+    launchctl bootout   gui/$(id -u)/<your-label>       # to remove
+
+  ProgramArguments below wraps the harness cron-wrapper (copied from
+  templates/cron-wrapper.tmpl.sh); the wrapper works unchanged under launchd.
+  Wrapper env is passed via EnvironmentVariables instead of a crontab env
+  prefix. Only TARGET and DEADMAN_MARKER are set here; the wrapper's other
+  deadman knobs (DEADMAN_PROBE, DEADMAN_PROBE_ARGS) default to empty — add
+  them to EnvironmentVariables if you use the probe. Session-scoped hook
+  bypass vars (see INSTALL.md, "Host hook isolation") also go in
+  EnvironmentVariables.
+
+  RunAtLoad fires one extra tick on bootstrap and on every login, in addition
+  to the StartInterval cadence — remove it if you only want interval ticks.
+  Overlap prevention is owned by the wrapper/harness locking, not this plist.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.example.fable-loop-tick</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/absolute/path/to/workspace/scripts/cron-wrapper.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>TARGET</key>
+    <string>/absolute/path/to/fable-loop-target</string>
+    <key>DEADMAN_MARKER</key>
+    <string>/absolute/path/to/workspace/loop/.deadman/tick-marker</string>
+  </dict>
+  <key>StartInterval</key>
+  <integer>300</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/absolute/path/to/workspace/logs/tick.log</string>
+  <key>StandardErrorPath</key>
+  <string>/absolute/path/to/workspace/logs/tick.log</string>
+</dict>
+</plist>

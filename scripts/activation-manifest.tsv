@@ -1,0 +1,23 @@
+# path	class	workspace_resolution	paused_contract	reason	guard_literal	first_forbidden_literal
+adapters/claude-code/checkpoint-stop-hook.sh	guarded	hook-payload.cwd	exit-0-silent	interactive-hook	caty_pause_workspace_state	mkdir -p "$guard_dir"
+adapters/claude-code/precompact-flush-hook.sh	guarded	hook-payload.cwd	exit-0-silent	interactive-hook	caty_pause_workspace_state	mkdir -p "$guard_dir"
+adapters/codex/checkpoint-stop-hook.sh	guarded	hook-payload.cwd	exit-0-silent	interactive-hook	caty_pause_workspace_state	mkdir -p "$guard_dir"
+adapters/hermes/spawn_step.sh	guarded	argv.workspace	exit-0-status	automated-model-call	caty_pause_workspace_state	run_bounded "$HERMES_STEP_TIMEOUT_S"
+adapters/hermes/stale-claim-watchdog.sh	guarded	--workspace	exit-0-status	automated-state-maintenance	caty_pause_workspace_state	append_pending "$job_id"
+adapters/hermes/verify-job.sh	guarded	bundle-parent	exit-0-status	automated-model-call	caty_pause_workspace_state	run_bounded "$VERIFY_TIMEOUT_S"
+adapters/kimi/checkpoint-stop-hook.sh	guarded	hook-payload.cwd	exit-0-silent	interactive-hook	caty_pause_workspace_state	mkdir -p "$guard_dir"
+adapters/openclaw/distill-audit.sh	guarded	--workspace	exit-0-status	automated-model-call-and-state-fold	caty_pause_workspace_state	touch "$marker_file"
+adapters/openclaw/sentinel-cron.sh	guarded	--workspace	exit-0-status	automated-state-maintenance	caty_pause_workspace_state	mv "$tmp_notice"
+scripts/deadman-probe.sh	guarded	argv.workspace	exit-0-status	automated-state-maintenance	caty_pause_workspace_state	mkdir -p "$deadman_dir"
+scripts/task-runner.sh	guarded	argv.workspace	exit-0-status	automated-task-lifecycle	caty_pause_workspace_state	mkdir -p "$queue_dir"
+scripts/tr-enqueue	guarded	argv.workspace	exit-3-status	explicit-queue-mutation	caty_pause_workspace_state	mkdir -p "$queue_dir"
+templates/cron-wrapper.tmpl.sh	guarded	--workspace-or-positional	exit-0-status	scheduler-wrapper-before-secrets-and-deadman-mutations	caty_pause_workspace_state	. "$SECRETS_ENV"
+templates/updater-cron.tmpl.sh	exempt	none	not-applicable	harness-updater-wrapper-not-member-workspace	-	-
+scripts/attest-wrapper	exempt	none	not-applicable	setup-time-wrapper-attestation	-	-
+scripts/family-updater	exempt	none	not-applicable	harness-clone-updater-not-member-workspace	-	-
+scripts/lib-bounded.sh	exempt	none	not-applicable	sourced-library	-	-
+scripts/lib-classify.sh	exempt	none	not-applicable	sourced-library	-	-
+scripts/lib-pause.sh	exempt	explicit-function-argument	not-applicable	sourced-library	-	-
+scripts/lib-wrapper-conformance.sh	exempt	none	not-applicable	sourced-library	-	-
+scripts/loop-init	exempt	--workspace	not-applicable	explicit-initialization-command	-	-
+scripts/tr-metrics.sh	exempt	argv.workspace	not-applicable	read-only-inspection	-	-
