@@ -26,7 +26,8 @@ a small system, wrapped around the AI you already use.
 - [What you get](#what-you-get)
 - [What you need](#environments)
 - [Get started](#get-started)
-- [Everything under the hood](#shelf)
+- [Why it's safe to try](#safety)
+- [Dig deeper](#shelf)
 - [Part of Family OS](#family-os)
 - [License](#license)
 
@@ -36,18 +37,24 @@ a small system, wrapped around the AI you already use.
 
 ## Does this sound familiar?
 
+The more work you hand to an AI, the more often these moments show up.
+
 - Every new session starts with you explaining the same background again.
 - The AI says the job is complete — but the result is missing, or you can't tell.
 - Long work loses its place halfway and quietly stalls.
 - A fix that worked last week is forgotten by this week.
 
-If you nodded at any of these, this was built for you.
+If you nodded at any of these, this was built for you. And if you only use AI for short one-off questions, this machinery is more than you need — you're fine as you are.
+
+These four problems are exactly what Caty Agent Harness was built to crush, with machinery instead of promises.
 
 ---
 
 <a id="what-you-get"></a>
 
 ## What you get
+
+It's one loop, repeated: remember → work → prove it → hand over. The machinery keeps that loop turning, so even when the AI forgets, the work is never forgotten.
 
 ```mermaid
 flowchart LR
@@ -57,59 +64,31 @@ flowchart LR
     D -. next time .-> A
 ```
 
-### 🌱 It gets smarter on its own
+- 🌱 **It gets smarter on its own**
 
-- When it makes a mistake, the reason and the evidence are written down on the spot.
-- The next attempt always inherits the previous failure, and taking the same road again is forbidden — the same mistake stops repeating.
-- A good method is not trusted after one success. It becomes a rule only after passing verification again on a different job.
-- A procedure that keeps coming up is reviewed by a different AI — not the one that wrote it — and becomes a reusable skill only when it passes.
-- All of this happens automatically. You never have to say "take a note."
+  When it makes a mistake, the reason and the evidence are recorded on the spot in a notebook (really just a plain text file). The next attempt always inherits the previous failure, and retrying the same way is mechanically forbidden — the same mistake stops repeating. You never have to say "take a note."
+
+- 🏁 **It runs to the finish**
+
+  Big jobs are split into small numbered steps, and the machinery drives them forward one at a time. Sessions can end, windows can close, models can change — the work continues from where it left off.
+
+- 🔍 **"Done" comes with proof**
+
+  "Done" is judged by mechanical checks against the actual result — never by the AI's own claim. The checking is done by an independent verifier, not by the maker grading its own work. When nothing is working, it doesn't spin forever: it stops honestly, with evidence, and reports to you.
 
 <details>
-<summary><b>How it gets smarter</b></summary>
+<summary><b>How it works (the reason it isn't magic)</b></summary>
 
 1. **When it fails** — what went wrong, plus the evidence, is recorded automatically in a notebook inside your project.
 2. **On the next attempt** — the previous failure is always handed over, and a mechanical rule forbids retrying the same way.
-3. **When it succeeds** — the method is saved only as a lesson at first. It is promoted to a rule after passing verification again on a different job.
-4. **Procedures that keep coming up** — are reviewed by a different AI than the one that wrote them; only the ones that pass are stored as skills and consulted automatically next time.
+3. **When it succeeds** — the method is saved only as a lesson at first, and becomes a rule after passing verification again on a different job. Procedures that keep coming up are reviewed by a different AI than the one that wrote them; only the ones that pass are stored as skills.
+4. **While it runs** — a scheduler kicks the next step every few minutes, handing the AI only a short, fresh context. Attempts and active time have limits counted by the machinery, so endless grinding is impossible.
 
-→ In depth: [engineering guide — learning from repeated failures](docs/engineering.md#learning)
-
-</details>
-
-### 🏁 It runs to the finish
-
-- Big jobs are split into small recorded steps, and the machinery drives them forward one step at a time.
-- The AI receives only a short, fresh context plus the one step to do now — so even small models don't fall apart.
-- "Can it remember?" becomes "does the machinery re-read the file?" — forgetting becomes structurally impossible.
-- Sessions can end, windows can close, models can change — the work continues from where it left off.
-
-<details>
-<summary><b>How it reaches the finish line</b></summary>
-
-1. **Split** — a big job becomes a numbered step plan, written down.
-2. **One step at a time** — a scheduler kicks the next step every few minutes. The AI gets only the task, the progress so far, and the handover notebook: a short, fresh context every time.
-3. **Real checks** — after each step, an executable check script inspects the actual result. The AI's own claim is never the judge.
-4. **Budgets** — attempts and active time have limits, counted by the machinery. Endless grinding is impossible.
-5. **An honest ending** — either the job finishes, or you get a report with the recent attempts and their evidence.
-
-→ In depth: [engineering guide — the completion rail](docs/engineering.md#completion)
+→ In depth: [learning from repeated failures](docs/engineering.md#learning) ／ [the completion rail](docs/engineering.md#completion)
 
 </details>
 
-### 🔍 "Done" comes with proof
-
-- "Done" is judged by mechanical checks against the actual result — never by a status message.
-- The checking is done by an independent verifier with a fresh context — never by the maker grading its own work.
-- When nothing is working, it doesn't spin forever: it stops honestly, with evidence, and reports to you.
-
-<a id="safety"></a>
-
-### 🤝 Your AI stays exactly yours
-
-- Your AI's personality, instruction files, and accumulated memory are never touched — this only adds a few files around them.
-- Installing is one command; pausing is one command too, and nothing it learned is lost. Trying it takes no courage.
-- Everything it knows lives in plain text files — you can read every lesson with your own eyes.
+Whether you can use it comes down to the tools you already have — here's the table.
 
 ---
 
@@ -124,9 +103,11 @@ The supported AI tools all run in a terminal — **but you won't be the one typi
 | OS | macOS ✅ ／ Linux ✅ |
 | AI tools | Claude Code ✅ ／ Codex CLI ✅ ／ Kimi Code CLI ✅ ／ Hermes Agent ✅ ／ OpenClaw ✅ |
 | Shell | bash 3.2+ ✅ (the macOS default is fine) |
-| Python 3 | used by the hooks and automated paths — your AI will check this for you |
+| Python 3 | used by behind-the-scenes automation (technically, a mechanism called hooks) — your AI will check this for you |
 
 Support depth differs by tool on purpose — the details live in the [engineering guide](docs/engineering.md).
+
+If your setup is on the table, installing takes one prompt.
 
 ---
 
@@ -134,9 +115,7 @@ Support depth differs by tool on purpose — the details live in the [engineerin
 
 ## Get started
 
-### Hand it to your AI
-
-One step. Open the AI tool you already use inside the project folder where it works, and paste this:
+There is one thing to do on your side. Open the AI tool you already use inside the project folder where it works, and paste this — your AI handles the install, the checks, and the report back to you.
 
 ```text
 Please set up https://github.com/caty-ai/caty-agent-harness.git in this project:
@@ -154,17 +133,30 @@ Prefer to type the commands yourself? → the [engineering guide](docs/engineeri
 
 - Your AI will run a read-only health check (`--check`) and show you the result — a healthy setup ends with `ok: required layout and STATE.md headers present`.
 - Some check rows can say `FAIL` while the core is healthy: those are optional automation paths that aren't wired yet. The agent guide tells your AI which ones matter for your tool.
-- Nothing here replaces your AI, your files, or your project — see [Your AI stays exactly yours](#safety).
 
 </details>
+
+Still hesitant to paste it? The next section explains why nothing gets broken.
+
+---
+
+<a id="safety"></a>
+
+## Why it's safe to try
+
+- **Your AI stays exactly yours** — its personality, instruction files, and accumulated memory are never touched. This only adds a few files around them.
+- **Quitting is one command too** — installing is one command, pausing is one command, and nothing it learned is lost. Resume, and it continues where it stopped.
+- **You can read everything** — lessons, progress, and evidence all live in plain text files, so you can see what's happening with your own eyes.
+
+That's the short version. The depth is all below.
 
 ---
 
 <a id="shelf"></a>
 
-## Everything under the hood
+## Dig deeper
 
-The page you just read is the short version. This is the full shelf — the depth is real, and it's all documented.
+The page you just read is a map. The substance is real, and it's all documented.
 
 | Document | What's inside |
 | --- | --- |
@@ -174,6 +166,8 @@ The page you just read is the short version. This is the full shelf — the dept
 | [Runtime setup](docs/engineering.md#runtime-setup) | **Per-tool wiring** — hooks, verifiers, and schedules for each of the five AI tools |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | **How to propose changes** — issue-first flow and the test suites (20 of them, one loop to run) |
 | [SECURITY.md](SECURITY.md) | **How to report issues safely** — private vulnerability reporting |
+
+One last thing — the bigger picture this tool belongs to.
 
 ---
 
@@ -192,7 +186,7 @@ Caty Agent Harness is one tool inside **Family OS** — the Caty AI project's la
 
 ## License
 
-[MIT](LICENSE). Use it, study it, build it into anything — including commercial agent setups. That's the point.
+[MIT](LICENSE) — chosen so anyone can use it, study it, and build it into anything, including commercial agent setups. That's the point.
 
 ---
 
