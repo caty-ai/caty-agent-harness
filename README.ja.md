@@ -173,6 +173,26 @@ workspace としてインストールし、ヘルスチェックを実行し、�
 
 <a id="family-os"></a>
 
+<!-- family:generated:family-footer:start -->
+
+---
+
+このリポジトリは **Caty AI ファミリー** の一員です — AI エージェントの家族を運用するためのオープンなツール群。公開準備中のモジュールを含む全体の地図は [Family OS](https://github.com/caty-ai/family-os) にあります。
+
+| 軸 | モジュール | 何をするもの | 状態 |
+| --- | --- | --- | --- |
+| 地図 | [Family OS](https://github.com/caty-ai/family-os) | AIファミリー全体の地図 — モジュール・状態・つながり | 公開・MIT |
+| 掟 | [Family Dev Handbook](https://github.com/caty-ai/family-dev-handbook) | 開発の交通ルール — Issue・PR・worktree・受け渡し・並行開発 | 公開・MIT |
+| 縦軸・基盤 | **Caty Agent Harness** | AIエージェントのタスク基盤 — 試行・リトライ・チェックポイント・完了判定 | 公開・MIT |
+| 縦軸 | [Persona Engine](https://github.com/caty-ai/persona-engine) | エージェントに人格を与える — 人格レイヤーと感情のグラデーション | 公開・MIT |
+| 縦軸 | **Persona Growth Loop** | 人格そのものを育てる — 最小・冪等な提案づくり | 公開準備中 |
+| 縦軸 | [X Collector](https://github.com/caty-ai/x-collector) | Xやウェブの素材を1日1回のダイジェストに — 人にもエージェントにも | 公開・MIT |
+| 縦軸 | **Self Growth Loop** | エージェントが自分の能力を育てるループ — 提案・ガバナンス・採用記録 | 公開準備中 |
+| 横軸・基盤 | **Family Memory Architecture** | 記憶バス — 家族が知っていることを共有する層 | 公開準備中 |
+| 横軸 | [Sitter](https://github.com/caty-ai/sitter) | 委譲したエージェント実行の見張り番 — 監視・証拠の記録・再起動 | 公開・MIT |
+
+<!-- family:generated:family-footer:end -->
+
 ## Family OS の一員です
 
 Caty Agent Harness は、Caty AI プロジェクト **Family OS** — 複数の AI エージェントをひとつの家族として運用するための全体構想 — を構成するツールのひとつです。単独でそのまま使えますが、次と組み合わせると、さらに力を発揮します。
@@ -195,23 +215,3 @@ Caty Agent Harness は、Caty AI プロジェクト **Family OS** — 複数の 
 **ただのテキストファイル** ｜ **5つの AI ツールで動く** ｜ **コマンド1つで一時停止・再開**
 
 </div>
-
-<!-- family:generated:family-footer:start -->
-
----
-
-このリポジトリは **Caty AI ファミリー** の一員です — AI エージェントの家族を運用するためのオープンなツール群。公開準備中のモジュールを含む全体の地図は [Family OS](https://github.com/caty-ai/family-os) にあります。
-
-| 軸 | モジュール | 何をするもの | 状態 |
-| --- | --- | --- | --- |
-| 地図 | [Family OS](https://github.com/caty-ai/family-os) | AIファミリー全体の地図 — モジュール・状態・つながり | 公開・MIT |
-| 掟 | [Family Dev Handbook](https://github.com/caty-ai/family-dev-handbook) | 開発の交通ルール — Issue・PR・worktree・受け渡し・並行開発 | 公開・MIT |
-| 縦軸・基盤 | **Caty Agent Harness** | AIエージェントのタスク基盤 — 試行・リトライ・チェックポイント・完了判定 | 公開・MIT |
-| 縦軸 | [Persona Engine](https://github.com/caty-ai/persona-engine) | エージェントに人格を与える — 人格レイヤーと感情のグラデーション | 公開・MIT |
-| 縦軸 | **Persona Growth Loop** | 人格そのものを育てる — 最小・冪等な提案づくり | 公開準備中 |
-| 縦軸 | [X Collector](https://github.com/caty-ai/x-collector) | Xやウェブの素材を1日1回のダイジェストに — 人にもエージェントにも | 公開・MIT |
-| 縦軸 | **Self Growth Loop** | エージェントが自分の能力を育てるループ — 提案・ガバナンス・採用記録 | 公開準備中 |
-| 横軸・基盤 | **Family Memory Architecture** | 記憶バス — 家族が知っていることを共有する層 | 公開準備中 |
-| 横軸 | [Sitter](https://github.com/caty-ai/sitter) | 委譲したエージェント実行の見張り番 — 監視・証拠の記録・再起動 | 公開・MIT |
-
-<!-- family:generated:family-footer:end -->
