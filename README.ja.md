@@ -195,3 +195,13 @@ Caty Agent Harness は、Caty AI プロジェクト **Family OS** — 複数の 
 **ただのテキストファイル** ｜ **5つの AI ツールで動く** ｜ **コマンド1つで一時停止・再開**
 
 </div>
+
+<!-- family:generated:family-footer:start -->
+
+---
+
+このリポジトリは **Caty AI ファミリー** の一員です — AI エージェントの家族を運用するためのオープンなツール群。公開準備中のモジュールを含む全体の地図は [Family OS](https://github.com/caty-ai/family-os) にあります。
+
+兄弟モジュール: [Persona Engine](https://github.com/caty-ai/persona-engine) · [Sitter](https://github.com/caty-ai/sitter) · [X Collector](https://github.com/caty-ai/x-collector) · [Family Dev Handbook](https://github.com/caty-ai/family-dev-handbook)
+
+<!-- family:generated:family-footer:end -->

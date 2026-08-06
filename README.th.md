@@ -195,3 +195,13 @@ Caty Agent Harness เป็นเครื่องมือหนึ่งใ�
 **ไฟล์ข้อความธรรมดา** ｜ **ใช้ได้กับเครื่องมือ AI 5 ตัว** ｜ **คำสั่งเดียวหยุด/ทำต่อได้**
 
 </div>
+
+<!-- family:generated:family-footer:start -->
+
+---
+
+รีโพนี้เป็นส่วนหนึ่งของ **ครอบครัว Caty AI** — ชุดเครื่องมือโอเพนซอร์สสำหรับดูแลครอบครัวเอเจนต์ AI แผนที่ฉบับเต็ม (รวมโมดูลที่กำลังเตรียมเปิด) อยู่ที่ [Family OS](https://github.com/caty-ai/family-os)
+
+โมดูลพี่น้อง: [Persona Engine](https://github.com/caty-ai/persona-engine) · [Sitter](https://github.com/caty-ai/sitter) · [X Collector](https://github.com/caty-ai/x-collector) · [Family Dev Handbook](https://github.com/caty-ai/family-dev-handbook)
+
+<!-- family:generated:family-footer:end -->
