@@ -195,3 +195,13 @@ Caty Agent Harness is one tool inside **Family OS** — the Caty AI project's la
 **plain text files** ｜ **works with 5 AI tools** ｜ **paused in one command**
 
 </div>
+
+<!-- family:generated:family-footer:start -->
+
+---
+
+Part of the **Caty AI family** — open tools for running a family of AI agents. The full map, including modules still being prepared for release, lives in [Family OS](https://github.com/caty-ai/family-os).
+
+Siblings: [Persona Engine](https://github.com/caty-ai/persona-engine) · [Sitter](https://github.com/caty-ai/sitter) · [X Collector](https://github.com/caty-ai/x-collector) · [Family Dev Handbook](https://github.com/caty-ai/family-dev-handbook)
+
+<!-- family:generated:family-footer:end -->
