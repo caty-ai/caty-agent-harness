@@ -184,7 +184,7 @@ Part of the **Caty AI family** — open tools for running a family of AI agents.
 | Map | [Family OS](https://github.com/caty-ai/family-os) | The map of the whole family — every module, its state, and how they fit | published, MIT |
 | Rules | [Family Dev Handbook](https://github.com/caty-ai/family-dev-handbook) | The rules of the road — issues, PRs, worktrees, handoffs, parallel development | published, MIT |
 | Vertical · foundation | **Caty Agent Harness** | Task backbone for AI agents — retries, checkpoints, and honest completion | published, MIT |
-| Vertical | **context-kit** | Five-piece context hygiene kit for one agent — bounded output, delegation briefs, safety guards, recall | publication in preparation |
+| Vertical | [context-kit](https://github.com/caty-ai/context-kit) | Five-piece context hygiene kit for one agent — bounded output, delegation briefs, safety guards, recall | published, MIT |
 | Vertical | [Persona Engine](https://github.com/caty-ai/persona-engine) | Gives an agent a persona — layered personality and graded emotion | published, MIT |
 | Vertical | **Persona Growth Loop** | Grows the persona itself — minimal, idempotent proposals | publication in preparation |
 | Vertical | [X Collector](https://github.com/caty-ai/x-collector) | Turns X and the web into one daily digest — for people and agents | published, MIT |
