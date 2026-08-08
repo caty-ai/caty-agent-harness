@@ -172,6 +172,8 @@ flowchart LR
 
 <a id="family-os"></a>
 
+## Family OS 中的一员
+
 <!-- family:generated:family-footer:start -->
 
 ---
@@ -193,11 +195,9 @@ flowchart LR
 
 <!-- family:generated:family-footer:end -->
 
-## Family OS 中的一员
-
 Caty Agent Harness 是 Caty AI 项目 **Family OS**——把多个 AI agent 当作一个家庭来运营的整体蓝图——中的一件工具。它完全可以单独使用，而与下面这些组合时会更加强大：
 
-- **family-os**（公开准备中） — 把整个家庭串联起来的蓝图。本 Harness 在其中负责「纵轴 = 培养单个 agent 并驱动其完成工作」。
+- **[family-os](https://github.com/caty-ai/family-os)** — 把整个家庭串联起来的蓝图。本 Harness 在其中负责「纵轴 = 培养单个 agent 并驱动其完成工作」。
 - **[sitter](https://github.com/caty-ai/sitter)** — 从外部盯守长时间运行的 agent 工作的看护者，一旦工作卡住或冻结就会举手示警。
 
 ---

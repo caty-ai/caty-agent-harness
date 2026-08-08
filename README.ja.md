@@ -173,6 +173,8 @@ workspace としてインストールし、ヘルスチェックを実行し、�
 
 <a id="family-os"></a>
 
+## Family OS の一員です
+
 <!-- family:generated:family-footer:start -->
 
 ---
@@ -194,11 +196,9 @@ workspace としてインストールし、ヘルスチェックを実行し、�
 
 <!-- family:generated:family-footer:end -->
 
-## Family OS の一員です
-
 Caty Agent Harness は、Caty AI プロジェクト **Family OS** — 複数の AI エージェントをひとつの家族として運用するための全体構想 — を構成するツールのひとつです。単独でそのまま使えますが、次と組み合わせると、さらに力を発揮します。
 
-- **family-os**（公開準備中） — 家族全体をまとめる設計図。この Harness はその中で「縦軸 = 個のエージェントを育て、完走させる軸」を担当します。
+- **[family-os](https://github.com/caty-ai/family-os)** — 家族全体をまとめる設計図。この Harness はその中で「縦軸 = 個のエージェントを育て、完走させる軸」を担当します。
 - **[sitter](https://github.com/caty-ai/sitter)** — 長く走るエージェント作業を外から見張る監視役。作業が止まった・固まったを検知して知らせます。
 
 ---

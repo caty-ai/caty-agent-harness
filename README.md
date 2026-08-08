@@ -173,6 +173,8 @@ One last thing — the bigger picture this tool belongs to.
 
 <a id="family-os"></a>
 
+## Part of Family OS
+
 <!-- family:generated:family-footer:start -->
 
 ---
@@ -194,11 +196,9 @@ Part of the **Caty AI family** — open tools for running a family of AI agents.
 
 <!-- family:generated:family-footer:end -->
 
-## Part of Family OS
-
 Caty Agent Harness is one tool inside **Family OS** — the Caty AI project's larger blueprint for running multiple AI agents as one family. It works fully on its own, and it becomes even stronger combined with:
 
-- **family-os** (public release in preparation) — the blueprint that ties the family together. Inside it, this Harness owns the vertical axis: growing an individual agent and driving its work to completion.
+- **[family-os](https://github.com/caty-ai/family-os)** — the blueprint that ties the family together. Inside it, this Harness owns the vertical axis: growing an individual agent and driving its work to completion.
 - **[sitter](https://github.com/caty-ai/sitter)** — a watchdog that keeps an eye on long-running agent work from the outside, and raises its hand when the work stalls or freezes.
 
 ---
