@@ -1,5 +1,7 @@
 # Task Packet — family-updater rollout
 
+> Historical design record. Issue numbers cited in this document refer to the pre-publication private trackers, not to issues in this repository.
+
 From: Alpha · SoT: fable-loop-harness Issue #36
 For: Claude Code, OpenClaw, and Hermes family agents
 
@@ -106,32 +108,11 @@ the same harness fixes without being first to absorb release risk.
 - [ ] The local ledger records real updates and failures; no-op
       already-current runs do not add a line.
 
-## Verified deployments — actual paths (as of 2026-07-14, fable-loop #40)
+## Deployment inventory example
 
-The packet templates above use illustrative paths. These are the paths that were
-actually verified working at install time — trust this table over the templates,
-and always confirm the live workspace path on the host before installing.
+The live deployment inventory is maintained privately by the operator. Use this
+minimal placeholder pattern and confirm every value on the target host before installing.
 
 | Agent | Host | Trigger | Deploy clone | Credential |
 | --- | --- | --- | --- | --- |
-| Claire (canary) | VPS | cron `:17` | `/path/to/clones/caty-agent-harness` | read-only deploy key |
-| Alpha | MBP | launchd `com.alpha.fable-loop.updater` `:12` | `~/claude-workspace/systems/caty-agent-harness-stable` | `alpha-mbp-updater-ro` |
-| Cero | VPS | cron `:22` | `/path/to/hermes-home/.hermes/profiles/cero/systems/caty-agent-harness-stable` | `cero-vps-updater-ro` |
-| Mine | VPS | cron `:27` | `/path/to/openclaw-home/.openclaw/workspace/systems/caty-agent-harness-stable` | `mine-vps-updater-ro` |
-| Caty | mac-mini | launchd `com.caty.fable-loop.updater` `:22` | `~/systems/caty-agent-harness-stable` | mini's existing read ssh key |
-
-Install learnings folded back from the rollout:
-
-- Claire's real workspace is `/path/to/openclaw-home/.openclaw/workspace-claire`, not the
-  packet's `/path/to/claire-home/.openclaw-claire/workspace` (see the correction note in
-  the Claire section).
-- On macOS hosts (Alpha MBP, Caty mini) launchd is the source of truth, not
-  crontab — register a `com.<agent>.fable-loop.updater` plist instead of a cron
-  line.
-- VPS agents share one heartbeat dir (`/path/to/hermes-home/.hermes/profiles/cero/state/heartbeats`);
-  the fma watchdog reads a single dir per host and resolves entries by filename,
-  so per-agent heartbeat dirs are not required.
-- Caty on the mini needed `FMA_SCRIPTS_DIR=~/.openclaw/bin/fma`; an existing
-  host key with read access makes a dedicated deploy key unnecessary.
-- Register the fma `jobs.yaml` entry only after the real heartbeat file exists
-  (fma #77 lesson): alpha=#85, caty=#103, cero/mine=#105.
+| `<agent>` | `<host>` | `<cron-or-launchd schedule>` | `/path/to/caty-agent-harness` | `<host>-updater-ro` |

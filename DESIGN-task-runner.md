@@ -1,5 +1,7 @@
 # task-runner v0.2 — Completion Driver for Weak-Model Agents (Issue #8)
 
+> Historical design record. Issue numbers cited in this document (e.g. #43, #49) refer to the pre-publication private tracker, not to issues in this repository.
+
 Status: v0.2 — cross-review resolutions TR-R1…TR-R15 (SYNTHESIS-task-runner.md) applied.
 Amended 2026-07-18: §8 cross-cutting contracts (grok-build study, #43 → #49).
 Author: Alpha (Claude Fable 5), 2026-07-04.
