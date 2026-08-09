@@ -1,11 +1,11 @@
 ---
 id: {{TASK_ID}}
 title: {{TITLE}}
-issued_by: sho-alpha
+issued_by: example-operator
 created: {{CREATED_UTC}}
 attempts_budget: 8
 time_budget_min: 30
-escalate_to: sho
+escalate_to: example-operator
 verify: mechanical
 parent_id: null
 ---

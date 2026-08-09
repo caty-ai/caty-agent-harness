@@ -21,10 +21,9 @@ AGENT=${AGENT:-${USER:-unknown}}
 RING=${RING:-stable}
 SOAK_HOURS=${SOAK_HOURS:-24}
 
-if [[ -z "${FMA_SCRIPTS_DIR:-}" && -z "${HOME:-}" ]]; then
-  fail "HOME is not set; cannot derive default FMA_SCRIPTS_DIR"
+if [[ -z "${FMA_SCRIPTS_DIR:-}" ]]; then
+  fail "FMA_SCRIPTS_DIR is not set; set it to the reporter directory (for example, /path/to/family-memory-architecture/scripts)"
 fi
-FMA_SCRIPTS_DIR=${FMA_SCRIPTS_DIR:-"$HOME/claude-workspace/family-memory-architecture/scripts"}
 
 if [[ "$REPO_DIR" != /* ]]; then
   fail "REPO_DIR must be an absolute path: $REPO_DIR"

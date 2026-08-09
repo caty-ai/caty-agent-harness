@@ -159,13 +159,13 @@ WATCHDOG_STALE_SECS=3600 adapters/hermes/stale-claim-watchdog.sh --workspace ~/.
 
 ## Cron wrapper pattern
 
-For cron-driven verifier, watchdog, or Luca task-runner jobs, copy
+For cron-driven verifier, watchdog, or task-runner jobs, copy
 `templates/cron-wrapper.tmpl.sh` into the profile workspace, for example
 `<workspace>/scripts/cron-wrapper.sh`, and make the copy executable. Set `TARGET` to
 the absolute adapter/script path and pass the target arguments after the wrapper.
 
 ```cron
-*/5 * * * * CATY_HARNESS_ROOT=/opt/caty-agent-harness TARGET=/opt/caty-agent-harness/scripts/task-runner.sh SECRETS_ENV=/home/luca/.config/fable-loop/cron.env /home/luca/.hermes/profiles/luca/workspace/scripts/cron-wrapper.sh /home/luca/.hermes/profiles/luca/workspace >>/home/luca/.hermes/profiles/luca/workspace/loop/task-runner-cron.log 2>&1
+*/5 * * * * CATY_HARNESS_ROOT=/opt/caty-agent-harness TARGET=/opt/caty-agent-harness/scripts/task-runner.sh SECRETS_ENV=/path/to/secrets/cron.env /path/to/hermes-home/profiles/example/workspace/scripts/cron-wrapper.sh /path/to/hermes-home/profiles/example/workspace >>/path/to/hermes-home/profiles/example/workspace/loop/task-runner-cron.log 2>&1
 ```
 
 Adapter stdout is now captured per attempt in `attempts/NNN/model.stdout` and no longer appears in the tick log.

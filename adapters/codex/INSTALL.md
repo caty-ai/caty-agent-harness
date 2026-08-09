@@ -5,7 +5,8 @@ Harness CHECKPOINT enforcement reuses the reference Stop-hook logic
 (DESIGN §4.1) with no cron watchdog — the `Stop` event fires the reminder
 mechanically. This adapter targets a "relief Alpha" running on Codex while the
 Claude Code Alpha is down (see the relief operating charter at
-`~/claude-workspace/AGENTS.md`).
+`~/path/to/your/AGENTS.md`). Replace this placeholder with the operator's own
+agent charter file path during setup.
 
 ## checkpoint-stop-hook.sh (Stop hook)
 
