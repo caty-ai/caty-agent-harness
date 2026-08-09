@@ -7,9 +7,9 @@
 ![Caty Agent Harness — 自我成长，把任务一路跑到完成](assets/readme/hero.png)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![runtime](https://img.shields.io/badge/runtime-bash%203.2%2B-4EAA25?logo=gnubash&logoColor=white)
-![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
-![status](https://img.shields.io/badge/status-public--preview-blue)
+![runtime: bash 3.2+](https://img.shields.io/badge/runtime-bash%203.2%2B-4EAA25?logo=gnubash&logoColor=white)
+![platform: macOS | Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
+![status: public preview](https://img.shields.io/badge/status-public--preview-blue)
 
 一遍遍重复的背景说明。莫名消失的上下文。没有任何凭证的「完成了！」。<br>
 Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决掉。<br>
@@ -100,7 +100,8 @@ flowchart LR
 
 | 类别 | 支持情况 |
 | --- | --- |
-| 操作系统 | macOS ✅ ／ Linux ✅ |
+| 操作系统 | macOS：✅ 已测试（测试套件在 Apple 芯片 macOS 上运行） ／ Linux：⚠️ 预计可用（POSIX、bash 3.2+、Python 3 标准库）——尚未验证 |
+| Windows | ❌ 不支持（未测试；WSL 未测试） |
 | AI 工具 | Claude Code ✅ ／ Codex CLI ✅ ／ Kimi Code CLI ✅ ／ Hermes Agent ✅ ／ OpenClaw ✅ |
 | Shell | bash 3.2+ ✅（macOS 默认版本即可） |
 | Python 3 | 幕后自动化（技术上叫 hooks 的机制）会用到——你的 AI 会替你确认 |
@@ -124,6 +125,8 @@ flowchart LR
 ```
 
 就这样。[Agent 指南（英文）](docs/agent-guide.md)会引导你的 AI 完成每个选择、健康检查，以及如何向你汇报。
+
+作为一个具体的首次演示，你的 AI 可以运行随附的[图像试运行示例](templates/examples/img-pilot.task.md)，仅使用本地工具生成 SVG 图像卡片和 JSON 交付回执。
 
 想亲手敲命令？→ [工程指南（英文）](docs/engineering.md#quickstart)有完整的手动流程。
 

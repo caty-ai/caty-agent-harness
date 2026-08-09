@@ -7,9 +7,9 @@
 ![Caty Agent Harness — grows on its own, runs your tasks to done](assets/readme/hero.png)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![runtime](https://img.shields.io/badge/runtime-bash%203.2%2B-4EAA25?logo=gnubash&logoColor=white)
-![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
-![status](https://img.shields.io/badge/status-public--preview-blue)
+![runtime: bash 3.2+](https://img.shields.io/badge/runtime-bash%203.2%2B-4EAA25?logo=gnubash&logoColor=white)
+![platform: macOS | Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
+![status: public preview](https://img.shields.io/badge/status-public--preview-blue)
 
 Re-explaining everything. Context that vanishes. A cheerful "done!" with nothing to show for it.<br>
 Caty Agent Harness fixes those — with plain text files and real checks.<br>
@@ -100,7 +100,8 @@ The supported AI tools all run in a terminal — **but you won't be the one typi
 
 | Category | Supported |
 | --- | --- |
-| OS | macOS ✅ ／ Linux ✅ |
+| OS | macOS: ✅ tested (test suite runs on Apple-silicon macOS) ／ Linux: ⚠️ expected to work (POSIX, bash 3.2+, Python 3 stdlib) — not yet verified |
+| Windows | ❌ not supported (not tested; WSL not tested) |
 | AI tools | Claude Code ✅ ／ Codex CLI ✅ ／ Kimi Code CLI ✅ ／ Hermes Agent ✅ ／ OpenClaw ✅ |
 | Shell | bash 3.2+ ✅ (the macOS default is fine) |
 | Python 3 | used by behind-the-scenes automation (technically, a mechanism called hooks) — your AI will check this for you |
@@ -125,6 +126,8 @@ up and what I can do next.
 ```
 
 That's it. The [agent guide](docs/agent-guide.md) walks your AI through every choice, the health check, and what to report back to you.
+
+For a concrete first demo, your AI can run the bundled [image pilot example](templates/examples/img-pilot.task.md), which builds an SVG image card and JSON delivery receipt using local tools only.
 
 Prefer to type the commands yourself? → the [engineering guide](docs/engineering.md#quickstart) has the full manual path.
 
