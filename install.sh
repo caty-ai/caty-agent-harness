@@ -794,9 +794,10 @@ probe_adapter_conformance() {
 check_learning_paths() {
   local adapter
 
-  # Capability probes are read-only and diagnostic: they inspect the adapter
-  # implementation shipped beside this installer, never execute a model or
-  # mutate the checked workspace. FAIL does not change --check exit semantics.
+  # Capability probes are read-only and diagnostic: they inspect configured
+  # adapter paths. Conformance probes read and hash configured wrapper, provider,
+  # and probe paths, including env-supplied external ones. They never execute a
+  # model or mutate the checked workspace. FAIL does not change --check semantics.
   for adapter in claude-code codex hermes kimi openclaw; do
     if [[ "$adapter" == "claude-code" ]]; then
       print_learning_path_result "$adapter" "CONSULT injection" probe_claude_consult
@@ -1064,7 +1065,7 @@ EOF
   # RELATIVE path that does not exist in this workspace but does exist in a sibling
   # directory usually means the checkpoint was written into the wrong STATE.md.
   # Absolute paths, ~ paths, and URLs are legitimate host references and are skipped
-  # (Claire's STATE.md points at that agent's own VPS home by design).
+  # (Some agents' STATE.md legitimately points at that agent's own remote home directory).
   if [[ -f "$state_file" ]]; then
     local token
     local ws_base

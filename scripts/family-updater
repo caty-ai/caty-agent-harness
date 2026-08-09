@@ -7,7 +7,7 @@ agent=${USER:-unknown}
 ring=stable
 soak_hours=24
 dry_run=0
-fma_scripts_dir=${FMA_SCRIPTS_DIR:-"$HOME/claude-workspace/family-memory-architecture/scripts"}
+fma_scripts_dir=${FMA_SCRIPTS_DIR:-}
 lock_acquired=0
 lock_dir=
 
@@ -19,13 +19,14 @@ Usage:
                          [--fma-scripts-dir <dir>]
 
 Flags:
-  --repo-dir <path>       Local fable-loop-harness clone to update. Required.
+  --repo-dir <path>       Local caty-agent-harness clone to update. Required.
   --workspace <dir>       Workspace passed to install.sh --check.
   --agent <name>          Reporting agent name. Defaults to $USER.
   --ring canary|stable    Canary takes the newest semver tag. Stable waits for soak.
   --soak-hours N          Stable tag minimum age in hours. Defaults to 24.
   --dry-run               Print the planned update without fetching or changing files.
   --fma-scripts-dir <dir> Directory containing job-heartbeat and hot-inbox-post.
+                           When omitted, reporting is disabled with a warning.
   -h, --help              Show this help.
 USAGE
 }
@@ -164,12 +165,14 @@ append_ledger() {
 }
 
 warn_missing_reporter() {
-  printf 'warning: reporter script missing or not executable: %s\n' "$1" >&2
+  printf 'warning: reporter script missing or not executable: %s; set FMA_SCRIPTS_DIR or pass --fma-scripts-dir with the reporter directory\n' "$1" >&2
 }
 
 send_heartbeat() {
   local status=$1
   local reason=$2
+
+  [[ -n "$fma_scripts_dir" ]] || return 0
   local reporter="$fma_scripts_dir/job-heartbeat"
 
   if [[ ! -x "$reporter" ]]; then
@@ -185,6 +188,8 @@ post_failure_report() {
   local tag=$1
   local rollback=$2
   local summary=$3
+
+  [[ -n "$fma_scripts_dir" ]] || return 0
   local reporter="$fma_scripts_dir/hot-inbox-post"
   local repo_name
   local report_summary=$summary
@@ -299,6 +304,10 @@ while (($# > 0)); do
       ;;
   esac
 done
+
+if [[ -z "$fma_scripts_dir" ]]; then
+  printf '%s\n' 'warning: FMA_SCRIPTS_DIR is not set; heartbeat and failure reporting are disabled. Set FMA_SCRIPTS_DIR or pass --fma-scripts-dir <dir>.' >&2
+fi
 
 [[ -n "$repo_dir" ]] || die_usage
 [[ "$ring" == "canary" || "$ring" == "stable" ]] || die "invalid ring: $ring"
