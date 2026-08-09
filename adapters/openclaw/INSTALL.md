@@ -7,10 +7,13 @@ AGENTS.md, and cron entry.
 The [shared adapter runtime contract](../CONTRACT.md) is normative for this adapter.
 The rules there apply in addition to the OpenClaw-specific wiring below.
 
-1. Clone this private repository into a stable local path.
+1. Clone the public repository into a stable local path.
 
-   Access is by repo invite or deploy key. Do not copy adapter files by hand if the
-   profile can clone; keeping a clone makes updates auditable.
+   ```sh
+   git clone https://github.com/caty-ai/caty-agent-harness.git
+   ```
+
+   Keep the clone so updates remain auditable; do not copy adapter files by hand.
 
 2. Initialize the profile workspace.
 

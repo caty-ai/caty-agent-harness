@@ -1,5 +1,7 @@
 # Family Adoption Governance Rules (R1–R14)
 
+> Historical design record. Issue numbers and commit references cited in this document refer to the pre-publication private trackers and working repositories, not to issues or commits in this repository.
+
 > **Canonical file** for the family adoption governance R-series (R1–R14).
 > Initial version transcribed from the binding text of
 > fable-loop-harness#26 (private tracker)

@@ -108,7 +108,8 @@ both `manual` and `auto` compaction):
 
 On macOS, crontab sessions cannot reach the user Keychain, so `claude -p` exits 1
 with `Not logged in · Please run /login` under cron while the same command succeeds
-interactively and under launchd (observed in the Phase-1 pilot, #43, 2026-07-19).
+interactively and under launchd. The Phase-1 pilot on 2026-07-19 therefore adopted
+LaunchAgent scheduling for Claude CLI jobs on macOS.
 This is specific to the claude CLI's credential lookup; other targets may run fine
 under cron. The rule: any tick wrapper or spawn adapter that shells out to the
 claude CLI MUST be scheduled as a LaunchAgent in the `gui/<uid>` domain with
@@ -130,10 +131,10 @@ launchctl bootout gui/501/<label>    # to stop/remove
 ## Host hook isolation for headless spawn sessions
 
 Headless `claude -p` sessions inherit the user-level hooks in
-`~/.claude/settings.json`. In the Phase-1 pilot (#43, 2026-07-19), a host
-PreToolUse hook on the operator's machine blocked the weak agent's writes under
-`loop/artifacts/`; the weak model burned a full 381 s attempt negotiating with the
-hook before failing. This is a silent, host-specific failure mode: the harness
+`~/.claude/settings.json`. The Phase-1 pilot on 2026-07-19 established the need to
+isolate operator-level hooks after a host PreToolUse hook blocked the weak agent's
+writes under `loop/artifacts/`; the weak model burned a full 381 s attempt
+negotiating with the hook before failing. This is a silent, host-specific failure mode: the harness
 looks broken while the actual cause lives in the operator's personal settings.
 
 Contract for claude-code spawn adapters:

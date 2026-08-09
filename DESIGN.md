@@ -1,5 +1,7 @@
 # fable-loop v0.2 — Minimal Self-Improving Loop Harness for OpenClaw & Hermes Agent
 
+> Historical design record. Issue numbers cited in this document (e.g. #43, #49) refer to the pre-publication private tracker, not to issues in this repository.
+
 Status: v0.2 — cross-review resolutions R1–R15 (SYNTHESIS.md) applied.
 Amended 2026-07-18: §10 cross-cutting contracts (grok-build study, #43 → #49).
 Amended 2026-07-24: P1 implementation roll-up (#74–#84) and related CHECKPOINT

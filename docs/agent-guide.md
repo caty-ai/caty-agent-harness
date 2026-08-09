@@ -26,7 +26,7 @@ bash --version          # 3.2+ is fine (macOS default works)
 command -v python3      # needed for hooks and automated paths
 ```
 
-If `python3` is missing, you can still complete steps 1–4; say so in your report and point the human at their platform's Python 3 install. If the repository URL is not reachable, the most likely causes are missing access to this private repo or a network problem — stop and tell the human which error you saw.
+If `python3` is missing, you can still complete steps 1–4; say so in your report and point the human at their platform's Python 3 install. This repository is public at <https://github.com/caty-ai/caty-agent-harness>, so no invitation is needed. If the repository URL is not reachable, stop and tell the human which error you saw.
 
 <a id="step-1--identify-your-runtime"></a>
 
@@ -53,8 +53,6 @@ cd ..    # only if you are currently inside the workspace
 git clone https://github.com/caty-ai/caty-agent-harness.git
 cd caty-agent-harness
 ```
-
-> The public home will be `caty-ai/caty-agent-harness`; until that exists, the URL above is correct.
 
 ## Step 3 — install into the workspace
 
@@ -123,7 +121,6 @@ I'll remember where we were.
 | --- | --- | --- |
 | `append target must be an absolute path with an existing real parent: …` (exit 2) | The instruction-file path wasn't absolute, or the target/its parent is a symlink, or the parent folder doesn't exist | Re-run Step 3 with an absolute `$WORKSPACE` path |
 | `skip: bootstrap already present` | The block is already installed (idempotency marker `# caty-agent-harness bootstrap v2`) | Nothing — this is success |
-| Clone fails with auth error | Repo is private and this account isn't invited | Tell the human; they need access before you can proceed |
 | `--check` exit 1 | Required layout or safety invariant broken | Read the message; usually re-running Step 3 repairs missing scaffold |
 | Want to stop the harness | — | `./install.sh --disable --workspace "$WORKSPACE"` (reversible; `--enable` resumes; state is preserved) |
 
