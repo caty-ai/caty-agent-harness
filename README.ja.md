@@ -7,9 +7,9 @@
 ![Caty Agent Harness — 自己成長しながら、タスクを最後まで完走する](assets/readme/hero.png)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![runtime](https://img.shields.io/badge/runtime-bash%203.2%2B-4EAA25?logo=gnubash&logoColor=white)
-![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
-![status](https://img.shields.io/badge/status-public--preview-blue)
+![runtime: bash 3.2+](https://img.shields.io/badge/runtime-bash%203.2%2B-4EAA25?logo=gnubash&logoColor=white)
+![platform: macOS | Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
+![status: public preview](https://img.shields.io/badge/status-public--preview-blue)
 
 説明のやり直し。消える文脈。証拠のない「できました！」。<br>
 Caty Agent Harness は、その全部をただのテキストファイルと確認の仕組みで解決します。<br>
@@ -100,7 +100,8 @@ flowchart LR
 
 | 観点 | 対応 |
 | --- | --- |
-| OS | macOS ✅ ／ Linux ✅ |
+| OS | macOS: ✅ テスト済み（Apple シリコン搭載 macOS でテストスイートを実行） ／ Linux: ⚠️ 動作見込み（POSIX、bash 3.2+、Python 3 標準ライブラリ）— 未検証 |
+| Windows | ❌ 非対応（未テスト、WSL も未テスト） |
 | 対応 AI ツール | Claude Code ✅ ／ Codex CLI ✅ ／ Kimi Code CLI ✅ ／ Hermes Agent ✅ ／ OpenClaw ✅ |
 | シェル | bash 3.2+ ✅（macOS 標準のままで OK） |
 | Python 3 | 裏方の自動処理（技術的には hook と呼ばれる仕組み）が使います（有無は AI が確認してくれます） |
@@ -125,6 +126,8 @@ workspace としてインストールし、ヘルスチェックを実行し、�
 ```
 
 これで終わりです。[エージェント向けガイド](docs/agent-guide.md)が、選択肢・確認・あなたへの報告の仕方まで AI を案内します。
+
+具体的な最初のデモとして、あなたの AI は同梱の[画像パイロット例](templates/examples/img-pilot.task.md)を実行できます。ローカルツールだけで SVG 画像カードと JSON 配送レシートを作ります。
 
 自分の手でコマンドを打ちたい方は → [エンジニア向けドキュメント](docs/engineering.ja.md#quickstart)に完全な手動手順があります。
 

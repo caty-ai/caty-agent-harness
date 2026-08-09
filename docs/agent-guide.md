@@ -110,7 +110,16 @@ Set up complete. Here's what that means:
   take them out again on request."]
 
 Want to try it? Give me a small task, then close this session and start a new one —
-I'll remember where we were.
+I'll remember where we were. Or ask me to run the bundled example at
+templates/examples/img-pilot.task.md.
+```
+
+The bundled example you can run builds a self-contained SVG image card and a JSON delivery receipt using local tools only. From the harness repository root, set `STEP_PROVIDER` to your AI tool's step provider and run it end to end:
+
+```sh
+scripts/loop-init --workspace "$WORKSPACE"
+scripts/tr-enqueue templates/examples/img-pilot.task.md "$WORKSPACE"
+TR_SPAWN_STEP="$STEP_PROVIDER" scripts/task-runner.sh "$WORKSPACE"   # repeat until delivered
 ```
 
 ---
