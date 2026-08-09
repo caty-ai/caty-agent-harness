@@ -61,7 +61,11 @@ the missing verification discipline; neither runtime's native machinery is dupli
     VERIFY.log.md     # append-only verifier verdict log
     pending/          # host-staged, unverified candidates from parallel actors (§3.4)
     artifacts/        # artifact bundles per task (Appendix A), quarantine lives here
+    archive/          # consumed flush inputs; append-only retention
 ```
+
+`loop/archive/` is never pruned automatically. Consumed flush records are retained
+append-only until a human or operations owner explicitly deletes them.
 
 STATE.md sections (fixed order, machine-locatable by `## ` headers):
 

@@ -106,6 +106,47 @@ both `manual` and `auto` compaction):
 }
 ```
 
+## Flush intake consumer
+
+The stop and PreCompact hooks are producers. A workspace that enables either producer
+must also schedule `adapters/claude-code/flush-intake.sh`; otherwise unverified
+`loop/pending/flush-*.md` records accumulate without ever reaching the governed STATE
+fold. The same deterministic consumer may be used by Codex and Kimi workspaces because
+their checkpoint hooks emit the shared flush format. It does not assume that a
+model-authored `session=` attribute has been sanitized.
+
+Run the consumer two to four times per day. For a LaunchAgent, use a `StartInterval`
+between `21600` and `43200` seconds. A daily schedule has no jitter margin at the
+default deadman threshold. The consumer calls no model, so its scheduler does not need
+Claude credentials; LaunchAgent remains the recommended macOS scheduler surface.
+
+```sh
+HARNESS=/absolute/path/to/caty-agent-harness
+WS=/absolute/path/to/workspace
+"$HARNESS/adapters/claude-code/flush-intake.sh" "$WS"
+```
+
+Exactly one fold route may run in a workspace: use flush intake for Claude Code, Codex,
+or Kimi flush files, or use OpenClaw `distill-audit.sh`, never both. Pointing OpenClaw
+distillation at the transcript store summarized by the flush hooks is also forbidden.
+`install.sh --check` fails after it sees evidence from both routes:
+`loop/.distill-last-run` and `loop/pending/intake-runs.log`. This check is evidence-based,
+so a second route that is wired but has never run is detected only after its first run.
+
+The consumer owns `loop/pending/intake-<UTC-date>.md` key ledgers. A ledger may be
+deleted only when no unarchived `flush-*.md` file predates it. Folded keys are retained
+after STATE cap eviction to prevent refold oscillation. `loop/archive/` is append-only,
+is never auto-pruned, and is deleted only by a human or operations owner.
+
+The consumer itself touches `loop/.deadman/distill.marker` only after acquiring the
+shared STATE lock and completing without an infrastructure error. If it is launched
+through `templates/cron-wrapper.tmpl.sh`, leave `DEADMAN_MARKER` unset or point it at the
+`tick` marker. It must never point at `distill.marker`: the wrapper touches its marker
+before running the target and would conceal lock starvation or intake failure. The
+`distill` marker proves only that intake ran; inspect `loop/pending/intake-runs.log` for
+content-level silence, dedup, deferral, eviction, and quarantine counts. Stock OpenClaw
+distillation touches `.distill-last-run`, not the deadman `distill.marker`.
+
 ## macOS scheduling: LaunchAgent, not crontab
 
 On macOS, crontab sessions cannot reach the user Keychain, so `claude -p` exits 1

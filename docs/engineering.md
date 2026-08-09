@@ -186,7 +186,7 @@ caty-agent-harness/
 ├── adapters/               # per-runtime wiring (claude-code / codex / kimi / hermes / openclaw):
 │                           # INSTALL.md, bootstrap-block.md, hooks, verifier/cron scripts
 ├── templates/              # step-prompt, rubric, cron-wrapper, task templates
-├── tests/                  # 20 shell suites pinning the contracts
+├── tests/                  # shell suites pinning the contracts
 ├── docs/                   # this guide, reference, agent-guide, plugin & governance docs
 ├── DESIGN.md               # learning-loop contracts (source of truth)
 └── DESIGN-task-runner.md   # task-runner contract (source of truth)
@@ -237,7 +237,7 @@ What this project owns, and what it deliberately does not.
 
 - This is the public Caty AI release repository. Development happens in a private working repository; releases land here as clean snapshots.
 - The canonical installer is the pure-shell `install.sh`. There is no npm package and none is required.
-- Verification: merges are gated on all `tests/*.test.sh` suites passing (20 suites at this writing; run them locally as shown in [CONTRIBUTING.md](../CONTRIBUTING.md) — there is no public CI yet, so the claim is locally reproducible rather than badge-backed).
+- Verification: merges are gated on every `tests/*.test.sh` suite passing; run them locally as shown in [CONTRIBUTING.md](../CONTRIBUTING.md). There is no public CI yet, so the claim is locally reproducible rather than badge-backed.
 - `self-growth-loop` is an active plugin consumer; `persona-growth-loop` remains planned/scaffolded.
 - `sitter` is a proposed architecture edge, not an integrated default.
 

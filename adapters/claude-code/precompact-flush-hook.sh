@@ -38,7 +38,7 @@ for line in lines:
     if line.startswith("## "):
         if capturing:
             break
-        capturing = line == heading
+        capturing = line.startswith(heading)
         continue
     if capturing:
         body.append(line)
@@ -85,6 +85,7 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 pause_lib="$repo_root/scripts/lib-pause.sh"
 [[ -f "$pause_lib" && -r "$pause_lib" && ! -L "$pause_lib" ]] || exit 0
 bash -n "$pause_lib" >/dev/null 2>&1 || exit 0
+# shellcheck disable=SC1090
 if ! source "$pause_lib" 2>/dev/null; then
   exit 0
 fi
@@ -135,6 +136,7 @@ block_tmp=$(mktemp "$guard_dir/flh-flush-block.XXXXXX" 2>/dev/null) || {
   rm -f "$prompt_tmp" "$output_tmp" 2>/dev/null || true
   exit 0
 }
+# shellcheck disable=SC2329
 cleanup() {
   rm -f "$prompt_tmp" "$output_tmp" "$block_tmp" 2>/dev/null || true
 }

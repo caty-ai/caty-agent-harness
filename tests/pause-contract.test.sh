@@ -299,6 +299,13 @@ capture_run distill-paused env MODEL_SENTINEL="$model_sentinel" DISTILLER_CMD="$
 assert_paused_automation_capture "paused OpenClaw distiller" "$ws" openclaw-distill-audit
 assert_eq "paused OpenClaw distiller leaves exact workspace snapshot" "$distill_before" "$(snapshot_workspace "$ws")"
 cover adapters/openclaw/distill-audit.sh exit-0-status
+
+intake_before=$(snapshot_workspace "$ws")
+capture_run intake-paused "$ROOT/adapters/claude-code/flush-intake.sh" "$ws"
+assert_paused_automation_capture "paused Claude Code flush intake" "$ws" claude-code-flush-intake
+assert_eq "paused Claude Code flush intake leaves exact workspace snapshot" \
+  "$intake_before" "$(snapshot_workspace "$ws")"
+cover adapters/claude-code/flush-intake.sh exit-0-status
 [[ ! -e "$model_sentinel" ]] \
   && pass "all paused automated model paths make zero model calls" \
   || fail_case "all paused automated model paths make zero model calls" "model sentinel exists"

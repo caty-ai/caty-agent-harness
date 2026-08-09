@@ -213,7 +213,7 @@ fi
 assert_route_status "claude-code CONSULT injection passes" "$probe_output" claude-code "CONSULT injection" PASS
 assert_route_status "claude-code candidate generation passes" "$probe_output" claude-code "candidate generation" PASS
 assert_route_status "claude-code verifier availability fails explicitly" "$probe_output" claude-code "verifier available" FAIL
-assert_route_status "claude-code distiller cron fails explicitly" "$probe_output" claude-code "distiller cron" FAIL
+assert_route_status "claude-code flush intake fold route passes" "$probe_output" claude-code "distiller cron" PASS
 
 assert_route_status "codex CONSULT injection passes" "$probe_output" codex "CONSULT injection" PASS
 assert_route_status "codex candidate generation passes" "$probe_output" codex "candidate generation" PASS

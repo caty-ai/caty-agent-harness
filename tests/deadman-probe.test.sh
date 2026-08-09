@@ -165,29 +165,31 @@ chmod +x "$TMP_ROOT/awk-shim-dir/awk"
 PATH="$TMP_ROOT/awk-shim-dir:$PATH" DEADMAN_CHECKS='tick:60' DEADMAN_NOTIFY_CMD="$TMP_ROOT/notify" "$PROBE" "$ws" >"$TMP_ROOT/probe.out" 2>"$TMP_ROOT/probe.err"; awk_rc=$?
 awk_unchanged=0
 cmp -s "$TMP_ROOT/state-before" "$ws/STATE.md" && awk_unchanged=1
-awk_sentinel_absent=0
-[ ! -e "$ws/loop/.deadman/tick.fired" ] && awk_sentinel_absent=1
+awk_sentinel_present=0
+[ -e "$ws/loop/.deadman/tick.fired" ] && awk_sentinel_present=1
 awk_notify_count=0
 [ -f "$NOTIFY_LOG" ] && awk_notify_count=$(wc -l <"$NOTIFY_LOG" | tr -d '[:space:]')
 run_probe "$ws" 'tick:60'; awk_retry_rc=$?
 if [ "$awk_rc" -eq 1 ] && [ "$awk_unchanged" -eq 1 ] \
-  && [ "$awk_notify_count" -ge 1 ] \
-  && [ "$awk_sentinel_absent" -eq 1 ] && [ "$awk_retry_rc" -eq 1 ] \
-  && [ "$(entry_count "$ws")" -eq 1 ]; then
-  pass 'awk failure preserves state and retries'
+  && [ "$awk_notify_count" -eq 1 ] \
+  && [ "$awk_sentinel_present" -eq 1 ] && [ "$awk_retry_rc" -eq 0 ] \
+  && [ "$(entry_count "$ws")" -eq 1 ] \
+  && [ "$(wc -l <"$NOTIFY_LOG" | tr -d '[:space:]')" -eq 1 ] \
+  && [ ! -e "$ws/loop/.deadman/tick.append-pending" ]; then
+  pass 'append failure notifies once and retries without another notification'
 else
   fail_case 'awk failure preserves state and retries' "rcs=$awk_rc/$awk_retry_rc unchanged=$awk_unchanged"
 fi
 
 ws=$(new_ws abandoned-lock)
 touch -t 202001010000 "$ws/loop/.deadman/tick.marker"
-mkdir "$ws/loop/.deadman/.state.lock"
-touch -t 202001010000 "$ws/loop/.deadman/.state.lock"
+mkdir "$ws/loop/.distill-state.lock"
+touch -t 202001010000 "$ws/loop/.distill-state.lock"
 run_probe "$ws" 'tick:60'; rc=$?
 if [ "$rc" -eq 1 ] && [ "$(entry_count "$ws")" -eq 1 ]; then
-  pass 'abandoned state lock is reclaimed'
+  pass 'abandoned shared state lock is reclaimed'
 else
-  fail_case 'abandoned state lock is reclaimed' "rc=$rc entries=$(entry_count "$ws")"
+  fail_case 'abandoned shared state lock is reclaimed' "rc=$rc entries=$(entry_count "$ws")"
 fi
 
 ws=$(new_ws bootstrap)
