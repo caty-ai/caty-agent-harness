@@ -159,7 +159,7 @@ WATCHDOG_STALE_SECS=3600 adapters/hermes/stale-claim-watchdog.sh --workspace ~/.
 
 ## Cron wrapper pattern
 
-For cron-driven verifier, watchdog, or Luca task-runner jobs, copy
+For cron-driven verifier, watchdog, or task-runner jobs, copy
 `templates/cron-wrapper.tmpl.sh` into the profile workspace, for example
 `<workspace>/scripts/cron-wrapper.sh`, and make the copy executable. Set `TARGET` to
 the absolute adapter/script path and pass the target arguments after the wrapper.
