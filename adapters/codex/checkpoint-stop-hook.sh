@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# fable-loop CHECKPOINT enforcement — Codex CLI Stop hook (DESIGN §4.1, Issue #93).
-# Fires when the agent ends a turn in a workspace that has a fable-loop STATE.md
+# Caty Agent Harness CHECKPOINT enforcement — Codex CLI Stop hook (DESIGN §4.1, Issue #93).
+# Fires when the agent ends a turn in a Caty Agent Harness workspace that has STATE.md
 # and files changed after STATE.md was last written: asks once per session to
 # CHECKPOINT. Exits 0 silently in every other case.
 #
@@ -65,7 +65,7 @@ state_file="$cwd/STATE.md"
 
 # Ask at most once per session (state kept outside the workspace). If we cannot
 # record the guard we must not block at all — an ask on every turn is worse than none.
-guard_dir="${TMPDIR:-/tmp}/fable-loop-hook"
+guard_dir="${TMPDIR:-/tmp}/caty-agent-harness-hook"
 mkdir -p "$guard_dir" 2>/dev/null || exit 0
 find "$guard_dir" -name 'nagged-*' -mtime +2 -delete 2>/dev/null || true
 [[ -n "$session_id" ]] || session_id="cwd-$(printf '%s' "$cwd" | cksum | cut -d' ' -f1)"
@@ -87,7 +87,7 @@ stamp_sid=$session_id
 
 reason_tmp=$(mktemp "$guard_dir/flh-codex-reason.XXXXXX") || exit 0
 cat >"$reason_tmp" <<EOF || { rm -f "$reason_tmp"; exit 0; }
-fable-loop CHECKPOINT: workspace files changed after STATE.md was last written (e.g. ${newer#"$cwd"/}).
+caty-agent-harness CHECKPOINT: workspace files changed after STATE.md was last written (e.g. ${newer#"$cwd"/}).
 Before ending the session, update '## Last session' in STATE.md (task id / next action / blockers / last verified artifact path) and fold any new observations into the right sections. If this turn genuinely produced nothing checkpoint-worthy, state that explicitly and continue — this reminder fires at most once per session.
 
 Also append only genuinely NEW, delta-only observations to '$flush_file': first read '## Lessons learned' and '## Open failures' in STATE.md and today's flush file (if any) as already captured. If appending, prefix the block with '<!-- flush origin=stop-hook-demand session=$stamp_sid ts=$flush_stamp_ts outcome=ok unverified=true -->'. NO_REPLY is legal: if nothing new exists, say so explicitly instead of writing. Flush entries are unverified candidates; never fold them directly into '## Lessons learned' or '## Open failures' — normal distill gates apply later at intake. Do not capture transient environment failures or negative absolute tool claims; if a retry fixed it, capture the fix. Violation-shaped items go only to dated Open failures entries.

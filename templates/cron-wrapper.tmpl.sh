@@ -11,7 +11,7 @@ set -euo pipefail
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 export PATH
 
-TARGET=${TARGET:-/absolute/path/to/fable-loop-target}
+TARGET=${TARGET:-/absolute/path/to/caty-agent-harness-target}
 CATY_HARNESS_ROOT=${CATY_HARNESS_ROOT:-}
 CATY_WORKSPACE=${CATY_WORKSPACE:-}
 SECRETS_ENV=${SECRETS_ENV:-}

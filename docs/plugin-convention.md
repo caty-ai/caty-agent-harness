@@ -1,6 +1,6 @@
 # Plugin Convention v0 (2026-07-20)
 
-fable-loop-harness is a **generic completion engine**: cron tick → one fresh-context
+Caty Agent Harness is a **generic completion engine**: cron tick → one fresh-context
 step per tick → executable donecheck gate → budget/DLQ/escalation. Everything
 domain-specific (what the tasks *do*) lives outside the engine.
 
