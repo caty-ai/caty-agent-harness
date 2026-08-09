@@ -1,6 +1,6 @@
 # Task Packet — family-updater rollout
 
-> Historical design record. Issue numbers cited in this document refer to the pre-publication private tracker, not to issues in this repository.
+> Historical design record. Issue numbers cited in this document refer to the pre-publication private trackers, not to issues in this repository.
 
 From: Alpha · SoT: fable-loop-harness Issue #36
 For: Claude Code, OpenClaw, and Hermes family agents
