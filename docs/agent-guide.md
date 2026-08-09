@@ -114,7 +114,7 @@ I'll remember where we were. Or ask me to run the bundled example at
 templates/examples/img-pilot.task.md.
 ```
 
-The bundled example you can run builds a self-contained SVG image card and a JSON delivery receipt using local tools only. From the harness repository root, set `STEP_PROVIDER` to your AI tool's step provider and run it end to end:
+The bundled example you can run builds a self-contained SVG image card and a JSON delivery receipt using local tools only. From the harness repository root, set `STEP_PROVIDER` to your AI tool's step provider (the provider interface — its four positional arguments and the `step-result.json` it must write — is specified in [`DESIGN-task-runner.md`](../DESIGN-task-runner.md) and your adapter's bootstrap block) and run it end to end:
 
 ```sh
 scripts/loop-init --workspace "$WORKSPACE"
