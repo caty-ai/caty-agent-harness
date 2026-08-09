@@ -483,7 +483,7 @@ for runtime in claude-code kimi; do
   set -e
   assert_eq "enabled $runtime hook retains blocking exit" "2" "$hook_rc"
   assert_eq "enabled $runtime hook stdout remains empty" "" "$(cat "$TMP/enabled-hook.stdout")"
-  grep -Fq 'fable-loop CHECKPOINT' "$TMP/enabled-hook.stderr" \
+  grep -Fq 'caty-agent-harness CHECKPOINT' "$TMP/enabled-hook.stderr" \
     && pass "enabled $runtime hook keeps checkpoint reason on stderr" \
     || fail_case "enabled $runtime hook keeps checkpoint reason on stderr" "$(cat "$TMP/enabled-hook.stderr")"
 done
@@ -502,7 +502,7 @@ import json, sys
 with open(sys.argv[1], encoding="utf-8") as f:
     value = json.load(f)
 assert value["decision"] == "block"
-assert "fable-loop CHECKPOINT" in value["reason"]
+assert "caty-agent-harness CHECKPOINT" in value["reason"]
 PY
 
 # Missing or syntactically broken pause helpers must fail open for every hook.
@@ -705,7 +705,7 @@ multiworkspace_hook_rc=$?
 set -e
 assert_eq "other enabled workspace entrypoint remains active while selected workspace is paused" "2" "$multiworkspace_hook_rc"
 assert_eq "other enabled hook stdout remains empty" "" "$(cat "$TMP/multiworkspace-hook.stdout")"
-grep -Fq 'fable-loop CHECKPOINT' "$TMP/multiworkspace-hook.stderr" \
+grep -Fq 'caty-agent-harness CHECKPOINT' "$TMP/multiworkspace-hook.stderr" \
   && pass "other enabled workspace produces its normal checkpoint behavior" \
   || fail_case "other enabled workspace produces its normal checkpoint behavior" "$(cat "$TMP/multiworkspace-hook.stderr")"
 

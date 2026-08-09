@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# fable-loop updater cron wrapper template v1
+# Caty Agent Harness updater cron wrapper template v1
 #
 # Copy this file next to a checked-out harness clone, set REPO_DIR to the
 # absolute clone path, and run it from cron. It validates wrapper-level
@@ -15,7 +15,7 @@ fail() {
   exit 3
 }
 
-REPO_DIR=${REPO_DIR:-/absolute/path/to/fable-loop-harness}
+REPO_DIR=${REPO_DIR:-/absolute/path/to/caty-agent-harness}
 WORKSPACE=${WORKSPACE:-$PWD}
 AGENT=${AGENT:-${USER:-unknown}}
 RING=${RING:-stable}

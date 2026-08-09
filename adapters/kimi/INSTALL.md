@@ -1,16 +1,18 @@
 # Kimi Code CLI Adapter Install
 
-Kimi Code CLI exposes lifecycle hooks including a blockable `Stop` event, so fable-loop
-CHECKPOINT enforcement reuses the reference Stop-hook logic (DESIGN §4.1) with no cron
-watchdog. This adapter targets a "relief Alpha" running on Kimi while the Claude Code
-Alpha is down (see the relief operating charter at `~/claude-workspace/AGENTS.md`).
+Kimi Code CLI exposes lifecycle hooks including a blockable `Stop` event, so
+Caty Agent Harness CHECKPOINT enforcement reuses the reference Stop-hook logic
+(DESIGN §4.1) with no cron watchdog. This adapter targets a "relief Alpha"
+running on Kimi while the Claude Code Alpha is down (see the relief operating
+charter at `~/claude-workspace/AGENTS.md`).
 
 ## checkpoint-stop-hook.sh (Stop hook)
 
-What it does: identical policy to the Claude Code reference — when the model is about to
-end a turn in a cwd with a fable-loop `STATE.md` and workspace files changed after
-`STATE.md` was last written, it asks ONCE per session to update `## Last session` and
-demands a delta-only, unverified flush append for genuinely new observations. Silent in
+What it does: identical policy to the Claude Code reference — when the model
+is about to end a turn in a cwd for a Caty Agent Harness workspace that
+contains `STATE.md` and workspace files changed after `STATE.md` was last
+written, it asks ONCE per session to update `## Last session` and demands a
+delta-only, unverified flush append for genuinely new observations. Silent in
 every other case, and it never crashes the hook chain.
 
 Kimi block contract: the `Stop` event is blockable, so the hook exits 2 with the

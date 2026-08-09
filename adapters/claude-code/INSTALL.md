@@ -36,13 +36,14 @@ instruction-driven and therefore softer than the shell guards.
 
 ## checkpoint-stop-hook.sh (Stop hook)
 
-What it does: when the assistant ends a turn in a cwd that contains a fable-loop
-`STATE.md` and workspace files changed after `STATE.md` was last written, it blocks
-ONCE per session (exit 2) with a reminder to update `## Last session`. Silent in
-every other case: no STATE.md, nothing changed, already nagged this session,
-stop-hook-forced continuation, or any environment problem (a guard hook must never
-crash the hook chain). Its reminder also demands a delta-only, unverified flush
-append when there are genuinely new durable observations.
+What it does: when the assistant ends a turn in a cwd for a Caty Agent Harness
+workspace that contains `STATE.md` and workspace files changed after `STATE.md`
+was last written, it blocks ONCE per session (exit 2) with a reminder to update
+`## Last session`. Silent in every other case: no STATE.md, nothing changed,
+already nagged this session, stop-hook-forced continuation, or any environment
+problem (a guard hook must never crash the hook chain). Its reminder also
+demands a delta-only, unverified flush append when there are genuinely new
+durable observations.
 
 Known accepted false positive: `git checkout`/`rebase` rewrites tree mtimes and can
 trigger one spurious nag; the message allows the assistant to decline explicitly.
@@ -68,13 +69,14 @@ Point at your repo clone — `git pull` then updates the hook with no re-registr
 ## precompact-flush-hook.sh (PreCompact hook)
 
 What it does: before Claude Code compacts a context window, this hook makes one
-governed, headless capture attempt per session. It supplies the current `## Lessons
-learned`, `## Open failures`, and today's flush file as already captured context, so
-the model extracts delta-only candidates into `loop/pending/`. Every attempted write
-has a synthetic-origin stamp and is classified as `ok`, `no_reply`, `degenerate`,
-`timeout`, or `error`; bullets are appended only for `ok`. It never self-promotes
-these unverified candidates into `STATE.md`, and its outside-workspace guard prevents
-more than one attempt per session.
+governed, headless capture attempt per session. It supplies the current
+`## Lessons learned`, `## Open failures`, and today's flush file as already
+captured context, so the model extracts delta-only candidates into
+`loop/pending/`. Every attempted write has a synthetic-origin stamp and is
+classified as `ok`, `no_reply`, `degenerate`, `timeout`, or `error`; bullets
+are appended only for `ok`. It never self-promotes these unverified candidates
+into `STATE.md`, and its outside-workspace guard prevents more than one attempt
+per session.
 
 Known accepted bounded re-arm: the per-session guard file is cleaned up after
 about two days, so a session that runs longer can flush once more after the guard

@@ -1,20 +1,21 @@
 # Codex CLI Adapter Install
 
-Codex CLI supports the same lifecycle hooks as Claude Code, so fable-loop CHECKPOINT
-enforcement reuses the reference Stop-hook logic (DESIGN §4.1) with no cron watchdog —
-the `Stop` event fires the reminder mechanically. This adapter targets a "relief
-Alpha" running on Codex while the Claude Code Alpha is down (see the relief operating
-charter at `~/claude-workspace/AGENTS.md`).
+Codex CLI supports the same lifecycle hooks as Claude Code, so Caty Agent
+Harness CHECKPOINT enforcement reuses the reference Stop-hook logic
+(DESIGN §4.1) with no cron watchdog — the `Stop` event fires the reminder
+mechanically. This adapter targets a "relief Alpha" running on Codex while the
+Claude Code Alpha is down (see the relief operating charter at
+`~/claude-workspace/AGENTS.md`).
 
 ## checkpoint-stop-hook.sh (Stop hook)
 
-What it does: when the agent ends a turn in a cwd that contains a fable-loop
-`STATE.md` and workspace files changed after `STATE.md` was last written, it asks ONCE
-per session to update `## Last session`, and demands a delta-only, unverified flush
-append when there are genuinely new observations. Silent in every other case: no
-STATE.md, nothing changed, already asked this session, a Stop-forced continuation
-(`stop_hook_active`), or any environment problem (a guard hook must never crash the
-hook chain).
+What it does: when the agent ends a turn in a cwd for a Caty Agent Harness
+workspace that contains `STATE.md` and workspace files changed after `STATE.md`
+was last written, it asks ONCE per session to update `## Last session`, and
+demands a delta-only, unverified flush append when there are genuinely new
+observations. Silent in every other case: no STATE.md, nothing changed,
+already asked this session, a Stop-forced continuation (`stop_hook_active`),
+or any environment problem (a guard hook must never crash the hook chain).
 
 Codex block contract: the hook prints `{"decision":"block","reason":"..."}` on stdout
 and exits 0. Codex turns the `reason` into an automatic continuation prompt, so the

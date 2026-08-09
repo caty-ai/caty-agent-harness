@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# fable-loop pre-destruction memory flush — Claude Code PreCompact hook (Issue #47).
+# Caty Agent Harness pre-destruction memory flush — Claude Code PreCompact hook (Issue #47).
 # Captures only new, unverified candidates before compaction; it never blocks compaction.
 set -euo pipefail
 trap 'exit 0' ERR
@@ -94,7 +94,7 @@ cwd=$(caty_pause_canonical_workspace "$cwd" 2>/dev/null) || exit 0
 state_file="$cwd/STATE.md"
 [[ -f "$state_file" ]] || exit 0
 
-guard_dir="${TMPDIR:-/tmp}/fable-loop-hook"
+guard_dir="${TMPDIR:-/tmp}/caty-agent-harness-hook"
 mkdir -p "$guard_dir" 2>/dev/null || exit 0
 find "$guard_dir" -name 'flushed-*' -mtime +2 -delete 2>/dev/null || true
 [[ -n "$session_id" ]] || session_id="cwd-$(printf '%s' "$cwd" | cksum | cut -d' ' -f1)"
@@ -141,7 +141,7 @@ cleanup() {
 trap cleanup EXIT
 
 cat >"$prompt_tmp" <<EOF
-You are a memory-flush extractor for a fable-loop workspace about to lose its context window. Below is (1) what is ALREADY captured — do not restate any of it — and (2) the recent session transcript. Extract only NEW durable observations (lessons, open failures, decisions with reasons, verified facts). Output either exactly NO_REPLY (if nothing new) or markdown bullets (- ...), one observation per bullet, each self-contained with concrete referents (paths/ids), no headers, no prose around them.
+You are a memory-flush extractor for a Caty Agent Harness workspace about to lose its context window. Below is (1) what is ALREADY captured — do not restate any of it — and (2) the recent session transcript. Extract only NEW durable observations (lessons, open failures, decisions with reasons, verified facts). Output either exactly NO_REPLY (if nothing new) or markdown bullets (- ...), one observation per bullet, each self-contained with concrete referents (paths/ids), no headers, no prose around them.
 Current UTC date: $today
 Do not save transient environment failures or negative absolute tool claims; if a retry fixed it, save the fix. Such items go only to dated Open failures entries.
 

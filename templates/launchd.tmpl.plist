@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  fable-loop LaunchAgent template v1
+  Caty Agent Harness LaunchAgent template v1
 
   macOS scheduling for any tick that shells out to the claude CLI. crontab
   sessions cannot reach the user Keychain, so `claude -p` fails there with
@@ -30,7 +30,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.example.fable-loop-tick</string>
+  <string>com.example.caty-agent-harness-tick</string>
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
@@ -39,7 +39,7 @@
   <key>EnvironmentVariables</key>
   <dict>
     <key>TARGET</key>
-    <string>/absolute/path/to/fable-loop-target</string>
+    <string>/absolute/path/to/caty-agent-harness-target</string>
     <key>DEADMAN_MARKER</key>
     <string>/absolute/path/to/workspace/loop/.deadman/tick-marker</string>
   </dict>
