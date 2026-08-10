@@ -85,9 +85,9 @@ if [[ "$evidence_path" == "$wrapper_path" || "$evidence_path" == "$probe_path" ]
   attest_fail 'evidence_path must not identify the wrapper or probe'
 fi
 
-scratch_dir=$(mktemp -d "${TMPDIR:-/tmp}/fable-attest-wrapper.XXXXXX")
-probe_stdout=$(mktemp "${TMPDIR:-/tmp}/fable-attest-wrapper.stdout.XXXXXX")
-probe_stderr=$(mktemp "${TMPDIR:-/tmp}/fable-attest-wrapper.stderr.XXXXXX")
+scratch_dir=$(mktemp -d "${TMPDIR:-/tmp}/caty-attest-wrapper.XXXXXX")
+probe_stdout=$(mktemp "${TMPDIR:-/tmp}/caty-attest-wrapper.stdout.XXXXXX")
+probe_stderr=$(mktemp "${TMPDIR:-/tmp}/caty-attest-wrapper.stderr.XXXXXX")
 cleanup() {
   rm -rf "$scratch_dir"
   rm -f "$probe_stdout" "$probe_stderr"

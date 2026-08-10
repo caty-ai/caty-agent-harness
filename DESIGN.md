@@ -1,4 +1,4 @@
-# fable-loop v0.2 — Minimal Self-Improving Loop Harness for OpenClaw & Hermes Agent
+# Caty Agent Harness v0.2 — Minimal Self-Improving Loop Harness for OpenClaw & Hermes Agent
 
 > Historical design record. Issue numbers cited in this document (e.g. #43, #49) refer to the pre-publication private tracker, not to issues in this repository.
 

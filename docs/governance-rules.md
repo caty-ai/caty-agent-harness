@@ -4,7 +4,7 @@
 
 > **Canonical file** for the family adoption governance R-series (R1–R14).
 > Initial version transcribed from the binding text of
-> fable-loop-harness#26 (private tracker)
+> pre-publication private tracker #26
 > (self-growth loop EPIC — cross-model review resolutions 2026-07-08 + Sho decisions 2026-07-08).
 > Before this file existed, #26's issue body was the only authoritative record; this file
 > supersedes it as the living canon. #26 remains the historical source of v1.0.
@@ -17,7 +17,7 @@ bare number.**
 | Series | Canon | Scope |
 | --- | --- | --- |
 | **Governance R1–R14** (this file) | `docs/governance-rules.md` | Family adoption governance: how the family senses, trials, and adopts external tools/LLMs/practices, and how identity-critical changes are gated |
-| Synthesis R1–R15 | `SYNTHESIS.md` | fable-loop v0.1→v0.2 design review resolutions (verifier, STATE.md, rubric discipline) |
+| Synthesis R1–R15 | `SYNTHESIS.md` | harness v0.1→v0.2 design review resolutions (verifier, STATE.md, rubric discipline) |
 
 When ambiguity is possible, qualify as `governance-R12` vs `synthesis-R12`.
 
@@ -384,5 +384,5 @@ namespace note in `SYNTHESIS.md` (file outside this Issue's declared scope).
 | Evidence thresholds (delayed reward, holdout, negative signals) | `persona-growth-loop/docs/contracts/evidence-rules.md` @ same tag |
 | Architecture (soul-freeze strength per face; residual risk) | `persona-growth-loop/docs/architecture-v1.md` §5/§7 |
 | Adjudication that mandated this file | `persona-growth-loop/reviews/2026-08-02-architecture-v1/10-adjudication.md` §C |
-| v1.0 source | fable-loop-harness#26 (issue body) |
-| Amendment issue | fable-loop-harness#123 |
+| v1.0 source | pre-publication private tracker #26 (issue body) |
+| Amendment issue | pre-publication private tracker #123 |

@@ -2,7 +2,7 @@
 
 > Historical design record. Issue numbers cited in this document refer to the pre-publication private trackers, not to issues in this repository.
 
-From: Alpha · SoT: fable-loop-harness Issue #36
+From: Alpha · SoT: pre-publication private tracker Issue #36
 For: Claude Code, OpenClaw, and Hermes family agents
 
 ## Claude Code
@@ -51,7 +51,7 @@ so failures are caught before stable agents update.
 > hourly cron, heartbeat `updater-claire.json` ok, 34/34 tests green on host).
 > v1.1.1 is the first tag distributed via the rail itself.
 
-> Path correction (install learning, fable-loop #40): the cron line below shows
+> Path correction (install learning, pre-publication private tracker #40): the cron line below shows
 > `WORKSPACE="/path/to/claire-home/.openclaw-claire/workspace"`, but Claire's real workspace
 > is `/path/to/openclaw-home/.openclaw/workspace-claire`. Verify the live workspace path on
 > the host before installing; do not copy packet paths blindly.

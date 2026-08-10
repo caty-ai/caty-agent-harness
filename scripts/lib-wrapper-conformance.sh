@@ -507,7 +507,7 @@ wrapper_conformance_stage_runtime() {
   local staged_sha
   local staged_provider_sha
 
-  stage_dir=$(mktemp -d "${TMPDIR:-/tmp}/fable-wrapper-stage.XXXXXX") || {
+  stage_dir=$(mktemp -d "${TMPDIR:-/tmp}/caty-wrapper-stage.XXXXXX") || {
     wrapper_conformance_fail "failed to create wrapper stage directory"
     return 1
   }
