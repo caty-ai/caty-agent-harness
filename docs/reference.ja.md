@@ -55,6 +55,12 @@
 
 ---
 
+## Flush intake consumer の receipt
+
+flush intake consumer の会計 ledger は `loop/pending/intake-runs.log` です。deadman の `distill` marker が証明するのは intake が実行されたことだけです。内容レベルの沈黙・dedup・deferral・eviction・quarantine の各件数は ledger で確認します。`loop/archive/` は append-only で、自動で prune されることはありません。ledger の詳しい形式と schedule は [adapters/claude-code/INSTALL.md](../adapters/claude-code/INSTALL.md) を参照してください。
+
+---
+
 ## 契約文書
 
 | 文書 | 契約 |

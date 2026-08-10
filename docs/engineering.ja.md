@@ -123,6 +123,16 @@ verifier availability や cron wiring など、optional learning-path row も表
 
 この表は意図的に非対称で、すべての runtime に同一の native 機能があるとは主張しません。
 
+### Flush intake consumer
+
+上の Claude Code の `Stop` / `PreCompact` hook は producer に過ぎません。その産物は `loop/pending/flush-*.md` の未検証の記録です。どちらかの producer を有効にした workspace は、consumer である `adapters/claude-code/flush-intake.sh` の定期実行も必ず設定してください。さもないと、その記録は governed な `STATE.md` の fold に届かないまま溜まり続けます。同じ deterministic な consumer は、Codex CLI と Kimi Code CLI の workspace でも使えます。両者の checkpoint hook が同じ flush format を出力するためです。
+
+consumer は 1 日 2〜4 回実行してください。LaunchAgent なら `StartInterval` を `21600`〜`43200` 秒にします。毎日 1 回の schedule では、既定の deadman threshold に対して jitter の余裕がありません。consumer は model を呼ばないため、scheduler に Claude の credential は不要です。それでも macOS の scheduler surface としては `gui/<uid>` domain の LaunchAgent を推奨します。claude CLI を叩く tick wrapper や spawn adapter はいずれも LaunchAgent が必須です。crontab session は user Keychain に到達できないためです。
+
+fold 経路は workspace につき 1 本だけです。この consumer か、OpenClaw の `distill-audit.sh` のどちらかを使い、両方の併用はできません。consumer 自身は、共有 STATE lock を取得し、infrastructure error なく完了した後にだけ `loop/.deadman/distill.marker` を touch します（self-marking 設計）。チェックイン済みの cron wrapper（`templates/cron-wrapper.tmpl.sh`）はまさにこの consumer を self-marking として認識し、`DEADMAN_MARKER` がその workspace の `distill.marker` を指す場合は自身の pre-touch を抑制します。したがって明示的に設定しても lock starvation や intake failure が隠れることはありません。`DEADMAN_MARKER` を未設定のままにするのは、wrapper が識別できない proxy や rename された対象の場合です。
+
+詳しいセットアップ手順・ledger の形式・schedule の詳細は [adapters/claude-code/INSTALL.md](../adapters/claude-code/INSTALL.md) を参照してください。
+
 ---
 
 <a id="pause"></a>
