@@ -1,0 +1,66 @@
+# 基本門番①: テスト + lint
+#
+# 守るもの: 「テストが通っていないコードが main に入らない」こと。
+# 配り方: このファイルを対象リポの .github/workflows/ へコピーし、# CUSTOMIZE の2箇所を
+#         そのリポのコマンドに差し替える。
+#
+# 設計姿勢 (handbook docs/05・docs/09 R-6):
+# - 未設定 = 赤 (fail-closed)。「テストが無いリポでは green」にしない。
+#   fail-open で置くと「置いただけで守られた気になる」(FP-5) ため、導入時に必ずコマンドを書かせる。
+# - set -euo pipefail 必須・`|| true` でゲート判定を飲み込むこと禁止。
+# 型の正本: caty-ai/family-dev-handbook templates/ci/
+
+name: Test + Lint
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-lint-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run tests
+        run: |
+          set -euo pipefail
+          # CUSTOMIZE: このリポのテストコマンドに差し替える (例: npm test / pytest / swift test)。
+          # 既定は Makefile の `test` ターゲットを試み、無ければ「未設定」として赤で落ちる (fail-closed)。
+          if [ -f Makefile ] && grep -qE '^test:' Makefile; then
+            make test
+          else
+            echo "::error::test command is not configured. Edit the CUSTOMIZE block in test-lint.yml — an unconfigured gate must not pass (fail-closed by design)."
+            exit 1
+          fi
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run lint
+        run: |
+          set -euo pipefail
+          # CUSTOMIZE: このリポの lint コマンドに差し替える (例: npm run lint / ruff check / swiftlint)。
+          # 既定は Makefile の `lint` ターゲットを試み、無ければ「未設定」として赤で落ちる (fail-closed)。
+          if [ -f Makefile ] && grep -qE '^lint:' Makefile; then
+            make lint
+          else
+            echo "::error::lint command is not configured. Edit the CUSTOMIZE block in test-lint.yml — an unconfigured gate must not pass (fail-closed by design)."
+            exit 1
+          fi

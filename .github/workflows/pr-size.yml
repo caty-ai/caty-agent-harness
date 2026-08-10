@@ -1,0 +1,136 @@
+# 基本門番③: PR サイズ上限 (既定 250 行・助言ゲート)
+#
+# 守るもの: レビュー不能な巨大 PR がそのまま merge されないこと (handbook L2-3 の分解を促す)。
+# 配り方: .github/workflows/ へコピーし、# CUSTOMIZE (除外パターン) を必要に応じて追記。
+#         既定では required checks に登録しない (赤は出すが merge は止めない・可視化 — FP-4 側)。
+#         required 化は各リポの判断。サイズは安全境界ではなく助言ゲート。
+#
+# 設計姿勢 (handbook docs/05・docs/09):
+# - 計測は merge-base 起点 3 点 diff + rename/copy 検出 (-M -C)。純粋な移動・リネーム由来の行は
+#   計測から外れるので、R-2③ が歓迎する抽出リファクタの大半は閾値を割る。
+# - 免除は size-exempt ラベル。免除された PR はその旨を green ログに明示する (黙って通さない — FP-5)。
+#   免除は head SHA に束縛される: 束縛の本体はゲート側のイベント判定 (作者が単独で起こせる
+#   synchronize / reopened / ready_for_review / edited の run ではラベルが残っていても免除を無効化)
+#   で、剥がしジョブの成功に依存しない。剥がしは可視化のための衛生。
+# - 範囲解決に失敗したら赤 (FP-6)。
+# - pull_request_target は使わない (untrusted コードに write トークンを渡す典型的脆弱形)。
+# 型の正本: caty-ai/family-dev-handbook templates/ci/
+
+name: PR Size
+
+on:
+  pull_request:
+    # 既定 types に labeled/unlabeled は含まれない。省くと「免除ラベルを貼っても再評価されない」
+    # 「剥がしても緑が残る」の両不具合になるため明示する。edited は PR 本文の
+    # 「## リファクタ宣言」追記を超過メッセージへ反映するため。
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-size-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # ゲート評価 (赤/緑)。書き込み系ジョブに needs: 依存しない — 書き込みの失敗が判定を不明にする経路を作らない。
+  pr-size:
+    name: pr-size
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0 # 浅い checkout は「diff 解決不能 → 変更ゼロ扱い → 緑」の fail-open になる
+          persist-credentials: false
+
+      - name: Measure PR size
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_ACTION: ${{ github.event.action }}
+          MAX_LINES: "250" # 既定上限 (推奨値)。変更は各リポの判断
+        run: |
+          set -euo pipefail
+          git rev-parse --verify "origin/${BASE_REF}" >/dev/null || {
+            echo "::error::base ref not found — failing closed (FP-6)."; exit 1; }
+          BASE=$(git merge-base "origin/${BASE_REF}" HEAD) || {
+            echo "::error::merge-base failed — failing closed (FP-6)."; exit 1; }
+          [ -n "$BASE" ] || { echo "::error::empty merge-base — failing closed."; exit 1; }
+
+          # 免除ラベル (size-exempt): 付いていれば green だが、黙って通さず明示する (FP-5)。
+          # 束縛はイベント種別で行う: synchronize (新 push)・reopened・ready_for_review・edited
+          # (いずれも PR 作者が単独で起こせる) の run では、ラベルが残っていても免除を無効化する
+          # (剥がしジョブの成功に依存しない)。免除が効くのはオーナーが貼った labeled イベント起点の
+          # 再評価のみ。オーナーが貼り直すと labeled イベントで再評価される。
+          case "$EVENT_ACTION" in synchronize|reopened|ready_for_review|edited) AUTHOR_EVENT=1 ;; *) AUTHOR_EVENT=0 ;; esac
+          if [ "$AUTHOR_EVENT" -eq 0 ]; then
+            LABELS=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name') || {
+              echo "::error::label fetch failed — cannot judge exemption, failing closed (FP-6)."; exit 1; }
+            if grep -Fxq 'size-exempt' <<<"$LABELS"; then
+              echo "::notice::size-exempt label present — size gate exempted by owner for this head SHA. This exemption is logged, not silent (FP-5)."
+              exit 0
+            fi
+          else
+            echo "head changed (event: ${EVENT_ACTION}) — any size-exempt label is void for this head; measuring size normally."
+          fi
+
+          # 計測: merge-base 起点 3 点 diff・rename/copy 検出・numstat (バイナリは '-' で自動除外)。
+          # CUSTOMIZE: 除外パターン (lockfile・生成物・翻訳同期など、リポ固有の機械的増分をここに足す)
+          EXCLUDES=(
+            ':(exclude)*.lock'
+            ':(exclude)package-lock.json'
+            ':(exclude)i18n/**'
+          )
+          TOTAL=$(git diff -M -C --numstat "${BASE}...HEAD" -- . "${EXCLUDES[@]}" \
+            | awk '$1 != "-" && $2 != "-" { total += $1 + $2 } END { print total + 0 }')
+          echo "measured size (additions+deletions, moves/renames/binaries/excludes removed): ${TOTAL} lines (limit ${MAX_LINES})"
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "::notice::measured size is 0 lines (empty commits, pure moves, or fully excluded paths) — nothing to advise on. Making the empty measurement explicit rather than silently green (FP-5)."
+          fi
+
+          if [ "$TOTAL" -gt "$MAX_LINES" ]; then
+            BODY=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json body --jq '.body // ""') || BODY=""
+            echo "::error::PR size ${TOTAL} lines exceeds limit ${MAX_LINES}."
+            echo ""
+            echo "分割の指針 (handbook L2-3): 触るファイル予測が独立する単位で子 Issue に分解する。"
+            if grep -q '^## リファクタ宣言' <<<"$BODY"; then
+              echo "この PR にはリファクタ宣言がある: 宣言リファクタの移動・リネーム行は既に計測から除外されている。"
+              echo "それでも超過する場合は、オーナーに size-exempt ラベルを依頼する (免除はログに明示される)。"
+            else
+              echo "抽出リファクタなら PR 本文に見出し『## リファクタ宣言』+ 抽出元 Issue リンクを書く (移動行は計測から除外済み)。"
+              echo "それ以外は分割するか、オーナーに size-exempt ラベルを依頼する。"
+            fi
+            exit 1
+          fi
+
+  # 書き込み系 (fail-open): 新しい push で免除ラベルを剥がす。「剥がしは機械・貼るのは人間」。
+  # fork PR ではラベル操作が 403 になる → 警告に留める (ゲート判定はこのジョブに依存しない)。
+  strip-exempt-on-push:
+    name: strip-size-exempt (on new push)
+    if: github.event.action == 'synchronize'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Remove size-exempt label
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # if 条件内のパイプラインは errexit の対象外で API 失敗が黙って成功になる — 取得は明示代入で行う。
+          LABELS=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name') || {
+            echo "::warning::label fetch failed — skipping strip (hygiene only; gate evaluation is unaffected)."; exit 0; }
+          if grep -Fxq 'size-exempt' <<<"$LABELS"; then
+            gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label 'size-exempt' \
+              || echo "::warning::could not remove size-exempt (fork PR has no write token — 403 is expected there). Gate evaluation is unaffected."
+            echo "size-exempt removed: exemption is bound to the head SHA the owner saw; a new push requires re-exemption."
+          fi
