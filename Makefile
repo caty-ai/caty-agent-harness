@@ -22,3 +22,5 @@ lint:
 	done; \
 	[ "$$count" -ge 1 ] || { echo "lint: zero shell files checked - refusing vacuous green (fail-closed)" >&2; exit 1; }; \
 	echo "lint: $$count shell files OK"
+
+# ci-verify #30: risk-path touch (verification only, never merge)
