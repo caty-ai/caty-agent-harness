@@ -7,11 +7,11 @@ Amended 2026-07-18: §8 cross-cutting contracts (grok-build study, #43 → #49).
 Author: Alpha (Claude Fable 5), 2026-07-04.
 Review lineage: v0.1 → Codex gpt-5.5 xhigh / GLM 5.2 / Sonnet 5 (APPROVE-WITH-CHANGES)
 + Opus 4.8 (REJECT) → adjudication in SYNTHESIS-task-runner.md → this rewrite.
-Parent: Issue #8 (EPIC). Companion to DESIGN.md (fable-loop v0.2); does not restate it.
+Parent: Issue #8 (EPIC). Companion to DESIGN.md (harness v0.2); does not restate it.
 
 ## 0. TL;DR
 
-The fable-loop guards the QUALITY of finished work; task-runner DRIVES work to
+The harness loop guards the QUALITY of finished work; task-runner DRIVES work to
 completion on weak backends. Split a task into an enumerated plan, run one attempt per
 cron tick in a FRESH agent session that receives only {task file, progress evidence,
 STATE.md}, keep all machine truth in a per-task `state.json` (atomic renames, the only
@@ -179,7 +179,7 @@ Kill = TERM to pgroup → 30 s grace → KILL; the adapter also sets HTTP timeou
 STATE.md: the driver NEVER writes it — nor `loop/pending/` (TR-R4). All task-runner
 state lives under `loop/tasks/` + `loop/artifacts/`. The workspace's normal distill
 path consumes delivered bundles; candidates distilled from them carry
-`verify: mechanical` and are excluded from k≥2 promotion until a real fable-loop
+`verify: mechanical` and are excluded from k≥2 promotion until a real harness
 VERIFY or explicit human promotion (TR-R5).
 
 ### 3.5 Escalation / DLQ (D6, TR-R11)

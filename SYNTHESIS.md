@@ -1,6 +1,6 @@
-# Cross-Review Synthesis & Adjudication — fable-loop v0.1 → v0.2
+# Cross-Review Synthesis & Adjudication — harness design v0.1 → v0.2
 
-> Namespace note: the R1–R15 in this file are fable-loop v0.2 design-review resolutions —
+> Namespace note: the R1–R15 in this file are harness v0.2 design-review resolutions —
 > a separate series from the family adoption **governance** R1–R14 in
 > [docs/governance-rules.md](docs/governance-rules.md). Never cross-reference by bare number.
 
