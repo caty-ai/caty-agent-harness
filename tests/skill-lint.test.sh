@@ -93,8 +93,41 @@ trigger: worse
 Check.
 EOF
 
+mkdir -p "$ws/skills/verified-complete" "$ws/skills/draft-without-verification"
+cat >"$ws/skills/verified-complete/SKILL.md" <<'EOF'
+---
+name: verified-complete
+description: verified skill with complete verification metadata
+trigger: verified-complete
+status: verified
+verified_at: 2026-08-10T00:00:00Z
+verifier_id: test-verifier
+---
+
+# verified-complete
+
+## Verification
+
+Check.
+EOF
+cat >"$ws/skills/draft-without-verification/SKILL.md" <<'EOF'
+---
+name: draft-without-verification
+description: draft skill without verification metadata
+trigger: draft-without-verification
+status: draft
+---
+
+# draft-without-verification
+
+## Verification
+
+Check.
+EOF
+
 output=$("$ROOT/install.sh" --check --workspace "$ws" 2>&1)
 rc=$?
+baseline_rc=$rc
 if [ "$rc" -eq 0 ] \
   && printf '%s\n' "$output" | grep -q 'warning: skill lint: description exceeds 200 bytes: skills/_staging/bad-skill/SKILL.md' \
   && printf '%s\n' "$output" | grep -q 'warning: skill lint: missing ## Verification section: skills/_staging/bad-skill/SKILL.md' \
@@ -117,6 +150,46 @@ if printf '%s\n' "$output" | grep -q 'warning: skill lint: missing description: 
   pass "empty description and missing name/status are each warned"
 else
   fail_case "empty description and missing name/status are each warned" "output=$output"
+fi
+
+if ! printf '%s\n' "$output" | grep -q 'skill lint: missing verified_at.*skills/verified-complete/SKILL.md' \
+  && ! printf '%s\n' "$output" | grep -q 'skill lint: missing verifier_id.*skills/verified-complete/SKILL.md'; then
+  pass "verified skill with verification metadata has no verification-field warnings"
+else
+  fail_case "verified skill with verification metadata has no verification-field warnings" "output=$output"
+fi
+
+if ! printf '%s\n' "$output" | grep -q 'skill lint: missing verified_at.*skills/draft-without-verification/SKILL.md' \
+  && ! printf '%s\n' "$output" | grep -q 'skill lint: missing verifier_id.*skills/draft-without-verification/SKILL.md'; then
+  pass "draft skill without verification metadata has no verification-field warnings"
+else
+  fail_case "draft skill without verification metadata has no verification-field warnings" "output=$output"
+fi
+
+mkdir -p "$ws/skills/verified-missing"
+cat >"$ws/skills/verified-missing/SKILL.md" <<'EOF'
+---
+name: verified-missing
+description: verified skill without verification metadata
+trigger: verified-missing
+status: verified
+---
+
+# verified-missing
+
+## Verification
+
+Check.
+EOF
+
+output=$("$ROOT/install.sh" --check --workspace "$ws" 2>&1)
+rc=$?
+if [ "$rc" -eq "$baseline_rc" ] \
+  && printf '%s\n' "$output" | grep -q 'warning: skill lint: missing verified_at for status verified: skills/verified-missing/SKILL.md' \
+  && printf '%s\n' "$output" | grep -q 'warning: skill lint: missing verifier_id for status verified: skills/verified-missing/SKILL.md'; then
+  pass "verified skill warns for both missing fields without changing check exit status"
+else
+  fail_case "verified skill warns for both missing fields without changing check exit status" "baseline_rc=$baseline_rc rc=$rc output=$output"
 fi
 
 output=$(SKILL_DESC_MAX=10 "$ROOT/install.sh" --check --workspace "$ws" 2>&1)

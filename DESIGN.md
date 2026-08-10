@@ -158,6 +158,8 @@ degraded no-template fallback does not render this block.
   Skill frontmatter: `name, description, trigger (deterministic: keyword list or glob),
   status (draft | verified | deprecated | needs_reverify), verified_at (UTC),
   verifier_id`. Drafts live in `skills/_staging/` and are never loaded at CONSULT.
+  Drafts there carry `name, description, trigger, status, source`; `verified_at` and
+  `verifier_id` are added at promotion, so the six-field schema binds verified skills.
   If two promoted skills match one task, the more specific trigger wins; tie → most
   recent `verified_at`; the collision is logged to Open failures for human review.
 - OpenClaw distillation skill drafts may declare `source_task_id`, `target_skill`, and

@@ -1015,7 +1015,7 @@ EOF
   # Skill lint warnings do not affect --check exit semantics. The loader budget is
   # adapter-specific, so callers may tune it with SKILL_DESC_MAX (default: 200).
   local skill_desc_max=${SKILL_DESC_MAX:-200}
-  local skill_file rel_path description description_bytes key key_value
+  local skill_file rel_path description description_bytes key key_value status_value
   while IFS= read -r skill_file; do
     [[ -n "$skill_file" ]] || continue
     rel_path=$(print_relative "$workspace" "$skill_file")
@@ -1039,7 +1039,8 @@ EOF
     if ! grep -q '^## Verification[[:space:]]*$' "$skill_file"; then
       printf 'warning: skill lint: missing ## Verification section: %s\n' "$rel_path" >&2
     fi
-    for key in name trigger status; do
+    status_value=
+    for key in name trigger status verified_at verifier_id; do
       key_value=$(awk -v key="$key" '
         $0 == "---" {markers++; next}
         markers == 1 && $0 ~ ("^" key ":[[:space:]]*") {
@@ -1049,7 +1050,14 @@ EOF
         }
         markers >= 2 {exit}
       ' "$skill_file")
-      if [[ -z "$key_value" ]]; then
+      if [[ "$key" == status ]]; then
+        status_value=$key_value
+      fi
+      if [[ "$key" == verified_at || "$key" == verifier_id ]]; then
+        if [[ "$status_value" == verified && -z "$key_value" ]]; then
+          printf 'warning: skill lint: missing %s for status verified: %s\n' "$key" "$rel_path" >&2
+        fi
+      elif [[ -z "$key_value" ]]; then
         printf 'warning: skill lint: missing %s: %s\n' "$key" "$rel_path" >&2
       fi
     done
