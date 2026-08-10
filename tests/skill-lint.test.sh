@@ -192,6 +192,58 @@ else
   fail_case "verified skill warns for both missing fields without changing check exit status" "baseline_rc=$baseline_rc rc=$rc output=$output"
 fi
 
+mkdir -p "$ws/skills/verified-padded"
+{
+  printf '%s\n' '---'
+  printf '%s\n' 'name: verified-padded'
+  printf '%s\n' 'description: verified skill with padded status'
+  printf '%s\n' 'trigger: verified-padded'
+  printf '%s \n' 'status: verified'
+  printf '%s\n' '---'
+  printf '%s\n' ''
+  printf '%s\n' '# verified-padded'
+  printf '%s\n' ''
+  printf '%s\n' '## Verification'
+  printf '%s\n' ''
+  printf '%s\n' 'Check.'
+} >"$ws/skills/verified-padded/SKILL.md"
+
+output=$("$ROOT/install.sh" --check --workspace "$ws" 2>&1)
+rc=$?
+if [ "$rc" -eq "$baseline_rc" ] \
+  && printf '%s\n' "$output" | grep -q 'warning: skill lint: missing verified_at for status verified: skills/verified-padded/SKILL.md' \
+  && printf '%s\n' "$output" | grep -q 'warning: skill lint: missing verifier_id for status verified: skills/verified-padded/SKILL.md'; then
+  pass "padded verified status warns for both missing fields without changing check exit status"
+else
+  fail_case "padded verified status warns for both missing fields without changing check exit status" "baseline_rc=$baseline_rc rc=$rc output=$output"
+fi
+
+mkdir -p "$ws/skills/verified-quoted"
+cat >"$ws/skills/verified-quoted/SKILL.md" <<'EOF'
+---
+name: verified-quoted
+description: verified skill with quoted status
+trigger: verified-quoted
+status: "verified"
+---
+
+# verified-quoted
+
+## Verification
+
+Check.
+EOF
+
+output=$("$ROOT/install.sh" --check --workspace "$ws" 2>&1)
+rc=$?
+if [ "$rc" -eq "$baseline_rc" ] \
+  && printf '%s\n' "$output" | grep -q 'warning: skill lint: missing verified_at for status verified: skills/verified-quoted/SKILL.md' \
+  && printf '%s\n' "$output" | grep -q 'warning: skill lint: missing verifier_id for status verified: skills/verified-quoted/SKILL.md'; then
+  pass "quoted verified status warns for both missing fields without changing check exit status"
+else
+  fail_case "quoted verified status warns for both missing fields without changing check exit status" "baseline_rc=$baseline_rc rc=$rc output=$output"
+fi
+
 output=$(SKILL_DESC_MAX=10 "$ROOT/install.sh" --check --workspace "$ws" 2>&1)
 rc=$?
 if [ "$rc" -eq 0 ] \

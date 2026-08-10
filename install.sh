@@ -1052,6 +1052,7 @@ EOF
       ' "$skill_file")
       if [[ "$key" == status ]]; then
         status_value=$key_value
+        status_value=$(printf '%s' "$status_value" | sed -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")
       fi
       if [[ "$key" == verified_at || "$key" == verifier_id ]]; then
         if [[ "$status_value" == verified && -z "$key_value" ]]; then
