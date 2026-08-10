@@ -46,6 +46,16 @@ file_mtime() {
   stat -c '%Y' "$1" 2>/dev/null || stat -f '%m' "$1"
 }
 
+age_file_seconds() {
+  local path=$1
+  local seconds=$2
+
+  if touch -d "$seconds seconds ago" "$path" 2>/dev/null; then
+    return 0
+  fi
+  touch -t "$(date -v-"${seconds}"S '+%Y%m%d%H%M.%S')" "$path"
+}
+
 cat >"$TMP_ROOT/notify" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$1" >>"$NOTIFY_LOG"
@@ -190,6 +200,28 @@ if [ "$rc" -eq 1 ] && [ "$(entry_count "$ws")" -eq 1 ]; then
   pass 'abandoned shared state lock is reclaimed'
 else
   fail_case 'abandoned shared state lock is reclaimed' "rc=$rc entries=$(entry_count "$ws")"
+fi
+
+ws=$(new_ws sub-stale-lock)
+touch -t 202001010000 "$ws/loop/.deadman/tick.marker"
+mkdir "$ws/loop/.distill-state.lock"
+age_file_seconds "$ws/loop/.distill-state.lock" 120
+: >"$NOTIFY_LOG"
+run_probe "$ws" 'tick:1'; first_rc=$?
+lock_retained=0
+[ -d "$ws/loop/.distill-state.lock" ] && lock_retained=1
+first_entries=$(entry_count "$ws")
+first_notifications=$(wc -l <"$NOTIFY_LOG" | tr -d '[:space:]')
+rm -rf "$ws/loop/.distill-state.lock"
+run_probe "$ws" 'tick:1'; retry_rc=$?
+if [ "$first_rc" -eq 1 ] && [ "$retry_rc" -eq 0 ] \
+  && [ "$lock_retained" -eq 1 ] && [ "$first_entries" -eq 0 ] \
+  && [ "$first_notifications" -eq 1 ] && [ "$(entry_count "$ws")" -eq 1 ] \
+  && [ "$(wc -l <"$NOTIFY_LOG" | tr -d '[:space:]')" -eq 1 ]; then
+  pass 'probe wait never reclaims a lock younger than the shared stale threshold'
+else
+  fail_case 'probe wait never reclaims a lock younger than the shared stale threshold' \
+    "rcs=$first_rc/$retry_rc retained=$lock_retained entries=$first_entries/$(entry_count "$ws") notifications=$first_notifications/$(wc -l <"$NOTIFY_LOG")"
 fi
 
 ws=$(new_ws bootstrap)

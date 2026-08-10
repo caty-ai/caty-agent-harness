@@ -87,20 +87,21 @@ write_receipt() {
   local timestamp
 
   timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-  printf 'ts=%s files_scanned=%s blocks=%s candidates=%s folded=%s deduped=%s evicted_by_cap=%s deferred=%s headerless_bullets=%s torn_lines=%s quarantined=%s lock=%s marker=%s%s\n' \
+  printf 'ts=%s files_scanned=%s blocks=%s candidates=%s folded=%s deduped=%s evicted_by_cap=%s deferred=%s headerless_bullets=%s torn_lines=%s quarantined=%s lock=%s marker=%s error=%s%s\n' \
     "$timestamp" "$files_scanned" "$blocks" "$candidates" "$folded" "$deduped" \
     "$evicted_by_cap" "$deferred" "$headerless_bullets" "$torn_lines" \
-    "$quarantined" "$lock_status" "$marker_status" "$quarantined_paths" \
+    "$quarantined" "$lock_status" "$marker_status" "$receipt_error" "$quarantined_paths" \
     >>"$receipt_file"
 }
 
 consider_candidate() {
-  local task_id=$1
-  local candidate_date=$2
-  local text=$3
-  local target=$4
+  local candidate_date=$1
+  local text=$2
+  local target=$3
+  local source_header=$4
   local section
   local line
+  local task_id
   local lesson_hash
   local composite_key
   local normalized_target
@@ -109,6 +110,13 @@ consider_candidate() {
   local split_lessons="$work_dir/candidate.lessons"
   local split_failures="$work_dir/candidate.failures"
 
+  candidates=$((candidates + 1))
+  if (( budget_used >= max_fold )); then
+    deferred=$((deferred + 1))
+    return 1
+  fi
+
+  task_id=$(sha256_text "$source_header")
   line="- $candidate_date $text (source: flush-intake)"
   if [[ "$target" == lessons ]]; then
     section=LESSONS
@@ -120,16 +128,15 @@ consider_candidate() {
   : >"$split_lessons"
   : >"$split_failures"
   annotate_reply_dedup_keys "$candidate_reply" "$task_id" "$annotated_reply" \
-    '(source: flush-intake)' 'LESSONS OPEN_FAILURES'
+    '(source: flush-intake)' 'LESSONS|OPEN_FAILURES'
   split_annotated_reply_sections "$annotated_reply" "$split_lessons" "$split_failures" \
-    '(source: flush-intake)' 'LESSONS OPEN_FAILURES'
+    '(source: flush-intake)' 'LESSONS|OPEN_FAILURES'
   if [[ "$target" == lessons ]]; then
     IFS=$'\t' read -r composite_key line <"$split_lessons"
   else
     IFS=$'\t' read -r composite_key line <"$split_failures"
   fi
   lesson_hash=${composite_key##*:}
-  candidates=$((candidates + 1))
   if [[ "$target" == lessons ]]; then
     normalized_target=$normalized_lessons_state
   else
@@ -141,11 +148,6 @@ consider_candidate() {
     deduped=$((deduped + 1))
     return 0
   fi
-  if (( budget_used >= max_fold )); then
-    deferred=$((deferred + 1))
-    return 1
-  fi
-
   if [[ "$target" == lessons ]]; then
     printf '%s\n' "$line" >>"$accepted_lessons"
   else
@@ -217,6 +219,7 @@ headerless_bullets=0
 torn_lines=0
 quarantined=0
 quarantined_paths=
+receipt_error=none
 
 # Only old debris is swept so a concurrent process cannot lose a live temp file.
 find "$pending_dir" -maxdepth 1 -type f -name '.intake-*.tmp.*' -mtime +1 -delete
@@ -275,6 +278,9 @@ while IFS= read -r flush_file || [[ -n "$flush_file" ]]; do
   file_date=${file_date%.md}
   file_malformed=0
   file_deferred=0
+  if [[ ! "$basename" =~ ^flush-[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$ ]]; then
+    file_malformed=1
+  fi
   is_today=0
   [[ "$file_date" == "$today" ]] && is_today=1
   torn_today=0
@@ -312,9 +318,8 @@ while IFS= read -r flush_file || [[ -n "$flush_file" ]]; do
         file_deferred=1
         ;;
       C)
-        task_id=$(sha256_text "$field_three")
-        candidate_date=${field_one:-$file_date}
-        if ! consider_candidate "$task_id" "$candidate_date" "$field_two" lessons; then
+        candidate_date=$field_one
+        if ! consider_candidate "$candidate_date" "$field_two" lessons "$field_three"; then
           file_deferred=1
         fi
         ;;
@@ -324,10 +329,10 @@ while IFS= read -r flush_file || [[ -n "$flush_file" ]]; do
   action=keep
   action_path=
   if [[ "$file_malformed" -eq 1 && "$file_deferred" -eq 0 ]]; then
-    action_path="loop/artifacts/flush-$file_date.malformed.md"
-    failure_task=$(sha256_text "<!-- flush-intake quarantine path=$action_path -->")
-    if consider_candidate "$failure_task" "$today" \
-      "flush intake quarantined malformed file $action_path" failures; then
+    action_path="loop/artifacts/${basename%.md}.malformed.md"
+    if consider_candidate "$today" \
+      "flush intake quarantined malformed file $action_path" failures \
+      "<!-- flush-intake quarantine path=$action_path -->"; then
       action=quarantine
     else
       file_deferred=1
@@ -343,9 +348,21 @@ done <"$files_file"
 eviction_file="$work_dir/evicted.txt"
 printf '0\n' >"$eviction_file"
 if [[ -s "$accepted_lessons" || -s "$accepted_failures" ]]; then
+  append_rc=0
   append_state_sections "$state_file" "$accepted_lessons" "$accepted_failures" \
     "$state_tmp" "$STATE_FOLD_LESSONS_CAP_DEFAULT" "$STATE_FOLD_FAILURES_CAP_DEFAULT" \
-    "$eviction_file"
+    "$eviction_file" || append_rc=$?
+  if [[ "$append_rc" -ne 0 ]]; then
+    rm -f "$state_tmp"
+    folded=0
+    if [[ "$append_rc" -eq 4 ]]; then
+      receipt_error=missing-section
+    else
+      receipt_error=state-append
+    fi
+    write_receipt acquired untouched
+    exit 1
+  fi
   mv -f "$state_tmp" "$state_file"
   evicted_by_cap=$(cat "$eviction_file")
   if [[ ${INTAKE_TEST_CRASH_AFTER_STATE:-0} == 1 ]]; then

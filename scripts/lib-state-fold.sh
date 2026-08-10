@@ -9,7 +9,15 @@ STATE_FOLD_LOCK_STALE_S=${DISTILL_STATE_LOCK_STALE_S:-1800}
 
 file_mtime_epoch() {
   local path=$1
-  stat -c "%Y" "$path" 2>/dev/null || stat -f "%m" "$path"
+  stat -c '%Y' "$path" 2>/dev/null || stat -f '%m' "$path"
+}
+
+state_fold_trace() {
+  local event=$1
+
+  # Test-only seam for proving that intake budget rejection bypasses this pipeline.
+  [[ -n "${STATE_FOLD_TEST_TRACE_FILE:-}" ]] || return 0
+  printf '%s\n' "$event" >>"$STATE_FOLD_TEST_TRACE_FILE"
 }
 
 sha256_file() {
@@ -24,6 +32,7 @@ sha256_file() {
 }
 
 sha256_text() {
+  state_fold_trace sha256
   if command -v sha256sum >/dev/null 2>&1; then
     printf '%s' "$1" | sha256sum | awk '{print $1}'
   elif command -v shasum >/dev/null 2>&1; then
@@ -38,8 +47,10 @@ state_fold_section_allowed() {
   local candidate=$1
   local section_headings=$2
   local heading
+  local headings
 
-  for heading in $section_headings; do
+  IFS='|' read -r -a headings <<<"$section_headings"
+  for heading in "${headings[@]}"; do
     if [[ "$candidate" == "$heading" ]]; then
       return 0
     fi
@@ -58,6 +69,8 @@ annotate_reply_dedup_keys() {
   local stripped_line
   local normalized
   local lesson_hash
+
+  state_fold_trace annotate
 
   while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ "$line" =~ ^##\ ([A-Z_]+)[[:space:]]*$ ]]; then
@@ -189,6 +202,8 @@ state_fold_candidate_is_duplicate() {
   local lesson_hash=${composite_key##*:}
   local normalized
 
+  state_fold_trace dedup
+
   normalized=$(normalize_state_candidate "$candidate_line")
   grep -Fqx -- "$lesson_hash" "$prior_hashes" \
     || grep -Fqx -- "$lesson_hash" "$batch_hashes" \
@@ -203,10 +218,12 @@ split_annotated_reply_sections() {
   local source_marker=$4
   local section_headings=$5
 
+  state_fold_trace split
+
   awk -v lessons="$lessons_file" -v failures="$failures_file" \
     -v source_marker="$source_marker" -v section_headings="$section_headings" '
     BEGIN {
-      count = split(section_headings, headings, " ")
+      count = split(section_headings, headings, "|")
       for (i = 1; i <= count; i++) {
         allowed[headings[i]] = 1
       }
@@ -258,6 +275,15 @@ append_state_sections() {
   local lessons_cap=${5:-$STATE_FOLD_LESSONS_CAP_DEFAULT}
   local failures_cap=${6:-$STATE_FOLD_FAILURES_CAP_DEFAULT}
   local eviction_file=${7:-}
+
+  if [[ -s "$lessons_file" ]] \
+    && ! grep -Eq '^## Lessons learned[[:space:]]*(\([^)]*\))?[[:space:]]*$' "$state_file"; then
+    return 4
+  fi
+  if [[ -s "$failures_file" ]] \
+    && ! grep -Eq '^## Open failures[[:space:]]*(\([^)]*\))?[[:space:]]*$' "$state_file"; then
+    return 4
+  fi
 
   awk -v lessons="$lessons_file" -v failures="$failures_file" \
     -v lessons_cap="$lessons_cap" -v failures_cap="$failures_cap" \

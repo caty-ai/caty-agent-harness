@@ -8,6 +8,8 @@ TMP_ROOT=${TMPDIR:-/tmp}/flush-intake-test.$$
 PASS_COUNT=0
 FAIL_COUNT=0
 TODAY=$(date -u +%F)
+DEFAULT_INTAKE_MAX_FOLD=$(bash -c 'source "$1"; printf "%s\n" "$((STATE_FOLD_LESSONS_CAP_DEFAULT / 2))"' \
+  _ "$ROOT/scripts/lib-state-fold.sh")
 
 cleanup() {
   rm -rf "$TMP_ROOT"
@@ -60,6 +62,20 @@ write_block() {
     "- $text" >"$path"
 }
 
+age_file_seconds() {
+  local path=$1
+  local seconds=$2
+
+  if touch -d "$seconds seconds ago" "$path" 2>/dev/null; then
+    return 0
+  fi
+  touch -t "$(date -v-"${seconds}"S '+%Y%m%d%H%M.%S')" "$path"
+}
+
+file_mtime() {
+  stat -c '%Y' "$1" 2>/dev/null || stat -f '%m' "$1"
+}
+
 ws=$(new_ws case-01-fold)
 cp "$ROOT/tests/fixtures/flush/basic.md" "$ws/loop/pending/flush-2026-07-01.md"
 run_intake "$ws"
@@ -85,12 +101,16 @@ fi
 ws=$(new_ws case-03-dedup)
 write_block "$ws/loop/pending/flush-$TODAY.md" "$TODAY" 'A pending key rejects the same candidate.'
 run_intake "$ws"
+first_ledger_fold=$(receipt_value "$ws" folded)
+sed '/A pending key rejects the same candidate/d' "$ws/STATE.md" >"$TMP_ROOT/state-without-case-03"
+mv "$TMP_ROOT/state-without-case-03" "$ws/STATE.md"
 run_intake "$ws"
-if [ "$(state_count "$ws" "- $TODAY A pending key rejects the same candidate. (source: flush-intake)")" -eq 1 ] \
+if [ "$first_ledger_fold" -eq 1 ] \
+  && [ "$(state_count "$ws" "- $TODAY A pending key rejects the same candidate. (source: flush-intake)")" -eq 0 ] \
   && [ "$(receipt_value "$ws" deduped)" -eq 1 ]; then
-  pass '[3] pending-ledger dedup rejects a recurrence'
+  pass '[3] pending-ledger dedup rejects a recurrence without the STATE backstop'
 else
-  fail_case '[3] pending-ledger dedup rejects a recurrence' 'recurrence was not rejected'
+  fail_case '[3] pending-ledger dedup rejects a recurrence without the STATE backstop' 'recurrence was not rejected'
 fi
 
 if [ "$(receipt_value "$ws" folded)" -eq 0 ] && [ "$(receipt_value "$ws" deferred)" -eq 0 ]; then
@@ -198,13 +218,14 @@ default_ws=$(new_ws case-11-default-budget)
 {
   printf '%s\n' '<!-- flush ts=2026-07-06T01:00:00Z outcome=ok -->'
   i=1
-  while [ "$i" -le 31 ]; do
+  while [ "$i" -le "$((DEFAULT_INTAKE_MAX_FOLD + 1))" ]; do
     printf -- '- default budget candidate %02d\n' "$i"
     i=$((i + 1))
   done
 } >"$default_ws/loop/pending/flush-2026-07-06.md"
 run_intake "$default_ws"
-if [ "$backlog_ordered" -eq 1 ] && [ "$(receipt_value "$default_ws" folded)" -eq 30 ] \
+if [ "$backlog_ordered" -eq 1 ] \
+  && [ "$(receipt_value "$default_ws" folded)" -eq "$DEFAULT_INTAKE_MAX_FOLD" ] \
   && [ "$(receipt_value "$default_ws" deferred)" -eq 1 ]; then
   pass '[11] backlog drains oldest-first and the default budget is half the Lessons cap'
 else
@@ -302,12 +323,18 @@ fi
 
 ws=$(new_ws case-19-wrapper)
 mkdir "$ws/loop/.distill-state.lock"
+distill_marker="$ws/loop/.deadman/distill.marker"
+mkdir -p "${distill_marker%/*}"
+touch -t 202001010000 "$distill_marker"
+marker_mtime_before=$(file_mtime "$distill_marker")
 wrapper=$TMP_ROOT/cron-wrapper.sh
 cp "$ROOT/templates/cron-wrapper.tmpl.sh" "$wrapper"
 chmod +x "$wrapper"
 TARGET="$INTAKE" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$ws" \
+  DEADMAN_MARKER="$distill_marker" \
   INTAKE_LOCK_ATTEMPTS=1 INTAKE_LOCK_SLEEP_S=0 "$wrapper" "$ws" >/dev/null 2>&1
-if [ ! -e "$ws/loop/.deadman/distill.marker" ] \
+marker_mtime_after=$(file_mtime "$distill_marker")
+if [ "$marker_mtime_before" = "$marker_mtime_after" ] \
   && grep -Fq 'lock=busy marker=untouched' "$ws/loop/pending/intake-runs.log"; then
   pass '[19] cron wrapper cannot pre-touch the intake distill marker'
 else
@@ -374,6 +401,7 @@ mkdir -p "$ws/loop/.deadman"
 touch -t 202001010000 "$ws/loop/.deadman/tick.marker"
 printf '%s\n' '- concurrent fold remains present' >>"$ws/STATE.md"
 mkdir "$ws/loop/.distill-state.lock"
+age_file_seconds "$ws/loop/.distill-state.lock" 120
 notify=$TMP_ROOT/notify.sh
 cat >"$notify" <<'SH'
 #!/usr/bin/env bash
@@ -386,23 +414,27 @@ NOTIFY_LOG="$notify_log" DEADMAN_CHECKS='tick:1' DEADMAN_NOTIFY_CMD="$notify" "$
 first_probe_rc=$?
 set -e
 first_notify_count=$(wc -l <"$notify_log" | tr -d ' ')
+first_probe_entries=$(grep -Fc 'deadman: tick' "$ws/STATE.md" || true)
+lock_retained=0
+[ -d "$ws/loop/.distill-state.lock" ] && lock_retained=1
 rm -rf "$ws/loop/.distill-state.lock"
 set +e
 NOTIFY_LOG="$notify_log" DEADMAN_CHECKS='tick:1' DEADMAN_NOTIFY_CMD="$notify" "$PROBE" "$ws" >/dev/null 2>&1
 second_probe_rc=$?
 set -e
 if [ "$first_probe_rc" -eq 1 ] && [ "$second_probe_rc" -eq 0 ] \
+  && [ "$first_probe_entries" -eq 0 ] && [ "$lock_retained" -eq 1 ] \
   && [ "$first_notify_count" -eq 1 ] && [ "$(wc -l <"$notify_log" | tr -d ' ')" -eq 1 ] \
   && grep -Fq 'deadman: tick' "$ws/STATE.md"; then
-  pass '[22] lock-blocked deadman notification fires once and append retries next cycle'
+  pass '[22] short deadman wait retains a sub-stale lock, notifies once, and retries append'
 else
-  fail_case '[22] lock-blocked deadman notification fires once and append retries next cycle' "rcs=$first_probe_rc/$second_probe_rc notifications=$(wc -l <"$notify_log")"
+  fail_case '[22] short deadman wait retains a sub-stale lock, notifies once, and retries append' "rcs=$first_probe_rc/$second_probe_rc retained=$lock_retained first_entries=$first_probe_entries notifications=$(wc -l <"$notify_log")"
 fi
 if grep -Fq -- '- concurrent fold remains present' "$ws/STATE.md" \
   && grep -Fq 'deadman: tick' "$ws/STATE.md"; then
-  pass '[23] deadman retry preserves concurrent STATE content without a lost update'
+  pass '[23] deadman retry preserves pre-existing STATE content'
 else
-  fail_case '[23] deadman retry preserves concurrent STATE content without a lost update' 'one STATE update was lost'
+  fail_case '[23] deadman retry preserves pre-existing STATE content' 'pre-existing STATE content was lost'
 fi
 
 ws=$(new_ws case-24-old-torn)
@@ -440,10 +472,10 @@ fi
 ws=$(new_ws case-26-anchor)
 printf '%s\n' \
   '<!-- flush ts=2026-07-14T01:02:03Z outcome=ok -->' \
-  '- Keep the parenthetical ending (macOS default).' \
-  '- Keep the parenthetical ending.' >"$ws/loop/pending/flush-2026-07-14.md"
+  '- Keep literal provenance (source: user) suffix' \
+  '- Keep literal provenance suffix (source: flush-intake)' >"$ws/loop/pending/flush-2026-07-14.md"
 run_intake "$ws"
-if [ "$(grep -Fc 'Keep the parenthetical ending' "$ws/STATE.md")" -eq 2 ]; then
+if [ "$(grep -Fc 'Keep literal provenance' "$ws/STATE.md")" -eq 2 ]; then
   pass '[26] normalization strips only the anchored consumer source marker'
 else
   fail_case '[26] normalization strips only the anchored consumer source marker' 'legitimate parenthetical was stripped'
@@ -452,16 +484,92 @@ fi
 if grep -Fq 'state_fold_candidate_is_duplicate' "$ROOT/adapters/openclaw/distill-audit.sh" \
   && grep -Fq 'state_fold_candidate_is_duplicate' "$INTAKE" \
   && grep -Fq 'annotate_reply_dedup_keys' "$INTAKE" \
-  && grep -Fq 'split_annotated_reply_sections' "$INTAKE"; then
+  && grep -Fq 'annotate_reply_dedup_keys' "$ROOT/adapters/openclaw/distill-audit.sh" \
+  && grep -Fq 'split_annotated_reply_sections' "$INTAKE" \
+  && grep -Fq 'split_annotated_reply_sections' "$ROOT/adapters/openclaw/distill-audit.sh"; then
   pass '[27] both consumers call the shared annotation, splitting, and rejection machinery'
 else
   fail_case '[27] both consumers call the shared annotation, splitting, and rejection machinery' 'one consumer forked fold logic'
 fi
 
-if [ -x "$INTAKE" ] && bash -n "$0" "$INTAKE" "$ROOT/scripts/lib-state-fold.sh"; then
-  pass '[28] full-suite entry points are executable and syntax-valid'
+if [ -x "$0" ] && [ -x "$INTAKE" ] \
+  && bash -n "$0" "$INTAKE" "$ROOT/scripts/lib-state-fold.sh" \
+    "$ROOT/adapters/openclaw/distill-audit.sh" "$ROOT/scripts/deadman-probe.sh"; then
+  pass '[28] suite and intake entry points are executable; touched shell files are syntax-valid'
 else
-  fail_case '[28] full-suite entry points are executable and syntax-valid' 'suite contract is not runnable'
+  fail_case '[28] suite and intake entry points are executable; touched shell files are syntax-valid' 'suite contract is not runnable'
+fi
+
+ws=$(new_ws case-29-budget-trace)
+{
+  printf '%s\n' '<!-- flush ts=2026-07-15T01:02:03Z outcome=ok -->'
+  i=1
+  while [ "$i" -le 5 ]; do
+    printf -- '- Budget candidate %s bypasses work only after the cap.\n' "$i"
+    i=$((i + 1))
+  done
+} >"$ws/loop/pending/flush-2026-07-15.md"
+dedup_trace=$TMP_ROOT/dedup-pipeline.trace
+rm -f "$dedup_trace"
+run_intake "$ws" INTAKE_MAX_FOLD=2 STATE_FOLD_TEST_TRACE_FILE="$dedup_trace"
+if [ "$(receipt_value "$ws" candidates)" -eq 5 ] \
+  && [ "$(receipt_value "$ws" deferred)" -eq 3 ] \
+  && [ "$(receipt_value "$ws" folded)" -eq 2 ] \
+  && [ "$(receipt_value "$ws" deduped)" -eq 0 ] \
+  && [ "$(grep -Fxc annotate "$dedup_trace")" -eq 2 ] \
+  && [ "$(grep -Fxc split "$dedup_trace")" -eq 2 ] \
+  && [ "$(grep -Fxc dedup "$dedup_trace")" -eq 2 ] \
+  && [ "$(grep -Fxc sha256 "$dedup_trace")" -eq 4 ]; then
+  pass '[29] candidates after the accepted budget bypass annotate, split, hash, and dedup'
+else
+  fail_case '[29] candidates after the accepted budget bypass annotate, split, hash, and dedup' "receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log") trace=$(tr '\n' ',' <"$dedup_trace" 2>/dev/null)"
+fi
+
+ws=$(new_ws case-30-malformed-filename)
+write_block "$ws/loop/pending/flush-not-a-date.md" 2026-07-15 'A malformed filename is quarantined.'
+run_intake "$ws"
+if [ ! -e "$ws/loop/pending/flush-not-a-date.md" ] \
+  && [ -f "$ws/loop/artifacts/flush-not-a-date.malformed.md" ] \
+  && grep -Fq 'flush intake quarantined malformed file loop/artifacts/flush-not-a-date.malformed.md' "$ws/STATE.md" \
+  && [ "$(receipt_value "$ws" quarantined)" -eq 1 ]; then
+  pass '[30] malformed flush filenames are quarantined with durable evidence'
+else
+  fail_case '[30] malformed flush filenames are quarantined with durable evidence' "receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+fi
+
+ws=$(new_ws case-31-missing-section)
+sed 's/^## Lessons learned.*/## Missing lessons/' "$ws/STATE.md" >"$TMP_ROOT/state-missing-lessons"
+mv "$TMP_ROOT/state-missing-lessons" "$ws/STATE.md"
+cp "$ws/STATE.md" "$TMP_ROOT/state-before-missing-section"
+write_block "$ws/loop/pending/flush-2026-07-16.md" 2026-07-16 'Missing sections fail closed.'
+set +e
+run_intake "$ws"
+missing_section_rc=$?
+set -e
+if [ "$missing_section_rc" -eq 1 ] \
+  && cmp -s "$TMP_ROOT/state-before-missing-section" "$ws/STATE.md" \
+  && [ -f "$ws/loop/pending/flush-2026-07-16.md" ] \
+  && ! find "$ws/loop/pending" -maxdepth 1 -name 'intake-*.md' -print | grep -q . \
+  && [ ! -e "$ws/loop/archive/flush-2026-07-16.md" ] \
+  && [ ! -e "$ws/loop/.deadman/distill.marker" ] \
+  && [ "$(receipt_value "$ws" candidates)" -eq 1 ] \
+  && [ "$(receipt_value "$ws" folded)" -eq 0 ] \
+  && [ "$(receipt_value "$ws" error)" = missing-section ] \
+  && [ "$(receipt_value "$ws" marker)" = untouched ]; then
+  missing_section_failed_closed=1
+else
+  missing_section_failed_closed=0
+fi
+sed 's/^## Missing lessons/## Lessons learned/' "$ws/STATE.md" >"$TMP_ROOT/state-restored-lessons"
+mv "$TMP_ROOT/state-restored-lessons" "$ws/STATE.md"
+run_intake "$ws"
+if [ "$missing_section_failed_closed" -eq 1 ] \
+  && grep -Fq 'Missing sections fail closed.' "$ws/STATE.md" \
+  && [ -f "$ws/loop/archive/flush-2026-07-16.md" ] \
+  && [ -e "$ws/loop/.deadman/distill.marker" ]; then
+  pass '[31] missing requested STATE section fails atomically and succeeds after repair'
+else
+  fail_case '[31] missing requested STATE section fails atomically and succeeds after repair' "failed_closed=$missing_section_failed_closed receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
 fi
 
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"

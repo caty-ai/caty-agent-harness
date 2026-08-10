@@ -159,9 +159,9 @@ register_instruction_file() {
     printf 'invalid harness control directory: %s\n' "$control_dir" >&2
     exit 2
   fi
-# Existing directories intentionally retain their mode.
-# shellcheck disable=SC2174
-mkdir -p -m 700 "$control_dir"
+  # Existing directories intentionally retain their mode.
+  # shellcheck disable=SC2174
+  mkdir -p -m 700 "$control_dir"
   if ! control_dir_is_user_owned "$control_dir"; then
     printf 'instruction registry control directory is not owned by the current user\n' >&2
     exit 2
@@ -781,7 +781,7 @@ probe_adapter_distiller_cron() {
   local adapter=$1
 
   case "$adapter" in
-    claude-code)
+    claude-code|codex|kimi)
       probe_executable_contains "$repo_root/adapters/claude-code/flush-intake.sh" \
         "snapshot_pending_dedup_keys \"\$pending_dir\"" \
         && probe_executable_contains "$repo_root/adapters/claude-code/flush-intake.sh" \

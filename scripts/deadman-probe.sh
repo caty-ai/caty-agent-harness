@@ -61,7 +61,7 @@ append_failure_with_lock() {
   local name=$1
   local entry=$2
 
-  if ! take_state_lock "$workspace" deadman-probe 10 0.5 60; then
+  if ! take_state_lock "$workspace" deadman-probe 10 0.5; then
     printf 'deadman-probe: STATE.md lock timeout, skipping append for %s (notify still sent)\n' "$name" >&2
     return 1
   fi

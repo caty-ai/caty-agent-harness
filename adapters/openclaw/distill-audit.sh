@@ -579,7 +579,7 @@ snapshot_pending_dedup_keys "$pending_dir" "$prior_dedup_keys" \
 annotated_reply_file="$work_dir/reply.annotated.md"
 : >"$annotated_reply_file"
 annotate_reply_dedup_keys "$distiller_tmp_file" "$task_id" "$annotated_reply_file" \
-  '(source: distill-audit)' 'LESSONS OPEN_FAILURES'
+  '(source: distill-audit)' 'LESSONS|OPEN_FAILURES'
 
 rejected_drafts="$work_dir/rejected-drafts.txt"
 integrity_failures="$work_dir/integrity-failures.txt"
@@ -592,7 +592,7 @@ failures_file="$work_dir/failures.txt"
 : >"$failures_file"
 
 split_annotated_reply_sections "$annotated_reply_file" "$lessons_file" "$failures_file" \
-  '(source: distill-audit)' 'LESSONS OPEN_FAILURES'
+  '(source: distill-audit)' 'LESSONS|OPEN_FAILURES'
 
 deduped_lessons="$work_dir/lessons.deduped.txt"
 deduped_failures="$work_dir/failures.deduped.txt"
@@ -636,11 +636,20 @@ done <"$failures_file"
 
 lessons_added=$(wc -l <"$deduped_lessons" | tr -d '[:space:]')
 failures_added=$(wc -l <"$deduped_failures" | tr -d '[:space:]')
+evicted_by_cap=0
 
 if [[ "$lessons_added" -gt 0 || "$failures_added" -gt 0 ]]; then
+  append_rc=0
   append_state_sections "$state_file" "$deduped_lessons" "$deduped_failures" \
-    "$state_tmp_file" "$lessons_cap" "$failures_cap" "$work_dir/evicted-count.txt"
+    "$state_tmp_file" "$lessons_cap" "$failures_cap" "$work_dir/evicted-count.txt" \
+    || append_rc=$?
+  if [[ "$append_rc" -eq 4 ]]; then
+    infra_fail 'STATE.md missing requested fold section'
+  elif [[ "$append_rc" -ne 0 ]]; then
+    infra_fail "STATE.md fold failed (append rc=$append_rc)"
+  fi
   mv -f "$state_tmp_file" "$state_file"
+  evicted_by_cap=$(cat "$work_dir/evicted-count.txt")
 fi
 
 drafts_count_file="$work_dir/drafts-created.txt"
@@ -673,8 +682,9 @@ fi
 injection_size_check "$workspace" "$pending_dir"
 
 timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-printf '%s | files_scanned=%s | lessons_added=%s | failures_added=%s | drafts_created=%s | distiller=%s\n' \
-  "$timestamp" "$files_scanned" "$lessons_added" "$failures_added" "$drafts_created" "$distiller_id" \
+printf '%s | files_scanned=%s | lessons_added=%s | failures_added=%s | evicted_by_cap=%s | drafts_created=%s | distiller=%s\n' \
+  "$timestamp" "$files_scanned" "$lessons_added" "$failures_added" "$evicted_by_cap" \
+  "$drafts_created" "$distiller_id" \
   >>"$pending_dir/distill-runs.log"
 
 touch "$marker_file"

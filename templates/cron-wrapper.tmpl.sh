@@ -132,7 +132,14 @@ if [[ -n "$DEADMAN_PROBE" && "$DEADMAN_PROBE" != /* ]]; then
   fail "DEADMAN_PROBE must be an absolute path: $DEADMAN_PROBE"
 fi
 
-if [[ -n "$DEADMAN_MARKER" ]]; then
+self_marking_flush_intake=0
+flush_intake_target=$(cd "$(dirname "$pause_helper")/.." && pwd -P)/adapters/claude-code/flush-intake.sh
+if [[ -e "$flush_intake_target" && "$TARGET" -ef "$flush_intake_target" \
+  && "$DEADMAN_MARKER" == "$workspace_arg/loop/.deadman/distill.marker" ]]; then
+  self_marking_flush_intake=1
+fi
+
+if [[ -n "$DEADMAN_MARKER" && "$self_marking_flush_intake" -eq 0 ]]; then
   if ! mkdir -p "$(dirname "$DEADMAN_MARKER")"; then
     printf 'cron-wrapper warning: cannot create DEADMAN_MARKER parent: %s\n' "$DEADMAN_MARKER" >&2
   elif ! touch "$DEADMAN_MARKER"; then

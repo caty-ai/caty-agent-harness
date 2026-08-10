@@ -139,13 +139,15 @@ after STATE cap eviction to prevent refold oscillation. `loop/archive/` is appen
 is never auto-pruned, and is deleted only by a human or operations owner.
 
 The consumer itself touches `loop/.deadman/distill.marker` only after acquiring the
-shared STATE lock and completing without an infrastructure error. If it is launched
-through `templates/cron-wrapper.tmpl.sh`, leave `DEADMAN_MARKER` unset or point it at the
-`tick` marker. It must never point at `distill.marker`: the wrapper touches its marker
-before running the target and would conceal lock starvation or intake failure. The
-`distill` marker proves only that intake ran; inspect `loop/pending/intake-runs.log` for
-content-level silence, dedup, deferral, eviction, and quarantine counts. Stock OpenClaw
-distillation touches `.distill-last-run`, not the deadman `distill.marker`.
+shared STATE lock and completing without an infrastructure error. The checked-in
+`templates/cron-wrapper.tmpl.sh` recognizes this exact repository consumer as
+self-marking and suppresses its own pre-touch when `DEADMAN_MARKER` names that
+workspace's `distill.marker`; an explicit setting therefore cannot hide lock starvation
+or intake failure. Leave `DEADMAN_MARKER` unset for a proxy or renamed target that the
+wrapper cannot identify. The `distill` marker proves only that intake ran; inspect
+`loop/pending/intake-runs.log` for content-level silence, dedup, deferral, eviction, and
+quarantine counts. Stock OpenClaw distillation touches `.distill-last-run`, not the
+deadman `distill.marker`.
 
 ## macOS scheduling: LaunchAgent, not crontab
 

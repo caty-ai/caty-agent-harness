@@ -312,11 +312,33 @@ if [ "$rc" -eq 0 ] \
   && grep -Fq -- '- 2026-07-06 new failure (source: distill-audit)' "$ws/STATE.md" \
   && ! grep -Fq -- '- 2026-07-05 old lesson 001 (source: distill-audit)' "$ws/STATE.md" \
   && ! grep -Fq -- '- 2026-07-05 old failure 001 (source: distill-audit)' "$ws/STATE.md" \
+  && grep -Fq 'evicted_by_cap=2' "$ws/loop/pending/distill-runs.log" \
   && [ ! -e "$ws/.STATE.md.tmp.$$" ] \
   && [ ! -d "$ws/loop/.distill-state.lock" ]; then
-  pass "state rewrite is capped, atomic temp cleaned, and lock released"
+  pass "state rewrite is capped, eviction reported, atomic temp cleaned, and lock released"
 else
-  fail_case "state rewrite is capped, atomic temp cleaned, and lock released" "rc=$rc output=$output lessons=$lessons_lines failures=$failures_lines"
+  fail_case "state rewrite is capped, eviction reported, atomic temp cleaned, and lock released" "rc=$rc output=$output lessons=$lessons_lines failures=$failures_lines log=$(cat "$ws/loop/pending/distill-runs.log" 2>/dev/null)"
+fi
+
+ws=$(make_ws missing-state-section)
+sed 's/^## Lessons learned$/## Missing lessons/' "$ws/STATE.md" >"$TMP_ROOT/state-without-lessons"
+mv "$TMP_ROOT/state-without-lessons" "$ws/STATE.md"
+cp "$ws/STATE.md" "$TMP_ROOT/state-before-missing-lessons"
+set +e
+output=$(DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+set -e
+if [ "$rc" -eq 3 ] \
+  && printf '%s\n' "$output" | grep -Fq 'distill-audit infra error: STATE.md missing requested fold section' \
+  && cmp -s "$TMP_ROOT/state-before-missing-lessons" "$ws/STATE.md" \
+  && [ ! -e "$ws/loop/.distill-last-run" ] \
+  && [ ! -d "$ws/loop/.distill-state.lock" ] \
+  && ! find "$ws/loop/pending" -maxdepth 1 -name 'distill-*.md' -print | grep -q . \
+  && ! find "$ws/loop/pending" -maxdepth 1 -name '.distill-*.tmp.*' -print | grep -q .; then
+  pass "missing requested STATE section is a loud atomic infrastructure failure"
+else
+  fail_case "missing requested STATE section is a loud atomic infrastructure failure" \
+    "rc=$rc output=$output pending=$(find "$ws/loop/pending" -maxdepth 1 -type f -print)"
 fi
 
 ws=$(make_ws bad-cmd)

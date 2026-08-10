@@ -218,7 +218,7 @@ assert_route_status "claude-code flush intake fold route passes" "$probe_output"
 assert_route_status "codex CONSULT injection passes" "$probe_output" codex "CONSULT injection" PASS
 assert_route_status "codex candidate generation passes" "$probe_output" codex "candidate generation" PASS
 assert_route_status "codex verifier availability fails explicitly" "$probe_output" codex "verifier available" FAIL
-assert_route_status "codex distiller cron fails explicitly" "$probe_output" codex "distiller cron" FAIL
+assert_route_status "codex reuses the flush intake fold route" "$probe_output" codex "distiller cron" PASS
 
 assert_route_status "hermes CONSULT injection passes" "$probe_output" hermes "CONSULT injection" PASS
 assert_route_status "hermes candidate generation passes" "$probe_output" hermes "candidate generation" PASS
@@ -229,7 +229,7 @@ assert_route_status "hermes verifier conformance fails explicitly when unset" "$
 assert_route_status "kimi CONSULT injection passes" "$probe_output" kimi "CONSULT injection" PASS
 assert_route_status "kimi candidate generation passes" "$probe_output" kimi "candidate generation" PASS
 assert_route_status "kimi verifier availability fails explicitly" "$probe_output" kimi "verifier available" FAIL
-assert_route_status "kimi distiller cron fails explicitly" "$probe_output" kimi "distiller cron" FAIL
+assert_route_status "kimi reuses the flush intake fold route" "$probe_output" kimi "distiller cron" PASS
 
 assert_route_status "openclaw CONSULT injection passes" "$probe_output" openclaw "CONSULT injection" PASS
 assert_route_status "openclaw candidate generation passes" "$probe_output" openclaw "candidate generation" PASS
