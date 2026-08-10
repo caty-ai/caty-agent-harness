@@ -156,14 +156,22 @@ fi
 if [[ -n "$DEADMAN_PROBE" ]]; then
   if [[ ! -x "$DEADMAN_PROBE" ]]; then
     printf 'cron-wrapper warning: DEADMAN_PROBE not executable: %s\n' "$DEADMAN_PROBE" >&2
-  elif [[ -n "$DEADMAN_PROBE_ARGS" ]]; then
-    # DEADMAN_PROBE_ARGS is intentionally shell-style whitespace-separated extras.
-    read -r -a deadman_probe_args <<<"$DEADMAN_PROBE_ARGS"
-    if ! "$DEADMAN_PROBE" "${deadman_probe_args[@]}"; then
-      printf 'cron-wrapper warning: DEADMAN_PROBE failed: %s\n' "$DEADMAN_PROBE" >&2
+  else
+    deadman_probe_rc=0
+    if [[ -n "$DEADMAN_PROBE_ARGS" ]]; then
+      # DEADMAN_PROBE_ARGS is intentionally shell-style whitespace-separated extras.
+      read -r -a deadman_probe_args <<<"$DEADMAN_PROBE_ARGS"
+      "$DEADMAN_PROBE" "${deadman_probe_args[@]}" || deadman_probe_rc=$?
+    else
+      "$DEADMAN_PROBE" || deadman_probe_rc=$?
     fi
-  elif ! "$DEADMAN_PROBE"; then
-    printf 'cron-wrapper warning: DEADMAN_PROBE failed: %s\n' "$DEADMAN_PROBE" >&2
+    if (( deadman_probe_rc != 0 )); then
+      if (( deadman_probe_rc == 1 )); then
+        printf 'cron-wrapper warning: DEADMAN_PROBE reported a deadman violation: %s\n' "$DEADMAN_PROBE" >&2
+      else
+        printf 'cron-wrapper warning: DEADMAN_PROBE failed: %s\n' "$DEADMAN_PROBE" >&2
+      fi
+    fi
   fi
 fi
 

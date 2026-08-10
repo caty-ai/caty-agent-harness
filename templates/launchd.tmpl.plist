@@ -41,7 +41,7 @@
     <key>TARGET</key>
     <string>/absolute/path/to/caty-agent-harness-target</string>
     <key>DEADMAN_MARKER</key>
-    <string>/absolute/path/to/workspace/loop/.deadman/tick-marker</string>
+    <string>/absolute/path/to/workspace/loop/.deadman/tick.marker</string>
   </dict>
   <key>StartInterval</key>
   <integer>300</integer>

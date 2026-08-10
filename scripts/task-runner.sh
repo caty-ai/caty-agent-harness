@@ -13,6 +13,7 @@ fi
 workspace=$1
 TR_STEP_TIMEOUT_S=${TR_STEP_TIMEOUT_S-600}
 TR_GRACE_S=${TR_GRACE_S-30}
+TR_DONECHECK_TIMEOUT_S=${TR_DONECHECK_TIMEOUT_S-60}
 TR_SPAWN_STEP=${TR_SPAWN_STEP:-}
 TR_PUSH_CMD=${TR_PUSH_CMD:-}
 TR_CRASH_AFTER=${TR_CRASH_AFTER:-}
@@ -20,7 +21,7 @@ TR_TEMPLATE_OVERRIDE=${TR_TEMPLATE_OVERRIDE:-}
 # Replay payload cap: values are clamped to a 64-byte floor and 1048576-byte ceiling.
 TR_GATE_REPLAY_MAX_BYTES=${TR_GATE_REPLAY_MAX_BYTES-4096}
 
-for integer_var in TR_STEP_TIMEOUT_S TR_GRACE_S TR_GATE_REPLAY_MAX_BYTES; do
+for integer_var in TR_STEP_TIMEOUT_S TR_GRACE_S TR_DONECHECK_TIMEOUT_S TR_GATE_REPLAY_MAX_BYTES; do
   integer_value=${!integer_var}
   case "$integer_value" in
     ''|*[!0-9]*|0[0-9]*)
@@ -949,10 +950,10 @@ ERR_TRAP
   local pid=$!
   local start=$SECONDS
   while kill -0 "$pid" 2>/dev/null; do
-    if (( SECONDS - start >= 60 )); then
+    if (( SECONDS - start >= TR_DONECHECK_TIMEOUT_S )); then
       kill_pgroup "$pid"
       wait "$pid" 2>/dev/null || true
-      printf 'donecheck timed out after 60s\n' >>"$log_file"
+      printf 'donecheck timed out after %ss\n' "$TR_DONECHECK_TIMEOUT_S" >>"$log_file"
       # The timeout has already rewritten the trace. Preserve its final
       # command as this run's failure identity rather than reusing one from
       # a prior verification of the same attempt directory.
@@ -1368,6 +1369,32 @@ write_dlq_report() {
   } >"$report_file"
 }
 
+push_dlq_report() {
+  local dest=$1
+  local report_file="$dest/REPORT.md"
+  local push_log="$dest/push.log"
+  local attempted_at push_rc
+  attempted_at=$(utc_now)
+
+  printf '\n== push attempt %s dest=%s ==\n' "$attempted_at" "$dest" >>"$push_log" || true
+  if bash -c "$TR_PUSH_CMD \"\$1\"" _ "$report_file" >>"$push_log" 2>&1; then
+    push_rc=0
+  else
+    push_rc=$?
+  fi
+  printf 'push: rc=%d %s dest=%s\n' "$push_rc" "$attempted_at" "$dest" >>"$push_log" || true
+
+  if (( push_rc == 0 )); then
+    rm -f "$dest/push-failed" || true
+    return 0
+  fi
+
+  printf 'push: failed rc=%d %s\n' "$push_rc" "$attempted_at" >>"$report_file" || true
+  printf 'warning: push failed rc=%d: %s\n' "$push_rc" "$dest" >&2
+  : >"$dest/push-failed" || true
+  return 0
+}
+
 dlq_task() {
   local task_file=$1
   local artifact_dir=$2
@@ -1396,7 +1423,7 @@ dlq_task() {
   cp "$state_file" "$dest/state.json"
   write_dlq_report "$dest/REPORT.md" "$task_id" "$reason" "$artifact_dir" "$task_file"
   if [[ -n "$TR_PUSH_CMD" ]]; then
-    bash -c "$TR_PUSH_CMD \"\$1\"" _ "$dest/REPORT.md" >/dev/null 2>&1 || true
+    push_dlq_report "$dest"
   fi
 }
 
@@ -1463,8 +1490,9 @@ reconcile_terminals() {
         fi
         write_dlq_report "$dest/REPORT.md" "$task_id" "${terminal_reason:-reconciled-dlq}" "$artifact_dir" "$terminal_task"
       fi
-      if (( report_missing == 1 )) && [[ -n "$TR_PUSH_CMD" ]]; then
-        bash -c "$TR_PUSH_CMD \"\$1\"" _ "$dest/REPORT.md" >/dev/null 2>&1 || true
+      if [[ -n "$TR_PUSH_CMD" ]] \
+        && { (( report_missing == 1 )) || [[ -f "$dest/push-failed" ]]; }; then
+        push_dlq_report "$dest"
       fi
     fi
   done
@@ -1537,7 +1565,7 @@ finalize_attempt() {
   else
     donecheck_rc=$?
     if (( donecheck_rc == 124 )); then
-      printf '%s\n' 'donecheck timed out after 60s' >"$attempt_dir/verify-reason" || true
+      printf 'donecheck timed out after %ss\n' "$TR_DONECHECK_TIMEOUT_S" >"$attempt_dir/verify-reason" || true
     else
       printf 'donecheck failed (exit %d)\n' "$donecheck_rc" >"$attempt_dir/verify-reason" || true
     fi
@@ -1602,7 +1630,7 @@ recover_verifying() {
     else
       donecheck_rc=$?
       if (( donecheck_rc == 124 )); then
-        printf '%s\n' 'donecheck timed out after 60s' >"$attempt_dir/verify-reason" || true
+        printf 'donecheck timed out after %ss\n' "$TR_DONECHECK_TIMEOUT_S" >"$attempt_dir/verify-reason" || true
       else
         printf 'donecheck failed (exit %d)\n' "$donecheck_rc" >"$attempt_dir/verify-reason" || true
       fi
