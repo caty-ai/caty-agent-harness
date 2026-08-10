@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 RUNNER="$ROOT/scripts/task-runner.sh"
+ENQUEUE="$ROOT/scripts/tr-enqueue"
 METRICS="$ROOT/scripts/tr-metrics.sh"
 MOCK="$ROOT/tests/fixtures/mock-spawn-step.sh"
 FIX_BASIC="$ROOT/tests/fixtures/task-basic.task.md"
@@ -89,6 +90,179 @@ run_tick() {
   local ws=$1
   shift
   env TR_SPAWN_STEP="$MOCK" "$@" bash "$RUNNER" "$ws"
+}
+
+case_env_integer_validation() {
+  local name=env-integer-validation
+  local variable invalid_value validation_case ws output code
+  for variable in TR_STEP_TIMEOUT_S TR_GRACE_S TR_GATE_REPLAY_MAX_BYTES; do
+    for invalid_value in abc ''; do
+      ws=$(make_ws)
+      set +e
+      output=$(run_tick "$ws" "${variable}=$invalid_value" 2>&1)
+      code=$?
+      set -e
+      if [[ "$code" -ne 2 ]] \
+        || ! grep -F -q "$variable must be a non-negative integer: value=$invalid_value" <<<"$output" \
+        || [[ -e "$ws/loop/tasks/.tick.lock" ]] \
+        || [[ -d "$ws/loop/artifacts" ]]; then
+        fail "$name-$variable" "value='$invalid_value' rc=$code output=$output"
+        return
+      fi
+    done
+  done
+
+  for validation_case in TR_STEP_TIMEOUT_S=08 TR_GRACE_S=010 TR_GATE_REPLAY_MAX_BYTES=0600; do
+    variable=${validation_case%%=*}
+    invalid_value=${validation_case#*=}
+    ws=$(make_ws)
+    set +e
+    output=$(run_tick "$ws" "$validation_case" 2>&1)
+    code=$?
+    set -e
+    if [[ "$code" -ne 2 ]] \
+      || ! grep -F -q "$variable must be a non-negative integer: value=$invalid_value" <<<"$output" \
+      || [[ -e "$ws/loop/tasks/.tick.lock" ]] \
+      || [[ -d "$ws/loop/artifacts" ]]; then
+      fail "$name-$variable" "value='$invalid_value' rc=$code output=$output"
+      return
+    fi
+  done
+
+  ws=$(make_ws)
+  set +e
+  output=$(run_tick "$ws" TR_STEP_TIMEOUT_S=0 TR_GRACE_S=0 TR_GATE_REPLAY_MAX_BYTES=0 2>&1)
+  code=$?
+  set -e
+  if [[ "$code" -ne 0 ]] || grep -F -q 'must be a non-negative integer' <<<"$output"; then
+    fail "$name-zero" "rc=$code output=$output"
+    return
+  fi
+  pass "$name"
+}
+
+case_corrupt_state_quarantine_continues() {
+  local name=corrupt-state-quarantine-continues
+  local ws corrupt_state output code warning_count state_after
+  ws=$(make_ws)
+  ws=$(cd "$ws" && pwd -P)
+  sed 's/^id: tr-basic$/id: corrupt-state/' "$FIX_BASIC" >"$ws/loop/tasks/queue/corrupt-state.task.md"
+  sed 's/^id: tr-basic$/id: healthy-state/' "$FIX_BASIC" >"$ws/loop/tasks/queue/healthy-state.task.md"
+  corrupt_state="$ws/loop/artifacts/corrupt-state/state.json"
+  mkdir -p "$(dirname "$corrupt_state")"
+  printf '{not-json\n' >"$corrupt_state"
+
+  set +e
+  output=$(run_tick "$ws" TR_MOCK_BEHAVIOR=success 2>&1)
+  code=$?
+  set -e
+  warning_count=$(grep -F -c "corrupt state.json, quarantined: $corrupt_state" <<<"$output" || true)
+  state_after=$(cat "$corrupt_state")
+  if [[ "$code" -eq 1 ]] \
+    && [[ "$warning_count" -eq 4 ]] \
+    && grep -F -q "warning: reconcile_terminals: corrupt state.json, quarantined: $corrupt_state" <<<"$output" \
+    && grep -F -q "warning: recover_verifying: corrupt state.json, quarantined: $corrupt_state" <<<"$output" \
+    && grep -F -q "warning: reap_running: corrupt state.json, quarantined: $corrupt_state" <<<"$output" \
+    && grep -F -q "warning: pick_oldest_queued: corrupt state.json, quarantined: $corrupt_state" <<<"$output" \
+    && [[ "$state_after" = '{not-json' ]] \
+    && [[ -f "$ws/loop/tasks/queue/corrupt-state.task.md" ]] \
+    && [[ ! -d "$ws/loop/artifacts/corrupt-state/attempts" ]] \
+    && [[ -f "$ws/loop/tasks/delivered/healthy-state/healthy-state.task.md" ]] \
+    && [[ "$(state_value "$ws" healthy-state status)" = delivered ]] \
+    && [[ ! -e "$ws/loop/tasks/.tick.lock" ]]; then
+    pass "$name"
+  else
+    fail "$name" "rc=$code warnings=$warning_count corrupt_state=$state_after output=$output"
+  fi
+}
+
+case_quoted_id_intake_runner_agree() {
+  local name=quoted-id-intake-runner-agree
+  local ws task output code artifact_count
+  ws=$(make_ws)
+  task="$ws/quoted.task.md"
+  sed -e 's/^id: tr-basic$/id: "qt-1"/' -e 's/^time_budget_min: 5$/time_budget_min: 30/' "$FIX_BASIC" >"$task"
+  if ! "$ENQUEUE" "$task" "$ws" >/dev/null 2>&1; then
+    fail "$name" "quoted id was rejected by intake"
+    return
+  fi
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success
+  artifact_count=$(find "$ws/loop/artifacts" -mindepth 1 -maxdepth 1 -type d -print | wc -l | tr -d '[:space:]')
+  set +e
+  output=$("$ENQUEUE" "$task" "$ws" 2>&1)
+  code=$?
+  set -e
+  if [[ "$artifact_count" -eq 1 ]] \
+    && [[ -d "$ws/loop/artifacts/qt-1" ]] \
+    && [[ ! -e "$ws/loop/artifacts/\"qt-1\"" ]] \
+    && [[ -f "$ws/loop/tasks/delivered/qt-1/qt-1.task.md" ]] \
+    && [[ "$code" -eq 1 ]] \
+    && grep -F -q 'duplicate id' <<<"$output"; then
+    pass "$name"
+  else
+    fail "$name" "artifacts=$artifact_count duplicate_rc=$code output=$output"
+  fi
+}
+
+case_invalid_created_sorts_last() {
+  local name=invalid-created-sorts-last
+  local ws first_output second_output first_count second_count
+  ws=$(make_ws)
+  sed 's/^id: tr-basic$/id: valid-created/' "$FIX_BASIC" >"$ws/loop/tasks/queue/valid-created.task.md"
+  sed -e 's/^id: tr-basic$/id: legacy-created/' -e '/^created:/d' "$FIX_BASIC" >"$ws/loop/tasks/queue/legacy-created.task.md"
+
+  first_output=$(run_tick "$ws" TR_MOCK_BEHAVIOR=success 2>&1)
+  first_count=$(grep -F -c 'warning: pick_oldest_queued: invalid created for task legacy-created:' <<<"$first_output" || true)
+  if [[ "$first_count" -ne 1 ]] \
+    || [[ ! -f "$ws/loop/tasks/delivered/valid-created/valid-created.task.md" ]] \
+    || [[ ! -f "$ws/loop/tasks/queue/legacy-created.task.md" ]] \
+    || [[ -e "$ws/loop/artifacts/legacy-created/state.json" ]]; then
+    fail "$name" "legacy task did not sort after valid task: output=$first_output"
+    return
+  fi
+
+  second_output=$(run_tick "$ws" TR_MOCK_BEHAVIOR=success 2>&1)
+  second_count=$(grep -F -c 'warning: pick_oldest_queued: invalid created for task legacy-created:' <<<"$second_output" || true)
+  if [[ "$second_count" -eq 1 ]] \
+    && [[ -f "$ws/loop/tasks/delivered/legacy-created/legacy-created.task.md" ]] \
+    && [[ "$(state_value "$ws" legacy-created status)" = delivered ]]; then
+    pass "$name"
+  else
+    fail "$name" "legacy task did not run after valid task: output=$second_output"
+  fi
+}
+
+case_trailing_comment_created_parity() {
+  local name=trailing-comment-created-parity
+  local ws older_task later_task output
+  ws=$(make_ws)
+  older_task="$ws/older.task.md"
+  later_task="$ws/later.task.md"
+  sed \
+    -e 's/^id: tr-basic$/id: z-comment-created/' \
+    -e 's/^created:.*/created: "2026-01-01T00:00:00Z" # ts/' \
+    -e 's/^time_budget_min: 5$/time_budget_min: 30/' \
+    "$FIX_BASIC" >"$older_task"
+  sed \
+    -e 's/^id: tr-basic$/id: a-later-created/' \
+    -e 's/^created:.*/created: "2026-02-01T00:00:00Z"/' \
+    -e 's/^time_budget_min: 5$/time_budget_min: 30/' \
+    "$FIX_BASIC" >"$later_task"
+
+  if ! "$ENQUEUE" "$older_task" "$ws" >/dev/null 2>&1 \
+    || ! "$ENQUEUE" "$later_task" "$ws" >/dev/null 2>&1; then
+    fail "$name" "intake rejected a valid commented created value"
+    return
+  fi
+
+  output=$(run_tick "$ws" TR_MOCK_BEHAVIOR=success 2>&1)
+  if [[ -f "$ws/loop/tasks/delivered/z-comment-created/z-comment-created.task.md" ]] \
+    && [[ -f "$ws/loop/tasks/queue/a-later-created.task.md" ]] \
+    && ! grep -F -q 'invalid created' <<<"$output"; then
+    pass "$name"
+  else
+    fail "$name" "commented timestamp did not sort first without warning: output=$output"
+  fi
 }
 
 attest_verifier_wrapper() {
@@ -1551,6 +1725,11 @@ case_crash_verifying_terminal_rederive() {
   fi
 }
 
+case_env_integer_validation
+case_corrupt_state_quarantine_continues
+case_quoted_id_intake_runner_agree
+case_invalid_created_sorts_last
+case_trailing_comment_created_parity
 case_happy_path
 case_success_next_hint_surface
 case_success_next_hint_null_empty_omitted

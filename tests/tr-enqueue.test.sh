@@ -122,6 +122,34 @@ ws=$(new_workspace missing-id)
 write_task "$task" "" mechanical 8 30 "$valid_steps" yes "" none
 run_expect_reject "reject missing/empty id" "missing/empty id" "$task" "$ws"
 
+task=$TMP_ROOT/missing-created.task.md
+ws=$(new_workspace missing-created)
+write_task "$task" missing-created mechanical 8 30 "$valid_steps" yes "" none
+grep -v '^created:' "$task" >"$task.tmp"
+mv "$task.tmp" "$task"
+output=$("$SCRIPT" "$task" "$ws" 2>&1)
+rc=$?
+if [ "$rc" -eq 1 ] \
+  && printf '%s\n' "$output" | grep -F -q "created must be UTC ISO-8601 with seconds: value='' file='$task'"; then
+  pass "reject missing created"
+else
+  fail_case "reject missing created" "rc=$rc output=$output"
+fi
+
+task=$TMP_ROOT/invalid-created.task.md
+ws=$(new_workspace invalid-created)
+write_task "$task" invalid-created mechanical 8 30 "$valid_steps" yes "" none
+sed 's/^created:.*/created: 2026-02-30T00:00:00Z/' "$task" >"$task.tmp"
+mv "$task.tmp" "$task"
+output=$("$SCRIPT" "$task" "$ws" 2>&1)
+rc=$?
+if [ "$rc" -eq 1 ] \
+  && printf '%s\n' "$output" | grep -F -q "created must be UTC ISO-8601 with seconds: value='2026-02-30T00:00:00Z' file='$task'"; then
+  pass "reject invalid created"
+else
+  fail_case "reject invalid created" "rc=$rc output=$output"
+fi
+
 task=$TMP_ROOT/duplicate.task.md
 ws=$(new_workspace duplicate)
 write_task "$task" dup-task mechanical 8 30 "$valid_steps" yes "" none
@@ -154,6 +182,116 @@ ws=$(new_workspace stale-artifact-duplicate)
 write_task "$task" stale-artifact mechanical 8 30 "$valid_steps" yes "" none
 mkdir -p "$ws/loop/artifacts/stale-artifact"
 run_expect_reject "reject stale artifact duplicate" "duplicate id" "$task" "$ws"
+
+task=$TMP_ROOT/copy-failure.task.md
+ws=$(new_workspace copy-failure)
+write_task "$task" copy-failure mechanical 8 30 "$valid_steps" yes "" none
+cp_shim=$TMP_ROOT/cp-shim
+real_cp=$(command -v cp)
+mkdir -p "$cp_shim"
+{
+  printf '%s\n' '#!/bin/sh'
+  printf '%s\n' 'if [ "${TR_ENQUEUE_FAIL_CP:-}" = 1 ]; then exit 1; fi'
+  printf 'exec "%s" "$@"\n' "$real_cp"
+} >"$cp_shim/cp"
+chmod +x "$cp_shim/cp"
+output=$(PATH="$cp_shim:$PATH" TR_ENQUEUE_FAIL_CP=1 "$SCRIPT" "$task" "$ws" 2>&1)
+rc=$?
+if [ "$rc" -eq 1 ] \
+  && printf '%s\n' "$output" | grep -F -q 'failed to install task file' \
+  && [ ! -e "$ws/loop/artifacts/copy-failure" ] \
+  && [ ! -e "$ws/loop/tasks/queue/copy-failure.task.md" ] \
+  && ! find "$ws/loop/tasks/queue" -name '.copy-failure.task.md.tmp.*' -print | grep -q .; then
+  retry_output=$("$SCRIPT" "$task" "$ws" 2>&1)
+  retry_rc=$?
+  if [ "$retry_rc" -eq 0 ] \
+    && [ -d "$ws/loop/artifacts/copy-failure" ] \
+    && [ -f "$ws/loop/tasks/queue/copy-failure.task.md" ]; then
+    pass "copy failure leaves no artifact and retry succeeds"
+  else
+    fail_case "copy failure leaves no artifact and retry succeeds" "retry_rc=$retry_rc output=$retry_output"
+  fi
+else
+  fail_case "copy failure leaves no artifact and retry succeeds" "rc=$rc output=$output"
+fi
+
+task=$TMP_ROOT/artifact-race.task.md
+ws=$(new_workspace artifact-race)
+write_task "$task" artifact-race mechanical 8 30 "$valid_steps" yes "" none
+race_cp_shim=$TMP_ROOT/race-cp-shim
+real_mkdir=$(command -v mkdir)
+mkdir -p "$race_cp_shim"
+{
+  printf '%s\n' '#!/bin/sh'
+  printf '%s\n' '"$TR_ENQUEUE_REAL_CP" "$@" || exit $?'
+  printf '%s\n' '"$TR_ENQUEUE_REAL_MKDIR" "$TR_ENQUEUE_RACE_ARTIFACT_DIR"'
+} >"$race_cp_shim/cp"
+chmod +x "$race_cp_shim/cp"
+output=$(PATH="$race_cp_shim:$PATH" \
+  TR_ENQUEUE_REAL_CP="$real_cp" \
+  TR_ENQUEUE_REAL_MKDIR="$real_mkdir" \
+  TR_ENQUEUE_RACE_ARTIFACT_DIR="$ws/loop/artifacts/artifact-race" \
+  "$SCRIPT" "$task" "$ws" 2>&1)
+rc=$?
+if [ "$rc" -eq 1 ] \
+  && printf '%s\n' "$output" | grep -F -q 'duplicate id' \
+  && [ -d "$ws/loop/artifacts/artifact-race" ] \
+  && [ ! -e "$ws/loop/tasks/queue/artifact-race.task.md" ] \
+  && ! find "$ws/loop/tasks/queue" -name '.artifact-race.task.md.tmp.*' -print | grep -q .; then
+  pass "artifact race loser reports duplicate id"
+else
+  fail_case "artifact race loser reports duplicate id" "rc=$rc output=$output"
+fi
+
+task=$TMP_ROOT/term-cleanup.task.md
+ws=$(new_workspace term-cleanup)
+write_task "$task" term-cleanup mechanical 8 30 "$valid_steps" yes "" none
+mv_shim=$TMP_ROOT/mv-shim
+real_mv=$(command -v mv)
+mkdir -p "$mv_shim"
+{
+  printf '%s\n' '#!/bin/sh'
+  printf '%s\n' 'if [ "${TR_ENQUEUE_PAUSE_MV:-}" = 1 ]; then'
+  printf '%s\n' '  printf "%s\\n" "$$" >"$TR_ENQUEUE_MV_PID_FILE"'
+  printf '%s\n' '  : >"$TR_ENQUEUE_MV_READY_FILE"'
+  printf '%s\n' '  sleep 30'
+  printf '%s\n' '  exit 1'
+  printf '%s\n' 'fi'
+  printf '%s\n' 'exec "$TR_ENQUEUE_REAL_MV" "$@"'
+} >"$mv_shim/mv"
+chmod +x "$mv_shim/mv"
+mv_ready=$TMP_ROOT/mv-ready
+mv_pid_file=$TMP_ROOT/mv-pid
+term_output=$TMP_ROOT/term-output
+PATH="$mv_shim:$PATH" \
+  TR_ENQUEUE_PAUSE_MV=1 \
+  TR_ENQUEUE_MV_READY_FILE="$mv_ready" \
+  TR_ENQUEUE_MV_PID_FILE="$mv_pid_file" \
+  TR_ENQUEUE_REAL_MV="$real_mv" \
+  "$SCRIPT" "$task" "$ws" >"$term_output" 2>&1 &
+enqueue_pid=$!
+wait_count=0
+while [ ! -e "$mv_ready" ] && [ "$wait_count" -lt 200 ]; do
+  sleep 0.01
+  wait_count=$((wait_count + 1))
+done
+temp_before=$(find "$ws/loop/tasks/queue" -name '.term-cleanup.task.md.tmp.*' -print | wc -l | tr -d '[:space:]')
+kill -TERM "$enqueue_pid" 2>/dev/null || true
+if [ -s "$mv_pid_file" ]; then
+  kill -TERM "$(cat "$mv_pid_file")" 2>/dev/null || true
+fi
+wait "$enqueue_pid" 2>/dev/null
+term_rc=$?
+temp_after_exit=$(find "$ws/loop/tasks/queue" -name '.term-cleanup.task.md.tmp.*' -print | wc -l | tr -d '[:space:]')
+if [ "$temp_before" -eq 1 ] \
+  && [ "$temp_after_exit" -eq 0 ] \
+  && [ "$term_rc" -ne 0 ] \
+  && [ ! -e "$ws/loop/tasks/queue/term-cleanup.task.md" ] \
+  && [ ! -e "$ws/loop/artifacts/term-cleanup" ]; then
+  pass "TERM mid-enqueue removes install temp"
+else
+  fail_case "TERM mid-enqueue removes install temp" "rc=$term_rc temp_before=$temp_before temp_after=$temp_after_exit output=$(cat "$term_output")"
+fi
 
 task=$TMP_ROOT/missing-section.task.md
 ws=$(new_workspace missing-section)
