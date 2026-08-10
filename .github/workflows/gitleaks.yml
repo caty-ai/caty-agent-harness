@@ -1,0 +1,114 @@
+# 基本門番②: secret 漏れ検知 (gitleaks)
+#
+# 守るもの: PR の追加コミットに秘密情報 (API キー・トークン・秘密鍵) が入って main に届かないこと。
+# 配り方: このファイルを .github/workflows/ へコピー。差し替え必須箇所なし (バージョン pin は # CUSTOMIZE 外)。
+#
+# 設計姿勢 (handbook docs/05・docs/09 R-6):
+# - gitleaks-action は使わない (Organization リポで有償キーが要る)。MIT の gitleaks バイナリを
+#   バージョン pin + SHA256 検証つきで直接実行する — 秘密検知ゲートが未検証バイナリを実行時取得する形にしない。
+# - 走査範囲が解決できない・空になったら赤 (FP-6: 空集合からゲート判定を導出しない)。
+# - 設定の自己緩和封じ: gitleaks は無指定だとスキャン対象リポルートの .gitleaks.toml を自動検出し、
+#   さらに cwd の .gitleaksignore と inline の gitleaks:allow コメントも既定で尊重する。
+#   どれも「PR が自分の秘密を allowlist して green にする」経路になるため、①設定は base (main) 側から
+#   取り出して固定 (無ければ PR 側設定を退けて default ルール) ②.gitleaksignore は無効化
+#   ③gitleaks:allow コメントは --ignore-gitleaks-allow で無視する (許容の宣言は base 側 .gitleaks.toml へ)。
+# - --redact 必須 (検知した秘密そのものを CI ログに残さない)。
+# 運用注記: 秘密は commit 前に止めるのが本線 (ローカル hook)・CI は最後の網。
+#   一度 push した秘密は必ず rotate する — CI の赤が消えても秘密が無効化されたことにはならない。
+# 型の正本: caty-ai/family-dev-handbook templates/ci/
+
+name: gitleaks
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gitleaks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0 # 浅い checkout は「diff が解決できず変更ゼロ扱い → 緑」の最悪 fail-open になる
+          persist-credentials: false
+
+      - name: Download gitleaks (pinned + SHA256 verified)
+        run: |
+          set -euo pipefail
+          # バージョンと SHA256 は型の固定値 (# CUSTOMIZE 外)。更新は handbook 側の改訂で行う。
+          GITLEAKS_VERSION="8.30.1"
+          GITLEAKS_SHA256="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+          curl -fsSL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks version
+
+      - name: Scan PR commit range
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          # 範囲解決の fail-closed: base/head の存在確認と merge-base 解決に失敗したら赤。
+          git rev-parse --verify "origin/${BASE_REF}" >/dev/null || {
+            echo "::error::base ref origin/${BASE_REF} not found — range unresolved, failing closed."; exit 1; }
+          git rev-parse --verify HEAD >/dev/null || {
+            echo "::error::HEAD not found — range unresolved, failing closed."; exit 1; }
+          # base.sha 直参照にしない: PR open 時点の固定値は main が進むと実 merge-base とずれる。
+          BASE=$(git merge-base "origin/${BASE_REF}" HEAD) || {
+            echo "::error::merge-base failed — range unresolved, failing closed."; exit 1; }
+          [ -n "$BASE" ] || { echo "::error::empty merge-base — failing closed."; exit 1; }
+          COUNT=$(git rev-list --count "${BASE}..HEAD")
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::commit range ${BASE}..HEAD is empty — nothing to scan means 'cannot judge', failing closed (FP-6)."
+            exit 1
+          fi
+          # 設定の自己緩和封じ: 設定は base (main) 側から固定 (.gitleaks.toml → gitleaks.toml の順)。
+          # base のどちらにも無い場合は、PR 側 (checkout ツリー) の設定ファイルを退けてから
+          # default ルールで実行する — 「引数なし実行」は PR head の .gitleaks.toml を自動検出して
+          # PR 自身の allowlist が効いてしまう (fail-open) ため禁止。
+          CONFIG_ARGS=()
+          BASE_CONFIG=""
+          for CFG in .gitleaks.toml gitleaks.toml; do
+            if git cat-file -e "origin/${BASE_REF}:${CFG}" 2>/dev/null; then
+              BASE_CONFIG="$CFG"
+              break
+            fi
+          done
+          if [ -n "$BASE_CONFIG" ]; then
+            git show "origin/${BASE_REF}:${BASE_CONFIG}" > /tmp/gitleaks-base-config.toml
+            # [extend] の path は「設定ファイルの位置」ではなく実行時の作業ディレクトリ基準で解決される。
+            # base 設定が extend を持つと、参照先ファイルを PR 側 (checkout ツリー) が差し替えられ、
+            # base 固定を迂回できる — extend を含む base 設定は赤 (ルールは base 設定にインライン化する)。
+            # 検出は文字列マッチではなく TOML の実パース ([ extend ]・["extend"]・inline table 等の
+            # 別記法をすり抜けさせない)。パースできない設定も赤 (判定不能 = 赤・FP-6)。
+            python3 -c '
+          import sys, tomllib
+          try:
+              with open("/tmp/gitleaks-base-config.toml", "rb") as f:
+                  data = tomllib.load(f)
+          except Exception as e:
+              print(f"::error::base gitleaks config is not parseable TOML ({e}) — cannot judge, failing closed.")
+              sys.exit(1)
+          if "extend" in data:
+              print("::error::base gitleaks config contains extend — extend paths resolve against the working directory and can be redirected to PR-controlled files. Inline all rules into the base config (fail-closed).")
+              sys.exit(1)
+          ' || exit 1
+            CONFIG_ARGS=(--config /tmp/gitleaks-base-config.toml)
+            echo "using ${BASE_CONFIG} from origin/${BASE_REF} (PR-side config changes are intentionally ignored)"
+          else
+            rm -f .gitleaks.toml gitleaks.toml
+            echo "no gitleaks config on origin/${BASE_REF} — running with default rules (PR-side config files are removed from the checkout before scanning)"
+          fi
+          # .gitleaksignore と inline gitleaks:allow も PR 側から無効化できる自己緩和経路 — 両方塞ぐ。
+          rm -f .gitleaksignore
+          ./gitleaks git --no-banner --redact --ignore-gitleaks-allow \
+            "${CONFIG_ARGS[@]}" --log-opts="${BASE}..HEAD"
