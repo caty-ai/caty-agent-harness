@@ -7,6 +7,8 @@ METRICS="$ROOT/scripts/tr-metrics.sh"
 DEADMAN="$ROOT/scripts/deadman-probe.sh"
 INSTALL="$ROOT/install.sh"
 ENQUEUE="$ROOT/scripts/tr-enqueue"
+LOOP_INIT="$ROOT/scripts/loop-init"
+ATTEST_WRAPPER="$ROOT/scripts/attest-wrapper"
 
 pass_count=0
 fail_count=0
@@ -68,6 +70,8 @@ git -C "$ROOT" status --porcelain --untracked-files=all >"$TMP/git-status.before
 run_expect_exit task-runner-no-args 2 env -u TR_SPAWN_STEP "$TASK_RUNNER"
 run_expect_exit tr-metrics-bad-usage 2 "$METRICS"
 run_expect_exit deadman-probe-bad-usage 2 "$DEADMAN"
+run_expect_exit loop-init-unknown-flag 2 "$LOOP_INIT" --not-a-real-option
+run_expect_exit attest-wrapper-unknown-flag 2 "$ATTEST_WRAPPER" --not-a-real-option
 run_expect_exit install-unknown-flag 2 "$INSTALL" --not-a-real-option
 
 # #21b may migrate this with owner approval — update this pin in the same PR.
