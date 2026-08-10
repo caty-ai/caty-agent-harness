@@ -55,6 +55,12 @@ The idempotency marker for appended bootstrap blocks is the literal line `# caty
 
 ---
 
+## Flush intake consumer receipts
+
+The flush intake consumer's accounting ledger is `loop/pending/intake-runs.log`. The deadman `distill` marker proves only that intake ran; inspect the ledger for content-level silence, dedup, deferral, eviction, and quarantine counts. `loop/archive/` is append-only and is never auto-pruned. See [adapters/claude-code/INSTALL.md](../adapters/claude-code/INSTALL.md) for the full ledger format and scheduling.
+
+---
+
 ## Contract documents
 
 | Document | Contract |

@@ -123,6 +123,16 @@ Start with Quickstart, then complete the runtime-specific integration you chose.
 
 The table is deliberately asymmetric and does not claim identical native capabilities across runtimes.
 
+### Flush intake consumer
+
+The Claude Code `Stop` and `PreCompact` hooks above are producers only: their output is unverified records in `loop/pending/flush-*.md`. A workspace that enables either producer must also schedule the consumer, `adapters/claude-code/flush-intake.sh`, or those records accumulate without ever reaching the governed `STATE.md` fold. The same deterministic consumer may also be used by Codex CLI and Kimi Code CLI workspaces, since their checkpoint hooks emit the same flush format.
+
+Run the consumer two to four times per day: for a LaunchAgent, a `StartInterval` between `21600` and `43200` seconds; a daily schedule leaves no jitter margin at the default deadman threshold. The consumer calls no model, so its scheduler does not need Claude credentials. On macOS, a LaunchAgent in the `gui/<uid>` domain remains the recommended scheduler surface; any tick wrapper or spawn adapter that shells out to the claude CLI must use one, since crontab sessions cannot reach the user Keychain.
+
+Exactly one fold route may run per workspace: this consumer, or OpenClaw's `distill-audit.sh`, never both. The consumer touches `loop/.deadman/distill.marker` itself, only after acquiring the shared STATE lock and finishing without an infrastructure error—a self-marking design. The checked-in cron wrapper (`templates/cron-wrapper.tmpl.sh`) recognizes this exact consumer as self-marking and suppresses its own pre-touch when `DEADMAN_MARKER` names that workspace's `distill.marker`, so an explicit setting cannot hide lock starvation or intake failure; leave `DEADMAN_MARKER` unset for a proxy or renamed target the wrapper cannot identify.
+
+See [adapters/claude-code/INSTALL.md](../adapters/claude-code/INSTALL.md) for the full setup steps, ledger format, and scheduling detail.
+
 ---
 
 <a id="pause"></a>
