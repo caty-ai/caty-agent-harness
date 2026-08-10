@@ -94,7 +94,7 @@ run_tick() {
 
 case_env_integer_validation() {
   local name=env-integer-validation
-  local variable invalid_value ws output code
+  local variable invalid_value validation_case ws output code
   for variable in TR_STEP_TIMEOUT_S TR_GRACE_S TR_GATE_REPLAY_MAX_BYTES; do
     for invalid_value in abc ''; do
       ws=$(make_ws)
@@ -111,6 +111,33 @@ case_env_integer_validation() {
       fi
     done
   done
+
+  for validation_case in TR_STEP_TIMEOUT_S=08 TR_GRACE_S=010 TR_GATE_REPLAY_MAX_BYTES=0600; do
+    variable=${validation_case%%=*}
+    invalid_value=${validation_case#*=}
+    ws=$(make_ws)
+    set +e
+    output=$(run_tick "$ws" "$validation_case" 2>&1)
+    code=$?
+    set -e
+    if [[ "$code" -ne 2 ]] \
+      || ! grep -F -q "$variable must be a non-negative integer: value=$invalid_value" <<<"$output" \
+      || [[ -e "$ws/loop/tasks/.tick.lock" ]] \
+      || [[ -d "$ws/loop/artifacts" ]]; then
+      fail "$name-$variable" "value='$invalid_value' rc=$code output=$output"
+      return
+    fi
+  done
+
+  ws=$(make_ws)
+  set +e
+  output=$(run_tick "$ws" TR_STEP_TIMEOUT_S=0 TR_GRACE_S=0 TR_GATE_REPLAY_MAX_BYTES=0 2>&1)
+  code=$?
+  set -e
+  if [[ "$code" -ne 0 ]] || grep -F -q 'must be a non-negative integer' <<<"$output"; then
+    fail "$name-zero" "rc=$code output=$output"
+    return
+  fi
   pass "$name"
 }
 
@@ -202,6 +229,39 @@ case_invalid_created_sorts_last() {
     pass "$name"
   else
     fail "$name" "legacy task did not run after valid task: output=$second_output"
+  fi
+}
+
+case_trailing_comment_created_parity() {
+  local name=trailing-comment-created-parity
+  local ws older_task later_task output
+  ws=$(make_ws)
+  older_task="$ws/older.task.md"
+  later_task="$ws/later.task.md"
+  sed \
+    -e 's/^id: tr-basic$/id: z-comment-created/' \
+    -e 's/^created:.*/created: "2026-01-01T00:00:00Z" # ts/' \
+    -e 's/^time_budget_min: 5$/time_budget_min: 30/' \
+    "$FIX_BASIC" >"$older_task"
+  sed \
+    -e 's/^id: tr-basic$/id: a-later-created/' \
+    -e 's/^created:.*/created: "2026-02-01T00:00:00Z"/' \
+    -e 's/^time_budget_min: 5$/time_budget_min: 30/' \
+    "$FIX_BASIC" >"$later_task"
+
+  if ! "$ENQUEUE" "$older_task" "$ws" >/dev/null 2>&1 \
+    || ! "$ENQUEUE" "$later_task" "$ws" >/dev/null 2>&1; then
+    fail "$name" "intake rejected a valid commented created value"
+    return
+  fi
+
+  output=$(run_tick "$ws" TR_MOCK_BEHAVIOR=success 2>&1)
+  if [[ -f "$ws/loop/tasks/delivered/z-comment-created/z-comment-created.task.md" ]] \
+    && [[ -f "$ws/loop/tasks/queue/a-later-created.task.md" ]] \
+    && ! grep -F -q 'invalid created' <<<"$output"; then
+    pass "$name"
+  else
+    fail "$name" "commented timestamp did not sort first without warning: output=$output"
   fi
 }
 
@@ -1669,6 +1729,7 @@ case_env_integer_validation
 case_corrupt_state_quarantine_continues
 case_quoted_id_intake_runner_agree
 case_invalid_created_sorts_last
+case_trailing_comment_created_parity
 case_happy_path
 case_success_next_hint_surface
 case_success_next_hint_null_empty_omitted

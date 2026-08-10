@@ -23,7 +23,7 @@ TR_GATE_REPLAY_MAX_BYTES=${TR_GATE_REPLAY_MAX_BYTES-4096}
 for integer_var in TR_STEP_TIMEOUT_S TR_GRACE_S TR_GATE_REPLAY_MAX_BYTES; do
   integer_value=${!integer_var}
   case "$integer_value" in
-    ''|*[!0-9]*)
+    ''|*[!0-9]*|0[0-9]*)
       printf '%s must be a non-negative integer: value=%s\n' "$integer_var" "$integer_value" >&2
       exit 2
       ;;
@@ -120,7 +120,7 @@ quarantine_corrupt_state() {
 load_task_meta() {
   local task_file=$1
   eval "$(python3 -B - "$task_file" <<'PY'
-import shlex, sys
+import re, shlex, sys
 path = sys.argv[1]
 meta = {}
 in_fm = False
@@ -140,7 +140,8 @@ with open(path, encoding="utf-8") as f:
             break
         if in_fm and ":" in line:
             key, value = line.split(":", 1)
-            value = unquote(value.strip())
+            value = re.sub(r"\s+#.*$", "", value).strip()
+            value = unquote(value)
             if value in ("null", "~"):
                 value = ""
             meta[key.strip()] = value
@@ -1777,6 +1778,7 @@ rows = []
 corrupt = False
 
 def unquote(value):
+    value = re.sub(r"\s+#.*$", "", value)
     value = value.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in ("\"", "'"):
         return value[1:-1]

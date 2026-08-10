@@ -109,6 +109,7 @@ has_receipt_assertion() {
 task_file=$1
 workspace=$2
 step_timeout_min=10
+install_tmp=''
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$script_dir/lib-pause.sh"
@@ -155,7 +156,7 @@ done
 
 tmp_donecheck=${TMPDIR:-/tmp}/tr-enqueue-donecheck.$$
 tmp_donecheck_clean=${TMPDIR:-/tmp}/tr-enqueue-donecheck.clean.$$
-trap 'rm -f "$tmp_donecheck" "$tmp_donecheck_clean"' EXIT HUP INT TERM
+trap 'rm -f "$tmp_donecheck" "$tmp_donecheck_clean" "$install_tmp"' EXIT HUP INT TERM
 extract_donecheck "$task_file" > "$tmp_donecheck" || fail "missing donecheck block"
 strip_donecheck_comments "$tmp_donecheck" "$tmp_donecheck_clean"
 
@@ -202,6 +203,9 @@ if ! cp "$task_file" "$install_tmp"; then
 fi
 if ! mkdir "$artifact_dir" >/dev/null 2>&1; then
   rm -f "$install_tmp"
+  if [ -d "$artifact_dir" ]; then
+    fail "duplicate id"
+  fi
   fail "artifacts dir not writable"
 fi
 if [ ! -d "$artifact_dir" ] || [ ! -w "$artifact_dir" ]; then
