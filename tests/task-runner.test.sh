@@ -858,6 +858,36 @@ EOF
   fi
 }
 
+case_dlq_push_bash_error_is_redacted() {
+  local name=dlq-push-bash-error-is-redacted
+  local ws token dest report push_log output code push_log_mode
+  ws=$(make_ws)
+  ws=$(cd "$ws" && pwd -P)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  token='SECRETTOKEN22xyz'
+
+  set +e
+  output=$(run_tick "$ws" TR_MOCK_BEHAVIOR=auth-error \
+    TR_PUSH_CMD="nonexistent-push-$token --auth" 2>&1)
+  code=$?
+  set -e
+  dest="$ws/loop/tasks/dlq/tr-basic"
+  report="$dest/REPORT.md"
+  push_log="$dest/push.log"
+  push_log_mode=$(stat -c '%a' "$push_log" 2>/dev/null || stat -f '%Lp' "$push_log" 2>/dev/null)
+  if [[ "$code" -eq 0 ]] \
+    && [[ -f "$dest/push-failed" ]] \
+    && grep -Fqx '[bash-level error suppressed]' "$push_log" \
+    && grep -Eq '^push: rc=127 [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z dest=' "$push_log" \
+    && grep -Eq '^push: failed rc=127 [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$report" \
+    && [[ "$push_log_mode" = 600 ]] \
+    && ! grep -R -Fq -- "$token" "$ws"; then
+    pass "$name"
+  else
+    fail "$name" "bash error redaction mismatch: rc=$code mode=$push_log_mode output=$output"
+  fi
+}
+
 case_stale_lease_reap() {
   local name=stale-lease-reap
   local ws pgid
@@ -1881,6 +1911,7 @@ case_crash_donecheck
 case_crash_deliver_terminal_reconcile
 case_crash_dlq_terminal_reconcile
 case_dlq_push_failure_visible_and_retried
+case_dlq_push_bash_error_is_redacted
 case_stale_lease_reap
 case_future_lease_reap_bounded
 case_attempts_exhaustion

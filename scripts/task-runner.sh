@@ -1373,15 +1373,19 @@ push_dlq_report() {
   local dest=$1
   local report_file="$dest/REPORT.md"
   local push_log="$dest/push.log"
-  local attempted_at push_rc
+  local push_output attempted_at push_rc
   attempted_at=$(utc_now)
 
+  ( umask 077; : >>"$push_log" ) || true
+  push_output=$(mktemp "$dest/.push-output.XXXXXX")
   printf '\n== push attempt %s dest=%s ==\n' "$attempted_at" "$dest" >>"$push_log" || true
-  if bash -c "$TR_PUSH_CMD \"\$1\"" _ "$report_file" >>"$push_log" 2>&1; then
+  if bash -c "$TR_PUSH_CMD \"\$1\"" _ "$report_file" >"$push_output" 2>&1; then
     push_rc=0
   else
     push_rc=$?
   fi
+  sed 's/^_: .*/[bash-level error suppressed]/' "$push_output" >>"$push_log" || true
+  rm -f "$push_output" || true
   printf 'push: rc=%d %s dest=%s\n' "$push_rc" "$attempted_at" "$dest" >>"$push_log" || true
 
   if (( push_rc == 0 )); then
