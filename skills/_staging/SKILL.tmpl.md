@@ -4,6 +4,9 @@ description: <one-line description within the measured CONSULT loader budget; de
 trigger: <trigger>
 status: draft
 source: <source material>
+# Add these fields when promoting the skill:
+# verified_at: <UTC timestamp>
+# verifier_id: <verifier identifier>
 ---
 
 # <name>
