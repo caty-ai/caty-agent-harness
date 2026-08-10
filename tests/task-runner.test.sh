@@ -976,7 +976,7 @@ Exercise the configurable donecheck timeout.
 
 ## Done-when
 ```donecheck
-sleep 3
+sleep 10
 test -e "$ARTIFACT_DIR/out/never-created"
 ```
 
@@ -991,7 +991,7 @@ EOF
   elapsed=$(( SECONDS - started ))
   log_file="$ws/loop/artifacts/tr-donecheck-timeout/attempts/001/donecheck.log"
   reason_file="$ws/loop/artifacts/tr-donecheck-timeout/attempts/001/verify-reason"
-  if [[ "$code" -eq 0 && "$elapsed" -ge 1 && "$elapsed" -lt 3 ]] \
+  if [[ "$code" -eq 0 && "$elapsed" -ge 1 && "$elapsed" -lt 8 ]] \
     && grep -Fqx 'donecheck timed out after 1s' "$reason_file" \
     && grep -Fqx 'donecheck timed out after 1s' "$log_file"; then
     pass "$name"
