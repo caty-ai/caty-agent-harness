@@ -11,14 +11,24 @@ if [[ $# -ne 1 ]]; then
 fi
 
 workspace=$1
-TR_STEP_TIMEOUT_S=${TR_STEP_TIMEOUT_S:-600}
-TR_GRACE_S=${TR_GRACE_S:-30}
+TR_STEP_TIMEOUT_S=${TR_STEP_TIMEOUT_S-600}
+TR_GRACE_S=${TR_GRACE_S-30}
 TR_SPAWN_STEP=${TR_SPAWN_STEP:-}
 TR_PUSH_CMD=${TR_PUSH_CMD:-}
 TR_CRASH_AFTER=${TR_CRASH_AFTER:-}
 TR_TEMPLATE_OVERRIDE=${TR_TEMPLATE_OVERRIDE:-}
 # Replay payload cap: values are clamped to a 64-byte floor and 1048576-byte ceiling.
-TR_GATE_REPLAY_MAX_BYTES=${TR_GATE_REPLAY_MAX_BYTES:-4096}
+TR_GATE_REPLAY_MAX_BYTES=${TR_GATE_REPLAY_MAX_BYTES-4096}
+
+for integer_var in TR_STEP_TIMEOUT_S TR_GRACE_S TR_GATE_REPLAY_MAX_BYTES; do
+  integer_value=${!integer_var}
+  case "$integer_value" in
+    ''|*[!0-9]*)
+      printf '%s must be a non-negative integer: value=%s\n' "$integer_var" "$integer_value" >&2
+      exit 2
+      ;;
+  esac
+done
 
 case "$TR_CRASH_AFTER" in
   ''|spawn|stamp|infra-requeue|infra-terminal|verifying|donecheck-pass|deliver-terminal|dlq-terminal) ;;
@@ -82,6 +92,7 @@ take_lock() {
 }
 
 release_lock() {
+  local exit_status=$?
   local lock_pid=''
   if [[ -f "$lockdir/pid" ]]; then
     lock_pid=$(cat "$lockdir/pid" 2>/dev/null || true)
@@ -89,18 +100,36 @@ release_lock() {
   if [[ "$lock_pid" = "$$" ]]; then
     rm -rf "$lockdir"
   fi
+  return "$exit_status"
 }
 
 take_lock
-trap release_lock EXIT INT TERM
+trap release_lock EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+corrupt_state_seen=0
+
+quarantine_corrupt_state() {
+  local context=$1
+  local state_file=$2
+  printf 'warning: %s: corrupt state.json, quarantined: %s\n' "$context" "$state_file" >&2
+  corrupt_state_seen=1
+}
 
 load_task_meta() {
   local task_file=$1
-  eval "$(python3 - "$task_file" <<'PY'
+  eval "$(python3 -B - "$task_file" <<'PY'
 import shlex, sys
 path = sys.argv[1]
 meta = {}
 in_fm = False
+
+def unquote(value):
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("\"", "'"):
+        return value[1:-1]
+    return value
+
 with open(path, encoding="utf-8") as f:
     for raw in f:
         line = raw.rstrip("\n")
@@ -111,7 +140,7 @@ with open(path, encoding="utf-8") as f:
             break
         if in_fm and ":" in line:
             key, value = line.split(":", 1)
-            value = value.strip()
+            value = unquote(value.strip())
             if value in ("null", "~"):
                 value = ""
             meta[key.strip()] = value
@@ -123,34 +152,43 @@ PY
 
 load_state() {
   local state_file=$1
-  eval "$(python3 - "$state_file" <<'PY'
+  local loaded_state
+  if ! loaded_state=$(python3 -B - "$state_file" <<'PY'
 import json, shlex, sys
-with open(sys.argv[1], encoding="utf-8") as f:
-    s = json.load(f)
-lease = s.get("lease") or {}
-owner = lease.get("owner") or {}
-fields = {
-    "status": s.get("status", ""),
-    "current_step": s.get("current_step", 1),
-    "attempts_used": s.get("attempts_used", 0),
-    "active_seconds_used": s.get("active_seconds_used", 0),
-    "infra_retries": s.get("infra_retries", 0),
-    "consec_noncomplete": s.get("consec_noncomplete", 0),
-    "last_error_class": "" if s.get("last_error_class") is None else s.get("last_error_class"),
-    "last_gap_fingerprint": "" if s.get("last_gap_fingerprint") is None else s.get("last_gap_fingerprint"),
-    "last_gap_step": "" if s.get("last_gap_step") is None else s.get("last_gap_step"),
-    "terminal_reason": "" if s.get("terminal_reason") is None else s.get("terminal_reason"),
-    "lease_pid": lease.get("pid", ""),
-    "lease_pgid": lease.get("pgid", ""),
-    "lease_started": lease.get("started", ""),
-    "lease_owner_pid": owner.get("pid", ""),
-    "lease_owner_started": owner.get("started", ""),
-    "lease_owner_sentinel": owner.get("sentinel", ""),
-}
-for key, value in fields.items():
-    print("%s=%s" % (key, shlex.quote(str(value))))
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        s = json.load(f)
+    if not isinstance(s, dict):
+        raise ValueError("state must be an object")
+    lease = s.get("lease") or {}
+    owner = lease.get("owner") or {}
+    fields = {
+        "status": s.get("status", ""),
+        "current_step": s.get("current_step", 1),
+        "attempts_used": s.get("attempts_used", 0),
+        "active_seconds_used": s.get("active_seconds_used", 0),
+        "infra_retries": s.get("infra_retries", 0),
+        "consec_noncomplete": s.get("consec_noncomplete", 0),
+        "last_error_class": "" if s.get("last_error_class") is None else s.get("last_error_class"),
+        "last_gap_fingerprint": "" if s.get("last_gap_fingerprint") is None else s.get("last_gap_fingerprint"),
+        "last_gap_step": "" if s.get("last_gap_step") is None else s.get("last_gap_step"),
+        "terminal_reason": "" if s.get("terminal_reason") is None else s.get("terminal_reason"),
+        "lease_pid": lease.get("pid", ""),
+        "lease_pgid": lease.get("pgid", ""),
+        "lease_started": lease.get("started", ""),
+        "lease_owner_pid": owner.get("pid", ""),
+        "lease_owner_started": owner.get("started", ""),
+        "lease_owner_sentinel": owner.get("sentinel", ""),
+    }
+    for key, value in fields.items():
+        print("%s=%s" % (key, shlex.quote(str(value))))
+except Exception:
+    sys.exit(1)
 PY
-)"
+  ); then
+    return 1
+  fi
+  eval "$loaded_state"
 }
 
 write_state() {
@@ -1391,7 +1429,10 @@ reconcile_terminals() {
   local state_file
   for state_file in "$artifacts_root"/*/state.json; do
     [[ -e "$state_file" ]] || continue
-    load_state "$state_file"
+    if ! load_state "$state_file"; then
+      quarantine_corrupt_state reconcile_terminals "$state_file"
+      continue
+    fi
     [[ "$status" = "delivered" || "$status" = "dlq" ]] || continue
     local artifact_dir task_id dest task_file terminal_task report_missing
     artifact_dir=$(dirname "$state_file")
@@ -1540,7 +1581,10 @@ recover_verifying() {
   local state_file
   for state_file in "$artifacts_root"/*/state.json; do
     [[ -e "$state_file" ]] || continue
-    load_state "$state_file"
+    if ! load_state "$state_file"; then
+      quarantine_corrupt_state recover_verifying "$state_file"
+      continue
+    fi
     [[ "$status" = "verifying" ]] || continue
     local artifact_dir
     artifact_dir=$(dirname "$state_file")
@@ -1616,7 +1660,10 @@ reap_running() {
   local state_file
   for state_file in "$artifacts_root"/*/state.json; do
     [[ -e "$state_file" ]] || continue
-    load_state "$state_file"
+    if ! load_state "$state_file"; then
+      quarantine_corrupt_state reap_running "$state_file"
+      continue
+    fi
     [[ "$status" = "running" ]] || continue
     local age
     age=$(lease_age_s "$lease_started")
@@ -1722,10 +1769,28 @@ PY
 }
 
 pick_oldest_queued() {
-  python3 - "$queue_dir" "$artifacts_root" <<'PY'
-import glob, json, os, sys
+  local picked_path pick_status
+  if picked_path=$(python3 -B - "$queue_dir" "$artifacts_root" <<'PY'
+import datetime, glob, json, os, re, sys
 queue, artifacts = sys.argv[1:3]
 rows = []
+corrupt = False
+
+def unquote(value):
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("\"", "'"):
+        return value[1:-1]
+    return value
+
+def valid_created(value):
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", value):
+        return False
+    try:
+        datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return False
+    return True
+
 for path in glob.glob(os.path.join(queue, "*.task.md")):
     meta = {}
     in_fm = False
@@ -1738,7 +1803,7 @@ for path in glob.glob(os.path.join(queue, "*.task.md")):
             break
         if in_fm and ":" in line:
             k, v = line.split(":", 1)
-            meta[k.strip()] = v.strip()
+            meta[k.strip()] = unquote(v)
     task_id = meta.get("id")
     if not task_id:
         continue
@@ -1746,14 +1811,42 @@ for path in glob.glob(os.path.join(queue, "*.task.md")):
     status = "queued"
     if os.path.exists(state_path):
         try:
-            status = json.load(open(state_path, encoding="utf-8")).get("status", "queued")
+            with open(state_path, encoding="utf-8") as state_file:
+                state = json.load(state_file)
+            if not isinstance(state, dict):
+                raise ValueError("state must be an object")
+            status = state.get("status", "queued")
         except Exception:
-            status = "queued"
+            print("warning: pick_oldest_queued: corrupt state.json, quarantined: %s" % state_path, file=sys.stderr)
+            corrupt = True
+            continue
     if status == "queued":
-        rows.append((meta.get("created", ""), path))
+        created = meta.get("created", "")
+        if valid_created(created):
+            rows.append((0, created, path))
+        else:
+            print(
+                "warning: pick_oldest_queued: invalid created for task %s: value=%r path=%s; sorting last"
+                % (task_id, created, path),
+                file=sys.stderr,
+            )
+            rows.append((1, "", path))
 if rows:
-    print(sorted(rows)[0][1])
+    print(sorted(rows)[0][2])
+if corrupt:
+    sys.exit(4)
 PY
+  ); then
+    pick_status=0
+  else
+    pick_status=$?
+  fi
+  if (( pick_status == 4 )); then
+    corrupt_state_seen=1
+  elif (( pick_status != 0 )); then
+    return "$pick_status"
+  fi
+  task_to_run=$picked_path
 }
 
 run_one_attempt() {
@@ -1765,7 +1858,10 @@ run_one_attempt() {
   local state_file="$artifact_dir/state.json"
   mkdir -p "$attempts_dir" "$artifact_dir/out"
   init_state_if_missing "$state_file"
-  load_state "$state_file"
+  if ! load_state "$state_file"; then
+    quarantine_corrupt_state run_one_attempt "$state_file"
+    return 0
+  fi
   [[ "$status" = "queued" ]] || return 0
 
   local nnn
@@ -1873,8 +1969,12 @@ run_one_attempt() {
 reconcile_terminals
 recover_verifying
 reap_running
-task_to_run=$(pick_oldest_queued)
+task_to_run=''
+pick_oldest_queued
 if [[ -n "$task_to_run" ]]; then
   run_one_attempt "$task_to_run"
 fi
 render_all_progress
+if (( corrupt_state_seen != 0 )); then
+  exit 1
+fi

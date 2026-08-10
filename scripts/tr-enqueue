@@ -29,8 +29,9 @@ frontmatter_value() {
         sub(/[[:space:]]+#.*$/, "", line)
         sub(/^[[:space:]]+/, "", line)
         sub(/[[:space:]]+$/, "", line)
-        gsub(/^"|"$/, "", line)
-        gsub(/^'\''|'\''$/, "", line)
+        if ((line ~ /^".*"$/) || (line ~ /^'\''.*'\''$/)) {
+          line = substr(line, 2, length(line) - 2)
+        }
         print line
         exit
       }
@@ -69,6 +70,21 @@ is_positive_integer() {
     ''|*[!0-9]*) return 1 ;;
     *) [ "$value" -gt 0 ] ;;
   esac
+}
+
+is_utc_iso8601() {
+  value=$1
+  python3 -B - "$value" <<'PY'
+import datetime, re, sys
+
+value = sys.argv[1]
+if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", value):
+    sys.exit(1)
+try:
+    datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+except ValueError:
+    sys.exit(1)
+PY
 }
 
 is_safe_id() {
@@ -110,6 +126,9 @@ fi
 id=$(frontmatter_value id "$task_file")
 [ -n "$id" ] || fail "missing/empty id"
 is_safe_id "$id" || fail "invalid id: must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+
+created=$(frontmatter_value created "$task_file")
+is_utc_iso8601 "$created" || fail "created must be UTC ISO-8601 with seconds: value='$created' file='$task_file'"
 
 parent_id=$(frontmatter_value parent_id "$task_file")
 case "$parent_id" in
@@ -172,12 +191,27 @@ if [ -e "$queue_dir/$id.task.md" ] \
   fail "duplicate id"
 fi
 
-mkdir "$artifact_dir" >/dev/null 2>&1 || fail "artifacts dir not writable"
-[ -d "$artifact_dir" ] && [ -w "$artifact_dir" ] || fail "artifacts dir not writable"
-
 if [ "$time_budget_min" -lt $((plan_steps * 8)) ]; then
   warn "time_budget_min is less than plan_steps x 8"
 fi
 
-cp "$task_file" "$queue_dir/$id.task.md" || fail "failed to install task file"
+install_tmp=$queue_dir/.$id.task.md.tmp.$$
+if ! cp "$task_file" "$install_tmp"; then
+  rm -f "$install_tmp"
+  fail "failed to install task file"
+fi
+if ! mkdir "$artifact_dir" >/dev/null 2>&1; then
+  rm -f "$install_tmp"
+  fail "artifacts dir not writable"
+fi
+if [ ! -d "$artifact_dir" ] || [ ! -w "$artifact_dir" ]; then
+  rmdir "$artifact_dir" >/dev/null 2>&1 || true
+  rm -f "$install_tmp"
+  fail "artifacts dir not writable"
+fi
+if ! mv "$install_tmp" "$queue_dir/$id.task.md"; then
+  rmdir "$artifact_dir" >/dev/null 2>&1 || true
+  rm -f "$install_tmp"
+  fail "failed to install task file"
+fi
 exit 0
