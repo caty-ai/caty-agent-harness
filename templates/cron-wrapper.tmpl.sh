@@ -134,8 +134,14 @@ fi
 
 self_marking_flush_intake=0
 flush_intake_target=$(cd "$(dirname "$pause_helper")/.." && pwd -P)/adapters/claude-code/flush-intake.sh
+deadman_marker_compare=$DEADMAN_MARKER
+deadman_marker_workspace=${DEADMAN_MARKER%/loop/.deadman/distill.marker}
+if [[ "$deadman_marker_workspace" != "$DEADMAN_MARKER" ]] \
+  && deadman_marker_workspace=$(caty_pause_canonical_workspace "$deadman_marker_workspace" 2>/dev/null); then
+  deadman_marker_compare="$deadman_marker_workspace/loop/.deadman/distill.marker"
+fi
 if [[ -e "$flush_intake_target" && "$TARGET" -ef "$flush_intake_target" \
-  && "$DEADMAN_MARKER" == "$workspace_arg/loop/.deadman/distill.marker" ]]; then
+  && "$deadman_marker_compare" == "$workspace_arg/loop/.deadman/distill.marker" ]]; then
   self_marking_flush_intake=1
 fi
 

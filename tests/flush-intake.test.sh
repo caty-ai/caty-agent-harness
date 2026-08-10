@@ -324,6 +324,7 @@ fi
 ws=$(new_ws case-19-wrapper)
 mkdir "$ws/loop/.distill-state.lock"
 distill_marker="$ws/loop/.deadman/distill.marker"
+distill_marker_arg="$ws/loop/../loop/.deadman/distill.marker"
 mkdir -p "${distill_marker%/*}"
 touch -t 202001010000 "$distill_marker"
 marker_mtime_before=$(file_mtime "$distill_marker")
@@ -331,7 +332,7 @@ wrapper=$TMP_ROOT/cron-wrapper.sh
 cp "$ROOT/templates/cron-wrapper.tmpl.sh" "$wrapper"
 chmod +x "$wrapper"
 TARGET="$INTAKE" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$ws" \
-  DEADMAN_MARKER="$distill_marker" \
+  DEADMAN_MARKER="$distill_marker_arg" \
   INTAKE_LOCK_ATTEMPTS=1 INTAKE_LOCK_SLEEP_S=0 "$wrapper" "$ws" >/dev/null 2>&1
 marker_mtime_after=$(file_mtime "$distill_marker")
 if [ "$marker_mtime_before" = "$marker_mtime_after" ] \
@@ -475,10 +476,20 @@ printf '%s\n' \
   '- Keep literal provenance (source: user) suffix' \
   '- Keep literal provenance suffix (source: flush-intake)' >"$ws/loop/pending/flush-2026-07-14.md"
 run_intake "$ws"
-if [ "$(grep -Fc 'Keep literal provenance' "$ws/STATE.md")" -eq 2 ]; then
-  pass '[26] normalization strips only the anchored consumer source marker'
+parenthetical_fixture="$ROOT/tests/fixtures/flush/normalization-parenthetical.md"
+parenthetical_normalized="$TMP_ROOT/normalization-parenthetical.txt"
+bash -c '
+  source "$1"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    normalize_state_candidate "$line"
+  done <"$2"
+' _ "$ROOT/scripts/lib-state-fold.sh" "$parenthetical_fixture" >"$parenthetical_normalized"
+if [ "$(grep -Fc 'Keep literal provenance' "$ws/STATE.md")" -eq 2 ] \
+  && grep -Fqx -- 'Keep a distinct local annotation. (some note)' "$parenthetical_normalized" \
+  && [ "$(LC_ALL=C sort -u "$parenthetical_normalized" | wc -l | tr -d '[:space:]')" -eq 2 ]; then
+  pass '[26] normalization strips only the anchored consumer source marker and preserves other parentheticals'
 else
-  fail_case '[26] normalization strips only the anchored consumer source marker' 'legitimate parenthetical was stripped'
+  fail_case '[26] normalization strips only the anchored consumer source marker and preserves other parentheticals' 'legitimate parenthetical was stripped'
 fi
 
 if grep -Fq 'state_fold_candidate_is_duplicate' "$ROOT/adapters/openclaw/distill-audit.sh" \
@@ -560,16 +571,36 @@ if [ "$missing_section_rc" -eq 1 ] \
 else
   missing_section_failed_closed=0
 fi
-sed 's/^## Missing lessons/## Lessons learned/' "$ws/STATE.md" >"$TMP_ROOT/state-restored-lessons"
+sed 's/^## Missing lessons/## Lessons learned - house annotation/' "$ws/STATE.md" >"$TMP_ROOT/state-restored-lessons"
 mv "$TMP_ROOT/state-restored-lessons" "$ws/STATE.md"
+set +e
 run_intake "$ws"
+annotated_section_rc=$?
+set -e
 if [ "$missing_section_failed_closed" -eq 1 ] \
+  && [ "$annotated_section_rc" -eq 0 ] \
+  && grep -Fqx '## Lessons learned - house annotation' "$ws/STATE.md" \
   && grep -Fq 'Missing sections fail closed.' "$ws/STATE.md" \
   && [ -f "$ws/loop/archive/flush-2026-07-16.md" ] \
   && [ -e "$ws/loop/.deadman/distill.marker" ]; then
-  pass '[31] missing requested STATE section fails atomically and succeeds after repair'
+  pass '[31] missing requested STATE section fails atomically and a prefix-matched annotated header folds after repair'
 else
-  fail_case '[31] missing requested STATE section fails atomically and succeeds after repair' "failed_closed=$missing_section_failed_closed receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+  fail_case '[31] missing requested STATE section fails atomically and a prefix-matched annotated header folds after repair' "failed_closed=$missing_section_failed_closed repair_rc=$annotated_section_rc receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+fi
+
+set +e
+/bin/bash -uc '
+  source "$1"
+  if state_fold_section_allowed CANDIDATE ""; then
+    exit 1
+  fi
+' _ "$ROOT/scripts/lib-state-fold.sh" >"$TMP_ROOT/bash32-array.out" 2>"$TMP_ROOT/bash32-array.err"
+bash32_array_rc=$?
+set -e
+if [ "$bash32_array_rc" -eq 0 ]; then
+  pass '[32] empty section-heading arrays are safe under nounset on system bash'
+else
+  fail_case '[32] empty section-heading arrays are safe under nounset on system bash' "rc=$bash32_array_rc error=$(tr '\n' ' ' <"$TMP_ROOT/bash32-array.err")"
 fi
 
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"

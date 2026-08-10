@@ -50,7 +50,7 @@ state_fold_section_allowed() {
   local headings
 
   IFS='|' read -r -a headings <<<"$section_headings"
-  for heading in "${headings[@]}"; do
+  for heading in ${headings[@]+"${headings[@]}"}; do
     if [[ "$candidate" == "$heading" ]]; then
       return 0
     fi
@@ -277,11 +277,11 @@ append_state_sections() {
   local eviction_file=${7:-}
 
   if [[ -s "$lessons_file" ]] \
-    && ! grep -Eq '^## Lessons learned[[:space:]]*(\([^)]*\))?[[:space:]]*$' "$state_file"; then
+    && ! grep -q '^## Lessons learned' "$state_file"; then
     return 4
   fi
   if [[ -s "$failures_file" ]] \
-    && ! grep -Eq '^## Open failures[[:space:]]*(\([^)]*\))?[[:space:]]*$' "$state_file"; then
+    && ! grep -q '^## Open failures' "$state_file"; then
     return 4
   fi
 
