@@ -1,5 +1,6 @@
 # path	class	workspace_resolution	paused_contract	reason	guard_literal	first_forbidden_literal
 adapters/claude-code/checkpoint-stop-hook.sh	guarded	hook-payload.cwd	exit-0-silent	interactive-hook	caty_pause_workspace_state	mkdir -p "$guard_dir"
+adapters/claude-code/flush-intake.sh	guarded	argv	exit-0-status	automated-state-fold	caty_pause_workspace_state	find "$pending_dir" -maxdepth 1 -type f -name '.intake-*.tmp.*' -mtime +1 -delete
 adapters/claude-code/precompact-flush-hook.sh	guarded	hook-payload.cwd	exit-0-silent	interactive-hook	caty_pause_workspace_state	mkdir -p "$guard_dir"
 adapters/codex/checkpoint-stop-hook.sh	guarded	hook-payload.cwd	exit-0-silent	interactive-hook	caty_pause_workspace_state	mkdir -p "$guard_dir"
 adapters/hermes/spawn_step.sh	guarded	argv.workspace	exit-0-status	automated-model-call	caty_pause_workspace_state	run_bounded "$HERMES_STEP_TIMEOUT_S"
@@ -18,6 +19,7 @@ scripts/family-updater	exempt	none	not-applicable	harness-clone-updater-not-memb
 scripts/lib-bounded.sh	exempt	none	not-applicable	sourced-library	-	-
 scripts/lib-classify.sh	exempt	none	not-applicable	sourced-library	-	-
 scripts/lib-pause.sh	exempt	explicit-function-argument	not-applicable	sourced-library	-	-
+scripts/lib-state-fold.sh	exempt	explicit-function-argument	not-applicable	sourced-library	-	-
 scripts/lib-wrapper-conformance.sh	exempt	none	not-applicable	sourced-library	-	-
 scripts/loop-init	exempt	--workspace	not-applicable	explicit-initialization-command	-	-
 scripts/tr-metrics.sh	exempt	argv.workspace	not-applicable	read-only-inspection	-	-

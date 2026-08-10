@@ -13,102 +13,6 @@ infra_fail() {
   exit 3
 }
 
-file_mtime_epoch() {
-  local path=$1
-  stat -c "%Y" "$path" 2>/dev/null || stat -f "%m" "$path"
-}
-
-sha256_file() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | awk '{print $1}'
-  elif command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$1" | awk '{print $1}'
-  else
-    infra_fail 'sha256sum or shasum is required for deduplication'
-  fi
-}
-
-sha256_text() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    printf '%s' "$1" | sha256sum | awk '{print $1}'
-  elif command -v shasum >/dev/null 2>&1; then
-    printf '%s' "$1" | shasum -a 256 | awk '{print $1}'
-  else
-    infra_fail 'sha256sum or shasum is required for deduplication'
-  fi
-}
-
-annotate_reply_dedup_keys() {
-  local reply=$1
-  local task_id=$2
-  local annotated_reply=$3
-  local section=
-  local line
-  local stripped_line
-  local normalized
-  local lesson_hash
-
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    if [[ "$line" =~ ^##\ LESSONS[[:space:]]*$ ]]; then
-      section=lessons
-    elif [[ "$line" =~ ^##\ OPEN_FAILURES[[:space:]]*$ ]]; then
-      section=failures
-    elif [[ "$line" =~ ^##\  ]]; then
-      section=other
-    fi
-
-    stripped_line=$line
-    if [[ ( "$section" == lessons || "$section" == failures ) \
-      && "$stripped_line" =~ ^(.*)\ \[dedup_key:\ [^]]*\]$ ]]; then
-      stripped_line=${BASH_REMATCH[1]}
-    fi
-
-    if [[ ( "$section" == lessons || "$section" == failures ) \
-      && "$stripped_line" =~ ^-\ [0-9]{4}-[0-9]{2}-[0-9]{2}\ .*\(source:\ distill-audit\)$ ]]; then
-      # Normalize only for hashing: trim leading/trailing whitespace and collapse
-      # internal whitespace runs to one space, so equivalent bullets share a key.
-      normalized=$(printf '%s\n' "$stripped_line" | awk '{$1 = $1; print}')
-      lesson_hash=$(sha256_text "$normalized")
-      printf '%s [dedup_key: %s:%s]\n' "$stripped_line" "$task_id" "$lesson_hash" >>"$annotated_reply"
-    else
-      printf '%s\n' "$stripped_line" >>"$annotated_reply"
-    fi
-  done <"$reply"
-}
-
-extract_pending_dedup_keys() {
-  local file=$1
-  local output=$2
-  local line
-  local key
-
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    key=
-    if [[ "$line" =~ \ \[dedup_key:\ ([^]]+)\]$ ]]; then
-      key=${BASH_REMATCH[1]}
-    elif [[ "$line" =~ ^'<!-- carried dedup_key: '([^[:space:]]+)' -->'$ ]]; then
-      key=${BASH_REMATCH[1]}
-    fi
-    if [[ "$key" =~ ^[0-9a-f]{64}:[0-9a-f]{64}$ ]]; then
-      printf '%s\n' "$key" >>"$output"
-    fi
-  done <"$file"
-}
-
-snapshot_pending_dedup_keys() {
-  local pending=$1
-  local output=$2
-  local file
-
-  : >"$output"
-  # This is enforced at fold-time: a valid key in any prior pending record
-  # prevents another STATE.md append. Legacy or malformed annotations are not
-  # indexed and therefore remain distinct; they never silently match a key.
-  while IFS= read -r -d '' file; do
-    extract_pending_dedup_keys "$file" "$output"
-  done < <(find "$pending" -maxdepth 1 -type f -name 'distill-*.md' -print0)
-}
-
 injection_size_check() {
   local workspace_root=${1:-}
   local pending=${2:-}
@@ -161,7 +65,7 @@ injection_size_check() {
       matched=0
       for ((i = 0; i < ${#names[@]}; i++)); do
         if [[ "$name" == "${names[$i]}" ]]; then
-          caps[$i]=$value
+          caps[i]=$value
           matched=1
           break
         fi
@@ -211,112 +115,6 @@ injection_size_check() {
   done
 
   return 0
-}
-
-section_count() {
-  local section=$1
-  local file=$2
-
-  awk -v section="$section" '
-    index($0, section) == 1 {in_section = 1; next}
-    in_section && /^## / {exit}
-    in_section {count++}
-    END {print count + 0}
-  ' "$file"
-}
-
-append_state_sections() {
-  local state_file=$1
-  local lessons_file=$2
-  local failures_file=$3
-  local tmp_file=$4
-  local lessons_cap=$5
-  local failures_cap=$6
-
-  awk -v lessons="$lessons_file" -v failures="$failures_file" \
-    -v lessons_cap="$lessons_cap" -v failures_cap="$failures_cap" '
-    function append_file(path) {
-      while ((getline line < path) > 0) {
-        section_lines[++section_count] = line
-      }
-      close(path)
-    }
-    function flush_section(    cap,start,i) {
-      if (section == "") {
-        return
-      }
-      if (section == "lessons") {
-        append_file(lessons)
-        cap = lessons_cap
-      } else if (section == "failures") {
-        append_file(failures)
-        cap = failures_cap
-      } else {
-        cap = section_count
-      }
-      start = 1
-      if (section_count > cap) {
-        start = section_count - cap + 1
-      }
-      for (i = start; i <= section_count; i++) {
-        print section_lines[i]
-      }
-      delete section_lines
-      section_count = 0
-      section = ""
-    }
-    {
-      if (/^## /) {
-        flush_section()
-        print
-        if (index($0, "## Lessons learned") == 1) {
-          section = "lessons"
-          next
-        } else if (index($0, "## Open failures") == 1) {
-          section = "failures"
-          next
-        }
-        next
-      }
-      if (section != "") {
-        section_lines[++section_count] = $0
-      } else {
-        print
-      }
-    }
-    END {
-      flush_section()
-    }
-  ' "$state_file" >"$tmp_file"
-}
-
-take_state_lock() {
-  local now_epoch
-  local lock_mtime
-  local lock_age
-
-  state_lock_stale_s=${DISTILL_STATE_LOCK_STALE_S:-1800}
-  while ! mkdir "$state_lock_dir" 2>/dev/null; do
-    now_epoch=$(date '+%s')
-    lock_mtime=$(file_mtime_epoch "$state_lock_dir" 2>/dev/null || printf '0\n')
-    lock_age=$((now_epoch - lock_mtime))
-    if (( lock_age > state_lock_stale_s )); then
-      # Stale-safe takeover: cron may die while holding the mkdir lock, so an
-      # old lock directory is removed only after its mtime exceeds the takeover age.
-      rm -rf "$state_lock_dir"
-      continue
-    fi
-    sleep 1
-  done
-  state_lock_owned=1
-  printf '%s\n' "$$" >"$state_lock_dir/pid"
-}
-
-release_state_lock() {
-  if [[ "${state_lock_owned:-0}" -eq 1 ]]; then
-    rm -rf "$state_lock_dir"
-    state_lock_owned=0
-  fi
 }
 
 write_skill_drafts() {
@@ -498,7 +296,7 @@ check_draft_integrity() {
         printf '%s\n' "$draft_name" >>"$rejected_drafts"
       fi
       failure_line="- $date_stamp distill integrity mismatch: skill $draft_name declares $field=$value not found (source: distill-audit)"
-      failure_hash=$(sha256_text "$failure_line")
+      failure_hash=$(candidate_lesson_hash "$failure_line")
       printf '%s [dedup_key: %s:%s]\n' "$failure_line" "$task_id" "$failure_hash" >>"$integrity_failures"
     fi
   done <"$declarations"
@@ -570,10 +368,16 @@ if [[ ! -d "$workspace" ]]; then
 fi
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+# shellcheck disable=SC1091
 source "$repo_root/scripts/lib-classify.sh"
+# shellcheck disable=SC1091
 source "$repo_root/scripts/lib-bounded.sh"
+# shellcheck disable=SC1091
 source "$repo_root/scripts/lib-wrapper-conformance.sh"
+# shellcheck disable=SC1091
 source "$repo_root/scripts/lib-pause.sh"
+# shellcheck disable=SC1091
+source "$repo_root/scripts/lib-state-fold.sh"
 workspace=$(caty_pause_canonical_workspace "$workspace" 2>/dev/null) || {
   usage
   exit 2
@@ -594,8 +398,6 @@ distiller_id=${DISTILLER_ID:-$distiller_cmd}
 state_file="$workspace/STATE.md"
 state_dir=$(cd "$(dirname "$state_file")" && pwd)
 state_tmp_file="$state_dir/.STATE.md.tmp.$$"
-state_lock_dir="$workspace/loop/.distill-state.lock"
-state_lock_owned=0
 marker_file="$workspace/loop/.distill-last-run"
 pending_dir="$workspace/loop/pending"
 staging_dir=${STAGING_DIR:-$workspace/skills/_staging}
@@ -770,12 +572,14 @@ fi
 # Serialize the prior-key snapshot, STATE fold, and pending replacement so two
 # overlapping cron runs cannot both decide that the same key is new. The pending
 # record is persisted only after its annotated observations have been folded.
-take_state_lock
+take_state_lock "$workspace" openclaw-distill-audit
 prior_dedup_keys="$work_dir/prior-dedup-keys.txt"
-snapshot_pending_dedup_keys "$pending_dir" "$prior_dedup_keys"
+snapshot_pending_dedup_keys "$pending_dir" "$prior_dedup_keys" \
+  'distill-*.md' 'intake-*.md'
 annotated_reply_file="$work_dir/reply.annotated.md"
 : >"$annotated_reply_file"
-annotate_reply_dedup_keys "$distiller_tmp_file" "$task_id" "$annotated_reply_file"
+annotate_reply_dedup_keys "$distiller_tmp_file" "$task_id" "$annotated_reply_file" \
+  '(source: distill-audit)' 'LESSONS|OPEN_FAILURES'
 
 rejected_drafts="$work_dir/rejected-drafts.txt"
 integrity_failures="$work_dir/integrity-failures.txt"
@@ -787,58 +591,65 @@ failures_file="$work_dir/failures.txt"
 : >"$lessons_file"
 : >"$failures_file"
 
-awk '
-  /^## LESSONS[[:space:]]*$/ {section = "lessons"; next}
-  /^## OPEN_FAILURES[[:space:]]*$/ {section = "failures"; next}
-  /^## SKILL_DRAFTS[[:space:]]*$/ {section = "skills"; next}
-  /^## / {section = "other"; next}
-  (section == "lessons" || section == "failures") {
-    if (match($0, / \[dedup_key: [^]]+\]$/)) {
-      line = substr($0, 1, RSTART - 1)
-      key = substr($0, RSTART + 13, RLENGTH - 14)
-      if (line ~ /^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] .*\(source: distill-audit\)$/ && split(key, p, ":") == 2 && length(p[1]) == 64 && length(p[2]) == 64 && p[1] ~ /^[0-9a-f]+$/ && p[2] ~ /^[0-9a-f]+$/) {
-        if (section == "lessons") {
-          print key "\t" line > lessons
-        } else {
-          print key "\t" line > failures
-        }
-      }
-    }
-  }
-' lessons="$lessons_file" failures="$failures_file" "$annotated_reply_file"
+split_annotated_reply_sections "$annotated_reply_file" "$lessons_file" "$failures_file" \
+  '(source: distill-audit)' 'LESSONS|OPEN_FAILURES'
 
 deduped_lessons="$work_dir/lessons.deduped.txt"
 deduped_failures="$work_dir/failures.deduped.txt"
 deduped_lessons_keys="$work_dir/lessons.deduped.keys"
 deduped_failures_keys="$work_dir/failures.deduped.keys"
+batch_hashes="$work_dir/batch.hashes"
+normalized_lessons_state="$work_dir/state.lessons.normalized"
+normalized_failures_state="$work_dir/state.failures.normalized"
 : >"$deduped_lessons"
 : >"$deduped_failures"
 : >"$deduped_lessons_keys"
 : >"$deduped_failures_keys"
+: >"$batch_hashes"
+snapshot_state_normalized_candidates "$state_file" "$normalized_lessons_state" \
+  '## Lessons learned'
+snapshot_state_normalized_candidates "$state_file" "$normalized_failures_state" \
+  '## Open failures'
 
-lessons_cap=60
-failures_cap=100
+lessons_cap=$STATE_FOLD_LESSONS_CAP_DEFAULT
+failures_cap=$STATE_FOLD_FAILURES_CAP_DEFAULT
 
 while IFS=$'\t' read -r key line; do
-  if [[ -n "$line" && -n "$key" ]] && ! grep -Fqx -- "$key" "$prior_dedup_keys" && ! grep -Fqx -- "$key" "$deduped_lessons_keys" && ! grep -Fqx -- "$line" "$state_file" && ! grep -Fqx -- "$line" "$deduped_lessons"; then
+  if [[ -n "$line" && -n "$key" ]] \
+    && ! state_fold_candidate_is_duplicate "$key" "$line" "$prior_dedup_keys" \
+      "$batch_hashes" "$state_file" "$normalized_lessons_state"; then
     printf '%s\n' "$line" >>"$deduped_lessons"
     printf '%s\n' "$key" >>"$deduped_lessons_keys"
+    printf '%s\n' "${key##*:}" >>"$batch_hashes"
   fi
 done <"$lessons_file"
 
 while IFS=$'\t' read -r key line; do
-  if [[ -n "$line" && -n "$key" ]] && ! grep -Fqx -- "$key" "$prior_dedup_keys" && ! grep -Fqx -- "$key" "$deduped_failures_keys" && ! grep -Fqx -- "$line" "$state_file" && ! grep -Fqx -- "$line" "$deduped_failures"; then
+  if [[ -n "$line" && -n "$key" ]] \
+    && ! state_fold_candidate_is_duplicate "$key" "$line" "$prior_dedup_keys" \
+      "$batch_hashes" "$state_file" "$normalized_failures_state"; then
     printf '%s\n' "$line" >>"$deduped_failures"
     printf '%s\n' "$key" >>"$deduped_failures_keys"
+    printf '%s\n' "${key##*:}" >>"$batch_hashes"
   fi
 done <"$failures_file"
 
 lessons_added=$(wc -l <"$deduped_lessons" | tr -d '[:space:]')
 failures_added=$(wc -l <"$deduped_failures" | tr -d '[:space:]')
+evicted_by_cap=0
 
 if [[ "$lessons_added" -gt 0 || "$failures_added" -gt 0 ]]; then
-  append_state_sections "$state_file" "$deduped_lessons" "$deduped_failures" "$state_tmp_file" "$lessons_cap" "$failures_cap"
+  append_rc=0
+  append_state_sections "$state_file" "$deduped_lessons" "$deduped_failures" \
+    "$state_tmp_file" "$lessons_cap" "$failures_cap" "$work_dir/evicted-count.txt" \
+    || append_rc=$?
+  if [[ "$append_rc" -eq 4 ]]; then
+    infra_fail 'STATE.md missing requested fold section'
+  elif [[ "$append_rc" -ne 0 ]]; then
+    infra_fail "STATE.md fold failed (append rc=$append_rc)"
+  fi
   mv -f "$state_tmp_file" "$state_file"
+  evicted_by_cap=$(cat "$work_dir/evicted-count.txt")
 fi
 
 drafts_count_file="$work_dir/drafts-created.txt"
@@ -854,7 +665,7 @@ if [[ -e "$reply_file" ]]; then
     printf '<!-- carried dedup_key: %s -->\n' "$key" >>"$annotated_reply_file"
   done <"$carried_dedup_keys"
 fi
-mv -f "$annotated_reply_file" "$reply_file"
+atomic_write_file "$annotated_reply_file" "$reply_file"
 
 lessons_lines=$(section_count "## Lessons learned" "$state_file")
 failures_lines=$(section_count "## Open failures" "$state_file")
@@ -871,8 +682,9 @@ fi
 injection_size_check "$workspace" "$pending_dir"
 
 timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-printf '%s | files_scanned=%s | lessons_added=%s | failures_added=%s | drafts_created=%s | distiller=%s\n' \
-  "$timestamp" "$files_scanned" "$lessons_added" "$failures_added" "$drafts_created" "$distiller_id" \
+printf '%s | files_scanned=%s | lessons_added=%s | failures_added=%s | evicted_by_cap=%s | drafts_created=%s | distiller=%s\n' \
+  "$timestamp" "$files_scanned" "$lessons_added" "$failures_added" "$evicted_by_cap" \
+  "$drafts_created" "$distiller_id" \
   >>"$pending_dir/distill-runs.log"
 
 touch "$marker_file"

@@ -312,11 +312,33 @@ if [ "$rc" -eq 0 ] \
   && grep -Fq -- '- 2026-07-06 new failure (source: distill-audit)' "$ws/STATE.md" \
   && ! grep -Fq -- '- 2026-07-05 old lesson 001 (source: distill-audit)' "$ws/STATE.md" \
   && ! grep -Fq -- '- 2026-07-05 old failure 001 (source: distill-audit)' "$ws/STATE.md" \
+  && grep -Fq 'evicted_by_cap=2' "$ws/loop/pending/distill-runs.log" \
   && [ ! -e "$ws/.STATE.md.tmp.$$" ] \
   && [ ! -d "$ws/loop/.distill-state.lock" ]; then
-  pass "state rewrite is capped, atomic temp cleaned, and lock released"
+  pass "state rewrite is capped, eviction reported, atomic temp cleaned, and lock released"
 else
-  fail_case "state rewrite is capped, atomic temp cleaned, and lock released" "rc=$rc output=$output lessons=$lessons_lines failures=$failures_lines"
+  fail_case "state rewrite is capped, eviction reported, atomic temp cleaned, and lock released" "rc=$rc output=$output lessons=$lessons_lines failures=$failures_lines log=$(cat "$ws/loop/pending/distill-runs.log" 2>/dev/null)"
+fi
+
+ws=$(make_ws missing-state-section)
+sed 's/^## Lessons learned$/## Missing lessons/' "$ws/STATE.md" >"$TMP_ROOT/state-without-lessons"
+mv "$TMP_ROOT/state-without-lessons" "$ws/STATE.md"
+cp "$ws/STATE.md" "$TMP_ROOT/state-before-missing-lessons"
+set +e
+output=$(DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+set -e
+if [ "$rc" -eq 3 ] \
+  && printf '%s\n' "$output" | grep -Fq 'distill-audit infra error: STATE.md missing requested fold section' \
+  && cmp -s "$TMP_ROOT/state-before-missing-lessons" "$ws/STATE.md" \
+  && [ ! -e "$ws/loop/.distill-last-run" ] \
+  && [ ! -d "$ws/loop/.distill-state.lock" ] \
+  && ! find "$ws/loop/pending" -maxdepth 1 -name 'distill-*.md' -print | grep -q . \
+  && ! find "$ws/loop/pending" -maxdepth 1 -name '.distill-*.tmp.*' -print | grep -q .; then
+  pass "missing requested STATE section is a loud atomic infrastructure failure"
+else
+  fail_case "missing requested STATE section is a loud atomic infrastructure failure" \
+    "rc=$rc output=$output pending=$(find "$ws/loop/pending" -maxdepth 1 -type f -print)"
 fi
 
 ws=$(make_ws bad-cmd)
@@ -873,6 +895,50 @@ if [ "$rc" -eq 0 ] \
   pass "drafts without declarations retain legacy skill creation behavior"
 else
   fail_case "drafts without declarations retain legacy skill creation behavior" "rc=$rc output=$output"
+fi
+
+ws=$(make_ws normalized-cross-source-rejection)
+awk '
+  {print}
+  index($0, "## Lessons learned") == 1 {
+    print "- 2026-07-01 shared route observation (source: flush-intake)"
+  }
+' "$ws/STATE.md" >"$TMP_ROOT/cross-source-state"
+mv "$TMP_ROOT/cross-source-state" "$ws/STATE.md"
+reply='## LESSONS
+- 2026-07-06 shared route observation (source: distill-audit)
+## OPEN_FAILURES
+## SKILL_DRAFTS'
+output=$(DISTILL_REPLY="$reply" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] \
+  && [ "$(grep -Fc 'shared route observation' "$ws/STATE.md")" -eq 1 ] \
+  && ! grep -Fq -- '- 2026-07-06 shared route observation (source: distill-audit)' "$ws/STATE.md"; then
+  pass "normalized rejection blocks flush-intake text from distill"
+else
+  fail_case "normalized rejection blocks flush-intake text from distill" "rc=$rc output=$output"
+fi
+
+ws=$(make_ws normalized-cross-date-rejection)
+awk '
+  {print}
+  index($0, "## Lessons learned") == 1 {
+    print "- 2026-07-01 repeated on a later date (source: distill-audit)"
+  }
+' "$ws/STATE.md" >"$TMP_ROOT/cross-date-state"
+mv "$TMP_ROOT/cross-date-state" "$ws/STATE.md"
+reply='## LESSONS
+- 2026-07-06 repeated on a later date (source: distill-audit)
+## OPEN_FAILURES
+## SKILL_DRAFTS'
+output=$(DISTILL_REPLY="$reply" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] \
+  && [ "$(grep -Fc 'repeated on a later date' "$ws/STATE.md")" -eq 1 ] \
+  && ! grep -Fq -- '- 2026-07-06 repeated on a later date (source: distill-audit)' "$ws/STATE.md"; then
+  pass "normalized rejection blocks same distill text on a later date"
+else
+  fail_case "normalized rejection blocks same distill text on a later date" "rc=$rc output=$output"
 fi
 
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"

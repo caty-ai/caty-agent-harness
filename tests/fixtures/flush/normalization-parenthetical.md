@@ -1,0 +1,2 @@
+- 2026-07-14 Keep a distinct local annotation.
+- 2026-07-14 Keep a distinct local annotation. (some note)

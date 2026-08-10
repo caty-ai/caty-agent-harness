@@ -17,7 +17,6 @@ append_failure() {
 
   if grep -Eq '^## Open failures[[:space:]]*(\([^)]*\))?[[:space:]]*$' "$state_file" 2>/dev/null; then
     tmp_file="$state_file.deadman.$$"
-    trap 'rm -f "$tmp_file"' RETURN
     if awk -v entry="$entry" '
       !inserted && /^## Open failures[[:space:]]*(\([^)]*\))?[[:space:]]*$/ {
         print
@@ -61,37 +60,16 @@ fire_once() {
 append_failure_with_lock() {
   local name=$1
   local entry=$2
-  local lock=$deadman_dir/.state.lock
-  local attempts=0
 
-  while (( attempts < 10 )); do
-    if mkdir "$lock" 2>/dev/null; then
-      (
-        trap 'rmdir "$lock" 2>/dev/null || true' EXIT
-        append_failure "$state_file" "$entry"
-      )
-      return $?
-    fi
-
-    (( attempts += 1 ))
-    if (( attempts < 10 )); then
-      sleep 0.5
-    fi
-  done
-
-  lock_age=$(( $(date +%s) - $(mtime "$lock") ))
-  if [[ -d "$lock" ]] && (( lock_age > 60 )); then
-    rmdir "$lock" 2>/dev/null || rm -rf "$lock" 2>/dev/null || true
-    if mkdir "$lock" 2>/dev/null; then
-      (
-        trap 'rmdir "$lock" 2>/dev/null || true' EXIT
-        append_failure "$state_file" "$entry"
-      )
-      return $?
-    fi
+  if ! take_state_lock "$workspace" deadman-probe 10 0.5; then
+    printf 'deadman-probe: STATE.md lock timeout, skipping append for %s (notify still sent)\n' "$name" >&2
+    return 1
   fi
-
-  printf 'deadman-probe: STATE.md lock timeout, skipping append for %s (notify still sent)\n' "$name" >&2
+  if append_failure "$state_file" "$entry"; then
+    release_state_lock
+    return 0
+  fi
+  release_state_lock
   return 1
 }
 
@@ -100,7 +78,10 @@ append_failure_with_lock() {
 workspace=$1
 [[ -d "$workspace" ]] || usage
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# shellcheck disable=SC1091
 source "$repo_root/scripts/lib-pause.sh"
+# shellcheck disable=SC1091
+source "$repo_root/scripts/lib-state-fold.sh"
 workspace=$(caty_pause_canonical_workspace "$workspace" 2>/dev/null) || usage
 pause_state=$(caty_pause_workspace_state "$workspace")
 if [[ "$pause_state" != enabled ]]; then
@@ -115,6 +96,16 @@ state_file=$workspace/STATE.md
 deadman_dir=$workspace/loop/.deadman
 mkdir -p "$deadman_dir"
 (set -C; : >"$state_file") 2>/dev/null || true
+# shellcheck disable=SC2329
+cleanup() {
+  local status=$?
+  release_state_lock
+  return "$status"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 new_violation=0
 for check in $checks; do
@@ -130,6 +121,7 @@ for check in $checks; do
   marker=$deadman_dir/$name.marker
   baseline=$deadman_dir/$name.baseline
   sentinel=$deadman_dir/$name.fired
+  pending_append=$deadman_dir/$name.append-pending
 
   if [[ ! -e "$marker" ]]; then
     create_baseline "$baseline" || {
@@ -149,13 +141,35 @@ for check in $checks; do
   now=$(date +%s)
   age=$((now - $(mtime "$reference")))
   if (( age < 0 || age <= threshold )); then
+    if [[ -f "$pending_append" ]]; then
+      pending_entry=$(cat "$pending_append")
+      if grep -Fqx -- "$pending_entry" "$state_file" 2>/dev/null \
+        || append_failure_with_lock "$name" "$pending_entry"; then
+        rm -f "$pending_append"
+      else
+        printf '%s stale-retry age=%ss\n' "$name" "$age"
+        new_violation=1
+        continue
+      fi
+    fi
     rm -f "$sentinel"
     printf '%s healthy age=%ss\n' "$name" "$age"
     continue
   fi
 
   if [[ -e "$sentinel" ]] && (( $(mtime "$sentinel") > $(mtime "$reference") )); then
-    printf '%s stale-reported age=%ss\n' "$name" "$age"
+    if [[ -f "$pending_append" ]]; then
+      pending_entry=$(cat "$pending_append")
+      if grep -Fqx -- "$pending_entry" "$state_file" 2>/dev/null \
+        || append_failure_with_lock "$name" "$pending_entry"; then
+        rm -f "$pending_append"
+        printf '%s stale-reported age=%ss\n' "$name" "$age"
+      else
+        printf '%s stale-retry age=%ss\n' "$name" "$age"
+      fi
+    else
+      printf '%s stale-reported age=%ss\n' "$name" "$age"
+    fi
     continue
   fi
 
@@ -175,11 +189,20 @@ for check in $checks; do
     append_ok=0
   fi
   notify_cmd=${DEADMAN_NOTIFY_CMD:-tg-send}
-  if command -v "$notify_cmd" >/dev/null 2>&1; then
-    "$notify_cmd" "$message" || true
+  if (( ! append_ok )); then
+    printf '%s\n' "- $message" >"$pending_append"
+  else
+    rm -f "$pending_append"
+  fi
+  notify_claimed=0
+  if fire_once "$sentinel"; then
+    notify_claimed=1
+    if command -v "$notify_cmd" >/dev/null 2>&1; then
+      "$notify_cmd" "$message" || true
+    fi
   fi
 
-  if (( append_ok )) && fire_once "$sentinel"; then
+  if (( append_ok && notify_claimed )); then
     printf '%s stale-fired age=%ss\n' "$name" "$age"
   elif (( append_ok )); then
     printf '%s stale-reported age=%ss\n' "$name" "$age"

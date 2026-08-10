@@ -166,7 +166,7 @@ case_failed_next_hint_stays_retry_only() {
   ws=$(make_ws)
   copy_task "$FIX_BASIC" "$ws" tr-basic
   key_name=api_key
-  hint="${key_name}"$'=retry-secret /Users/alice/work retry carefully\nsecond line must not replay'
+  hint="${key_name}"$'=retry-secret /home/alice/work retry carefully\nsecond line must not replay'
   run_tick "$ws" TR_MOCK_BEHAVIOR=noncomplete TR_MOCK_ERROR_CLASS=auth TR_MOCK_NEXT_HINT="$hint" || true
   first_error=$(state_value "$ws" tr-basic last_error_class)
   run_tick "$ws" TR_MOCK_BEHAVIOR=noncomplete TR_MOCK_ERROR_CLASS=tool-misuse TR_MOCK_NEXT_HINT=unused || true
@@ -193,7 +193,7 @@ case_success_next_hint_bound_and_redaction() {
   bidi=$(printf '\342\200\256')
   aws_key="AWS_SECRET_ACCESS_""KEY"
   github_key="GH_""TOKEN"
-  hint="${aws_key}=surface-secret ${github_key}=github-secret /Users/alice/private/file.txt ${bidi}abcdefghijklmnopqrstuvwxyz0123456789ABCD ${padding}"
+  hint="${aws_key}=surface-secret ${github_key}=github-secret /home/alice/private/file.txt ${bidi}abcdefghijklmnopqrstuvwxyz0123456789ABCD ${padding}"
   hint="${hint}"$'\nsecond line must not surface'
   run_tick "$ws" TR_MOCK_BEHAVIOR=success TR_MOCK_NEXT_HINT="$hint"
   result="$ws/loop/artifacts/tr-basic/attempts/001/step-result.json"
@@ -202,7 +202,7 @@ case_success_next_hint_bound_and_redaction() {
     && grep -F -q 'github-secret' "$result" \
     && grep -F -q '\u202e' "$result" \
     && grep -F -q 'abcdefghijklmnopqrstuvwxyz0123456789ABCD' "$result" \
-    && grep -F -q '/Users/alice/private/file.txt' "$result" \
+    && grep -F -q '/home/alice/private/file.txt' "$result" \
     && grep -F -q "${aws_key}=<redacted>" "$progress" \
     && grep -F -q "${github_key}=<redacted>" "$progress" \
     && grep -F -q '<path>' "$progress" \
@@ -210,7 +210,7 @@ case_success_next_hint_bound_and_redaction() {
     && ! grep -F -q 'github-secret' "$progress" \
     && ! grep -F -q '\u202e' "$progress" \
     && ! grep -F -q 'abcdefghijklmnopqrstuvwxyz0123456789ABCD' "$progress" \
-    && ! grep -F -q '/Users/alice/private/file.txt' "$progress" \
+    && ! grep -F -q '/home/alice/private/file.txt' "$progress" \
     && ! grep -F -q 'second line must not surface' "$progress" \
     && python3 - "$progress" <<'PY'
 import json, sys

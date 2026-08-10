@@ -67,6 +67,22 @@ Pause and resume without deleting `STATE.md`, learning records, queues, or artif
 Pause takes effect at the next entry-point boundary. Shell entry points are hard
 paused; bootstrap compliance is a softer model-instruction boundary.
 
+## Flush intake consumer
+
+The Stop hook produces the shared `loop/pending/flush-*.md` format. Schedule the
+deterministic Claude Code intake consumer for this workspace; it calls no model and is
+the supported fold route for Kimi too:
+
+```sh
+HARNESS=/absolute/path/to/caty-agent-harness
+WS=/absolute/path/to/workspace
+"$HARNESS/adapters/claude-code/flush-intake.sh" "$WS"
+```
+
+Follow the scheduling, single-route, ledger-retention, and deadman-marker rules in
+[`../claude-code/INSTALL.md`](../claude-code/INSTALL.md#flush-intake-consumer). Do not
+also run OpenClaw `distill-audit.sh` in the same workspace.
+
 ## Scope note / Destructive-command policy
 
 Same as the other adapters: the hook keys on the session cwd (project-dir sessions are

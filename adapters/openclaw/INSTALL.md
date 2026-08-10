@@ -71,6 +71,11 @@ The rules there apply in addition to the OpenClaw-specific wiring below.
    environment source. If `SECRETS_ENV` exists, the wrapper requires it to be owned by
    the cron user and to have `0600` or `0400` permissions.
 
+   Read `loop/pending/distill-runs.log` after each run. Its summary reports
+   `lessons_added`, `failures_added`, and `evicted_by_cap`; a nonzero eviction count
+   means the capped STATE sections accepted new observations while dropping the same
+   number of oldest lines.
+
 5. Locate Claire's real transcript/session-log directory on this host.
 
    The exact path varies by OpenClaw version and install method. Do not hardcode the
@@ -133,6 +138,15 @@ The rules there apply in addition to the OpenClaw-specific wiring below.
    `git pull` refreshes the adapter and templates in this repository clone only. The
    profile's own `STATE.md`, `skills/`, `skills/_staging/`, and `loop/` contents live
    outside the repo clone and are not touched by an adapter update.
+
+   Pre-upgrade distill keys hashed date- and source-marker-inclusive text, so their hash
+   suffixes do not match keys written by the normalized post-upgrade pipeline. While a
+   pre-upgrade observation remains in `STATE.md`, normalized line comparison still
+   rejects the same observation. If STATE cap eviction already removed that line, the
+   old key cannot stop one post-upgrade refold; the newly normalized key then prevents
+   later repeats. In other words, an already-evicted pre-upgrade lesson can refold
+   exactly once. Retain old pending records for their remaining legacy dedup value; no
+   bulk key rewrite is required.
 
 ## Optional sentinel cron
 

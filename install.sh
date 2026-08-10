@@ -2,7 +2,9 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck disable=SC1091
 source "$repo_root/scripts/lib-wrapper-conformance.sh"
+# shellcheck disable=SC1091
 source "$repo_root/scripts/lib-pause.sh"
 legacy_marker_line="# fable-loop bootstrap v1"
 current_marker_line="# caty-agent-harness bootstrap v2"
@@ -157,6 +159,8 @@ register_instruction_file() {
     printf 'invalid harness control directory: %s\n' "$control_dir" >&2
     exit 2
   fi
+  # Existing directories intentionally retain their mode.
+  # shellcheck disable=SC2174
   mkdir -p -m 700 "$control_dir"
   if ! control_dir_is_user_owned "$control_dir"; then
     printf 'instruction registry control directory is not owned by the current user\n' >&2
@@ -757,8 +761,8 @@ probe_adapter_candidate_generation() {
     openclaw)
       probe_executable_contains "$repo_root/adapters/openclaw/distill-audit.sh" \
         "reply_file=\"\$pending_dir/distill-" \
-        && probe_executable_contains "$repo_root/adapters/openclaw/distill-audit.sh" \
-          "mv -f \"\$annotated_reply_file\" \"\$reply_file\""
+      && probe_executable_contains "$repo_root/adapters/openclaw/distill-audit.sh" \
+          "atomic_write_file \"\$annotated_reply_file\" \"\$reply_file\""
       ;;
     *)
       return 1
@@ -776,10 +780,22 @@ probe_adapter_verifier() {
 probe_adapter_distiller_cron() {
   local adapter=$1
 
-  probe_executable_contains "$repo_root/adapters/$adapter/distill-audit.sh" \
-    "distiller_cmd=\${DISTILLER_CMD:-" \
-    && probe_executable_contains "$repo_root/templates/cron-wrapper.tmpl.sh" \
-      '# fable-loop cron wrapper template v1'
+  case "$adapter" in
+    claude-code|codex|kimi)
+      probe_executable_contains "$repo_root/adapters/claude-code/flush-intake.sh" \
+        "snapshot_pending_dedup_keys \"\$pending_dir\"" \
+        && probe_executable_contains "$repo_root/adapters/claude-code/flush-intake.sh" \
+          "atomic_write_file \"\$ledger_source\" \"\$ledger_file\"" \
+        && probe_executable_contains "$repo_root/templates/cron-wrapper.tmpl.sh" \
+          '# fable-loop cron wrapper template v1'
+      ;;
+    *)
+      probe_executable_contains "$repo_root/adapters/$adapter/distill-audit.sh" \
+        "distiller_cmd=\${DISTILLER_CMD:-" \
+        && probe_executable_contains "$repo_root/templates/cron-wrapper.tmpl.sh" \
+          '# fable-loop cron wrapper template v1'
+      ;;
+  esac
 }
 
 probe_adapter_conformance() {
@@ -887,6 +903,10 @@ check_workspace() {
     printf 'missing path: loop/artifacts/\n'
     failures=1
   fi
+  if [[ ! -d "$workspace/loop/archive" ]]; then
+    printf 'missing path: loop/archive/\n'
+    failures=1
+  fi
   if [[ ! -f "$workspace/loop/VERIFY.log.md" ]]; then
     printf 'missing path: loop/VERIFY.log.md\n'
     failures=1
@@ -975,6 +995,12 @@ EOF
       [[ -n "$old_pending" ]] || continue
       printf 'warning: pending file older than 7 days: %s\n' "$(print_relative "$workspace" "$old_pending")" >&2
     done < <(find "$pending_dir" -type f -mtime +7 -print)
+  fi
+
+  if [[ -e "$workspace/loop/.distill-last-run" \
+    && -e "$workspace/loop/pending/intake-runs.log" ]]; then
+    printf 'conflicting fold route evidence: openclaw distill and flush intake have both run\n'
+    failures=1
   fi
 
   if [[ -d "$staging_dir" ]]; then
