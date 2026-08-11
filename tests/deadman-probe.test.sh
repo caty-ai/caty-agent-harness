@@ -4,6 +4,7 @@ set -u
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 PROBE=$ROOT/scripts/deadman-probe.sh
 WRAPPER_TEMPLATE=$ROOT/templates/cron-wrapper.tmpl.sh
+LAUNCHD_TEMPLATE=$ROOT/templates/launchd.tmpl.plist
 TMP_ROOT=${TMPDIR:-/tmp}/deadman-probe-test.$$
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -55,6 +56,39 @@ age_file_seconds() {
   fi
   touch -t "$(date -v-"${seconds}"S '+%Y%m%d%H%M.%S')" "$path"
 }
+
+default_checks=$(awk -F"'" '/^checks=\$\{DEADMAN_CHECKS:-/ { print $2; exit }' "$PROBE")
+template_markers=$(grep -Eho '\.deadman/[A-Za-z0-9._-]+' "$WRAPPER_TEMPLATE" "$LAUNCHD_TEMPLATE" | sort -u)
+marker_contract_ok=1
+marker_contract_detail=
+if [ -z "$default_checks" ]; then
+  marker_contract_ok=0
+  marker_contract_detail='could not extract probe defaults'
+fi
+for check in $default_checks; do
+  check_name=${check%%:*}
+  expected_marker=".deadman/$check_name.marker"
+  if ! grep -Fqx "$expected_marker" <<<"$template_markers"; then
+    marker_contract_ok=0
+    marker_contract_detail="missing $expected_marker"
+    break
+  fi
+  while IFS= read -r template_marker; do
+    case "$template_marker" in
+      "$expected_marker") ;;
+      ".deadman/$check_name"*)
+        marker_contract_ok=0
+        marker_contract_detail="unexpected $template_marker for $check_name"
+        break 2
+        ;;
+    esac
+  done <<<"$template_markers"
+done
+if [ "$marker_contract_ok" -eq 1 ]; then
+  pass 'template marker guidance matches probe defaults'
+else
+  fail_case 'template marker guidance matches probe defaults' "$marker_contract_detail"
+fi
 
 cat >"$TMP_ROOT/notify" <<'EOF'
 #!/usr/bin/env bash
@@ -269,15 +303,36 @@ export TARGET_SAW_PROBE=$TMP_ROOT/target-saw-probe
 export MARKER_TO_CHECK=$marker
 wrapper_ws=$(new_ws wrapper-guard)
 TARGET="$target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
-  DEADMAN_MARKER="$marker" DEADMAN_PROBE="$probe_fail" "$wrapper"; wrapper_rc=$?
+  DEADMAN_MARKER="$marker" DEADMAN_PROBE="$probe_fail" "$wrapper" \
+  >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; wrapper_rc=$?
 marker_age=$(( $(date +%s) - $(file_mtime "$marker") ))
 if [ "$wrapper_rc" -eq 0 ] && [ -f "$marker" ] && [ "$marker_age" -le 60 ] \
   && [ -f "$PROBE_LOG" ] && [ "$(cat "$PROBE_SAW_MARKER")" = yes ] \
   && [ "$(cat "$TARGET_SAW_PROBE")" = yes ] \
-  && [ "$(wc -l <"$TARGET_LOG" | tr -d '[:space:]')" -eq 1 ]; then
+  && [ "$(wc -l <"$TARGET_LOG" | tr -d '[:space:]')" -eq 1 ] \
+  && grep -Fq 'cron-wrapper warning: DEADMAN_PROBE reported a deadman violation:' "$TMP_ROOT/wrapper.err" \
+  && ! grep -Fq 'cron-wrapper warning: DEADMAN_PROBE failed:' "$TMP_ROOT/wrapper.err"; then
   pass 'wrapper marks before probe and ignores probe failures'
 else
   fail_case 'wrapper marks before probe and ignores probe failures' "rc=$wrapper_rc"
+fi
+
+probe_broken=$TMP_ROOT/probe-broken
+cat >"$probe_broken" <<'EOF'
+#!/usr/bin/env bash
+exit 2
+EOF
+chmod +x "$probe_broken"
+TARGET="$target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  DEADMAN_MARKER="$marker" DEADMAN_PROBE="$probe_broken" "$wrapper" \
+  >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; broken_wrapper_rc=$?
+if [ "$broken_wrapper_rc" -eq 0 ] \
+  && grep -Fq "cron-wrapper warning: DEADMAN_PROBE failed: $probe_broken" "$TMP_ROOT/wrapper.err" \
+  && ! grep -Fq 'reported a deadman violation' "$TMP_ROOT/wrapper.err" \
+  && [ "$(wc -l <"$TARGET_LOG" | tr -d '[:space:]')" -eq 2 ]; then
+  pass 'wrapper distinguishes probe breakage from violations'
+else
+  fail_case 'wrapper distinguishes probe breakage from violations' "rc=$broken_wrapper_rc stderr=$(cat "$TMP_ROOT/wrapper.err")"
 fi
 
 secrets=$TMP_ROOT/secrets-env

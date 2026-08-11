@@ -95,7 +95,7 @@ run_tick() {
 case_env_integer_validation() {
   local name=env-integer-validation
   local variable invalid_value validation_case ws output code
-  for variable in TR_STEP_TIMEOUT_S TR_GRACE_S TR_GATE_REPLAY_MAX_BYTES; do
+  for variable in TR_STEP_TIMEOUT_S TR_GRACE_S TR_DONECHECK_TIMEOUT_S TR_GATE_REPLAY_MAX_BYTES; do
     for invalid_value in abc ''; do
       ws=$(make_ws)
       set +e
@@ -112,7 +112,7 @@ case_env_integer_validation() {
     done
   done
 
-  for validation_case in TR_STEP_TIMEOUT_S=08 TR_GRACE_S=010 TR_GATE_REPLAY_MAX_BYTES=0600; do
+  for validation_case in TR_STEP_TIMEOUT_S=08 TR_GRACE_S=010 TR_DONECHECK_TIMEOUT_S=060 TR_GATE_REPLAY_MAX_BYTES=0600; do
     variable=${validation_case%%=*}
     invalid_value=${validation_case#*=}
     ws=$(make_ws)
@@ -131,7 +131,7 @@ case_env_integer_validation() {
 
   ws=$(make_ws)
   set +e
-  output=$(run_tick "$ws" TR_STEP_TIMEOUT_S=0 TR_GRACE_S=0 TR_GATE_REPLAY_MAX_BYTES=0 2>&1)
+  output=$(run_tick "$ws" TR_STEP_TIMEOUT_S=0 TR_GRACE_S=0 TR_DONECHECK_TIMEOUT_S=0 TR_GATE_REPLAY_MAX_BYTES=0 2>&1)
   code=$?
   set -e
   if [[ "$code" -ne 0 ]] || grep -F -q 'must be a non-negative integer' <<<"$output"; then
@@ -790,6 +790,105 @@ case_crash_dlq_terminal_reconcile() {
   fi
 }
 
+case_dlq_push_failure_visible_and_retried() {
+  local name=dlq-push-failure-visible-and-retried
+  local baseline_ws ws push_helper allow_file credential push_command dest report push_log
+  local baseline_rc failure_rc retry_rc output retry_output warning_count
+  baseline_ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$baseline_ws" tr-basic
+  set +e
+  run_tick "$baseline_ws" TR_MOCK_BEHAVIOR=auth-error >/dev/null 2>&1
+  baseline_rc=$?
+  set -e
+
+  ws=$(make_ws)
+  ws=$(cd "$ws" && pwd -P)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  push_helper="$ws/push-helper.sh"
+  allow_file="$ws/push-allowed"
+  credential='credential-sentinel-22'
+  push_command="$push_helper $credential"
+  cat >"$push_helper" <<'EOF'
+#!/usr/bin/env bash
+if [[ ! -e "$PUSH_ALLOW_FILE" ]]; then
+  printf 'push helper stdout\n'
+  printf 'push helper stderr\n' >&2
+  exit 7
+fi
+printf 'push helper success for %s\n' "$2"
+EOF
+  chmod +x "$push_helper"
+
+  set +e
+  output=$(run_tick "$ws" TR_MOCK_BEHAVIOR=auth-error \
+    TR_PUSH_CMD="$push_command" PUSH_ALLOW_FILE="$allow_file" 2>&1)
+  failure_rc=$?
+  set -e
+  dest="$ws/loop/tasks/dlq/tr-basic"
+  report="$dest/REPORT.md"
+  push_log="$dest/push.log"
+  warning_count=$(grep -Fxc "warning: push failed rc=7: $dest" <<<"$output" || true)
+  if [[ "$baseline_rc" -ne 0 || "$failure_rc" -ne "$baseline_rc" ]] \
+    || [[ "$warning_count" -ne 1 ]] \
+    || [[ ! -f "$dest/push-failed" || ! -f "$push_log" ]] \
+    || ! grep -Fq 'push helper stdout' "$push_log" \
+    || ! grep -Fq 'push helper stderr' "$push_log" \
+    || ! grep -Eq '^push: failed rc=7 [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$report" \
+    || grep -R -Fq -- "$push_command" "$ws"; then
+    fail "$name" "failed push contract mismatch: baseline_rc=$baseline_rc failure_rc=$failure_rc warnings=$warning_count output=$output"
+    return
+  fi
+
+  : >"$allow_file"
+  set +e
+  retry_output=$(run_tick "$ws" TR_MOCK_BEHAVIOR=success \
+    TR_PUSH_CMD="$push_command" PUSH_ALLOW_FILE="$allow_file" 2>&1)
+  retry_rc=$?
+  set -e
+  if [[ "$retry_rc" -eq 0 ]] \
+    && [[ ! -e "$dest/push-failed" ]] \
+    && [[ "$(grep -Fc '== push attempt ' "$push_log")" -eq 2 ]] \
+    && grep -Fq "push helper success for $report" "$push_log" \
+    && ! grep -Fq 'warning: push failed' <<<"$retry_output" \
+    && ! grep -R -Fq -- "$push_command" "$ws" \
+    && [[ "$(state_value "$ws" tr-basic status)" = dlq ]]; then
+    pass "$name"
+  else
+    fail "$name" "retry contract mismatch: rc=$retry_rc marker=$([[ -e "$dest/push-failed" ]] && printf present || printf absent) output=$retry_output"
+  fi
+}
+
+case_dlq_push_bash_error_is_redacted() {
+  local name=dlq-push-bash-error-is-redacted
+  local ws leak_marker dest report push_log output code push_log_mode
+  ws=$(make_ws)
+  ws=$(cd "$ws" && pwd -P)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  # Deliberately fake credential marker; named/sized to stay clear of secret-scanner patterns.
+  leak_marker='LEAKMARK9xyz'
+
+  set +e
+  output=$(run_tick "$ws" TR_MOCK_BEHAVIOR=auth-error \
+    TR_PUSH_CMD="nonexistent-push-$leak_marker --auth" 2>&1)
+  code=$?
+  set -e
+  dest="$ws/loop/tasks/dlq/tr-basic"
+  report="$dest/REPORT.md"
+  push_log="$dest/push.log"
+  push_log_mode=$(stat -c '%a' "$push_log" 2>/dev/null || stat -f '%Lp' "$push_log" 2>/dev/null)
+  if [[ "$code" -eq 0 ]] \
+    && [[ -f "$dest/push-failed" ]] \
+    && grep -Fqx '[bash-level error suppressed]' "$push_log" \
+    && grep -Eq '^push: rc=127 [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z dest=' "$push_log" \
+    && grep -Eq '^push: failed rc=127 [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$report" \
+    && [[ "$push_log_mode" = 600 ]] \
+    && ! grep -R -Fq -- "$leak_marker" "$ws"; then
+    pass "$name"
+  else
+    fail "$name" "bash error redaction mismatch: rc=$code mode=$push_log_mode output=$output"
+  fi
+}
+
 case_stale_lease_reap() {
   local name=stale-lease-reap
   local ws pgid
@@ -883,6 +982,52 @@ case_time_exhaustion() {
     pass "$name"
   else
     fail "$name" "expected dlq time-budget"
+  fi
+}
+
+case_donecheck_timeout_is_tunable() {
+  local name=donecheck-timeout-is-tunable
+  local ws started elapsed code log_file reason_file
+  ws=$(make_ws)
+  cat >"$ws/loop/tasks/queue/tr-donecheck-timeout.task.md" <<'EOF'
+---
+id: tr-donecheck-timeout
+title: tunable donecheck timeout fixture
+issued_by: test
+created: 2026-08-10T00:00:00Z
+attempts_budget: 4
+time_budget_min: 5
+escalate_to: test
+verify: mechanical
+parent_id: null
+---
+
+## Goal
+Exercise the configurable donecheck timeout.
+
+## Done-when
+```donecheck
+sleep 10
+test -e "$ARTIFACT_DIR/out/never-created"
+```
+
+## Step plan
+1. Wait for the donecheck timeout.
+EOF
+  started=$SECONDS
+  set +e
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success TR_DONECHECK_TIMEOUT_S=1 >/dev/null 2>&1
+  code=$?
+  set -e
+  elapsed=$(( SECONDS - started ))
+  log_file="$ws/loop/artifacts/tr-donecheck-timeout/attempts/001/donecheck.log"
+  reason_file="$ws/loop/artifacts/tr-donecheck-timeout/attempts/001/verify-reason"
+  if [[ "$code" -eq 0 && "$elapsed" -ge 1 && "$elapsed" -lt 8 ]] \
+    && grep -Fqx 'donecheck timed out after 1s' "$reason_file" \
+    && grep -Fqx 'donecheck timed out after 1s' "$log_file"; then
+    pass "$name"
+  else
+    fail "$name" "custom timeout did not fire near 1s: rc=$code elapsed=$elapsed"
   fi
 }
 
@@ -1766,11 +1911,14 @@ case_crash_stamp_deterministic_auth_recovery
 case_crash_donecheck
 case_crash_deliver_terminal_reconcile
 case_crash_dlq_terminal_reconcile
+case_dlq_push_failure_visible_and_retried
+case_dlq_push_bash_error_is_redacted
 case_stale_lease_reap
 case_future_lease_reap_bounded
 case_attempts_exhaustion
 case_attempts_exhaustion_reports_actual_failing_donecheck_line
 case_time_exhaustion
+case_donecheck_timeout_is_tunable
 case_timeout_is_chargeable_not_quarantined
 case_infra_retries
 case_infra_quarantine_collision_fails_open

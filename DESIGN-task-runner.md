@@ -202,9 +202,8 @@ ships with `time_budget_min: 60` (D5 override; defaults unchanged).
 ### 3.7 Metrics (D8, TR-R14)
 
 `tr-metrics.sh` REGENERATES METRICS.md from ledger terminal states (idempotent):
-delivered / dlq counts + completion rate, per task-file `parent_id` chain. Baseline
-row B0 = the maintainer's field estimate, labeled `estimate`. Control runs optional, off the
-critical path.
+delivered / dlq counts + completion rate, per task-file `parent_id` chain. Control runs
+optional, off the critical path.
 
 ### 3.8 v1 reservation (one line, TR-R13)
 

@@ -177,6 +177,10 @@ that file instead of expanding secrets directly in crontab. `install.sh --check`
 remains read-only: its Hermes conformance row reads and hashes the configured wrapper,
 provider, probe, and evidence files without executing them.
 
+When configured, `push.log` persists the push command's combined output; bash-level
+errors are redacted. Keep secrets out of command-name position and out of helper output.
+`push.log` is append-only, with one block per tick while failing, and operator-trimmed.
+
 ## Destructive-command policy
 
 Never run the denylisted destructive commands (`git reset --hard`, `git checkout -- <path>`,
