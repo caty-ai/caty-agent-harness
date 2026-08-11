@@ -68,8 +68,13 @@ The rules there apply in addition to the OpenClaw-specific wiring below.
    ```
 
    Put `DISTILLER_CMD=/abs/distiller-wrapper.sh` in `SECRETS_ENV` or another cron-owned
-   environment source. If `SECRETS_ENV` exists, the wrapper requires it to be owned by
-   the cron user and to have `0600` or `0400` permissions.
+   environment mechanism. The wrapper parses `SECRETS_ENV` as data-only `KEY=VALUE`, one
+   assignment per physical line; it does not source or execute the file. The file must
+   be owned by the cron user, have `0600` or `0400` permissions, and not be a symlink.
+   Interpreter- and loader-control names are refused by a deliberately non-exhaustive
+   hazard guard. Store a multi-line secret in its own file and put that file's path in
+   `SECRETS_ENV`. Portable Bash 3.2 cannot open with `O_NOFOLLOW`; pre/post-open identity
+   checks narrow, but do not eliminate, a residual path replacement race.
 
    Read `loop/pending/distill-runs.log` after each run. Its summary reports
    `lessons_added`, `failures_added`, and `evicted_by_cap`; a nonzero eviction count

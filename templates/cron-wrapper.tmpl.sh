@@ -5,11 +5,14 @@ set -euo pipefail
 #
 # Copy this file to the target workspace scripts/ directory, set TARGET and
 # CATY_HARNESS_ROOT to absolute paths, and pass the target arguments to this wrapper.
-# Optional SECRETS_ENV is parsed as data-only KEY=VALUE assignments when the
-# file exists, is not a symlink, is owned by the current uid, and has 0600 or
-# 0400 permissions. No shell code is executed, one matching outer quote layer
-# is stripped from each value, and one trailing CR is removed per line.
-# Interpreter- or loader-control names are refused; the refusal list is a hazard guard, not an exhaustive safety boundary.
+# Optional SECRETS_ENV is parsed as data-only KEY=VALUE assignments, one per
+# physical line, when the file exists, is not a symlink, is owned by the current
+# uid, and has 0600 or 0400 permissions. No shell code is executed. One matching
+# outer quote layer is stripped only when its inner value has no matching quote,
+# and one trailing CR is removed per line. Interpreter- or loader-control names
+# are refused; the refusal list is a hazard guard, not an exhaustive safety
+# boundary. Portable Bash 3.2 cannot open with O_NOFOLLOW, so a residual path
+# replacement race remains despite the pre/post-open identity checks.
 
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 export PATH
@@ -68,9 +71,33 @@ same_open_file() {
   [[ "$path_identity" == "$fd_identity" ]]
 }
 
+first_nul_line() {
+  local secrets_path=$1
+
+  LC_ALL=C od -An -v -t u1 "$secrets_path" 2>/dev/null | awk '
+    BEGIN { line_number = 1 }
+    {
+      for (field = 1; field <= NF; field++) {
+        if (!found && $field == 0) {
+          first_match = line_number
+          found = 1
+        }
+        if ($field == 10) {
+          line_number++
+        }
+      }
+    }
+    END {
+      if (found) {
+        print first_match
+      }
+    }
+  '
+}
+
 parse_secrets_env() {
   local secrets_path=$1
-  local line_number=0 raw_line line key value first_char last_char
+  local line_number=0 raw_line line key value first_char last_char inner_value
 
   while IFS= read -r -u 9 raw_line || [[ -n "$raw_line" ]]; do
     line_number=$((line_number + 1))
@@ -79,29 +106,39 @@ parse_secrets_env() {
     if [[ "$line" =~ ^[[:space:]]*$ || "$line" =~ ^[[:space:]]*# ]]; then
       continue
     fi
-    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+    if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
       key=${BASH_REMATCH[1]}
       value=${BASH_REMATCH[2]}
       case "$key" in
         BASH_ENV|ENV|SHELLOPTS|BASHOPTS|IFS|PS4|CDPATH|GLOBIGNORE|PATH|BASH_XTRACEFD|\
-        PERL5OPT|PERL5LIB|PERLLIB|PYTHONSTARTUP|PYTHONPATH|PYTHONHOME|RUBYOPT|RUBYLIB|\
-        NODE_OPTIONS|NODE_REPL_EXTERNAL_MODULE|GIT_SSH|GIT_SSH_COMMAND|GIT_EXTERNAL_DIFF|\
-        GIT_PAGER|GIT_EDITOR|GIT_CONFIG_GLOBAL|GIT_CONFIG_SYSTEM|GIT_CONFIG_COUNT|\
-        GIT_ALTERNATE_OBJECT_DIRECTORIES|BASH_FUNC_*|LD_*|DYLD_*)
-          fail "SECRETS_ENV line $line_number refuses interpreter-control name $key: $secrets_path"
+        PAGER|EDITOR|VISUAL|PERL5OPT|PERL5LIB|PERLLIB|PERL5DB|PERL5SHELL|\
+        PYTHONSTARTUP|PYTHONPATH|PYTHONHOME|RUBYOPT|RUBYLIB|NODE_OPTIONS|NODE_PATH|\
+        NODE_REPL_EXTERNAL_MODULE|GIT_SSH|GIT_SSH_COMMAND|GIT_EXTERNAL_DIFF|GIT_PAGER|\
+        GIT_EDITOR|GIT_ASKPASS|SSH_ASKPASS|GIT_PROXY_COMMAND|GIT_CONFIG_GLOBAL|\
+        GIT_CONFIG_SYSTEM|GIT_CONFIG_COUNT|GIT_CONFIG_PARAMETERS|GIT_EXEC_PATH|\
+        GIT_ALTERNATE_OBJECT_DIRECTORIES|LESSOPEN|LESSCLOSE|BASH_FUNC_*|LD_*|DYLD_*)
+          fail "SECRETS_ENV line $line_number refuses interpreter-control name $key (rename it, e.g. APP_ENV): $secrets_path"
           ;;
       esac
       if (( ${#value} >= 2 )); then
         first_char=${value:0:1}
         last_char=${value: -1}
         if [[ "$first_char" == "$last_char" && ( "$first_char" == "'" || "$first_char" == '"' ) ]]; then
-          value=${value:1:${#value}-2}
+          inner_value=${value:1:${#value}-2}
+          if [[ "$inner_value" != *"$first_char"* ]]; then
+            value=$inner_value
+          fi
         fi
       fi
-      export "$key=$value"
+      # Bash 3.2 treats assignment errors from a directly invoked special
+      # builtin as fatal even inside `if !`; `command` makes the status
+      # catchable without changing export in the current shell.
+      if ! command export "$key=$value" 2>/dev/null; then
+        fail "SECRETS_ENV line $line_number cannot export $key (reserved or read-only name): $secrets_path"
+      fi
       continue
     fi
-    fail "SECRETS_ENV line $line_number is not a KEY=VALUE assignment: $secrets_path"
+    fail "SECRETS_ENV line $line_number is not a KEY=VALUE assignment; SECRETS_ENV requires one assignment per line (store multi-line secrets in their own file and put the path in SECRETS_ENV): $secrets_path"
   done
 }
 
@@ -182,6 +219,13 @@ if [[ -n "$SECRETS_ENV" ]]; then
   fi
   if [[ -f "$SECRETS_ENV" ]]; then
     validate_secrets_env "$SECRETS_ENV"
+
+    if ! nul_line=$(first_nul_line "$SECRETS_ENV"); then
+      fail "SECRETS_ENV could not be scanned for embedded NUL bytes: $SECRETS_ENV"
+    fi
+    if [[ -n "$nul_line" ]]; then
+      fail "SECRETS_ENV line $nul_line contains an embedded NUL byte: $SECRETS_ENV"
+    fi
 
     if ! exec 9<"$SECRETS_ENV"; then
       fail "SECRETS_ENV is not readable: $SECRETS_ENV"
