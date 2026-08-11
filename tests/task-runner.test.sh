@@ -860,15 +860,16 @@ EOF
 
 case_dlq_push_bash_error_is_redacted() {
   local name=dlq-push-bash-error-is-redacted
-  local ws token dest report push_log output code push_log_mode
+  local ws leak_marker dest report push_log output code push_log_mode
   ws=$(make_ws)
   ws=$(cd "$ws" && pwd -P)
   copy_task "$FIX_BASIC" "$ws" tr-basic
-  token='SECRETTOKEN22xyz'
+  # Deliberately fake credential marker; named/sized to stay clear of secret-scanner patterns.
+  leak_marker='LEAKMARK9xyz'
 
   set +e
   output=$(run_tick "$ws" TR_MOCK_BEHAVIOR=auth-error \
-    TR_PUSH_CMD="nonexistent-push-$token --auth" 2>&1)
+    TR_PUSH_CMD="nonexistent-push-$leak_marker --auth" 2>&1)
   code=$?
   set -e
   dest="$ws/loop/tasks/dlq/tr-basic"
@@ -881,7 +882,7 @@ case_dlq_push_bash_error_is_redacted() {
     && grep -Eq '^push: rc=127 [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z dest=' "$push_log" \
     && grep -Eq '^push: failed rc=127 [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$report" \
     && [[ "$push_log_mode" = 600 ]] \
-    && ! grep -R -Fq -- "$token" "$ws"; then
+    && ! grep -R -Fq -- "$leak_marker" "$ws"; then
     pass "$name"
   else
     fail "$name" "bash error redaction mismatch: rc=$code mode=$push_log_mode output=$output"
