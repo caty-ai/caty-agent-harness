@@ -18,6 +18,7 @@ scripts/attest-wrapper	exempt	none	not-applicable	setup-time-wrapper-attestation
 scripts/family-updater	exempt	none	not-applicable	harness-clone-updater-not-member-workspace	-	-
 scripts/lib-bounded.sh	exempt	none	not-applicable	sourced-library	-	-
 scripts/lib-classify.sh	exempt	none	not-applicable	sourced-library	-	-
+scripts/lib-donecheck.sh	exempt	none	not-applicable	sourced-library	-	-
 scripts/lib-pause.sh	exempt	explicit-function-argument	not-applicable	sourced-library	-	-
 scripts/lib-state-fold.sh	exempt	explicit-function-argument	not-applicable	sourced-library	-	-
 scripts/lib-wrapper-conformance.sh	exempt	none	not-applicable	sourced-library	-	-

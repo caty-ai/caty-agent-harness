@@ -63,7 +63,7 @@ WORKSPACE="/absolute/path/to/the/project"
 ./install.sh --workspace "$WORKSPACE" --bootstrap-runtime <your-runtime> --append-bootstrap "$WORKSPACE/<instruction-file>"
 ```
 
-Fill `<your-runtime>` and `<instruction-file>` from the Step 1 table (Hermes and OpenClaw: use the exact invocation from your adapter document instead of this template). Missing folders and files are created; existing ones are never replaced. If the block is already present you'll see `skip: bootstrap already present` — that's fine, it's idempotent.
+Fill `<your-runtime>` and `<instruction-file>` from the Step 1 table (Hermes and OpenClaw: use the exact invocation from your adapter document instead of this template). Missing folders and files are created; existing ones are never replaced. Initialization also pins the absolute Bash and Perl paths in `$WORKSPACE/loop/.tr-interpreters`, so donecheck validation and execution use the same binaries. If the block is already present you'll see `skip: bootstrap already present` — that's fine, it's idempotent.
 
 ## Step 4 — health check
 
@@ -114,7 +114,7 @@ I'll remember where we were. Or ask me to run the bundled example at
 templates/examples/img-pilot.task.md.
 ```
 
-The bundled example you can run builds a self-contained SVG image card and a JSON delivery receipt using local tools only. From the harness repository root, set `STEP_PROVIDER` to your AI tool's step provider — the runner invokes it with four positional arguments (task file, workspace, attempt directory, current step; see the `TR_SPAWN_STEP` call in `scripts/task-runner.sh`), and each step must write the `step-result.json` described in [`DESIGN-task-runner.md`](../DESIGN-task-runner.md) — and run it end to end:
+The bundled example you can run builds a self-contained SVG image card and a JSON delivery receipt using local tools only. From the harness repository root, set `STEP_PROVIDER` to the absolute path of your AI tool's executable step provider — relative and PATH-resolved `TR_SPAWN_STEP` values are rejected. The runner invokes it with four positional arguments (task file, workspace, attempt directory, current step; see the `TR_SPAWN_STEP` call in `scripts/task-runner.sh`), and each step must write the `step-result.json` described in [`DESIGN-task-runner.md`](../DESIGN-task-runner.md) — and run it end to end:
 
 ```sh
 scripts/loop-init --workspace "$WORKSPACE"

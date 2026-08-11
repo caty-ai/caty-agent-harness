@@ -42,6 +42,7 @@ esac
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd "$script_dir/.." && pwd)
 source "$repo_root/scripts/lib-pause.sh"
+source "$repo_root/scripts/lib-donecheck.sh"
 workspace=$(caty_pause_canonical_workspace "$workspace" 2>/dev/null) || {
   printf 'invalid workspace: %s\n' "$workspace" >&2
   exit 2
@@ -54,6 +55,13 @@ fi
 
 if [[ -z "$TR_SPAWN_STEP" ]]; then
   printf 'TR_SPAWN_STEP is required\n' >&2
+  exit 2
+fi
+if [[ "$TR_SPAWN_STEP" != /* ]] || [[ ! -f "$TR_SPAWN_STEP" ]] || [[ ! -x "$TR_SPAWN_STEP" ]]; then
+  printf 'TR_SPAWN_STEP must be an absolute executable file: value=%s\n' "$TR_SPAWN_STEP" >&2
+  exit 2
+fi
+if ! caty_load_interpreters "$workspace"; then
   exit 2
 fi
 
@@ -145,8 +153,10 @@ with open(path, encoding="utf-8") as f:
             value = unquote(value)
             if value in ("null", "~"):
                 value = ""
-            meta[key.strip()] = value
-for key in ("id", "created", "attempts_budget", "time_budget_min", "parent_id"):
+            key = key.strip()
+            if key not in meta:
+                meta[key] = value
+for key in ("id", "created", "attempts_budget", "time_budget_min", "parent_id", "receipt"):
     print("%s=%s" % (key, shlex.quote(meta.get(key, ""))))
 PY
 )"
@@ -881,28 +891,6 @@ PY
   rm -f "$prompt_tmp"
 }
 
-extract_donecheck() {
-  local task_file=$1
-  local out_file=$2
-  python3 - "$task_file" "$out_file" <<'PY'
-import sys
-task, out = sys.argv[1:3]
-inside = False
-lines = []
-for raw in open(task, encoding="utf-8"):
-    line = raw.rstrip("\n")
-    if line.strip() == "```donecheck":
-        inside = True
-        continue
-    if inside and line.strip() == "```":
-        break
-    if inside:
-        lines.append(raw)
-with open(out, "w", encoding="utf-8") as f:
-    f.writelines(lines)
-PY
-}
-
 run_donecheck() {
   local task_id=$1
   local task_file=$2
@@ -913,11 +901,18 @@ run_donecheck() {
   local log_file="$attempt_dir/donecheck.log"
   local trace_file="$attempt_dir/donecheck.trace"
   local failing_file="$attempt_dir/donecheck.failing"
-  rm -f "$trace_file" "$failing_file"
-  extract_donecheck "$task_file" "$check_file"
-  # The generated header is exactly 3 lines. Keep this constant adjacent to
+  rm -f "$check_file" "$trace_file" "$failing_file"
+  local extract_rc
+  if caty_extract_donecheck "$task_file" "$check_file"; then
+    :
+  else
+    extract_rc=$?
+    printf '%s\n' "$(caty_donecheck_error "$extract_rc")" >"$log_file"
+    return 125
+  fi
+  # The generated header is exactly 7 lines. Keep this constant adjacent to
   # the header so donecheck.failing remains relative to the user's script.
-  local donecheck_header_lines=3
+  local donecheck_header_lines=7
   local donecheck_err_trap
   donecheck_err_trap=$(cat <<'ERR_TRAP'
 __tr_dc_line=$LINENO
@@ -940,13 +935,34 @@ ERR_TRAP
     printf '%s\n' 'set -o errtrace'
     printf 'readonly __TR_DC_TRACE=%q\n' "$trace_file"
     printf 'trap %q ERR\n' "$donecheck_err_trap"
+    # These are best-effort process limits: some platforms refuse lowering a
+    # specific resource, so each limit deliberately preserves gate execution.
+    printf 'ulimit -t %q || true\n' "$(( TR_DONECHECK_TIMEOUT_S + 60 ))"
+    printf '%s\n' 'ulimit -f 2097152 || true'
+    printf '%s\n' 'ulimit -n 256 || true'
+    # RLIMIT_NPROC is per user on macOS. Do not lower it below the runner's
+    # already-live user process count, and skip when sandboxed ps cannot observe it.
+    printf '%s\n' '__tr_dc_nproc_count=$(ps -U "$(id -u)" -o pid= 2>/dev/null | wc -l | tr -d "[:space:]" || true); if [[ "$__tr_dc_nproc_count" =~ ^[0-9]+$ ]] && (( __tr_dc_nproc_count > 0 && __tr_dc_nproc_count < 480 )); then ulimit -u 512 || true; fi'
     cat "$check_file"
   } >"$wrapped_file"
   # Own process group so a timeout kills the whole donecheck tree, not just
   # the wrapper (orphaned children would keep mutating artifacts).
-  TASK_ID="$task_id" TASK_FILE="$task_file" ARTIFACT_DIR="$artifact_dir" TR_DC_CWD="$workspace" \
-    perl -MPOSIX=setsid -e 'setsid() or die "setsid: $!"; chdir $ENV{TR_DC_CWD} or die "chdir: $!"; exec @ARGV or die "exec: $!"' \
-    bash -euo pipefail "$wrapped_file" >"$log_file" 2>&1 &
+  local -a donecheck_env
+  donecheck_env=(
+    env -i
+    "TASK_ID=$task_id"
+    "TASK_FILE=$task_file"
+    "ARTIFACT_DIR=$artifact_dir"
+    "TR_DC_CWD=$workspace"
+    "PATH=/usr/bin:/bin:/usr/sbin:/sbin"
+    "HOME=${HOME-}"
+  )
+  [[ ${LANG+x} ]] && donecheck_env+=("LANG=$LANG")
+  [[ ${LC_ALL+x} ]] && donecheck_env+=("LC_ALL=$LC_ALL")
+  [[ ${TZ+x} ]] && donecheck_env+=("TZ=$TZ")
+  "${donecheck_env[@]}" \
+    "$TR_PERL" -MPOSIX=setsid -e 'setsid() or die "setsid: $!"; chdir $ENV{TR_DC_CWD} or die "chdir: $!"; exec @ARGV or die "exec: $!"' \
+    "$TR_BASH" -euo pipefail "$wrapped_file" >"$log_file" 2>&1 &
   local pid=$!
   local start=$SECONDS
   while kill -0 "$pid" 2>/dev/null; do
@@ -976,6 +992,26 @@ ERR_TRAP
     tail -n 1 "$trace_file" >"$failing_file"
   fi
   return "$donecheck_rc"
+}
+
+assert_delivery_receipt() {
+  local artifact_dir=$1
+  local receipt=$2
+  local target="$artifact_dir/$receipt"
+
+  [[ ! -L "$target" ]] && [[ -f "$target" ]] && [[ -s "$target" ]] || return 1
+  python3 -B - "$artifact_dir" "$target" <<'PY'
+import os
+import sys
+
+artifact_dir, target = sys.argv[1:3]
+artifact_real = os.path.realpath(artifact_dir)
+out_real = os.path.realpath(os.path.join(artifact_real, "out"))
+target_real = os.path.realpath(target)
+prefix = out_real.rstrip(os.sep) + os.sep
+if not target_real.startswith(prefix):
+    sys.exit(1)
+PY
 }
 
 gap_fingerprint_of() {
@@ -1379,7 +1415,7 @@ push_dlq_report() {
   ( umask 077; : >>"$push_log" ) || true
   push_output=$(mktemp "$dest/.push-output.XXXXXX")
   printf '\n== push attempt %s dest=%s ==\n' "$attempted_at" "$dest" >>"$push_log" || true
-  if bash -c "$TR_PUSH_CMD \"\$1\"" _ "$report_file" >"$push_output" 2>&1; then
+  if "$TR_BASH" -c "$TR_PUSH_CMD \"\$1\"" _ "$report_file" >"$push_output" 2>&1; then
     push_rc=0
   else
     push_rc=$?
@@ -1558,8 +1594,19 @@ finalize_attempt() {
     exit 137
   fi
 
-  local donecheck_rc
+  local donecheck_rc verification_passed=0
   if run_donecheck "$task_id" "$task_file" "$artifact_dir" "$attempt_dir"; then
+    if assert_delivery_receipt "$artifact_dir" "$receipt"; then
+      verification_passed=1
+    else
+      donecheck_rc=1
+      printf 'delivery receipt missing or invalid: %s\n' "$receipt" >"$attempt_dir/verify-reason" || true
+      printf 'delivery receipt missing or invalid: %s\n' "$receipt" >>"$attempt_dir/donecheck.log" || true
+    fi
+  else
+    donecheck_rc=$?
+  fi
+  if (( verification_passed )); then
     # Test-only crash injection point: verifies recovery after the gate passed.
     if [[ "$TR_CRASH_AFTER" = "donecheck-pass" ]]; then
       exit 137
@@ -1567,10 +1614,11 @@ finalize_attempt() {
     deliver_task "$task_file" "$artifact_dir"
     return 0
   else
-    donecheck_rc=$?
     if (( donecheck_rc == 124 )); then
       printf 'donecheck timed out after %ss\n' "$TR_DONECHECK_TIMEOUT_S" >"$attempt_dir/verify-reason" || true
-    else
+    elif (( donecheck_rc == 125 )); then
+      cp "$attempt_dir/donecheck.log" "$attempt_dir/verify-reason" || true
+    elif (( donecheck_rc != 1 )) || [[ ! -s "$attempt_dir/verify-reason" ]]; then
       printf 'donecheck failed (exit %d)\n' "$donecheck_rc" >"$attempt_dir/verify-reason" || true
     fi
     if [[ "$step_complete" = "true" ]]; then
@@ -1625,17 +1673,34 @@ recover_verifying() {
     task_id=$(basename "$artifact_dir")
     local task_file="$queue_dir/$task_id.task.md"
     [[ -f "$task_file" ]] || continue
+    load_task_meta "$task_file"
+    if ! caty_valid_receipt "$receipt"; then
+      dlq_task "$task_file" "$artifact_dir" missing-receipt
+      continue
+    fi
     local attempt_dir
     attempt_dir=$(find "$artifact_dir/attempts" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | tail -n 1)
     [[ -n "$attempt_dir" ]] || continue
-    local donecheck_rc
+    local donecheck_rc verification_passed=0
     if run_donecheck "$task_id" "$task_file" "$artifact_dir" "$attempt_dir"; then
-      deliver_task "$task_file" "$artifact_dir"
+      if assert_delivery_receipt "$artifact_dir" "$receipt"; then
+        verification_passed=1
+      else
+        donecheck_rc=1
+        printf 'delivery receipt missing or invalid: %s\n' "$receipt" >"$attempt_dir/verify-reason" || true
+        printf 'delivery receipt missing or invalid: %s\n' "$receipt" >>"$attempt_dir/donecheck.log" || true
+      fi
     else
       donecheck_rc=$?
+    fi
+    if (( verification_passed )); then
+      deliver_task "$task_file" "$artifact_dir"
+    else
       if (( donecheck_rc == 124 )); then
         printf 'donecheck timed out after %ss\n' "$TR_DONECHECK_TIMEOUT_S" >"$attempt_dir/verify-reason" || true
-      else
+      elif (( donecheck_rc == 125 )); then
+        cp "$attempt_dir/donecheck.log" "$attempt_dir/verify-reason" || true
+      elif (( donecheck_rc != 1 )) || [[ ! -s "$attempt_dir/verify-reason" ]]; then
         printf 'donecheck failed (exit %d)\n' "$donecheck_rc" >"$attempt_dir/verify-reason" || true
       fi
       # A crash inside the verifying window loses finalize_attempt's local
@@ -1897,6 +1962,10 @@ run_one_attempt() {
     return 0
   fi
   [[ "$status" = "queued" ]] || return 0
+  if ! caty_valid_receipt "$receipt"; then
+    dlq_task "$task_file" "$artifact_dir" missing-receipt
+    return 0
+  fi
 
   local nnn
   nnn=$(printf '%03d' $(( attempts_used + 1 )))
@@ -1908,8 +1977,8 @@ run_one_attempt() {
   started_at=$(utc_now)
   local owner_sentinel="$attempt_dir/owner.sentinel"
   local owner_nonce="sentinel:$started_at:$$:$RANDOM:$nnn"
-  perl -MPOSIX=setsid -e 'setsid() or die "setsid: $!"; exec @ARGV or die "exec: $!"' \
-    bash -c 'sentinel=$1; nonce=$2; shift 2; printf "%s\n" "$nonce" >"$sentinel"; "$@"; rc=$?; rm -f "$sentinel"; exit "$rc"' \
+  "$TR_PERL" -MPOSIX=setsid -e 'setsid() or die "setsid: $!"; exec @ARGV or die "exec: $!"' \
+    "$TR_BASH" -c 'sentinel=$1; nonce=$2; shift 2; printf "%s\n" "$nonce" >"$sentinel"; "$@"; rc=$?; rm -f "$sentinel"; exit "$rc"' \
     _ "$owner_sentinel" "$owner_nonce" "$TR_SPAWN_STEP" "$task_file" "$workspace" "$attempt_dir" "$current_step" >"$attempt_dir/model.stdout" 2>"$attempt_dir/model.stderr" &
   local pid=$!
   local pgid=$pid

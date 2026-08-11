@@ -45,16 +45,6 @@ has_section() {
   grep -Eq "^##[[:space:]]+$section[[:space:]]*$" "$file"
 }
 
-extract_donecheck() {
-  file=$1
-  awk '
-    /^```donecheck[[:space:]]*$/ { in_block = 1; found = 1; next }
-    in_block && /^```[[:space:]]*$/ { exit }
-    in_block { print }
-    END { if (!found) exit 2 }
-  ' "$file"
-}
-
 extract_plan_steps() {
   file=$1
   awk '
@@ -92,16 +82,12 @@ is_safe_id() {
   printf '%s\n' "$value" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
 }
 
-strip_donecheck_comments() {
-  input=$1
-  output=$2
-  sed 's/[[:space:]]*#.*$//' "$input" | sed '/^[[:space:]]*$/d' > "$output"
-}
-
-has_receipt_assertion() {
-  file=$1
-  grep -Eq '^[[:space:]]*test[[:space:]]+-(s|f)[[:space:]]+["'\'']?\$ARTIFACT_DIR/out/[^"'\''[:space:]]*receipt[^"'\''[:space:]]*["'\'']?([[:space:]]|$)' "$file" \
-    || grep -Eq '^[[:space:]]*grep[[:space:]]+-q([[:space:]]+[^[:space:]]+)+[[:space:]]+["'\'']?\$ARTIFACT_DIR/out/[^"'\''[:space:]]*receipt[^"'\''[:space:]]*["'\'']?([[:space:]]|$)' "$file"
+is_utf8_file() {
+  python3 -B - "$1" <<'PY'
+import sys
+with open(sys.argv[1], "rb") as handle:
+    handle.read().decode("utf-8")
+PY
 }
 
 [ "$#" -eq 2 ] || usage
@@ -114,6 +100,7 @@ install_tmp=''
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$script_dir/lib-pause.sh"
+source "$script_dir/lib-donecheck.sh"
 [ -d "$workspace" ] || fail "workspace dir not found: directory='$workspace'"
 workspace=$(caty_pause_canonical_workspace "$workspace") || fail "invalid workspace: directory='$workspace_input'"
 pause_state=$(caty_pause_workspace_state "$workspace")
@@ -125,14 +112,50 @@ fi
 [ -f "$task_file" ] || fail "task file not found: file='$task_file'"
 [ -r "$task_file" ] || fail "task file not readable: file='$task_file'"
 
-id=$(frontmatter_value id "$task_file")
+# Routing needs the caller-side id before the prescribed staging name can be
+# constructed. UTF-8 is checked here so that read is well-defined, then checked
+# again by the extractor against the staged snapshot that gates installation.
+is_utf8_file "$task_file" 2>/dev/null || fail "task file is not valid UTF-8: file='$task_file'"
+route_id=$(frontmatter_value id "$task_file")
+[ -n "$route_id" ] || fail "missing/empty id: file='$task_file'"
+is_safe_id "$route_id" || fail "invalid id: must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$: value='$route_id' file='$task_file'"
+
+loop_dir=$workspace/loop
+queue_dir=$loop_dir/tasks/queue
+delivered_dir=$loop_dir/tasks/delivered
+dlq_dir=$loop_dir/tasks/dlq
+artifacts_root=$loop_dir/artifacts
+artifact_dir=$loop_dir/artifacts/$route_id
+
+mkdir -p "$queue_dir" "$delivered_dir" "$dlq_dir" >/dev/null 2>&1 || fail "cannot create task ledger dirs: directories='$queue_dir $delivered_dir $dlq_dir'"
+mkdir -p "$artifacts_root" >/dev/null 2>&1 || fail "artifacts dir not writable: directory='$artifacts_root'"
+
+install_tmp=$queue_dir/.$route_id.task.md.tmp.$$
+tmp_donecheck=${TMPDIR:-/tmp}/tr-enqueue-donecheck.$$
+trap 'rm -f "$tmp_donecheck" "$install_tmp"' EXIT HUP INT TERM
+if ! cp "$task_file" "$install_tmp"; then
+  rm -f "$install_tmp"
+  fail "failed to install task file: file='$task_file' destination='$queue_dir/$route_id.task.md'"
+fi
+
+if caty_extract_donecheck "$install_tmp" "$tmp_donecheck"; then
+  :
+else
+  extract_rc=$?
+  fail "$(caty_donecheck_error "$extract_rc"): file='$task_file'"
+fi
+
+# Only the caller-side id read needed to choose the dot-prefixed staging path.
+# Every enqueue gate below reads the exact staged bytes that will be installed.
+id=$(frontmatter_value id "$install_tmp")
 [ -n "$id" ] || fail "missing/empty id: file='$task_file'"
 is_safe_id "$id" || fail "invalid id: must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$: value='$id' file='$task_file'"
+[ "$id" = "$route_id" ] || fail "task id changed while staging: expected='$route_id' value='$id' file='$task_file'"
 
-created=$(frontmatter_value created "$task_file")
+created=$(frontmatter_value created "$install_tmp")
 is_utc_iso8601 "$created" || fail "created must be UTC ISO-8601 with seconds: value='$created' file='$task_file'"
 
-parent_id=$(frontmatter_value parent_id "$task_file")
+parent_id=$(frontmatter_value parent_id "$install_tmp")
 case "$parent_id" in
   ''|null|'~') ;;
   *)
@@ -140,48 +163,36 @@ case "$parent_id" in
     ;;
 esac
 
-verify=$(frontmatter_value verify "$task_file")
+verify=$(frontmatter_value verify "$install_tmp")
 [ "$verify" = "mechanical" ] || fail "verify must be mechanical: value='$verify' file='$task_file'"
 
-attempts_budget=$(frontmatter_value attempts_budget "$task_file")
+attempts_budget=$(frontmatter_value attempts_budget "$install_tmp")
 is_positive_integer "$attempts_budget" || fail "attempts_budget must be a positive integer: value='$attempts_budget' file='$task_file'"
 
-time_budget_min=$(frontmatter_value time_budget_min "$task_file")
+time_budget_min=$(frontmatter_value time_budget_min "$install_tmp")
 is_positive_integer "$time_budget_min" || fail "time_budget_min must be a positive integer: value='$time_budget_min' file='$task_file'"
 
 [ "$time_budget_min" -ge "$step_timeout_min" ] || fail "global step_timeout exceeds time_budget_min: value='$time_budget_min' step_timeout_min='$step_timeout_min' file='$task_file'"
 
+receipt=$(frontmatter_value receipt "$install_tmp")
+[ -n "$receipt" ] || fail "missing required frontmatter key: receipt file='$task_file'"
+caty_valid_receipt "$receipt" || fail "invalid receipt: value='$receipt' file='$task_file'"
+
 for section in Goal "Done-when" "Step plan" Resources "Non-goals"; do
-  has_section "$section" "$task_file" || fail "missing required body section: $section file='$task_file'"
+  has_section "$section" "$install_tmp" || fail "missing required body section: $section file='$task_file'"
 done
 
-tmp_donecheck=${TMPDIR:-/tmp}/tr-enqueue-donecheck.$$
-tmp_donecheck_clean=${TMPDIR:-/tmp}/tr-enqueue-donecheck.clean.$$
-trap 'rm -f "$tmp_donecheck" "$tmp_donecheck_clean" "$install_tmp"' EXIT HUP INT TERM
-extract_donecheck "$task_file" > "$tmp_donecheck" || fail "missing donecheck block: file='$task_file'"
-strip_donecheck_comments "$tmp_donecheck" "$tmp_donecheck_clean"
+grep -Eqv '^[[:space:]]*(#.*)?$' "$tmp_donecheck" || fail "missing donecheck block: file='$task_file'"
+caty_load_interpreters "$workspace" || fail "cannot load pinned interpreters: file='$workspace/loop/.tr-interpreters'"
+"$TR_BASH" -n "$tmp_donecheck" >/dev/null 2>&1 || fail "donecheck fails bash -n: file='$task_file'"
 
-[ -s "$tmp_donecheck_clean" ] || fail "missing donecheck block: file='$task_file'"
-has_receipt_assertion "$tmp_donecheck_clean" || fail "donecheck has no delivery receipt assertion: file='$task_file'"
-bash -n "$tmp_donecheck_clean" >/dev/null 2>&1 || fail "donecheck fails bash -n: file='$task_file'"
-
-plan_steps=$(extract_plan_steps "$task_file" | wc -l | tr -d ' ')
+plan_steps=$(extract_plan_steps "$install_tmp" | wc -l | tr -d ' ')
 [ "$plan_steps" -gt 0 ] || fail "missing plan steps: file='$task_file'"
 [ "$plan_steps" -le "$attempts_budget" ] || fail "plan-step count exceeds attempts_budget: value='$plan_steps' attempts_budget='$attempts_budget' file='$task_file'"
 
-last_step=$(extract_plan_steps "$task_file" | tail -n 1)
+last_step=$(extract_plan_steps "$install_tmp" | tail -n 1)
 printf '%s\n' "$last_step" | grep -Eiq 'deliver' || fail "last Step-plan step does not mention deliver/receipt: value='$last_step' file='$task_file'"
 printf '%s\n' "$last_step" | grep -Eiq 'receipt' || fail "last Step-plan step does not mention deliver/receipt: value='$last_step' file='$task_file'"
-
-loop_dir=$workspace/loop
-queue_dir=$loop_dir/tasks/queue
-delivered_dir=$loop_dir/tasks/delivered
-dlq_dir=$loop_dir/tasks/dlq
-artifacts_root=$loop_dir/artifacts
-artifact_dir=$loop_dir/artifacts/$id
-
-mkdir -p "$queue_dir" "$delivered_dir" "$dlq_dir" >/dev/null 2>&1 || fail "cannot create task ledger dirs: directories='$queue_dir $delivered_dir $dlq_dir'"
-mkdir -p "$artifacts_root" >/dev/null 2>&1 || fail "artifacts dir not writable: directory='$artifacts_root'"
 
 if [ -e "$queue_dir/$id.task.md" ] \
   || [ -e "$delivered_dir/$id" ] \
@@ -197,11 +208,6 @@ if [ "$time_budget_min" -lt $((plan_steps * 8)) ]; then
   warn "time_budget_min is less than plan_steps x 8"
 fi
 
-install_tmp=$queue_dir/.$id.task.md.tmp.$$
-if ! cp "$task_file" "$install_tmp"; then
-  rm -f "$install_tmp"
-  fail "failed to install task file: file='$task_file' destination='$queue_dir/$id.task.md'"
-fi
 if ! mkdir "$artifact_dir" >/dev/null 2>&1; then
   rm -f "$install_tmp"
   if [ -d "$artifact_dir" ]; then

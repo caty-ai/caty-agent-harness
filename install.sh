@@ -6,6 +6,8 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$repo_root/scripts/lib-wrapper-conformance.sh"
 # shellcheck disable=SC1091
 source "$repo_root/scripts/lib-pause.sh"
+# shellcheck disable=SC1091
+source "$repo_root/scripts/lib-donecheck.sh"
 legacy_marker_line="# fable-loop bootstrap v1"
 current_marker_line="# caty-agent-harness bootstrap v2"
 
@@ -483,6 +485,8 @@ run_loop_init() {
   local workspace=$1
 
   "$repo_root/scripts/loop-init" --workspace "$workspace"
+  workspace=$(cd "$workspace" && pwd -P)
+  caty_load_interpreters "$workspace" || exit 2
 }
 
 print_hermes_next_steps() {

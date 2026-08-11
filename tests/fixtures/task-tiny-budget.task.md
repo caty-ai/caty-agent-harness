@@ -8,6 +8,7 @@ time_budget_min: 0
 escalate_to: test
 verify: mechanical
 parent_id: null
+receipt: out/delivery-receipt.json
 ---
 
 ## Goal

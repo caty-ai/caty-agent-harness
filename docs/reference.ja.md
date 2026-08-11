@@ -32,6 +32,9 @@
 | `--enable --workspace <dir> [--dry-run]` | pause を解除。harness 所有の通常 `DISABLED` marker だけを削除し、悪意ある marker object は決して辿らない |
 
 追記される bootstrap block の冪等 marker は、リテラル行 `# caty-agent-harness bootstrap v2` です（機械用の marker であり、プロダクト名を変更しても rename しません）。
+workspace 初期化時には `loop/.tr-interpreters` も作成されます。これは donecheck の
+validation と execution の両方で使う Bash / Perl の絶対パスを記録した2行のファイルです。
+既存 workspace では最初の enqueue または runner 実行時に自己修復し、不正な記録は fail closed になります。
 
 ---
 
@@ -58,6 +61,21 @@
 ## Flush intake consumer の receipt
 
 flush intake consumer の会計 ledger は `loop/pending/intake-runs.log` です。deadman の `distill` marker が証明するのは intake が実行されたことだけです。内容レベルの沈黙・dedup・deferral・eviction・quarantine の各件数は ledger で確認します。`loop/archive/` は append-only で、自動で prune されることはありません。ledger の詳しい形式と schedule は [adapters/claude-code/INSTALL.md](../adapters/claude-code/INSTALL.md) を参照してください。
+
+## task-runner の実行境界
+
+- task frontmatter の `receipt:` は
+  `^out/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$` に一致し、`.` と `..` の segment を
+  含んではいけません。delivery にはさらに、その target が symlink ではない non-empty な
+  regular file で、解決後も task artifact の `out/` 配下にあることが必要です。
+- donecheck fence は column zero から始めます。heredoc 内の column-zero fence も文字列として
+  extraction を終了させるため、使用禁止です。
+- donecheck に渡るのは `TASK_ID`、`TASK_FILE`、`ARTIFACT_DIR`、`TR_DC_CWD`、固定の
+  `PATH=/usr/bin:/bin:/usr/sbin:/sbin`、`HOME`、runner 側で set 済みの
+  `LANG`/`LC_ALL`/`TZ`、および shell が作る変数だけです。それ以外の継承変数は消え、
+  依存していた check は次回実行時に明示的に失敗します。
+- `TR_SPAWN_STEP` は1個の argv として実行され、実行可能な通常ファイルへの絶対パスが必須です。
+  relative または PATH lookup 前提の provider 設定は runner 実行前に移行してください。
 
 ---
 

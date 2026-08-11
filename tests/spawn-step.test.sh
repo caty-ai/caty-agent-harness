@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 ADAPTER="$ROOT/adapters/hermes/spawn_step.sh"
+RUNNER="$ROOT/scripts/task-runner.sh"
 
 pass_count=0
 fail_count=0
@@ -375,6 +376,39 @@ case_forwarded_term_quarantines_partial_output_and_kills_group() {
   fi
 }
 
+case_runner_rejects_relative_spawn_step() {
+  local name=runner-rejects-relative-spawn-step
+  local dir code output
+  dir=$(make_case_dir)
+  set +e
+  output=$(TR_SPAWN_STEP=relative-spawn bash "$RUNNER" "$dir/ws" 2>&1)
+  code=$?
+  set -e
+  if [[ "$code" -eq 2 ]] && grep -Fq 'value=relative-spawn' <<<"$output"; then
+    pass "$name"
+  else
+    fail "$name" "expected exit 2 naming relative-spawn, got rc=$code output=$output"
+  fi
+}
+
+case_runner_rejects_nonexecutable_spawn_step() {
+  local name=runner-rejects-nonexecutable-spawn-step
+  local dir path code output
+  dir=$(make_case_dir)
+  path="$dir/not-executable"
+  printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$path"
+  chmod 644 "$path"
+  set +e
+  output=$(TR_SPAWN_STEP="$path" bash "$RUNNER" "$dir/ws" 2>&1)
+  code=$?
+  set -e
+  if [[ "$code" -eq 2 ]] && grep -Fq "value=$path" <<<"$output"; then
+    pass "$name"
+  else
+    fail "$name" "expected exit 2 naming $path, got rc=$code output=$output"
+  fi
+}
+
 case_success
 case_step_cmd_unset
 case_step_cmd_nonexistent
@@ -387,6 +421,8 @@ case_timeout_quarantines_partial_output_and_kills_group
 case_fast_exit_preserves_complete_output_and_reaps_group
 case_ordinary_failure_preserves_complete_output
 case_forwarded_term_quarantines_partial_output_and_kills_group
+case_runner_rejects_relative_spawn_step
+case_runner_rejects_nonexecutable_spawn_step
 
 log "TOTAL pass=$pass_count fail=$fail_count"
 if (( fail_count > 0 )); then
