@@ -445,10 +445,18 @@ printf 'TR_BASH=%s\nTR_PERL=%s\n' "$pinned_bash" "$(command -v perl)" \
 output=$("$SCRIPT" "$task" "$ws" 2>&1)
 rc=$?
 if [ "$rc" -eq 0 ] \
-  && grep -Eq '^-n .*/tr-enqueue-donecheck\.[0-9]+$' "$pinned_marker"; then
+  && grep -Eq '^-n .*/tr-enqueue-donecheck\.[[:alnum:]]{6}$' "$pinned_marker"; then
   pass "enqueue syntax check uses pinned Bash"
 else
   fail_case "enqueue syntax check uses pinned Bash" "rc=$rc args=$(cat "$pinned_marker" 2>/dev/null) output=$output"
+fi
+
+multiline_receipt=$'out/valid.json\nout/also-valid.json'
+if ! bash -c 'source "$1"; caty_valid_receipt "$2"' \
+  _ "$ROOT/scripts/lib-donecheck.sh" "$multiline_receipt"; then
+  pass "receipt helper rejects multiline values"
+else
+  fail_case "receipt helper rejects multiline values" "multiline value passed standalone grammar validation"
 fi
 
 task=$TMP_ROOT/unwritable-artifacts.task.md

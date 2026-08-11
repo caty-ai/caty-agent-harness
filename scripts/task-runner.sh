@@ -955,8 +955,8 @@ ERR_TRAP
     "ARTIFACT_DIR=$artifact_dir"
     "TR_DC_CWD=$workspace"
     "PATH=/usr/bin:/bin:/usr/sbin:/sbin"
-    "HOME=${HOME-}"
   )
+  [[ ${HOME+x} ]] && donecheck_env+=("HOME=$HOME")
   [[ ${LANG+x} ]] && donecheck_env+=("LANG=$LANG")
   [[ ${LC_ALL+x} ]] && donecheck_env+=("LC_ALL=$LC_ALL")
   [[ ${TZ+x} ]] && donecheck_env+=("TZ=$TZ")
@@ -1006,9 +1006,11 @@ import sys
 
 artifact_dir, target = sys.argv[1:3]
 artifact_real = os.path.realpath(artifact_dir)
-out_real = os.path.realpath(os.path.join(artifact_real, "out"))
+out_dir = os.path.join(artifact_real, "out")
+if os.path.realpath(out_dir) != out_dir or not os.path.isdir(out_dir):
+    sys.exit(1)
 target_real = os.path.realpath(target)
-prefix = out_real.rstrip(os.sep) + os.sep
+prefix = out_dir + os.sep
 if not target_real.startswith(prefix):
     sys.exit(1)
 PY
@@ -1545,6 +1547,10 @@ finalize_attempt() {
   local charge_s=$4
   local state_file="$artifact_dir/state.json"
   load_task_meta "$task_file"
+  if ! caty_valid_receipt "$receipt"; then
+    dlq_task "$task_file" "$artifact_dir" missing-receipt
+    return 0
+  fi
   local task_id=$id
   local attempts_budget_value=${attempts_budget:-0}
   local time_budget_s=$(( ${time_budget_min:-0} * 60 ))
@@ -1902,7 +1908,9 @@ for path in glob.glob(os.path.join(queue, "*.task.md")):
             break
         if in_fm and ":" in line:
             k, v = line.split(":", 1)
-            meta[k.strip()] = unquote(v)
+            key = k.strip()
+            if key not in meta:
+                meta[key] = unquote(v)
     task_id = meta.get("id")
     if not task_id:
         continue

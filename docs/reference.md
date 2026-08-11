@@ -67,12 +67,15 @@ The flush intake consumer's accounting ledger is `loop/pending/intake-runs.log`.
 - Task frontmatter requires `receipt:` matching
   `^out/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$`, with `.` and `..` segments forbidden.
   Delivery additionally requires that target to be a non-symlink, non-empty regular
-  file resolving inside the task artifact's `out/` directory.
+  file resolving inside the task artifact's own non-symlink `out/` directory.
 - Donecheck fences must start at column zero. A column-zero fence inside a heredoc
   terminates extraction textually and is therefore prohibited.
 - Donechecks receive only `TASK_ID`, `TASK_FILE`, `ARTIFACT_DIR`, `TR_DC_CWD`, fixed
-  `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, `HOME`, and any set `LANG`/`LC_ALL`/`TZ`, plus
-  shell-created variables. Other inherited variables disappear and dependent checks
+  `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, any set `HOME`/`LANG`/`LC_ALL`/`TZ`, and
+  shell-created variables. Tools such as `python3` must be reachable in that fixed
+  `PATH` or invoked by absolute path. The bundled `templates/examples/img-pilot.task.md`
+  donecheck depends on `python3` there; macOS ships `/usr/bin/python3`, while Linux
+  distributions may not. Other inherited variables disappear and dependent checks
   fail loudly.
 - `TR_SPAWN_STEP` is one argv word and must be an absolute executable-file path.
   Migrate relative or PATH-resolved provider configurations before running the runner.

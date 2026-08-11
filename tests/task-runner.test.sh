@@ -295,6 +295,31 @@ case_trailing_comment_created_parity() {
   fi
 }
 
+case_duplicate_id_scheduler_parser_parity() {
+  local name=duplicate-id-scheduler-parser-parity
+  local ws task
+  ws=$(make_ws)
+
+  write_runner_task "$ws" scheduler-shadow out/delivery-receipt.json true
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success
+
+  write_runner_task "$ws" scheduler-first out/delivery-receipt.json true
+  task="$ws/loop/tasks/queue/scheduler-first.task.md"
+  sed '/^id: scheduler-first$/a\
+id: scheduler-shadow' "$task" >"$task.tmp"
+  mv "$task.tmp" "$task"
+
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success
+  if [[ "$(state_value "$ws" scheduler-first status)" = delivered ]] \
+    && [[ "$(state_value "$ws" scheduler-first attempts_used)" = 1 ]] \
+    && [[ -f "$ws/loop/tasks/delivered/scheduler-first/scheduler-first.task.md" ]] \
+    && [[ ! -e "$task" ]]; then
+    pass "$name"
+  else
+    fail "$name" 'scheduler did not use the same first id value as the runner'
+  fi
+}
+
 attest_verifier_wrapper() {
   local ws=$1
   local wrapper_path=$2
@@ -352,6 +377,18 @@ case_receipt_file_boundary() {
   if [[ "$(state_value "$ws" receipt-parent-symlink status)" != queued ]] \
     || [[ -d "$ws/loop/tasks/delivered/receipt-parent-symlink" ]]; then
     fail "$name" 'resolved receipt path escaped through a parent symlink'
+    return
+  fi
+
+  ws=$(make_ws)
+  write_runner_task "$ws" receipt-out-symlink out/delivery-receipt.json true
+  run_tick "$ws" TR_MOCK_BEHAVIOR=receipt-out-symlink
+  reason="$ws/loop/artifacts/receipt-out-symlink/attempts/001/verify-reason"
+  if [[ "$(state_value "$ws" receipt-out-symlink status)" != queued ]] \
+    || [[ -d "$ws/loop/tasks/delivered/receipt-out-symlink" ]] \
+    || [[ ! -f "$reason" ]] \
+    || ! grep -Fqx 'delivery receipt missing or invalid: out/delivery-receipt.json' "$reason"; then
+    fail "$name" 'artifact out symlink moved the delivery containment root'
     return
   fi
 
@@ -438,10 +475,10 @@ case_receipt_frontmatter_parser_parity() {
 
 case_donecheck_environment_allowlist() {
   local name=donecheck-environment-allowlist
-  local ws log_file unexpected_tr
+  local ws log_file unexpected_tr no_home_log
   ws=$(make_ws)
   write_runner_task "$ws" env-allow out/delivery-receipt.json 'env | sort'
-  TR_SENTINEL_CANARY=x TR_PUSH_CMD=should-not-leak \
+  HOME="$ws/home" TR_SENTINEL_CANARY=x TR_PUSH_CMD=should-not-leak \
     run_tick "$ws" TR_MOCK_BEHAVIOR=success LANG=C LC_ALL=C TZ=UTC
   log_file="$ws/loop/artifacts/env-allow/attempts/001/donecheck.log"
   unexpected_tr=$(grep '^TR_' "$log_file" | grep -v '^TR_DC_CWD=' || true)
@@ -451,7 +488,7 @@ case_donecheck_environment_allowlist() {
     && grep -Fq 'ARTIFACT_DIR=' "$log_file" \
     && grep -Fq 'TR_DC_CWD=' "$log_file" \
     && grep -Fqx 'PATH=/usr/bin:/bin:/usr/sbin:/sbin' "$log_file" \
-    && grep -Fq 'HOME=' "$log_file" \
+    && grep -Fqx "HOME=$ws/home" "$log_file" \
     && grep -Fqx 'LANG=C' "$log_file" \
     && grep -Fqx 'LC_ALL=C' "$log_file" \
     && grep -Fqx 'TZ=UTC' "$log_file" \
@@ -461,9 +498,21 @@ case_donecheck_environment_allowlist() {
     && grep -q '^PWD=' "$log_file" \
     && grep -q '^SHLVL=' "$log_file" \
     && grep -q '^_=' "$log_file"; then
-    pass "$name"
+    :
   else
     fail "$name" "allowlist or shell-created variable contract mismatch: unexpected_tr=$unexpected_tr log=$(cat "$log_file")"
+    return
+  fi
+
+  ws=$(make_ws)
+  write_runner_task "$ws" env-no-home out/delivery-receipt.json 'env | sort'
+  env -u HOME TR_SPAWN_STEP="$MOCK" TR_MOCK_BEHAVIOR=success bash "$RUNNER" "$ws"
+  no_home_log="$ws/loop/artifacts/env-no-home/attempts/001/donecheck.log"
+  if [[ "$(state_value "$ws" env-no-home status)" = delivered ]] \
+    && ! grep -q '^HOME=' "$no_home_log"; then
+    pass "$name"
+  else
+    fail "$name" "unset HOME was supplied to donecheck: log=$(cat "$no_home_log")"
   fi
 }
 
@@ -774,6 +823,31 @@ case_crash_stamp() {
     pass "$name"
   else
     fail "$name" "recovery did not reuse stamped attempt"
+  fi
+}
+
+case_crash_stamp_invalid_receipt_dlq() {
+  local name=crash-stamp-invalid-receipt-dlq
+  local ws task code
+  ws=$(make_ws)
+  write_runner_task "$ws" reap-invalid-receipt out/delivery-receipt.json true
+  set +e
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success TR_CRASH_AFTER=stamp >/dev/null 2>&1
+  code=$?
+  set -e
+  task="$ws/loop/tasks/queue/reap-invalid-receipt.task.md"
+  sed 's|^receipt:.*|receipt: out/../escape|' "$task" >"$task.tmp"
+  mv "$task.tmp" "$task"
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success
+  if [[ "$code" -eq 137 ]] \
+    && [[ "$(state_value "$ws" reap-invalid-receipt status)" = dlq ]] \
+    && [[ "$(state_value "$ws" reap-invalid-receipt terminal_reason)" = missing-receipt ]] \
+    && [[ "$(state_value "$ws" reap-invalid-receipt attempts_used)" = 0 ]] \
+    && [[ -f "$ws/loop/tasks/dlq/reap-invalid-receipt/reap-invalid-receipt.task.md" ]] \
+    && [[ ! -e "$ws/loop/artifacts/reap-invalid-receipt/attempts/001/donecheck.log" ]]; then
+    pass "$name"
+  else
+    fail "$name" 'reap finalize did not DLQ the mutated receipt before charging or verification'
   fi
 }
 
@@ -1203,14 +1277,16 @@ case_attempts_exhaustion() {
 
 case_attempts_exhaustion_reports_actual_failing_donecheck_line() {
   local name=attempts-exhaustion-reports-actual-failing-donecheck-line
-  local ws i report
+  local ws i report failing
   ws=$(make_ws)
   copy_task "$FIX_FAILING_LINE" "$ws" tr-failing-line
   for i in 1 2 3 4; do
     run_tick "$ws" TR_MOCK_BEHAVIOR=success
   done
   report="$ws/loop/tasks/dlq/tr-failing-line/REPORT.md"
+  failing="$ws/loop/artifacts/tr-failing-line/attempts/004/donecheck.failing"
   if [[ "$(state_value "$ws" tr-failing-line status)" = dlq ]] \
+    && grep -Eq '^2: ' "$failing" \
     && grep -F -q 'test -s "$ARTIFACT_DIR/out/missing-receipt.json"' "$report" \
     && ! grep -F -q 'test -s "$ARTIFACT_DIR/out/delivery-receipt.json"' "$report"; then
     pass "$name"
@@ -2123,6 +2199,7 @@ case_corrupt_state_quarantine_continues
 case_quoted_id_intake_runner_agree
 case_invalid_created_sorts_last
 case_trailing_comment_created_parity
+case_duplicate_id_scheduler_parser_parity
 case_happy_path
 case_receipt_file_boundary
 case_missing_receipt_dlq_before_spawn
@@ -2159,6 +2236,7 @@ case_plain_persistent_failure_dlq
 case_crash_verifying_terminal_rederive
 case_crash_spawn
 case_crash_stamp
+case_crash_stamp_invalid_receipt_dlq
 case_crash_stamp_infra_neutral
 case_crash_infra_requeue_recovery
 case_crash_infra_terminal_recovery

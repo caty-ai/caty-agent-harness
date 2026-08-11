@@ -87,7 +87,7 @@ with open(path, "w", encoding="utf-8") as f:
     f.write("\n")
 PY
     ;;
-  receipt-symlink|receipt-directory|receipt-parent-symlink)
+  receipt-symlink|receipt-directory|receipt-parent-symlink|receipt-out-symlink)
     printf 'claimed\n' >"$artifact_dir/out/claimed.txt"
     if [[ "$behavior" = receipt-symlink ]]; then
       printf 'outside\n' >"$artifact_dir/outside-receipt.json"
@@ -95,6 +95,12 @@ PY
     elif [[ "$behavior" = receipt-directory ]]; then
       mkdir -p "$artifact_dir/out/delivery-receipt.json"
       printf 'nested\n' >"$artifact_dir/out/delivery-receipt.json/value"
+    elif [[ "$behavior" = receipt-out-symlink ]]; then
+      mkdir -p "$workspace/receipt-out-symlink-outside"
+      printf 'claimed\n' >"$workspace/receipt-out-symlink-outside/claimed.txt"
+      printf 'outside\n' >"$workspace/receipt-out-symlink-outside/delivery-receipt.json"
+      rm -rf "$artifact_dir/out"
+      ln -s "$workspace/receipt-out-symlink-outside" "$artifact_dir/out"
     else
       mkdir -p "$artifact_dir/outside"
       printf 'outside\n' >"$artifact_dir/outside/delivery-receipt.json"

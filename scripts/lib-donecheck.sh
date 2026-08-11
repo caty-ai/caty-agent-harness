@@ -69,7 +69,10 @@ caty_valid_receipt() {
   local value=$1
   local old_ifs segment first=1 segments=0
 
-  printf '%s\n' "$value" | grep -Eq '^out/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$' || return 1
+  case "$value" in
+    *$'\n'*) return 1 ;;
+  esac
+  printf '%s\n' "$value" | grep -Eqx '^out/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$' || return 1
   old_ifs=$IFS
   IFS=/
   # Intentional word splitting: the regex above has already excluded empty

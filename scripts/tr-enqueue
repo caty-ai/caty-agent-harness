@@ -131,7 +131,8 @@ mkdir -p "$queue_dir" "$delivered_dir" "$dlq_dir" >/dev/null 2>&1 || fail "canno
 mkdir -p "$artifacts_root" >/dev/null 2>&1 || fail "artifacts dir not writable: directory='$artifacts_root'"
 
 install_tmp=$queue_dir/.$route_id.task.md.tmp.$$
-tmp_donecheck=${TMPDIR:-/tmp}/tr-enqueue-donecheck.$$
+tmp_donecheck=$(mktemp "${TMPDIR:-/tmp}/tr-enqueue-donecheck.XXXXXX") \
+  || fail "cannot create donecheck temp file"
 trap 'rm -f "$tmp_donecheck" "$install_tmp"' EXIT HUP INT TERM
 if ! cp "$task_file" "$install_tmp"; then
   rm -f "$install_tmp"

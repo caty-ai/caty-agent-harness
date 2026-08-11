@@ -273,6 +273,8 @@ attempt consumes budget; identical-error fast-DLQ; infra failures held separatel
 10. Post-enqueue mutation of a queued task is not detected. Enqueue closes the caller
     source-file TOCTOU window by validating the staged snapshot, but there is no queued
     task signature or immutable storage in this version.
+    A hardlink inside `out/` to an outside file is likewise not detected; creating one
+    requires an in-zone actor and is the same residual-risk class as risks 9–10.
 11. Timeout killing is process-group containment, not process-tree containment. A child
     that calls `setsid` can leave the original process group and survive the timeout kill.
 12. `TR_SPAWN_STEP` misconfiguration is operator-level by design. Startup rejects
