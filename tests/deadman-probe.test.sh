@@ -346,6 +346,291 @@ else
   fail_case 'secrets overrides are revalidated' "rc=$secrets_rc"
 fi
 
+quoted_marker="$TMP_ROOT/quoted marker/.deadman/tick.marker"
+quoted_secrets=$TMP_ROOT/secrets-env-quoted
+printf 'DEADMAN_MARKER="%s"\r\n' "$quoted_marker" >"$quoted_secrets"
+chmod 600 "$quoted_secrets"
+TARGET="$target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  SECRETS_ENV="$quoted_secrets" "$wrapper" >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; quoted_secrets_rc=$?
+if [ "$quoted_secrets_rc" -eq 0 ] && [ -f "$quoted_marker" ] \
+  && [ "$(wc -l <"$TARGET_LOG" | tr -d '[:space:]')" -eq 3 ]; then
+  pass 'quoted CRLF secrets overrides export without quotes'
+else
+  fail_case 'quoted CRLF secrets overrides export without quotes' "rc=$quoted_secrets_rc marker=$([ -f "$quoted_marker" ] && printf yes || printf no)"
+fi
+
+secrets_capture_target=$TMP_ROOT/secrets-capture-target
+cat >"$secrets_capture_target" <<'EOF'
+#!/usr/bin/env bash
+printf 'FOO=%s\n' "${FOO-}"
+printf 'STRIPPED=%s\n' "${STRIPPED-}"
+printf 'VERBATIM=%s\n' "${VERBATIM-}"
+printf 'LEADING=%s\n' "${LEADING-}"
+printf 'TRAILING=%s\n' "${TRAILING-}"
+printf 'MIDDLE=%s\n' "${MIDDLE-}"
+printf 'SINGLE=%s\n' "${SINGLE-}"
+printf 'EMPTY=%s\n' "${EMPTY-}"
+EOF
+chmod +x "$secrets_capture_target"
+
+indented_secrets=$TMP_ROOT/secrets-env-indented
+printf '  FOO=bar\n' >"$indented_secrets"
+chmod 600 "$indented_secrets"
+TARGET="$secrets_capture_target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  SECRETS_ENV="$indented_secrets" "$wrapper" >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; indented_rc=$?
+if [ "$indented_rc" -eq 0 ] && grep -Fxq 'FOO=bar' "$TMP_ROOT/wrapper.out"; then
+  pass 'indented secrets assignments are accepted'
+else
+  fail_case 'indented secrets assignments are accepted' "rc=$indented_rc stdout=$(cat "$TMP_ROOT/wrapper.out")"
+fi
+
+spaced_key_secrets=$TMP_ROOT/secrets-env-spaced-key
+printf '  FOO =bar\n' >"$spaced_key_secrets"
+chmod 600 "$spaced_key_secrets"
+TARGET="$target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  SECRETS_ENV="$spaced_key_secrets" "$wrapper" >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; spaced_key_rc=$?
+if [ "$spaced_key_rc" -eq 3 ] \
+  && grep -Fq "cron-wrapper infra error: SECRETS_ENV line 1 is not a KEY=VALUE assignment; SECRETS_ENV requires one assignment per line (store multi-line secrets in their own file and put the path in SECRETS_ENV): $spaced_key_secrets" "$TMP_ROOT/wrapper.err" \
+  && [ "$(wc -l <"$TARGET_LOG" | tr -d '[:space:]')" -eq 3 ]; then
+  pass 'whitespace between a secrets key and equals remains malformed'
+else
+  fail_case 'whitespace between a secrets key and equals remains malformed' \
+    "rc=$spaced_key_rc stderr=$(cat "$TMP_ROOT/wrapper.err")"
+fi
+
+quoted_shape_secrets=$TMP_ROOT/secrets-env-quoted-shapes
+cat >"$quoted_shape_secrets" <<'EOF'
+STRIPPED="a+b"
+VERBATIM="a"+"b"
+LEADING="a
+TRAILING=a"
+MIDDLE=a"b
+SINGLE="
+EMPTY=""
+EOF
+chmod 600 "$quoted_shape_secrets"
+TARGET="$secrets_capture_target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  SECRETS_ENV="$quoted_shape_secrets" "$wrapper" >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; quoted_shape_rc=$?
+if [ "$quoted_shape_rc" -eq 0 ] \
+  && grep -Fxq 'STRIPPED=a+b' "$TMP_ROOT/wrapper.out" \
+  && grep -Fxq 'VERBATIM="a"+"b"' "$TMP_ROOT/wrapper.out" \
+  && grep -Fxq 'LEADING="a' "$TMP_ROOT/wrapper.out" \
+  && grep -Fxq 'TRAILING=a"' "$TMP_ROOT/wrapper.out" \
+  && grep -Fxq 'MIDDLE=a"b' "$TMP_ROOT/wrapper.out" \
+  && grep -Fxq 'SINGLE="' "$TMP_ROOT/wrapper.out" \
+  && grep -Fxq 'EMPTY=' "$TMP_ROOT/wrapper.out"; then
+  pass 'outer quotes are stripped only when the inner value has no matching quote'
+else
+  fail_case 'outer quotes are stripped only when the inner value has no matching quote' \
+    "rc=$quoted_shape_rc stdout=$(cat "$TMP_ROOT/wrapper.out")"
+fi
+
+readonly_secrets=$TMP_ROOT/secrets-env-readonly
+printf 'UID=1000\n' >"$readonly_secrets"
+chmod 600 "$readonly_secrets"
+TARGET="$target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  SECRETS_ENV="$readonly_secrets" "$wrapper" >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; readonly_rc=$?
+if [ "$readonly_rc" -eq 3 ] \
+  && grep -Fq "cron-wrapper infra error: SECRETS_ENV line 1 cannot export UID (reserved or read-only name): $readonly_secrets" "$TMP_ROOT/wrapper.err" \
+  && ! grep -Fq 'readonly variable' "$TMP_ROOT/wrapper.err" \
+  && [ "$(wc -l <"$TARGET_LOG" | tr -d '[:space:]')" -eq 3 ]; then
+  pass 'read-only shell names fail through the infra-error contract'
+else
+  fail_case 'read-only shell names fail through the infra-error contract' \
+    "rc=$readonly_rc stderr=$(cat "$TMP_ROOT/wrapper.err")"
+fi
+
+pager_secrets=$TMP_ROOT/secrets-env-pager
+printf 'PAGER=/tmp/x\n' >"$pager_secrets"
+chmod 600 "$pager_secrets"
+TARGET="$target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  SECRETS_ENV="$pager_secrets" "$wrapper" >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; pager_rc=$?
+if [ "$pager_rc" -eq 3 ] \
+  && grep -Fq "cron-wrapper infra error: SECRETS_ENV line 1 refuses interpreter-control name PAGER (rename it, e.g. APP_ENV): $pager_secrets" "$TMP_ROOT/wrapper.err" \
+  && [ "$(wc -l <"$TARGET_LOG" | tr -d '[:space:]')" -eq 3 ]; then
+  pass 'added exact interpreter-control names are refused'
+else
+  fail_case 'added exact interpreter-control names are refused' "rc=$pager_rc"
+fi
+
+env_secrets=$TMP_ROOT/secrets-env-env
+printf '# comment\n\nENV=production\n' >"$env_secrets"
+chmod 600 "$env_secrets"
+TARGET="$target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  SECRETS_ENV="$env_secrets" "$wrapper" >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; env_rc=$?
+if [ "$env_rc" -eq 3 ] \
+  && grep -Fq "cron-wrapper infra error: SECRETS_ENV line 3 refuses interpreter-control name ENV (rename it, e.g. APP_ENV): $env_secrets" "$TMP_ROOT/wrapper.err" \
+  && [ "$(wc -l <"$TARGET_LOG" | tr -d '[:space:]')" -eq 3 ]; then
+  pass 'interpreter-control refusals include an actionable rename hint'
+else
+  fail_case 'interpreter-control refusals include an actionable rename hint' "rc=$env_rc"
+fi
+
+nul_secrets=$TMP_ROOT/secrets-env-nul
+printf 'FIRST=ok\nNUL_VALUE=before\0after\n' >"$nul_secrets"
+chmod 600 "$nul_secrets"
+TARGET="$target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  SECRETS_ENV="$nul_secrets" "$wrapper" >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; nul_rc=$?
+if [ "$nul_rc" -eq 3 ] \
+  && grep -Fq "cron-wrapper infra error: SECRETS_ENV line 2 contains an embedded NUL byte: $nul_secrets" "$TMP_ROOT/wrapper.err" \
+  && [ "$(wc -l <"$TARGET_LOG" | tr -d '[:space:]')" -eq 3 ]; then
+  pass 'embedded NUL bytes fail closed with the first offending line number'
+else
+  fail_case 'embedded NUL bytes fail closed with the first offending line number' \
+    "rc=$nul_rc stderr=$(cat "$TMP_ROOT/wrapper.err")"
+fi
+
+bash_env_marker=$TMP_ROOT/bash-env-marker
+bash_env_script=$TMP_ROOT/bash-env-script
+printf ': >"%s"\n' "$bash_env_marker" >"$bash_env_script"
+chmod 600 "$bash_env_script"
+bash_env_secrets=$TMP_ROOT/secrets-env-bash-env
+printf 'BASH_ENV=%s\n' "$bash_env_script" >"$bash_env_secrets"
+chmod 600 "$bash_env_secrets"
+TARGET="$target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  SECRETS_ENV="$bash_env_secrets" "$wrapper" >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; bash_env_rc=$?
+if [ "$bash_env_rc" -eq 3 ] && [ ! -e "$bash_env_marker" ] \
+  && grep -Fq "cron-wrapper infra error: SECRETS_ENV line 1 refuses interpreter-control name BASH_ENV (rename it, e.g. APP_ENV): $bash_env_secrets" "$TMP_ROOT/wrapper.err" \
+  && [ "$(wc -l <"$TARGET_LOG" | tr -d '[:space:]')" -eq 3 ]; then
+  pass 'BASH_ENV is refused before its startup script can run'
+else
+  fail_case 'BASH_ENV is refused before its startup script can run' \
+    "rc=$bash_env_rc marker=$([ -e "$bash_env_marker" ] && printf present || printf absent)"
+fi
+
+prefix_secrets=$TMP_ROOT/secrets-env-prefix
+printf 'LD_PRELOAD=/tmp/x\n' >"$prefix_secrets"
+chmod 600 "$prefix_secrets"
+TARGET="$target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  SECRETS_ENV="$prefix_secrets" "$wrapper" >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; prefix_rc=$?
+if [ "$prefix_rc" -eq 3 ] \
+  && grep -Fq "cron-wrapper infra error: SECRETS_ENV line 1 refuses interpreter-control name LD_PRELOAD (rename it, e.g. APP_ENV): $prefix_secrets" "$TMP_ROOT/wrapper.err" \
+  && [ "$(wc -l <"$TARGET_LOG" | tr -d '[:space:]')" -eq 3 ]; then
+  pass 'dynamic-loader prefix names are refused'
+else
+  fail_case 'dynamic-loader prefix names are refused' "rc=$prefix_rc"
+fi
+
+prefix_boundary_log=$TMP_ROOT/prefix-boundary.log
+prefix_boundary_target=$TMP_ROOT/prefix-boundary-target
+cat >"$prefix_boundary_target" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "${LDAP_TOKEN-}" >"$PREFIX_BOUNDARY_LOG"
+EOF
+chmod +x "$prefix_boundary_target"
+prefix_boundary_allowed=$TMP_ROOT/secrets-env-prefix-boundary-allowed
+printf 'LDAP_TOKEN=abc\n' >"$prefix_boundary_allowed"
+chmod 600 "$prefix_boundary_allowed"
+TARGET="$prefix_boundary_target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  PREFIX_BOUNDARY_LOG="$prefix_boundary_log" SECRETS_ENV="$prefix_boundary_allowed" "$wrapper" \
+  >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; prefix_boundary_allowed_rc=$?
+prefix_boundary_refused=$TMP_ROOT/secrets-env-prefix-boundary-refused
+printf 'LD_AUDIT=/tmp/x\n' >"$prefix_boundary_refused"
+chmod 600 "$prefix_boundary_refused"
+TARGET="$target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  SECRETS_ENV="$prefix_boundary_refused" "$wrapper" \
+  >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; prefix_boundary_refused_rc=$?
+if [ "$prefix_boundary_allowed_rc" -eq 0 ] \
+  && [ -f "$prefix_boundary_log" ] && [ "$(cat "$prefix_boundary_log")" = abc ] \
+  && [ "$prefix_boundary_refused_rc" -eq 3 ] \
+  && grep -Fq "cron-wrapper infra error: SECRETS_ENV line 1 refuses interpreter-control name LD_AUDIT (rename it, e.g. APP_ENV): $prefix_boundary_refused" "$TMP_ROOT/wrapper.err"; then
+  pass 'dynamic-loader prefix families match only at the start of a name'
+else
+  fail_case 'dynamic-loader prefix families match only at the start of a name' \
+    "rcs=$prefix_boundary_allowed_rc/$prefix_boundary_refused_rc value=$([ -f "$prefix_boundary_log" ] && cat "$prefix_boundary_log" || printf missing)"
+fi
+
+near_miss_log=$TMP_ROOT/near-miss.log
+near_miss_target=$TMP_ROOT/near-miss-target
+cat >"$near_miss_target" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "${MY_PATH_TOKEN-}" >"$NEAR_MISS_LOG"
+EOF
+chmod +x "$near_miss_target"
+near_miss_secrets=$TMP_ROOT/secrets-env-near-miss
+printf 'MY_PATH_TOKEN=abc\n' >"$near_miss_secrets"
+chmod 600 "$near_miss_secrets"
+TARGET="$near_miss_target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  NEAR_MISS_LOG="$near_miss_log" SECRETS_ENV="$near_miss_secrets" "$wrapper" \
+  >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; near_miss_rc=$?
+if [ "$near_miss_rc" -eq 0 ] && [ -f "$near_miss_log" ] \
+  && [ "$(cat "$near_miss_log")" = abc ]; then
+  pass 'hazardous substrings in legitimate names remain accepted'
+else
+  fail_case 'hazardous substrings in legitimate names remain accepted' \
+    "rc=$near_miss_rc value=$([ -f "$near_miss_log" ] && cat "$near_miss_log" || printf missing)"
+fi
+
+would_be_command_side_effect=$TMP_ROOT/would-be-command-side-effect
+secrets_command=$TMP_ROOT/secrets-env-command
+cat >"$secrets_command" <<EOF
+# comment
+
+DEADMAN_MARKER=$marker
+touch "$would_be_command_side_effect"
+EOF
+chmod 600 "$secrets_command"
+TARGET="$target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  SECRETS_ENV="$secrets_command" "$wrapper" >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; secrets_command_rc=$?
+if [ "$secrets_command_rc" -eq 3 ] && [ ! -e "$would_be_command_side_effect" ] \
+  && grep -Fq "cron-wrapper infra error: SECRETS_ENV line 4 is not a KEY=VALUE assignment; SECRETS_ENV requires one assignment per line (store multi-line secrets in their own file and put the path in SECRETS_ENV): $secrets_command" "$TMP_ROOT/wrapper.err" \
+  && [ "$(wc -l <"$TARGET_LOG" | tr -d '[:space:]')" -eq 3 ]; then
+  pass 'would-be command lines are rejected without side effects'
+else
+  fail_case 'would-be command lines are rejected without side effects' "rc=$secrets_command_rc side_effect=$([ -e "$would_be_command_side_effect" ] && printf yes || printf no)"
+fi
+
+malformed_secrets=$TMP_ROOT/secrets-env-malformed
+cat >"$malformed_secrets" <<EOF
+DEADMAN_MARKER=$marker
+BAD-KEY=value
+EOF
+chmod 600 "$malformed_secrets"
+TARGET="$target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  SECRETS_ENV="$malformed_secrets" "$wrapper" >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; malformed_secrets_rc=$?
+if [ "$malformed_secrets_rc" -eq 3 ] \
+  && grep -Fq "cron-wrapper infra error: SECRETS_ENV line 2 is not a KEY=VALUE assignment; SECRETS_ENV requires one assignment per line (store multi-line secrets in their own file and put the path in SECRETS_ENV): $malformed_secrets" "$TMP_ROOT/wrapper.err" \
+  && [ "$(wc -l <"$TARGET_LOG" | tr -d '[:space:]')" -eq 3 ]; then
+  pass 'malformed secrets lines fail with line numbers'
+else
+  fail_case 'malformed secrets lines fail with line numbers' "rc=$malformed_secrets_rc"
+fi
+
+pem_secrets=$TMP_ROOT/secrets-env-pem
+# PEM-shaped fixture: the same multi-line quoted structure a real key file has, with a
+# neutral block label so local and CI secret scanners do not flag the test data.
+cat >"$pem_secrets" <<'EOF'
+BLOCK_VALUE="-----BEGIN EXAMPLE BLOCK-----
+YWJj
+-----END EXAMPLE BLOCK-----"
+EOF
+chmod 600 "$pem_secrets"
+TARGET="$target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  SECRETS_ENV="$pem_secrets" "$wrapper" >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; pem_rc=$?
+if [ "$pem_rc" -eq 3 ] \
+  && grep -Fq "cron-wrapper infra error: SECRETS_ENV line 2 is not a KEY=VALUE assignment; SECRETS_ENV requires one assignment per line (store multi-line secrets in their own file and put the path in SECRETS_ENV): $pem_secrets" "$TMP_ROOT/wrapper.err" \
+  && [ "$(wc -l <"$TARGET_LOG" | tr -d '[:space:]')" -eq 3 ]; then
+  pass 'PEM-shaped multi-line values fail with the documented path workaround'
+else
+  fail_case 'PEM-shaped multi-line values fail with the documented path workaround' \
+    "rc=$pem_rc stderr=$(cat "$TMP_ROOT/wrapper.err")"
+fi
+
+symlink_source=$TMP_ROOT/secrets-env-symlink-source
+symlink_secrets=$TMP_ROOT/secrets-env-symlink
+printf 'DEADMAN_MARKER=%s\n' "$marker" >"$symlink_source"
+chmod 600 "$symlink_source"
+ln -s "$symlink_source" "$symlink_secrets"
+TARGET="$target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  SECRETS_ENV="$symlink_secrets" "$wrapper" >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; symlink_secrets_rc=$?
+if [ "$symlink_secrets_rc" -eq 3 ] \
+  && grep -Fq "cron-wrapper infra error: SECRETS_ENV must not be a symlink: $symlink_secrets" "$TMP_ROOT/wrapper.err" \
+  && [ "$(wc -l <"$TARGET_LOG" | tr -d '[:space:]')" -eq 3 ]; then
+  pass 'symlink secrets env is refused'
+else
+  fail_case 'symlink secrets env is refused' "rc=$symlink_secrets_rc"
+fi
+
 ws=$(new_ws malformed-checks)
 run_probe "$ws" 'tick:abc'; rc=$?
 if [ "$rc" -eq 2 ] && [ "$(entry_count "$ws")" -eq 0 ]; then

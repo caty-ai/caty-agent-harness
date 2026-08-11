@@ -170,12 +170,18 @@ the absolute adapter/script path and pass the target arguments after the wrapper
 
 Adapter stdout is now captured per attempt in `attempts/NNN/model.stdout` and no longer appears in the tick log.
 
-`SECRETS_ENV` is optional. When set and present, the wrapper sources it only if it is
-owned by the cron user and has `0600` or `0400` permissions. Put environment values
-such as `TR_SPAWN_STEP`, `HERMES_STEP_CMD`, `HERMES_PROBE_CMD`, and `TR_PUSH_CMD` in
-that file instead of expanding secrets directly in crontab. `install.sh --check`
-remains read-only: its Hermes conformance row reads and hashes the configured wrapper,
-provider, probe, and evidence files without executing them.
+`SECRETS_ENV` is optional. When set and present, the wrapper parses it as data-only
+`KEY=VALUE`, one assignment per physical line; it does not source or execute the file.
+The file must be owned by the cron user, have `0600` or `0400` permissions, and not be
+a symlink. Interpreter- and loader-control names are refused by a deliberately
+non-exhaustive hazard guard. Store a multi-line secret in its own file and put that
+file's path in `SECRETS_ENV`. Put ordinary values such as `TR_SPAWN_STEP`,
+`HERMES_STEP_CMD`, `HERMES_PROBE_CMD`, and `TR_PUSH_CMD` in the env file instead of
+expanding secrets directly in crontab. Portable Bash 3.2 cannot open with
+`O_NOFOLLOW`; pre/post-open identity checks narrow, but do not eliminate, a residual
+path replacement race. `install.sh --check` remains read-only: its Hermes conformance
+row reads and hashes the configured wrapper, provider, probe, and evidence files
+without executing them.
 
 When configured, `push.log` persists the push command's combined output; bash-level
 errors are redacted. Keep secrets out of command-name position and out of helper output.
