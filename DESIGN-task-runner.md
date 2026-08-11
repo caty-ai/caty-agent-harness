@@ -175,7 +175,7 @@ Every transition = temp-write + atomic rename. Cron every 5 min; singleton flock
 4. On exit/kill: stamp driver.json (timeout charges full step_timeout to
    `active_seconds_used`); update counters; status → verifying; run donecheck.
    - all pass → assert frontmatter `receipt` is a non-symlink, non-empty regular file
-     whose resolved path stays beneath resolved `out/`; then status delivered and move
+     whose resolved path stays beneath the artifact's own non-symlink `out/`; then status delivered and move
      the task file to `delivered/` (rename = commit). A missing/invalid receipt fails
      verification; missing/invalid receipt metadata is DLQ `missing-receipt` before spawn.
    - step_complete=yes → current_step += 1, consec_noncomplete = 0.
