@@ -12,7 +12,7 @@ adapters/openclaw/sentinel-cron.sh	guarded	--workspace	exit-0-status	automated-s
 scripts/deadman-probe.sh	guarded	argv.workspace	exit-0-status	automated-state-maintenance	caty_pause_workspace_state	mkdir -p "$deadman_dir"
 scripts/task-runner.sh	guarded	argv.workspace	exit-0-status	automated-task-lifecycle	caty_pause_workspace_state	mkdir -p "$queue_dir"
 scripts/tr-enqueue	guarded	argv.workspace	exit-3-status	explicit-queue-mutation	caty_pause_workspace_state	mkdir -p "$queue_dir"
-templates/cron-wrapper.tmpl.sh	guarded	--workspace-or-positional	exit-0-status	scheduler-wrapper-before-secrets-and-deadman-mutations	caty_pause_workspace_state	. "$SECRETS_ENV"
+templates/cron-wrapper.tmpl.sh	guarded	--workspace-or-positional	exit-0-status	scheduler-wrapper-before-secrets-and-deadman-mutations	caty_pause_workspace_state	exec 9<"$SECRETS_ENV"
 templates/updater-cron.tmpl.sh	exempt	none	not-applicable	harness-updater-wrapper-not-member-workspace	-	-
 scripts/attest-wrapper	exempt	none	not-applicable	setup-time-wrapper-attestation	-	-
 scripts/family-updater	exempt	none	not-applicable	harness-clone-updater-not-member-workspace	-	-
