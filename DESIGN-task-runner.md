@@ -88,6 +88,7 @@ time_budget_min: 30            # D5 — cumulative active seconds, driver-measur
 escalate_to: sho               # D6
 verify: mechanical             # fixed literal in v0; any other value rejected (TR-R15)
 parent_id: null                # set only on DLQ re-enqueue (always a NEW id, TR-R15)
+receipt: out/delivery-receipt.json # required delivery target under artifact out/
 ```
 
 (step_timeout is a global driver constant, 10 min — not per-task; TR-R15.)
@@ -95,17 +96,27 @@ parent_id: null                # set only on DLQ re-enqueue (always a NEW id, TR
 Body sections (all required; "none" allowed, deletion not):
 
 - `## Goal` — one paragraph.
-- `## Done-when` — a `donecheck` fenced block of executable assertions. Contract
-  (TR-R7): the driver runs it with `bash -euo pipefail`, cwd = workspace,
-  `TASK_ID`/`TASK_FILE`/`ARTIFACT_DIR` exported, 60 s timeout, output captured to the
-  attempt's `donecheck.log`. Assertions are READ-ONLY (they run after every attempt).
-  Prefer magic-byte checks over `file | grep`. MUST include a delivery-receipt
-  assertion (D2), e.g.:
+- `## Done-when` — exactly one column-zero `donecheck` fenced block of executable
+  assertions. Contract (TR-R7): the driver runs it with the Bash pinned in
+  `loop/.tr-interpreters`, `-euo pipefail`, cwd = workspace, and a 60 s timeout.
+  `env -i` supplies only `TASK_ID`, `TASK_FILE`, `ARTIFACT_DIR`, `TR_DC_CWD`, fixed
+  `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, `HOME`, and set `LANG`/`LC_ALL`/`TZ` values;
+  Bash may add `PWD`, `SHLVL`, and `_`. Output is captured in `donecheck.log`.
+  Assertions are READ-ONLY by task contract (they run after every attempt).
+  Prefer magic-byte checks over `file | grep`. After the block exits zero, the runner
+  mechanically asserts the frontmatter `receipt`; a task may also inspect its content,
+  e.g.:
   ```donecheck
   test -s "$ARTIFACT_DIR/out/image.png" || { echo "FAIL: image exists"; exit 1; }
   head -c8 "$ARTIFACT_DIR/out/image.png" | grep -q $'\x89PNG' || { echo "FAIL: PNG magic bytes"; exit 1; }
   test -s "$ARTIFACT_DIR/out/delivery-receipt.json" || { echo "FAIL: delivery ack captured"; exit 1; }
   ```
+  Extraction is textual: a column-zero closing fence inside a heredoc terminates the
+  block and is prohibited. The wrapper applies best-effort limits of CPU seconds =
+  `TR_DONECHECK_TIMEOUT_S + 60`, file size = 2,097,152 512-byte blocks (1 GiB), open
+  files = 256, and processes = 512. A platform may refuse a lower limit; the process
+  limit is skipped when current per-user usage cannot be observed safely or lacks
+  headroom. These are process-group bounds, not a sandbox or process-tree container.
 - `## Step plan` — enumerated `plan_steps`; invariant `plan_steps ≤ attempts_budget`
   (enqueue-validated). The agent executes exactly the injected step k; it may file a
   `deviation_report` (§3.3) but never re-plans (TR-R12). The LAST step is always
@@ -163,7 +174,10 @@ Every transition = temp-write + atomic rename. Cron every 5 min; singleton flock
      no budget burn on an xAI outage (TR-R2).
 4. On exit/kill: stamp driver.json (timeout charges full step_timeout to
    `active_seconds_used`); update counters; status → verifying; run donecheck.
-   - all pass → status delivered, move task file to `delivered/` (rename = commit).
+   - all pass → assert frontmatter `receipt` is a non-symlink, non-empty regular file
+     whose resolved path stays beneath the artifact's own non-symlink `out/`; then status delivered and move
+     the task file to `delivered/` (rename = commit). A missing/invalid receipt fails
+     verification; missing/invalid receipt metadata is DLQ `missing-receipt` before spawn.
    - step_complete=yes → current_step += 1, consec_noncomplete = 0.
    - non-complete: consec_noncomplete += 1. Two consecutive with IDENTICAL
      error_class → DLQ reason=persistent-failure. Otherwise yield (next tick retries
@@ -193,9 +207,12 @@ artifact path. Re-enqueue is manual, always under a NEW id with `parent_id` set.
 
 ### 3.6 Enqueue validation (tr-enqueue)
 
-Rejects: missing/duplicate id, missing sections, no delivery step, no delivery
-assertion, `verify` ≠ mechanical, `plan_steps > attempts_budget`,
-`step_timeout > time_budget`, donecheck that fails `bash -n`, unwritable artifact dir.
+`tr-enqueue` first copies to the queue-side dot-prefixed staging file, then validates
+the exact staged bytes. Rejects: missing/duplicate id, missing sections, no delivery
+step, missing/invalid `receipt`, `verify` ≠ mechanical, `plan_steps > attempts_budget`,
+`step_timeout > time_budget`, invalid UTF-8, missing/multiple/unclosed donecheck, a raw
+donecheck that fails pinned-Bash `-n`, or an unwritable artifact dir. `receipt` must
+match `^out/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$` and no segment may be `.` or `..`.
 Warns (does not block): `time_budget_min < plan_steps × 8 min` — the pilot image task
 ships with `time_budget_min: 60` (D5 override; defaults unchanged).
 
@@ -250,6 +267,19 @@ attempt consumes budget; identical-error fast-DLQ; infra failures held separatel
    clock, never from timestamps in files.
 8. Disk-full mid-artifact-write → donecheck `test -s` catches truncation; the attempt
    fails without corrupting state.json (atomic rename on a full disk fails whole).
+9. A malicious task runs arbitrary shell as the runner user by design. The environment,
+   receipt, timeout, and ulimit boundaries reduce accidents; they are not a privilege
+   boundary or sandbox.
+10. Post-enqueue mutation of a queued task is not detected. Enqueue closes the caller
+    source-file TOCTOU window by validating the staged snapshot, but there is no queued
+    task signature or immutable storage in this version.
+    A hardlink inside `out/` to an outside file is likewise not detected; creating one
+    requires an in-zone actor and is the same residual-risk class as risks 9–10.
+11. Timeout killing is process-group containment, not process-tree containment. A child
+    that calls `setsid` can leave the original process group and survive the timeout kill.
+12. `TR_SPAWN_STEP` misconfiguration is operator-level by design. Startup rejects
+    non-absolute, non-regular, or non-executable values, but does not attest provider
+    contents or constrain what an intentionally configured provider can do.
 
 ## 8. Cross-cutting contracts (grok-build study, Issue #43 → #49)
 

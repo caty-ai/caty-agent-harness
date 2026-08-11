@@ -8,6 +8,7 @@ time_budget_min: 60
 escalate_to: example-operator
 verify: mechanical
 parent_id: null
+receipt: out/delivery-receipt.json
 ---
 
 ## Goal

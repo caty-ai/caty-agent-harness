@@ -38,6 +38,35 @@ Anything not listed above is engine-internal and may change without notice.
    coverage; the engine's watchdogs only watch engine ticks.
 6. **Naming.** Plugin repos are named `<topic>-loop` (e.g. `self-growth-loop`).
 
+## Task execution boundary
+
+- Every task frontmatter must declare `receipt: out/<path>`. The exact grammar is
+  `^out/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$`; `.` and `..` path segments are also
+  forbidden. The runner delivers only when that target is a non-symlink, non-empty
+  regular file whose resolved path remains under the task artifact's own non-symlink
+  `out/` directory.
+  Queue-dropped legacy tasks with a missing or invalid value go to DLQ with
+  `missing-receipt` before a model attempt.
+- A donecheck opener is a column-zero `` ```donecheck `` line with only trailing
+  whitespace; its closer is the first subsequent column-zero `` ``` `` line with
+  only trailing whitespace. Exactly one closed block is required. Because extraction
+  is deliberately textual, a column-zero fence inside a shell heredoc closes the
+  block: plugins must not put column-zero Markdown fences inside donecheck heredocs.
+- Donechecks run with `env -i`. The supplied variables are `TASK_ID`, `TASK_FILE`,
+  `ARTIFACT_DIR`, `TR_DC_CWD`, and `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, plus `HOME`,
+  `LANG`, `LC_ALL`, and `TZ` only when the runner has them. The shell also creates
+  variables such as `PWD`, `SHLVL`, and `_`. Because `PATH` is fixed, tools such as
+  `python3` must be reachable there or invoked by absolute path in donechecks. The
+  bundled `templates/examples/img-pilot.task.md` donecheck depends on `python3` in
+  that `PATH`; macOS ships `/usr/bin/python3`, while Linux distributions may not.
+  Donechecks that depended on any other inherited variable, including `TR_PUSH_CMD`,
+  break loudly at their next run.
+- `TR_SPAWN_STEP` must be an absolute path to an executable file. PATH-resolved
+  command names and relative configurations must migrate to an absolute provider path.
+- Workspace initialization records the absolute Bash and Perl used for validation
+  and execution in `loop/.tr-interpreters`. Existing workspaces self-heal this record
+  on first enqueue or runner use; invalid recorded paths fail closed.
+
 ## Extraction policy (avoiding premature frameworks)
 
 Shared machinery (ledger schema, council runner, approval queue) starts life inside

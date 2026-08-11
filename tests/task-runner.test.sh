@@ -46,6 +46,36 @@ copy_task() {
   cp "$src" "$ws/loop/tasks/queue/$id.task.md"
 }
 
+write_runner_task() {
+  local ws=$1
+  local id=$2
+  local receipt_value=$3
+  local donecheck_body=${4:-true}
+  {
+    printf '%s\n' '---'
+    printf 'id: %s\n' "$id"
+    printf '%s\n' 'title: runner boundary fixture'
+    printf '%s\n' 'issued_by: test'
+    printf '%s\n' 'created: 2026-08-12T00:00:00Z'
+    printf '%s\n' 'attempts_budget: 4'
+    printf '%s\n' 'time_budget_min: 30'
+    printf '%s\n' 'escalate_to: test'
+    printf '%s\n' 'verify: mechanical'
+    printf '%s\n' 'parent_id: null'
+    if [[ "$receipt_value" != __missing__ ]]; then
+      printf 'receipt: %s\n' "$receipt_value"
+    fi
+    printf '%s\n\n' '---'
+    printf '%s\n\n' '## Goal' 'Exercise a runner execution boundary.'
+    printf '%s\n' '## Done-when' '```donecheck'
+    printf '%s\n' "$donecheck_body"
+    printf '%s\n\n' '```'
+    printf '%s\n' '## Step plan' '1. Produce the test artifact.' '2. Deliver + capture receipt.' ''
+    printf '%s\n\n' '## Resources' 'none'
+    printf '%s\n' '## Non-goals' 'none'
+  } >"$ws/loop/tasks/queue/$id.task.md"
+}
+
 state_value() {
   local ws=$1
   local id=$2
@@ -265,6 +295,31 @@ case_trailing_comment_created_parity() {
   fi
 }
 
+case_duplicate_id_scheduler_parser_parity() {
+  local name=duplicate-id-scheduler-parser-parity
+  local ws task
+  ws=$(make_ws)
+
+  write_runner_task "$ws" scheduler-shadow out/delivery-receipt.json true
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success
+
+  write_runner_task "$ws" scheduler-first out/delivery-receipt.json true
+  task="$ws/loop/tasks/queue/scheduler-first.task.md"
+  sed '/^id: scheduler-first$/a\
+id: scheduler-shadow' "$task" >"$task.tmp"
+  mv "$task.tmp" "$task"
+
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success
+  if [[ "$(state_value "$ws" scheduler-first status)" = delivered ]] \
+    && [[ "$(state_value "$ws" scheduler-first attempts_used)" = 1 ]] \
+    && [[ -f "$ws/loop/tasks/delivered/scheduler-first/scheduler-first.task.md" ]] \
+    && [[ ! -e "$task" ]]; then
+    pass "$name"
+  else
+    fail "$name" 'scheduler did not use the same first id value as the runner'
+  fi
+}
+
 attest_verifier_wrapper() {
   local ws=$1
   local wrapper_path=$2
@@ -286,6 +341,247 @@ case_happy_path() {
     pass "$name"
   else
     fail "$name" "task was not delivered"
+  fi
+}
+
+case_receipt_file_boundary() {
+  local name=receipt-file-boundary
+  local ws reason
+
+  ws=$(make_ws)
+  write_runner_task "$ws" receipt-missing out/delivery-receipt.json true
+  run_tick "$ws" TR_MOCK_BEHAVIOR=claim-valid
+  reason="$ws/loop/artifacts/receipt-missing/attempts/001/verify-reason"
+  if [[ "$(state_value "$ws" receipt-missing status)" = queued ]] \
+    && [[ -f "$reason" ]] \
+    && grep -Fqx 'delivery receipt missing or invalid: out/delivery-receipt.json' "$reason" \
+    && [[ ! -d "$ws/loop/tasks/delivered/receipt-missing" ]]; then
+    :
+  else
+    fail "$name" 'donecheck rc=0 with a missing receipt was delivered or lacked verify-reason'
+    return
+  fi
+
+  ws=$(make_ws)
+  write_runner_task "$ws" receipt-symlink out/delivery-receipt.json true
+  run_tick "$ws" TR_MOCK_BEHAVIOR=receipt-symlink
+  if [[ "$(state_value "$ws" receipt-symlink status)" != queued ]] \
+    || [[ -d "$ws/loop/tasks/delivered/receipt-symlink" ]]; then
+    fail "$name" 'symlink receipt passed the delivery gate'
+    return
+  fi
+
+  ws=$(make_ws)
+  write_runner_task "$ws" receipt-parent-symlink out/link/delivery-receipt.json true
+  run_tick "$ws" TR_MOCK_BEHAVIOR=receipt-parent-symlink
+  if [[ "$(state_value "$ws" receipt-parent-symlink status)" != queued ]] \
+    || [[ -d "$ws/loop/tasks/delivered/receipt-parent-symlink" ]]; then
+    fail "$name" 'resolved receipt path escaped through a parent symlink'
+    return
+  fi
+
+  ws=$(make_ws)
+  write_runner_task "$ws" receipt-out-symlink out/delivery-receipt.json true
+  run_tick "$ws" TR_MOCK_BEHAVIOR=receipt-out-symlink
+  reason="$ws/loop/artifacts/receipt-out-symlink/attempts/001/verify-reason"
+  if [[ "$(state_value "$ws" receipt-out-symlink status)" != queued ]] \
+    || [[ -d "$ws/loop/tasks/delivered/receipt-out-symlink" ]] \
+    || [[ ! -f "$reason" ]] \
+    || ! grep -Fqx 'delivery receipt missing or invalid: out/delivery-receipt.json' "$reason"; then
+    fail "$name" 'artifact out symlink moved the delivery containment root'
+    return
+  fi
+
+  ws=$(make_ws)
+  write_runner_task "$ws" receipt-directory out/delivery-receipt.json true
+  run_tick "$ws" TR_MOCK_BEHAVIOR=receipt-directory
+  if [[ "$(state_value "$ws" receipt-directory status)" = queued ]] \
+    && [[ ! -d "$ws/loop/tasks/delivered/receipt-directory" ]] \
+    && grep -Fqx 'delivery receipt missing or invalid: out/delivery-receipt.json' \
+      "$ws/loop/artifacts/receipt-directory/attempts/001/verify-reason"; then
+    pass "$name"
+  else
+    fail "$name" 'directory receipt passed the regular-file delivery gate'
+  fi
+}
+
+case_missing_receipt_dlq_before_spawn() {
+  local name=missing-receipt-dlq-before-spawn
+  local ws
+  ws=$(make_ws)
+  write_runner_task "$ws" missing-receipt __missing__ true
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success
+  if [[ "$(state_value "$ws" missing-receipt status)" = dlq ]] \
+    && [[ "$(state_value "$ws" missing-receipt terminal_reason)" = missing-receipt ]] \
+    && [[ -f "$ws/loop/tasks/dlq/missing-receipt/missing-receipt.task.md" ]] \
+    && ! find "$ws/loop/artifacts/missing-receipt/attempts" -mindepth 1 -print | grep -q .; then
+    :
+  else
+    fail "$name" 'missing receipt metadata did not DLQ before a model attempt'
+    return
+  fi
+
+  ws=$(make_ws)
+  write_runner_task "$ws" invalid-receipt out/../escape true
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success
+  if [[ "$(state_value "$ws" invalid-receipt status)" = dlq ]] \
+    && [[ "$(state_value "$ws" invalid-receipt terminal_reason)" = missing-receipt ]] \
+    && ! find "$ws/loop/artifacts/invalid-receipt/attempts" -mindepth 1 -print | grep -q .; then
+    :
+  else
+    fail "$name" 'grammar-invalid receipt metadata did not DLQ before a model attempt'
+    return
+  fi
+
+  ws=$(make_ws)
+  write_runner_task "$ws" recover-missing-receipt out/delivery-receipt.json true
+  set +e
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success TR_CRASH_AFTER=verifying >/dev/null 2>&1
+  set -e
+  sed '/^receipt:/d' "$ws/loop/tasks/queue/recover-missing-receipt.task.md" \
+    >"$ws/loop/tasks/queue/recover-missing-receipt.task.md.tmp"
+  mv "$ws/loop/tasks/queue/recover-missing-receipt.task.md.tmp" \
+    "$ws/loop/tasks/queue/recover-missing-receipt.task.md"
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success
+  if [[ "$(state_value "$ws" recover-missing-receipt status)" = dlq ]] \
+    && [[ "$(state_value "$ws" recover-missing-receipt terminal_reason)" = missing-receipt ]] \
+    && [[ ! -e "$ws/loop/artifacts/recover-missing-receipt/attempts/001/donecheck.log" ]]; then
+    pass "$name"
+  else
+    fail "$name" 'recover_verifying reran donecheck before DLQing missing receipt metadata'
+  fi
+}
+
+case_receipt_frontmatter_parser_parity() {
+  local name=receipt-frontmatter-parser-parity
+  local ws task
+  for receipt_value in '"out/delivery-receipt.json"' 'out/delivery-receipt.json # runner parity'; do
+    ws=$(make_ws)
+    task="$ws/source.task.md"
+    write_runner_task "$ws" receipt-parity "$receipt_value" true
+    mv "$ws/loop/tasks/queue/receipt-parity.task.md" "$task"
+    if ! "$ENQUEUE" "$task" "$ws" >/dev/null 2>&1; then
+      fail "$name" "enqueue rejected receipt value: $receipt_value"
+      return
+    fi
+    run_tick "$ws" TR_MOCK_BEHAVIOR=success
+    if [[ "$(state_value "$ws" receipt-parity status)" != delivered ]]; then
+      fail "$name" "runner disagreed with enqueue for receipt value: $receipt_value"
+      return
+    fi
+  done
+  pass "$name"
+}
+
+case_donecheck_environment_allowlist() {
+  local name=donecheck-environment-allowlist
+  local ws log_file unexpected_tr no_home_log
+  ws=$(make_ws)
+  write_runner_task "$ws" env-allow out/delivery-receipt.json 'env | sort'
+  HOME="$ws/home" TR_SENTINEL_CANARY=x TR_PUSH_CMD=should-not-leak \
+    run_tick "$ws" TR_MOCK_BEHAVIOR=success LANG=C LC_ALL=C TZ=UTC
+  log_file="$ws/loop/artifacts/env-allow/attempts/001/donecheck.log"
+  unexpected_tr=$(grep '^TR_' "$log_file" | grep -v '^TR_DC_CWD=' || true)
+  if [[ "$(state_value "$ws" env-allow status)" = delivered ]] \
+    && grep -Fqx 'TASK_ID=env-allow' "$log_file" \
+    && grep -Fq 'TASK_FILE=' "$log_file" \
+    && grep -Fq 'ARTIFACT_DIR=' "$log_file" \
+    && grep -Fq 'TR_DC_CWD=' "$log_file" \
+    && grep -Fqx 'PATH=/usr/bin:/bin:/usr/sbin:/sbin' "$log_file" \
+    && grep -Fqx "HOME=$ws/home" "$log_file" \
+    && grep -Fqx 'LANG=C' "$log_file" \
+    && grep -Fqx 'LC_ALL=C' "$log_file" \
+    && grep -Fqx 'TZ=UTC' "$log_file" \
+    && ! grep -q '^TR_SENTINEL_CANARY=' "$log_file" \
+    && ! grep -q '^TR_PUSH_CMD=' "$log_file" \
+    && [[ -z "$unexpected_tr" ]] \
+    && grep -q '^PWD=' "$log_file" \
+    && grep -q '^SHLVL=' "$log_file" \
+    && grep -q '^_=' "$log_file"; then
+    :
+  else
+    fail "$name" "allowlist or shell-created variable contract mismatch: unexpected_tr=$unexpected_tr log=$(cat "$log_file")"
+    return
+  fi
+
+  ws=$(make_ws)
+  write_runner_task "$ws" env-no-home out/delivery-receipt.json 'env | sort'
+  env -u HOME TR_SPAWN_STEP="$MOCK" TR_MOCK_BEHAVIOR=success bash "$RUNNER" "$ws"
+  no_home_log="$ws/loop/artifacts/env-no-home/attempts/001/donecheck.log"
+  if [[ "$(state_value "$ws" env-no-home status)" = delivered ]] \
+    && ! grep -q '^HOME=' "$no_home_log"; then
+    pass "$name"
+  else
+    fail "$name" "unset HOME was supplied to donecheck: log=$(cat "$no_home_log")"
+  fi
+}
+
+case_donecheck_uses_pinned_interpreters() {
+  local name=donecheck-uses-pinned-interpreters
+  local ws fake_bash fake_perl bash_marker perl_marker
+  ws=$(make_ws)
+  fake_bash="$ws/fake-bash"
+  fake_perl="$ws/fake-perl"
+  bash_marker="$ws/bash-args"
+  perl_marker="$ws/perl-args"
+  {
+    printf '%s\n' '#!/usr/bin/env bash'
+    printf 'printf "%%s\\n" "$*" >%q\n' "$bash_marker"
+    printf 'exec %q "$@"\n' "$(command -v bash)"
+  } >"$fake_bash"
+  {
+    printf '%s\n' '#!/usr/bin/env bash'
+    printf 'printf "%%s\\n" "$*" >%q\n' "$perl_marker"
+    printf 'exec %q "$@"\n' "$(command -v perl)"
+  } >"$fake_perl"
+  chmod +x "$fake_bash" "$fake_perl"
+  printf 'TR_BASH=%s\nTR_PERL=%s\n' "$fake_bash" "$fake_perl" \
+    >"$ws/loop/.tr-interpreters"
+  write_runner_task "$ws" pinned-interpreters out/delivery-receipt.json true
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success
+  if [[ "$(state_value "$ws" pinned-interpreters status)" = delivered ]] \
+    && grep -Fq -- '-euo pipefail' "$bash_marker" \
+    && grep -Fq -- '-MPOSIX=setsid' "$perl_marker"; then
+    pass "$name"
+  else
+    fail "$name" "pinned launch not observed: bash=$(cat "$bash_marker" 2>/dev/null) perl=$(cat "$perl_marker" 2>/dev/null)"
+  fi
+}
+
+case_recover_verifying_receipt_boundary() {
+  local name=recover-verifying-receipt-boundary
+  local ws
+  ws=$(make_ws)
+  write_runner_task "$ws" recover-receipt out/delivery-receipt.json true
+  set +e
+  run_tick "$ws" TR_MOCK_BEHAVIOR=claim-valid TR_CRASH_AFTER=verifying >/dev/null 2>&1
+  set -e
+  run_tick "$ws" TR_MOCK_BEHAVIOR=claim-valid
+  if [[ ! -d "$ws/loop/tasks/delivered/recover-receipt" ]] \
+    && grep -Fqx 'delivery receipt missing or invalid: out/delivery-receipt.json' \
+      "$ws/loop/artifacts/recover-receipt/attempts/001/verify-reason"; then
+    pass "$name"
+  else
+    fail "$name" 'recover_verifying delivered without a valid regular receipt'
+  fi
+}
+
+case_missing_donecheck_never_delivers() {
+  local name=missing-donecheck-never-delivers
+  local ws task
+  ws=$(make_ws)
+  write_runner_task "$ws" missing-donecheck out/delivery-receipt.json true
+  task="$ws/loop/tasks/queue/missing-donecheck.task.md"
+  sed 's/^```donecheck$/```donecheck extra/' "$task" >"$task.tmp"
+  mv "$task.tmp" "$task"
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success
+  if [[ "$(state_value "$ws" missing-donecheck status)" = queued ]] \
+    && [[ ! -d "$ws/loop/tasks/delivered/missing-donecheck" ]] \
+    && grep -Fqx 'missing donecheck block' \
+      "$ws/loop/artifacts/missing-donecheck/attempts/001/verify-reason"; then
+    pass "$name"
+  else
+    fail "$name" 'queue-dropped task without a valid donecheck was delivered'
   fi
 }
 
@@ -527,6 +823,31 @@ case_crash_stamp() {
     pass "$name"
   else
     fail "$name" "recovery did not reuse stamped attempt"
+  fi
+}
+
+case_crash_stamp_invalid_receipt_dlq() {
+  local name=crash-stamp-invalid-receipt-dlq
+  local ws task code
+  ws=$(make_ws)
+  write_runner_task "$ws" reap-invalid-receipt out/delivery-receipt.json true
+  set +e
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success TR_CRASH_AFTER=stamp >/dev/null 2>&1
+  code=$?
+  set -e
+  task="$ws/loop/tasks/queue/reap-invalid-receipt.task.md"
+  sed 's|^receipt:.*|receipt: out/../escape|' "$task" >"$task.tmp"
+  mv "$task.tmp" "$task"
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success
+  if [[ "$code" -eq 137 ]] \
+    && [[ "$(state_value "$ws" reap-invalid-receipt status)" = dlq ]] \
+    && [[ "$(state_value "$ws" reap-invalid-receipt terminal_reason)" = missing-receipt ]] \
+    && [[ "$(state_value "$ws" reap-invalid-receipt attempts_used)" = 0 ]] \
+    && [[ -f "$ws/loop/tasks/dlq/reap-invalid-receipt/reap-invalid-receipt.task.md" ]] \
+    && [[ ! -e "$ws/loop/artifacts/reap-invalid-receipt/attempts/001/donecheck.log" ]]; then
+    pass "$name"
+  else
+    fail "$name" 'reap finalize did not DLQ the mutated receipt before charging or verification'
   fi
 }
 
@@ -956,14 +1277,16 @@ case_attempts_exhaustion() {
 
 case_attempts_exhaustion_reports_actual_failing_donecheck_line() {
   local name=attempts-exhaustion-reports-actual-failing-donecheck-line
-  local ws i report
+  local ws i report failing
   ws=$(make_ws)
   copy_task "$FIX_FAILING_LINE" "$ws" tr-failing-line
   for i in 1 2 3 4; do
     run_tick "$ws" TR_MOCK_BEHAVIOR=success
   done
   report="$ws/loop/tasks/dlq/tr-failing-line/REPORT.md"
+  failing="$ws/loop/artifacts/tr-failing-line/attempts/004/donecheck.failing"
   if [[ "$(state_value "$ws" tr-failing-line status)" = dlq ]] \
+    && grep -Eq '^2: ' "$failing" \
     && grep -F -q 'test -s "$ARTIFACT_DIR/out/missing-receipt.json"' "$report" \
     && ! grep -F -q 'test -s "$ARTIFACT_DIR/out/delivery-receipt.json"' "$report"; then
     pass "$name"
@@ -1000,6 +1323,7 @@ time_budget_min: 5
 escalate_to: test
 verify: mechanical
 parent_id: null
+receipt: out/delivery-receipt.json
 ---
 
 ## Goal
@@ -1875,7 +2199,15 @@ case_corrupt_state_quarantine_continues
 case_quoted_id_intake_runner_agree
 case_invalid_created_sorts_last
 case_trailing_comment_created_parity
+case_duplicate_id_scheduler_parser_parity
 case_happy_path
+case_receipt_file_boundary
+case_missing_receipt_dlq_before_spawn
+case_receipt_frontmatter_parser_parity
+case_donecheck_environment_allowlist
+case_donecheck_uses_pinned_interpreters
+case_recover_verifying_receipt_boundary
+case_missing_donecheck_never_delivers
 case_success_next_hint_surface
 case_success_next_hint_null_empty_omitted
 case_failed_next_hint_stays_retry_only
@@ -1904,6 +2236,7 @@ case_plain_persistent_failure_dlq
 case_crash_verifying_terminal_rederive
 case_crash_spawn
 case_crash_stamp
+case_crash_stamp_invalid_receipt_dlq
 case_crash_stamp_infra_neutral
 case_crash_infra_requeue_recovery
 case_crash_infra_terminal_recovery

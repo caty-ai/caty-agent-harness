@@ -40,6 +40,7 @@ time_budget_min: 5
 escalate_to: test
 verify: mechanical
 parent_id: null
+receipt: out/delivery-receipt.json
 ---
 
 ## Goal
@@ -90,6 +91,7 @@ time_budget_min: 5
 escalate_to: test
 verify: mechanical
 parent_id: null
+receipt: out/delivery-receipt.json
 ---
 
 ## Goal
@@ -181,6 +183,9 @@ case_failure_then_pass_delivers() {
   printf 'single failure at %s/first 01:02:03\n' "$ws" >"$ws/loop/artifacts/tr-no-progress/gate-output"
   run_tick "$ws" TR_MOCK_BEHAVIOR=noncomplete TR_MOCK_ERROR_CLASS=alpha-error
   touch "$ws/loop/artifacts/tr-no-progress/gate-pass"
+  mkdir -p "$ws/loop/artifacts/tr-no-progress/out"
+  printf '{"task_id":"tr-no-progress"}\n' \
+    >"$ws/loop/artifacts/tr-no-progress/out/delivery-receipt.json"
   run_tick "$ws" TR_MOCK_BEHAVIOR=noncomplete TR_MOCK_ERROR_CLASS=beta-error
   if [[ "$(state_value "$ws" status)" = delivered ]] \
     && [[ "$(state_value "$ws" terminal_reason)" = '' ]] \

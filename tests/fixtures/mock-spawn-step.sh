@@ -87,6 +87,38 @@ with open(path, "w", encoding="utf-8") as f:
     f.write("\n")
 PY
     ;;
+  receipt-symlink|receipt-directory|receipt-parent-symlink|receipt-out-symlink)
+    printf 'claimed\n' >"$artifact_dir/out/claimed.txt"
+    if [[ "$behavior" = receipt-symlink ]]; then
+      printf 'outside\n' >"$artifact_dir/outside-receipt.json"
+      ln -s "$artifact_dir/outside-receipt.json" "$artifact_dir/out/delivery-receipt.json"
+    elif [[ "$behavior" = receipt-directory ]]; then
+      mkdir -p "$artifact_dir/out/delivery-receipt.json"
+      printf 'nested\n' >"$artifact_dir/out/delivery-receipt.json/value"
+    elif [[ "$behavior" = receipt-out-symlink ]]; then
+      mkdir -p "$workspace/receipt-out-symlink-outside"
+      printf 'claimed\n' >"$workspace/receipt-out-symlink-outside/claimed.txt"
+      printf 'outside\n' >"$workspace/receipt-out-symlink-outside/delivery-receipt.json"
+      rm -rf "$artifact_dir/out"
+      ln -s "$workspace/receipt-out-symlink-outside" "$artifact_dir/out"
+    else
+      mkdir -p "$artifact_dir/outside"
+      printf 'outside\n' >"$artifact_dir/outside/delivery-receipt.json"
+      ln -s "$artifact_dir/outside" "$artifact_dir/out/link"
+    fi
+    python3 - "$attempt_dir/step-result.json" <<'PY'
+import json, sys
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump({
+        "step_complete": True,
+        "files_created": ["out/claimed.txt"],
+        "error_class": None,
+        "deviation_report": None,
+        "next_hint": "receipt-boundary",
+    }, f)
+    f.write("\n")
+PY
+    ;;
   hang)
     while :; do
       sleep 30

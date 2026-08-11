@@ -43,6 +43,7 @@ write_task() {
   donecheck_extra=$8
   omit_section=$9
   parent_id_value=${10:-null}
+  receipt_value=${11-out/delivery-receipt.json}
 
   {
     printf '%s\n' '---'
@@ -55,6 +56,9 @@ write_task() {
     printf '%s\n' 'escalate_to: sho'
     printf 'verify: %s\n' "$verify"
     printf 'parent_id: %s\n' "$parent_id_value"
+    if [ "$receipt_value" != __missing__ ]; then
+      printf 'receipt: %s\n' "$receipt_value"
+    fi
     printf '%s\n' '---'
     if [ "$omit_section" != "Goal" ]; then
       printf '%s\n\n%s\n\n' '## Goal' 'Test goal.'
@@ -62,7 +66,9 @@ write_task() {
     if [ "$omit_section" != "Done-when" ]; then
       printf '%s\n\n' '## Done-when'
       printf '%s\n' '```donecheck'
-      printf '%s\n' 'test -s "$ARTIFACT_DIR/out/image.png"'
+      if [ "$receipt_assertion" != "empty" ]; then
+        printf '%s\n' 'test -s "$ARTIFACT_DIR/out/image.png"'
+      fi
       if [ "$receipt_assertion" = "yes" ]; then
         printf '%s\n' 'test -s "$ARTIFACT_DIR/out/delivery-receipt.json"'
       fi
@@ -215,6 +221,35 @@ else
   fail_case "copy failure leaves no artifact and retry succeeds" "rc=$rc output=$output"
 fi
 
+task=$TMP_ROOT/staged-snapshot.task.md
+ws=$(new_workspace staged-snapshot)
+write_task "$task" staged-snapshot mechanical 8 30 "$valid_steps" yes "" none
+snapshot_cp_shim=$TMP_ROOT/snapshot-cp-shim
+real_sed=$(command -v sed)
+real_mv=$(command -v mv)
+mkdir -p "$snapshot_cp_shim"
+{
+  printf '%s\n' '#!/bin/sh'
+  printf '%s\n' '"$TR_ENQUEUE_REAL_SED" "s|^receipt:.*|receipt: out/../escape|" "$1" >"$1.changed" || exit $?'
+  printf '%s\n' '"$TR_ENQUEUE_REAL_MV" "$1.changed" "$1" || exit $?'
+  printf '%s\n' 'exec "$TR_ENQUEUE_REAL_CP" "$@"'
+} >"$snapshot_cp_shim/cp"
+chmod +x "$snapshot_cp_shim/cp"
+output=$(PATH="$snapshot_cp_shim:$PATH" \
+  TR_ENQUEUE_REAL_CP="$real_cp" \
+  TR_ENQUEUE_REAL_SED="$real_sed" \
+  TR_ENQUEUE_REAL_MV="$real_mv" \
+  "$SCRIPT" "$task" "$ws" 2>&1)
+rc=$?
+if [ "$rc" -eq 1 ] \
+  && printf '%s\n' "$output" | grep -F -q 'invalid receipt' \
+  && [ ! -e "$ws/loop/tasks/queue/staged-snapshot.task.md" ] \
+  && [ ! -e "$ws/loop/artifacts/staged-snapshot" ]; then
+  pass "validate staged snapshot after copy"
+else
+  fail_case "validate staged snapshot after copy" "rc=$rc output=$output"
+fi
+
 task=$TMP_ROOT/artifact-race.task.md
 ws=$(new_workspace artifact-race)
 write_task "$task" artifact-race mechanical 8 30 "$valid_steps" yes "" none
@@ -308,12 +343,62 @@ run_expect_reject "reject last step without deliver/receipt" "last Step-plan ste
 task=$TMP_ROOT/no-receipt-assertion.task.md
 ws=$(new_workspace no-receipt-assertion)
 write_task "$task" no-receipt-assertion mechanical 8 30 "$valid_steps" no "" none
-run_expect_reject "reject donecheck without receipt assertion" "donecheck has no delivery receipt assertion" "$task" "$ws"
+run_expect_accept "accept donecheck without heuristic receipt assertion" "$task" "$ws" no-receipt-assertion
 
 task=$TMP_ROOT/comment-only-receipt.task.md
 ws=$(new_workspace comment-only-receipt)
 write_task "$task" comment-only-receipt mechanical 8 30 "$valid_steps" no '# test -s "$ARTIFACT_DIR/out/delivery-receipt.json"' none
-run_expect_reject "reject comment-only receipt assertion" "donecheck has no delivery receipt assertion" "$task" "$ws"
+run_expect_accept "accept comments as raw bash" "$task" "$ws" comment-only-receipt
+
+task=$TMP_ROOT/hash-in-quote.task.md
+ws=$(new_workspace hash-in-quote)
+write_task "$task" hash-in-quote mechanical 8 30 "$valid_steps" no 'printf "%s\n" "# retained" >/dev/null' none
+run_expect_accept "raw bash syntax preserves hash inside quotes" "$task" "$ws" hash-in-quote
+
+task=$TMP_ROOT/comment-only-donecheck.task.md
+ws=$(new_workspace comment-only-donecheck)
+write_task "$task" comment-only-donecheck mechanical 8 30 "$valid_steps" empty '   # full-line comment' none
+run_expect_reject "reject blank-or-comment-only donecheck" "missing donecheck block" "$task" "$ws"
+
+for receipt_case in out/x out/a/b.txt; do
+  case_id=$(printf '%s' "$receipt_case" | tr '/.' '--')
+  task=$TMP_ROOT/receipt-$case_id.task.md
+  ws=$(new_workspace receipt-$case_id)
+  write_task "$task" receipt-$case_id mechanical 8 30 "$valid_steps" yes "" none null "$receipt_case"
+  run_expect_accept "accept receipt $receipt_case" "$task" "$ws" receipt-$case_id
+done
+
+task=$TMP_ROOT/missing-receipt.task.md
+ws=$(new_workspace missing-receipt)
+write_task "$task" missing-receipt mechanical 8 30 "$valid_steps" yes "" none null __missing__
+run_expect_reject "reject missing receipt key" "missing required frontmatter key: receipt" "$task" "$ws"
+
+task=$TMP_ROOT/empty-receipt.task.md
+ws=$(new_workspace empty-receipt)
+write_task "$task" empty-receipt mechanical 8 30 "$valid_steps" yes "" none null ""
+run_expect_reject "reject empty receipt" "missing required frontmatter key: receipt" "$task" "$ws"
+
+for receipt_case in out /abs out/../x out/./x out//x state.json 'out/bad name' 'out/a@b'; do
+  case_id=$(printf '%s' "$receipt_case" | tr '/. @' '-----')
+  task=$TMP_ROOT/invalid-receipt-$case_id.task.md
+  ws=$(new_workspace invalid-receipt-$case_id)
+  write_task "$task" invalid-receipt-$case_id mechanical 8 30 "$valid_steps" yes "" none null "$receipt_case"
+  run_expect_reject "reject receipt $receipt_case" "invalid receipt" "$task" "$ws"
+done
+
+task=$TMP_ROOT/quoted-receipt.task.md
+ws=$(new_workspace quoted-receipt)
+write_task "$task" quoted-receipt mechanical 8 30 "$valid_steps" yes "" none
+sed 's|^receipt:.*|receipt: "out/quoted.json"|' "$task" >"$task.tmp"
+mv "$task.tmp" "$task"
+run_expect_accept "accept quoted receipt value" "$task" "$ws" quoted-receipt
+
+task=$TMP_ROOT/commented-receipt.task.md
+ws=$(new_workspace commented-receipt)
+write_task "$task" commented-receipt mechanical 8 30 "$valid_steps" yes "" none
+sed 's|^receipt:.*|receipt: out/commented.json # delivery target|' "$task" >"$task.tmp"
+mv "$task.tmp" "$task"
+run_expect_accept "accept inline-comment receipt value" "$task" "$ws" commented-receipt
 
 task=$TMP_ROOT/bad-verify.task.md
 ws=$(new_workspace bad-verify)
@@ -337,6 +422,42 @@ task=$TMP_ROOT/bad-donecheck.task.md
 ws=$(new_workspace bad-donecheck)
 write_task "$task" bad-donecheck mechanical 8 30 "$valid_steps" yes "if then" none
 run_expect_reject "reject invalid donecheck syntax" "donecheck fails bash -n" "$task" "$ws"
+
+task=$TMP_ROOT/non-utf8.task.md
+ws=$(new_workspace non-utf8)
+write_task "$task" non-utf8 mechanical 8 30 "$valid_steps" yes "" none
+printf '\377' >>"$task"
+run_expect_reject "reject non-UTF-8 task distinctly" "task file is not valid UTF-8" "$task" "$ws"
+
+task=$TMP_ROOT/pinned-bash.task.md
+ws=$(new_workspace pinned-bash)
+write_task "$task" pinned-bash mechanical 8 30 "$valid_steps" yes "" none
+pinned_bash=$ws/fake-bash
+pinned_marker=$ws/bash-args
+{
+  printf '%s\n' '#!/usr/bin/env bash'
+  printf 'printf "%%s\\n" "$*" >%q\n' "$pinned_marker"
+  printf 'exec %q "$@"\n' "$(command -v bash)"
+} >"$pinned_bash"
+chmod +x "$pinned_bash"
+printf 'TR_BASH=%s\nTR_PERL=%s\n' "$pinned_bash" "$(command -v perl)" \
+  >"$ws/loop/.tr-interpreters"
+output=$("$SCRIPT" "$task" "$ws" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] \
+  && grep -Eq '^-n .*/tr-enqueue-donecheck\.[[:alnum:]]{6}$' "$pinned_marker"; then
+  pass "enqueue syntax check uses pinned Bash"
+else
+  fail_case "enqueue syntax check uses pinned Bash" "rc=$rc args=$(cat "$pinned_marker" 2>/dev/null) output=$output"
+fi
+
+multiline_receipt=$'out/valid.json\nout/also-valid.json'
+if ! bash -c 'source "$1"; caty_valid_receipt "$2"' \
+  _ "$ROOT/scripts/lib-donecheck.sh" "$multiline_receipt"; then
+  pass "receipt helper rejects multiline values"
+else
+  fail_case "receipt helper rejects multiline values" "multiline value passed standalone grammar validation"
+fi
 
 task=$TMP_ROOT/unwritable-artifacts.task.md
 ws=$(new_workspace unwritable-artifacts)

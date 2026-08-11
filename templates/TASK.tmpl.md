@@ -8,6 +8,7 @@ time_budget_min: 30
 escalate_to: example-operator
 verify: mechanical
 parent_id: null
+receipt: out/delivery-receipt.json
 ---
 
 ## Goal
@@ -20,11 +21,11 @@ parent_id: null
 donecheck contract:
 - The driver runs this block with bash -euo pipefail.
 - cwd is the workspace root.
-- TASK_ID, TASK_FILE, and ARTIFACT_DIR are exported.
+- TASK_ID, TASK_FILE, ARTIFACT_DIR, and TR_DC_CWD are exported.
 - Assertions are READ-ONLY and may not create, edit, move, or delete files.
 - Runtime timeout is 60 seconds.
 - stdout and stderr are captured to the attempt's donecheck.log.
-- Include a delivery-receipt assertion; delivery is the terminal weak-model failure mode.
+- The runner mechanically asserts the frontmatter receipt after this block exits zero.
 -->
 
 ```donecheck

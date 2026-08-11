@@ -32,6 +32,9 @@ Exact flags, states, and the contract documents. When this page and a design doc
 | `--enable --workspace <dir> [--dry-run]` | resume a paused workspace; removes only the harness-owned regular `DISABLED` marker and never follows hostile marker objects |
 
 The idempotency marker for appended bootstrap blocks is the literal line `# caty-agent-harness bootstrap v2` (a machine marker; it is not renamed when the product name changes).
+Workspace initialization also creates `loop/.tr-interpreters`, a two-line record of
+the absolute Bash and Perl executables used by both donecheck validation and execution.
+Pre-existing workspaces create it on first enqueue/runner use; invalid entries fail closed.
 
 ---
 
@@ -58,6 +61,24 @@ The idempotency marker for appended bootstrap blocks is the literal line `# caty
 ## Flush intake consumer receipts
 
 The flush intake consumer's accounting ledger is `loop/pending/intake-runs.log`. The deadman `distill` marker proves only that intake ran; inspect the ledger for content-level silence, dedup, deferral, eviction, and quarantine counts. `loop/archive/` is append-only and is never auto-pruned. See [adapters/claude-code/INSTALL.md](../adapters/claude-code/INSTALL.md) for the full ledger format and scheduling.
+
+## Task-runner execution boundary
+
+- Task frontmatter requires `receipt:` matching
+  `^out/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$`, with `.` and `..` segments forbidden.
+  Delivery additionally requires that target to be a non-symlink, non-empty regular
+  file resolving inside the task artifact's own non-symlink `out/` directory.
+- Donecheck fences must start at column zero. A column-zero fence inside a heredoc
+  terminates extraction textually and is therefore prohibited.
+- Donechecks receive only `TASK_ID`, `TASK_FILE`, `ARTIFACT_DIR`, `TR_DC_CWD`, fixed
+  `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, any set `HOME`/`LANG`/`LC_ALL`/`TZ`, and
+  shell-created variables. Tools such as `python3` must be reachable in that fixed
+  `PATH` or invoked by absolute path. The bundled `templates/examples/img-pilot.task.md`
+  donecheck depends on `python3` there; macOS ships `/usr/bin/python3`, while Linux
+  distributions may not. Other inherited variables disappear and dependent checks
+  fail loudly.
+- `TR_SPAWN_STEP` is one argv word and must be an absolute executable-file path.
+  Migrate relative or PATH-resolved provider configurations before running the runner.
 
 ---
 
