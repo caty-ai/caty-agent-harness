@@ -511,6 +511,35 @@ else
   fail_case 'dynamic-loader prefix names are refused' "rc=$prefix_rc"
 fi
 
+prefix_boundary_log=$TMP_ROOT/prefix-boundary.log
+prefix_boundary_target=$TMP_ROOT/prefix-boundary-target
+cat >"$prefix_boundary_target" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "${LDAP_TOKEN-}" >"$PREFIX_BOUNDARY_LOG"
+EOF
+chmod +x "$prefix_boundary_target"
+prefix_boundary_allowed=$TMP_ROOT/secrets-env-prefix-boundary-allowed
+printf 'LDAP_TOKEN=abc\n' >"$prefix_boundary_allowed"
+chmod 600 "$prefix_boundary_allowed"
+TARGET="$prefix_boundary_target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  PREFIX_BOUNDARY_LOG="$prefix_boundary_log" SECRETS_ENV="$prefix_boundary_allowed" "$wrapper" \
+  >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; prefix_boundary_allowed_rc=$?
+prefix_boundary_refused=$TMP_ROOT/secrets-env-prefix-boundary-refused
+printf 'LD_AUDIT=/tmp/x\n' >"$prefix_boundary_refused"
+chmod 600 "$prefix_boundary_refused"
+TARGET="$target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$wrapper_ws" \
+  SECRETS_ENV="$prefix_boundary_refused" "$wrapper" \
+  >"$TMP_ROOT/wrapper.out" 2>"$TMP_ROOT/wrapper.err"; prefix_boundary_refused_rc=$?
+if [ "$prefix_boundary_allowed_rc" -eq 0 ] \
+  && [ -f "$prefix_boundary_log" ] && [ "$(cat "$prefix_boundary_log")" = abc ] \
+  && [ "$prefix_boundary_refused_rc" -eq 3 ] \
+  && grep -Fq "cron-wrapper infra error: SECRETS_ENV line 1 refuses interpreter-control name LD_AUDIT (rename it, e.g. APP_ENV): $prefix_boundary_refused" "$TMP_ROOT/wrapper.err"; then
+  pass 'dynamic-loader prefix families match only at the start of a name'
+else
+  fail_case 'dynamic-loader prefix families match only at the start of a name' \
+    "rcs=$prefix_boundary_allowed_rc/$prefix_boundary_refused_rc value=$([ -f "$prefix_boundary_log" ] && cat "$prefix_boundary_log" || printf missing)"
+fi
+
 near_miss_log=$TMP_ROOT/near-miss.log
 near_miss_target=$TMP_ROOT/near-miss-target
 cat >"$near_miss_target" <<'EOF'

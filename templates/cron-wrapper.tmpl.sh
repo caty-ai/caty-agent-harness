@@ -112,7 +112,8 @@ parse_secrets_env() {
       case "$key" in
         BASH_ENV|ENV|SHELLOPTS|BASHOPTS|IFS|PS4|CDPATH|GLOBIGNORE|PATH|BASH_XTRACEFD|\
         PAGER|EDITOR|VISUAL|PERL5OPT|PERL5LIB|PERLLIB|PERL5DB|PERL5SHELL|\
-        PYTHONSTARTUP|PYTHONPATH|PYTHONHOME|RUBYOPT|RUBYLIB|NODE_OPTIONS|NODE_PATH|\
+        PYTHONSTARTUP|PYTHONPATH|PYTHONHOME|PYTHONWARNINGS|PYTHONBREAKPOINT|\
+        RUBYOPT|RUBYLIB|NODE_OPTIONS|NODE_PATH|\
         NODE_REPL_EXTERNAL_MODULE|GIT_SSH|GIT_SSH_COMMAND|GIT_EXTERNAL_DIFF|GIT_PAGER|\
         GIT_EDITOR|GIT_ASKPASS|SSH_ASKPASS|GIT_PROXY_COMMAND|GIT_CONFIG_GLOBAL|\
         GIT_CONFIG_SYSTEM|GIT_CONFIG_COUNT|GIT_CONFIG_PARAMETERS|GIT_EXEC_PATH|\
@@ -130,9 +131,8 @@ parse_secrets_env() {
           fi
         fi
       fi
-      # Bash 3.2 treats assignment errors from a directly invoked special
-      # builtin as fatal even inside `if !`; `command` makes the status
-      # catchable without changing export in the current shell.
+      # `command` keeps assignment failures catchable across shells and modes
+      # without changing where the variable is set.
       if ! command export "$key=$value" 2>/dev/null; then
         fail "SECRETS_ENV line $line_number cannot export $key (reserved or read-only name): $secrets_path"
       fi
@@ -220,13 +220,6 @@ if [[ -n "$SECRETS_ENV" ]]; then
   if [[ -f "$SECRETS_ENV" ]]; then
     validate_secrets_env "$SECRETS_ENV"
 
-    if ! nul_line=$(first_nul_line "$SECRETS_ENV"); then
-      fail "SECRETS_ENV could not be scanned for embedded NUL bytes: $SECRETS_ENV"
-    fi
-    if [[ -n "$nul_line" ]]; then
-      fail "SECRETS_ENV line $nul_line contains an embedded NUL byte: $SECRETS_ENV"
-    fi
-
     if ! exec 9<"$SECRETS_ENV"; then
       fail "SECRETS_ENV is not readable: $SECRETS_ENV"
     fi
@@ -236,6 +229,15 @@ if [[ -n "$SECRETS_ENV" ]]; then
     fi
 
     validate_secrets_env "$SECRETS_ENV"
+
+    if ! nul_line=$(first_nul_line "$SECRETS_ENV"); then
+      exec 9<&-
+      fail "SECRETS_ENV could not be scanned for embedded NUL bytes: $SECRETS_ENV"
+    fi
+    if [[ -n "$nul_line" ]]; then
+      exec 9<&-
+      fail "SECRETS_ENV line $nul_line contains an embedded NUL byte: $SECRETS_ENV"
+    fi
 
     if [[ -L "$SECRETS_ENV" ]] || ! same_open_file "$SECRETS_ENV" /dev/fd/9; then
       exec 9<&-
