@@ -69,6 +69,10 @@ USAGE
 }
 
 die_usage() {
+  local reason=${1-}
+  if [[ -n "$reason" ]]; then
+    printf 'install.sh: %s\n' "$reason" >&2
+  fi
   usage >&2
   exit 2
 }
@@ -1144,36 +1148,36 @@ dry_run=0
 while (($# > 0)); do
   case "$1" in
     --workspace)
-      (($# >= 2)) || die_usage
+      (($# >= 2)) || die_usage 'missing argument for --workspace'
       workspace=$2
       workspace_explicit=1
       shift 2
       ;;
     --hermes)
-      (($# >= 2)) || die_usage
-      [[ "$runtime" == "generic" ]] || die_usage
+      (($# >= 2)) || die_usage 'missing argument for --hermes'
+      [[ "$runtime" == "generic" ]] || die_usage '--hermes cannot be combined with another runtime flag'
       hermes_profile=$2
       runtime=hermes
       shift 2
       ;;
     --openclaw)
-      (($# >= 2)) || die_usage
-      [[ "$runtime" == "generic" ]] || die_usage
+      (($# >= 2)) || die_usage 'missing argument for --openclaw'
+      [[ "$runtime" == "generic" ]] || die_usage '--openclaw cannot be combined with another runtime flag'
       workspace=$2
       runtime=openclaw
       shift 2
       ;;
     --append-bootstrap)
-      (($# >= 2)) || die_usage
+      (($# >= 2)) || die_usage 'missing argument for --append-bootstrap'
       append_file=$2
       shift 2
       ;;
     --bootstrap-runtime)
-      (($# >= 2)) || die_usage
+      (($# >= 2)) || die_usage 'missing argument for --bootstrap-runtime'
       bootstrap_runtime=$2
       case "$bootstrap_runtime" in
         claude-code|codex|kimi|hermes|openclaw) ;;
-        *) die_usage ;;
+        *) die_usage "invalid --bootstrap-runtime value: $bootstrap_runtime" ;;
       esac
       shift 2
       ;;
@@ -1182,12 +1186,12 @@ while (($# > 0)); do
       shift
       ;;
     --disable)
-      [[ -z "$pause_mode" ]] || die_usage
+      [[ -z "$pause_mode" ]] || die_usage '--disable conflicts with an existing pause-mode flag'
       pause_mode=disable
       shift
       ;;
     --enable)
-      [[ -z "$pause_mode" ]] || die_usage
+      [[ -z "$pause_mode" ]] || die_usage '--enable conflicts with an existing pause-mode flag'
       pause_mode=enable
       shift
       ;;
@@ -1200,7 +1204,7 @@ while (($# > 0)); do
       exit 0
       ;;
     *)
-      die_usage
+      die_usage "unknown argument: $1"
       ;;
   esac
 done
@@ -1211,22 +1215,22 @@ if ! caty_pause_value_is_record_safe "$workspace"; then
 fi
 
 if [[ -n "$pause_mode" ]]; then
-  [[ "$check_mode" -eq 0 && "$runtime" == "generic" && -z "$append_file" && -z "$bootstrap_runtime" && "$workspace_explicit" -eq 1 ]] || die_usage
+  [[ "$check_mode" -eq 0 && "$runtime" == "generic" && -z "$append_file" && -z "$bootstrap_runtime" && "$workspace_explicit" -eq 1 ]] || die_usage '--enable/--disable requires --workspace and forbids --check/runtime/bootstrap flags'
   pause_workspace "$pause_mode" "$workspace" "$dry_run"
   exit $?
 fi
 
-[[ "$dry_run" -eq 0 ]] || die_usage
-[[ -z "$bootstrap_runtime" || -n "$append_file" ]] || die_usage
+[[ "$dry_run" -eq 0 ]] || die_usage '--dry-run requires --enable or --disable'
+[[ -z "$bootstrap_runtime" || -n "$append_file" ]] || die_usage '--bootstrap-runtime requires --append-bootstrap'
 
 if [[ "$check_mode" -eq 1 ]]; then
-  [[ "$runtime" == "generic" && -z "$append_file" && -z "$bootstrap_runtime" ]] || die_usage
+  [[ "$runtime" == "generic" && -z "$append_file" && -z "$bootstrap_runtime" ]] || die_usage '--check cannot be combined with runtime or bootstrap flags'
   check_workspace "$workspace"
   exit $?
 fi
 
 if [[ "$runtime" == "hermes" ]]; then
-  [[ "$workspace_explicit" -eq 0 ]] || die_usage
+  [[ "$workspace_explicit" -eq 0 ]] || die_usage '--hermes does not accept --workspace'
   workspace="$HOME/.hermes/profiles/$hermes_profile/workspace"
 fi
 

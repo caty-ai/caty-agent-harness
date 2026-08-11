@@ -353,7 +353,7 @@ warn_steps='1. Step one.
 write_task "$task" warn-low-budget mechanical 8 20 "$warn_steps" yes "" none
 output=$("$SCRIPT" "$task" "$ws" 2>&1)
 rc=$?
-if [ "$rc" -eq 0 ] && printf '%s\n' "$output" | grep -q "WARN: time_budget_min is less than plan_steps x 8" && [ -f "$ws/loop/tasks/queue/warn-low-budget.task.md" ]; then
+if [ "$rc" -eq 0 ] && printf '%s\n' "$output" | grep -q "warning: time_budget_min is less than plan_steps x 8" && [ -f "$ws/loop/tasks/queue/warn-low-budget.task.md" ]; then
   pass "warn low time budget"
 else
   fail_case "warn low time budget" "rc=$rc output=$output"

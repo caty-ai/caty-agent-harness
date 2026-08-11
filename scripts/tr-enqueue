@@ -7,7 +7,7 @@ fail() {
 }
 
 warn() {
-  printf 'WARN: %s\n' "$1" >&2
+  printf 'warning: %s\n' "$1" >&2
 }
 
 usage() {
@@ -108,25 +108,26 @@ has_receipt_assertion() {
 
 task_file=$1
 workspace=$2
+workspace_input=$workspace
 step_timeout_min=10
 install_tmp=''
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$script_dir/lib-pause.sh"
-[ -d "$workspace" ] || fail "workspace dir not found"
-workspace=$(caty_pause_canonical_workspace "$workspace") || fail "invalid workspace"
+[ -d "$workspace" ] || fail "workspace dir not found: directory='$workspace'"
+workspace=$(caty_pause_canonical_workspace "$workspace") || fail "invalid workspace: directory='$workspace_input'"
 pause_state=$(caty_pause_workspace_state "$workspace")
 if [ "$pause_state" != enabled ]; then
   caty_pause_status_record "$workspace" tr-enqueue
   exit 3
 fi
 
-[ -f "$task_file" ] || fail "task file not found"
-[ -r "$task_file" ] || fail "task file not readable"
+[ -f "$task_file" ] || fail "task file not found: file='$task_file'"
+[ -r "$task_file" ] || fail "task file not readable: file='$task_file'"
 
 id=$(frontmatter_value id "$task_file")
-[ -n "$id" ] || fail "missing/empty id"
-is_safe_id "$id" || fail "invalid id: must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+[ -n "$id" ] || fail "missing/empty id: file='$task_file'"
+is_safe_id "$id" || fail "invalid id: must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$: value='$id' file='$task_file'"
 
 created=$(frontmatter_value created "$task_file")
 is_utc_iso8601 "$created" || fail "created must be UTC ISO-8601 with seconds: value='$created' file='$task_file'"
@@ -135,42 +136,42 @@ parent_id=$(frontmatter_value parent_id "$task_file")
 case "$parent_id" in
   ''|null|'~') ;;
   *)
-    is_safe_id "$parent_id" || fail "invalid parent_id: must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    is_safe_id "$parent_id" || fail "invalid parent_id: must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$: value='$parent_id' file='$task_file'"
     ;;
 esac
 
 verify=$(frontmatter_value verify "$task_file")
-[ "$verify" = "mechanical" ] || fail "verify must be mechanical"
+[ "$verify" = "mechanical" ] || fail "verify must be mechanical: value='$verify' file='$task_file'"
 
 attempts_budget=$(frontmatter_value attempts_budget "$task_file")
-is_positive_integer "$attempts_budget" || fail "attempts_budget must be a positive integer"
+is_positive_integer "$attempts_budget" || fail "attempts_budget must be a positive integer: value='$attempts_budget' file='$task_file'"
 
 time_budget_min=$(frontmatter_value time_budget_min "$task_file")
-is_positive_integer "$time_budget_min" || fail "time_budget_min must be a positive integer"
+is_positive_integer "$time_budget_min" || fail "time_budget_min must be a positive integer: value='$time_budget_min' file='$task_file'"
 
-[ "$time_budget_min" -ge "$step_timeout_min" ] || fail "global step_timeout exceeds time_budget_min"
+[ "$time_budget_min" -ge "$step_timeout_min" ] || fail "global step_timeout exceeds time_budget_min: value='$time_budget_min' step_timeout_min='$step_timeout_min' file='$task_file'"
 
 for section in Goal "Done-when" "Step plan" Resources "Non-goals"; do
-  has_section "$section" "$task_file" || fail "missing required body section: $section"
+  has_section "$section" "$task_file" || fail "missing required body section: $section file='$task_file'"
 done
 
 tmp_donecheck=${TMPDIR:-/tmp}/tr-enqueue-donecheck.$$
 tmp_donecheck_clean=${TMPDIR:-/tmp}/tr-enqueue-donecheck.clean.$$
 trap 'rm -f "$tmp_donecheck" "$tmp_donecheck_clean" "$install_tmp"' EXIT HUP INT TERM
-extract_donecheck "$task_file" > "$tmp_donecheck" || fail "missing donecheck block"
+extract_donecheck "$task_file" > "$tmp_donecheck" || fail "missing donecheck block: file='$task_file'"
 strip_donecheck_comments "$tmp_donecheck" "$tmp_donecheck_clean"
 
-[ -s "$tmp_donecheck_clean" ] || fail "missing donecheck block"
-has_receipt_assertion "$tmp_donecheck_clean" || fail "donecheck has no delivery receipt assertion"
-bash -n "$tmp_donecheck_clean" >/dev/null 2>&1 || fail "donecheck fails bash -n"
+[ -s "$tmp_donecheck_clean" ] || fail "missing donecheck block: file='$task_file'"
+has_receipt_assertion "$tmp_donecheck_clean" || fail "donecheck has no delivery receipt assertion: file='$task_file'"
+bash -n "$tmp_donecheck_clean" >/dev/null 2>&1 || fail "donecheck fails bash -n: file='$task_file'"
 
 plan_steps=$(extract_plan_steps "$task_file" | wc -l | tr -d ' ')
-[ "$plan_steps" -gt 0 ] || fail "missing plan steps"
-[ "$plan_steps" -le "$attempts_budget" ] || fail "plan-step count exceeds attempts_budget"
+[ "$plan_steps" -gt 0 ] || fail "missing plan steps: file='$task_file'"
+[ "$plan_steps" -le "$attempts_budget" ] || fail "plan-step count exceeds attempts_budget: value='$plan_steps' attempts_budget='$attempts_budget' file='$task_file'"
 
 last_step=$(extract_plan_steps "$task_file" | tail -n 1)
-printf '%s\n' "$last_step" | grep -Eiq 'deliver' || fail "last Step-plan step does not mention deliver/receipt"
-printf '%s\n' "$last_step" | grep -Eiq 'receipt' || fail "last Step-plan step does not mention deliver/receipt"
+printf '%s\n' "$last_step" | grep -Eiq 'deliver' || fail "last Step-plan step does not mention deliver/receipt: value='$last_step' file='$task_file'"
+printf '%s\n' "$last_step" | grep -Eiq 'receipt' || fail "last Step-plan step does not mention deliver/receipt: value='$last_step' file='$task_file'"
 
 loop_dir=$workspace/loop
 queue_dir=$loop_dir/tasks/queue
@@ -179,8 +180,8 @@ dlq_dir=$loop_dir/tasks/dlq
 artifacts_root=$loop_dir/artifacts
 artifact_dir=$loop_dir/artifacts/$id
 
-mkdir -p "$queue_dir" "$delivered_dir" "$dlq_dir" >/dev/null 2>&1 || fail "cannot create task ledger dirs"
-mkdir -p "$artifacts_root" >/dev/null 2>&1 || fail "artifacts dir not writable"
+mkdir -p "$queue_dir" "$delivered_dir" "$dlq_dir" >/dev/null 2>&1 || fail "cannot create task ledger dirs: directories='$queue_dir $delivered_dir $dlq_dir'"
+mkdir -p "$artifacts_root" >/dev/null 2>&1 || fail "artifacts dir not writable: directory='$artifacts_root'"
 
 if [ -e "$queue_dir/$id.task.md" ] \
   || [ -e "$delivered_dir/$id" ] \
@@ -189,7 +190,7 @@ if [ -e "$queue_dir/$id.task.md" ] \
   || [ -e "$dlq_dir/$id.task.md" ] \
   || [ -e "$artifact_dir" ] \
   || [ -e "$artifact_dir/state.json" ]; then
-  fail "duplicate id"
+  fail "duplicate id: id='$id' workspace='$workspace'"
 fi
 
 if [ "$time_budget_min" -lt $((plan_steps * 8)) ]; then
@@ -199,23 +200,23 @@ fi
 install_tmp=$queue_dir/.$id.task.md.tmp.$$
 if ! cp "$task_file" "$install_tmp"; then
   rm -f "$install_tmp"
-  fail "failed to install task file"
+  fail "failed to install task file: file='$task_file' destination='$queue_dir/$id.task.md'"
 fi
 if ! mkdir "$artifact_dir" >/dev/null 2>&1; then
   rm -f "$install_tmp"
   if [ -d "$artifact_dir" ]; then
-    fail "duplicate id"
+    fail "duplicate id: id='$id' workspace='$workspace'"
   fi
-  fail "artifacts dir not writable"
+  fail "artifacts dir not writable: directory='$artifact_dir'"
 fi
 if [ ! -d "$artifact_dir" ] || [ ! -w "$artifact_dir" ]; then
   rmdir "$artifact_dir" >/dev/null 2>&1 || true
   rm -f "$install_tmp"
-  fail "artifacts dir not writable"
+  fail "artifacts dir not writable: directory='$artifact_dir'"
 fi
 if ! mv "$install_tmp" "$queue_dir/$id.task.md"; then
   rmdir "$artifact_dir" >/dev/null 2>&1 || true
   rm -f "$install_tmp"
-  fail "failed to install task file"
+  fail "failed to install task file: file='$task_file' destination='$queue_dir/$id.task.md'"
 fi
 exit 0
