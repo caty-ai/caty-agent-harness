@@ -7,6 +7,8 @@ source "$repo_root/scripts/lib-wrapper-conformance.sh"
 # shellcheck disable=SC1091
 source "$repo_root/scripts/lib-pause.sh"
 # shellcheck disable=SC1091
+source "$repo_root/scripts/lib-secrets-env.sh"
+# shellcheck disable=SC1091
 source "$repo_root/scripts/lib-donecheck.sh"
 legacy_marker_line="# fable-loop bootstrap v1"
 current_marker_line="# caty-agent-harness bootstrap v2"
@@ -562,30 +564,88 @@ check_secrets_env_file() {
   local workspace=$1
   local secrets_file=$2
   local source_file=$3
-  local current_uid
-  local owner_uid
-  local mode
+  local wrapper_rel
+  local shape_reasons shape_reason mode
+  local nul_line
+  local line_number=0 raw_line classify_rc
 
   [[ -n "$secrets_file" ]] || return 0
+  wrapper_rel=$(print_relative "$workspace" "$source_file")
+  if [[ -L "$secrets_file" ]]; then
+    shape_reasons=$(secrets_env_file_shape_reasons "$secrets_file")
+    while IFS= read -r shape_reason; do
+      [[ -n "$shape_reason" ]] || continue
+      printf 'warning: cron wrapper %s SECRETS_ENV %s: %s\n' "$wrapper_rel" "$shape_reason" "$secrets_file" >&2
+    done <<EOF
+$shape_reasons
+EOF
+    return 0
+  fi
   if [[ ! -f "$secrets_file" ]]; then
-    printf 'warning: cron wrapper %s SECRETS_ENV file not found: %s\n' "$(print_relative "$workspace" "$source_file")" "$secrets_file" >&2
+    printf 'warning: cron wrapper %s SECRETS_ENV file not found: %s\n' "$wrapper_rel" "$secrets_file" >&2
     return 0
   fi
 
-  current_uid=$(id -u)
-  owner_uid=$(file_owner_uid "$secrets_file")
-  mode=$(file_mode "$secrets_file")
+  shape_reasons=$(secrets_env_file_shape_reasons "$secrets_file")
+  while IFS= read -r shape_reason; do
+    [[ -n "$shape_reason" ]] || continue
+    case "$shape_reason" in
+      'permissions must be 0600 or 0400; has '*)
+        mode=${shape_reason##* }
+        printf 'warning: cron wrapper %s SECRETS_ENV permissions should be 0600 or 0400: %s has %s\n' "$wrapper_rel" "$secrets_file" "$mode" >&2
+        ;;
+      *)
+        printf 'warning: cron wrapper %s SECRETS_ENV %s: %s\n' "$wrapper_rel" "$shape_reason" "$secrets_file" >&2
+        ;;
+    esac
+  done <<EOF
+$shape_reasons
+EOF
 
-  if [[ "$owner_uid" != "$current_uid" ]]; then
-    printf 'warning: cron wrapper %s SECRETS_ENV owner uid %s does not match current uid %s: %s\n' "$(print_relative "$workspace" "$source_file")" "$owner_uid" "$current_uid" "$secrets_file" >&2
+  if ! nul_line=$(secrets_env_first_nul_line "$secrets_file"); then
+    printf 'warning: cron wrapper %s SECRETS_ENV could not be scanned for embedded NUL bytes: %s\n' "$wrapper_rel" "$secrets_file" >&2
+    return 0
+  fi
+  if [[ -n "$nul_line" ]]; then
+    printf 'warning: cron wrapper %s SECRETS_ENV line %s contains an embedded NUL byte: %s\n' "$wrapper_rel" "$nul_line" "$secrets_file" >&2
+    return 0
   fi
 
-  case "$mode" in
-    400|0400|600|0600) ;;
-    *)
-      printf 'warning: cron wrapper %s SECRETS_ENV permissions should be 0600 or 0400: %s has %s\n' "$(print_relative "$workspace" "$source_file")" "$secrets_file" "$mode" >&2
-      ;;
-  esac
+  if ! exec 8<"$secrets_file"; then
+    printf 'warning: cron wrapper %s SECRETS_ENV file is not readable: %s\n' "$wrapper_rel" "$secrets_file" >&2
+    return 0
+  fi
+  while IFS= read -r -u 8 raw_line || [[ -n "$raw_line" ]]; do
+    line_number=$((line_number + 1))
+    if secrets_env_classify_line "$raw_line"; then
+      classify_rc=0
+    else
+      classify_rc=$?
+    fi
+    case "$classify_rc" in
+      0)
+        if ! (command export "$SECRETS_ENV_KEY=$SECRETS_ENV_VALUE") 2>/dev/null; then
+          printf 'warning: cron wrapper %s SECRETS_ENV line %s cannot export %s (reserved or read-only name): %s\n' \
+            "$wrapper_rel" "$line_number" "$SECRETS_ENV_KEY" "$secrets_file" >&2
+        fi
+        ;;
+      1)
+        ;;
+      2)
+        printf 'warning: cron wrapper %s SECRETS_ENV line %s refuses interpreter-control name %s (rename it, e.g. APP_ENV): %s\n' \
+          "$wrapper_rel" "$line_number" "$SECRETS_ENV_KEY" "$secrets_file" >&2
+        ;;
+      3)
+        printf 'warning: cron wrapper %s SECRETS_ENV line %s is not a KEY=VALUE assignment: %s\n' \
+          "$wrapper_rel" "$line_number" "$secrets_file" >&2
+        ;;
+      *)
+        printf 'warning: cron wrapper %s SECRETS_ENV line %s could not be classified: %s\n' \
+          "$wrapper_rel" "$line_number" "$secrets_file" >&2
+        ;;
+    esac
+  done
+  exec 8<&-
 }
 
 extract_wrapper_secrets_env() {
