@@ -10,7 +10,8 @@ set -euo pipefail
 # uid, and has 0600 or 0400 permissions. No shell code is executed. One matching
 # outer quote layer is stripped only when its inner value has no matching quote,
 # and one trailing CR is removed per line. Interpreter- or loader-control names
-# are refused; the refusal list is a hazard guard, not an exhaustive safety
+# are refused by scripts/lib-secrets-env.sh, which must be installed beside the
+# pause helper. The refusal list is a hazard guard, not an exhaustive safety
 # boundary. Portable Bash 3.2 cannot open with O_NOFOLLOW, so a residual path
 # replacement race remains despite the pre/post-open identity checks.
 
@@ -30,30 +31,24 @@ fail() {
   exit 3
 }
 
-file_owner_uid() {
-  stat -c "%u" "$1" 2>/dev/null || stat -f "%u" "$1"
-}
-
-file_mode() {
-  stat -c "%a" "$1" 2>/dev/null || stat -f "%Lp" "$1"
-}
-
 validate_secrets_env() {
-  local secrets_path=$1 current_uid owner_uid mode
+  local secrets_path=$1 shape_reasons shape_reason mode
 
-  current_uid=$(id -u)
-  owner_uid=$(file_owner_uid "$secrets_path")
-  mode=$(file_mode "$secrets_path")
-
-  if [[ "$owner_uid" != "$current_uid" ]]; then
-    fail "SECRETS_ENV owner uid $owner_uid does not match current uid $current_uid: $secrets_path"
-  fi
-  case "$mode" in
-    400|0400|600|0600) ;;
-    *)
-      fail "SECRETS_ENV permissions must be 0600 or 0400: $secrets_path has $mode"
-      ;;
-  esac
+  shape_reasons=$(secrets_env_file_shape_reasons "$secrets_path")
+  while IFS= read -r shape_reason; do
+    [[ -n "$shape_reason" ]] || continue
+    case "$shape_reason" in
+      'permissions must be 0600 or 0400; has '*)
+        mode=${shape_reason##* }
+        fail "SECRETS_ENV permissions must be 0600 or 0400: $secrets_path has $mode"
+        ;;
+      *)
+        fail "SECRETS_ENV $shape_reason: $secrets_path"
+        ;;
+    esac
+  done <<EOF
+$shape_reasons
+EOF
 }
 
 same_open_file() {
@@ -71,74 +66,37 @@ same_open_file() {
   [[ "$path_identity" == "$fd_identity" ]]
 }
 
-first_nul_line() {
-  local secrets_path=$1
-
-  LC_ALL=C od -An -v -t u1 "$secrets_path" 2>/dev/null | awk '
-    BEGIN { line_number = 1 }
-    {
-      for (field = 1; field <= NF; field++) {
-        if (!found && $field == 0) {
-          first_match = line_number
-          found = 1
-        }
-        if ($field == 10) {
-          line_number++
-        }
-      }
-    }
-    END {
-      if (found) {
-        print first_match
-      }
-    }
-  '
-}
-
 parse_secrets_env() {
   local secrets_path=$1
-  local line_number=0 raw_line line key value first_char last_char inner_value
+  local line_number=0 raw_line classify_rc
 
   while IFS= read -r -u 9 raw_line || [[ -n "$raw_line" ]]; do
     line_number=$((line_number + 1))
-    line=${raw_line%$'\r'}
-
-    if [[ "$line" =~ ^[[:space:]]*$ || "$line" =~ ^[[:space:]]*# ]]; then
-      continue
+    if secrets_env_classify_line "$raw_line"; then
+      classify_rc=0
+    else
+      classify_rc=$?
     fi
-    if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
-      key=${BASH_REMATCH[1]}
-      value=${BASH_REMATCH[2]}
-      case "$key" in
-        BASH_ENV|ENV|SHELLOPTS|BASHOPTS|IFS|PS4|CDPATH|GLOBIGNORE|PATH|BASH_XTRACEFD|\
-        PAGER|EDITOR|VISUAL|PERL5OPT|PERL5LIB|PERLLIB|PERL5DB|PERL5SHELL|\
-        PYTHONSTARTUP|PYTHONPATH|PYTHONHOME|PYTHONWARNINGS|PYTHONBREAKPOINT|\
-        RUBYOPT|RUBYLIB|NODE_OPTIONS|NODE_PATH|\
-        NODE_REPL_EXTERNAL_MODULE|GIT_SSH|GIT_SSH_COMMAND|GIT_EXTERNAL_DIFF|GIT_PAGER|\
-        GIT_EDITOR|GIT_ASKPASS|SSH_ASKPASS|GIT_PROXY_COMMAND|GIT_CONFIG_GLOBAL|\
-        GIT_CONFIG_SYSTEM|GIT_CONFIG_COUNT|GIT_CONFIG_PARAMETERS|GIT_EXEC_PATH|\
-        GIT_ALTERNATE_OBJECT_DIRECTORIES|LESSOPEN|LESSCLOSE|BASH_FUNC_*|LD_*|DYLD_*)
-          fail "SECRETS_ENV line $line_number refuses interpreter-control name $key (rename it, e.g. APP_ENV): $secrets_path"
-          ;;
-      esac
-      if (( ${#value} >= 2 )); then
-        first_char=${value:0:1}
-        last_char=${value: -1}
-        if [[ "$first_char" == "$last_char" && ( "$first_char" == "'" || "$first_char" == '"' ) ]]; then
-          inner_value=${value:1:${#value}-2}
-          if [[ "$inner_value" != *"$first_char"* ]]; then
-            value=$inner_value
-          fi
+    case "$classify_rc" in
+      0)
+        # `command` keeps assignment failures catchable across shells and modes
+        # without changing where the variable is set.
+        if ! command export "$SECRETS_ENV_KEY=$SECRETS_ENV_VALUE" 2>/dev/null; then
+          fail "SECRETS_ENV line $line_number cannot export $SECRETS_ENV_KEY (reserved or read-only name): $secrets_path"
         fi
-      fi
-      # `command` keeps assignment failures catchable across shells and modes
-      # without changing where the variable is set.
-      if ! command export "$key=$value" 2>/dev/null; then
-        fail "SECRETS_ENV line $line_number cannot export $key (reserved or read-only name): $secrets_path"
-      fi
-      continue
-    fi
-    fail "SECRETS_ENV line $line_number is not a KEY=VALUE assignment; SECRETS_ENV requires one assignment per line (store multi-line secrets in their own file and put the path in SECRETS_ENV): $secrets_path"
+        ;;
+      1)
+        ;;
+      2)
+        fail "SECRETS_ENV line $line_number refuses interpreter-control name $SECRETS_ENV_KEY (rename it, e.g. APP_ENV): $secrets_path"
+        ;;
+      3)
+        fail "SECRETS_ENV line $line_number is not a KEY=VALUE assignment; SECRETS_ENV requires one assignment per line (store multi-line secrets in their own file and put the path in SECRETS_ENV): $secrets_path"
+        ;;
+      *)
+        fail "SECRETS_ENV line $line_number could not be classified: $secrets_path"
+        ;;
+    esac
   done
 }
 
@@ -214,8 +172,18 @@ if [[ ! -x "$TARGET" ]]; then
 fi
 
 if [[ -n "$SECRETS_ENV" ]]; then
+  secrets_lib="$(dirname "$pause_helper")/lib-secrets-env.sh"
+  if [[ ! -f "$secrets_lib" || ! -r "$secrets_lib" || -L "$secrets_lib" ]] \
+    || ! bash -n "$secrets_lib" >/dev/null 2>&1; then
+    fail "SECRETS_ENV acceptance library is unavailable or invalid: $secrets_lib"
+  fi
+  # shellcheck disable=SC1090
+  if ! source "$secrets_lib" 2>/dev/null; then
+    fail "SECRETS_ENV acceptance library could not be loaded: $secrets_lib"
+  fi
+
   if [[ -L "$SECRETS_ENV" ]]; then
-    fail "SECRETS_ENV must not be a symlink: $SECRETS_ENV"
+    validate_secrets_env "$SECRETS_ENV"
   fi
   if [[ -f "$SECRETS_ENV" ]]; then
     validate_secrets_env "$SECRETS_ENV"
@@ -230,7 +198,7 @@ if [[ -n "$SECRETS_ENV" ]]; then
 
     validate_secrets_env "$SECRETS_ENV"
 
-    if ! nul_line=$(first_nul_line "$SECRETS_ENV"); then
+    if ! nul_line=$(secrets_env_first_nul_line "$SECRETS_ENV"); then
       exec 9<&-
       fail "SECRETS_ENV could not be scanned for embedded NUL bytes: $SECRETS_ENV"
     fi
