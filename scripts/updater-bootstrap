@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# shellcheck source=scripts/lib-updater-verify.sh
+source "$SCRIPT_DIR/lib-updater-verify.sh"
+
+repo_dir=
+initial_tag=
+allowed_signers=${CATY_UPDATER_ALLOWED_SIGNERS:-$HOME/.claude/state/updater-allowed-signers}
+cron_wrapper_dest=
+pin_already_matches=0
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  scripts/updater-bootstrap --repo-dir <clone> --initial-tag <vX.Y.Z>
+                            [--allowed-signers <out-of-repo-path>]
+                            [--cron-wrapper-dest <absolute-path>]
+
+The owner supplies the exact initial tag and allowed_signers out of band. This
+command verifies that one named tag only, checks it out by captured commit OID,
+records the per-repository floor, and only then may copy the cron wrapper.
+USAGE
+}
+
+fail() {
+  printf 'updater-bootstrap error: %s\n' "$1" >&2
+  exit 1
+}
+
+while (($# > 0)); do
+  case "$1" in
+    --repo-dir)
+      (($# >= 2)) || { usage >&2; exit 2; }
+      repo_dir=$2
+      shift 2
+      ;;
+    --initial-tag)
+      (($# >= 2)) || { usage >&2; exit 2; }
+      initial_tag=$2
+      shift 2
+      ;;
+    --allowed-signers)
+      (($# >= 2)) || { usage >&2; exit 2; }
+      allowed_signers=$2
+      shift 2
+      ;;
+    --cron-wrapper-dest)
+      (($# >= 2)) || { usage >&2; exit 2; }
+      cron_wrapper_dest=$2
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+[[ -n "$repo_dir" && -n "$initial_tag" ]] || { usage >&2; exit 2; }
+[[ -d "$repo_dir" ]] || fail "repo dir not found: $repo_dir"
+updater_is_semver "$initial_tag" || fail "initial tag is not strict semver: $initial_tag"
+if [[ -n "$cron_wrapper_dest" && "$cron_wrapper_dest" != /* ]]; then
+  fail "cron wrapper destination must be absolute: $cron_wrapper_dest"
+fi
+if ! git -C "$repo_dir" rev-parse --git-dir >/dev/null 2>&1; then
+  fail "repo is not a git repository: $repo_dir"
+fi
+if ! updater_check_capabilities "$repo_dir"; then
+  fail "$UPDATER_VERIFY_REASON"
+fi
+if ! updater_validate_allowed_signers "$repo_dir" "$allowed_signers"; then
+  fail "$UPDATER_VERIFY_REASON"
+fi
+
+pin_path=$(updater_default_pin_path "$repo_dir")
+
+# B-BOOT uses the same B-ALG steps 2-4 as the recurring updater and operates on
+# exactly the owner-named ref. It performs no remote enumeration or selection.
+if ! updater_capture_verify_and_bind "$repo_dir" "$initial_tag" "$allowed_signers"; then
+  fail "$UPDATER_VERIFY_REASON"
+fi
+
+# A prior attempt may have written the verified floor and then failed while
+# installing the cron wrapper. Only that exact version/commit identity may be
+# resumed; every other pre-existing pin remains a hard refusal.
+if [[ -e "$pin_path" || -L "$pin_path" ]]; then
+  if ! updater_read_pin "$pin_path" \
+    || [[ "$UPDATER_FLOOR_VERSION" != "$initial_tag" \
+      || "$UPDATER_FLOOR_COMMIT" != "$UPDATER_CAPTURED_COMMIT" ]]; then
+    fail "updater pin already exists; bootstrap will not replace it: $pin_path"
+  fi
+  pin_already_matches=1
+fi
+
+# The bootstrap floor is the verified initial identity itself. Running the same
+# equality rule makes a same-version/different-content seed impossible.
+UPDATER_FLOOR_VERSION=$initial_tag
+UPDATER_FLOOR_COMMIT=$UPDATER_CAPTURED_COMMIT
+if ! updater_check_floor "$initial_tag" "$UPDATER_CAPTURED_COMMIT"; then
+  fail "$UPDATER_VERIFY_REASON"
+fi
+
+# B-ALG step 6: checkout and assert only the captured commit OID, never the ref.
+if ! updater_checkout_captured_commit "$repo_dir" "$UPDATER_CAPTURED_COMMIT"; then
+  fail "$UPDATER_VERIFY_REASON"
+fi
+
+# The floor is made durable only after the named tag passed the full mechanical
+# gate. Repo code is not enabled and the cron wrapper is not installed earlier.
+if [[ "$pin_already_matches" -eq 0 ]]; then
+  if ! updater_write_pin "$pin_path" "$initial_tag" "$UPDATER_CAPTURED_COMMIT"; then
+    fail "$UPDATER_VERIFY_REASON"
+  fi
+fi
+
+if [[ -n "$cron_wrapper_dest" ]]; then
+  wrapper_source="$repo_dir/templates/updater-cron.tmpl.sh"
+  [[ -f "$wrapper_source" ]] || fail "verified release has no updater cron template: $wrapper_source"
+  wrapper_dir=$(dirname "$cron_wrapper_dest")
+  mkdir -p "$wrapper_dir" || fail "cannot create cron wrapper directory: $wrapper_dir"
+  tmp_wrapper=$(mktemp "$wrapper_dir/.updater-cron.tmp.XXXXXX") || fail "cannot create cron wrapper temporary file"
+  if ! cp "$wrapper_source" "$tmp_wrapper" || ! chmod 700 "$tmp_wrapper" || ! mv -f "$tmp_wrapper" "$cron_wrapper_dest"; then
+    rm -f "$tmp_wrapper"
+    fail "cannot atomically install cron wrapper: $cron_wrapper_dest"
+  fi
+fi
+
+printf 'updater-bootstrap: verified and installed %s at commit %s\n' "$initial_tag" "$UPDATER_CAPTURED_COMMIT"
+if [[ "$pin_already_matches" -eq 1 ]]; then
+  printf 'updater-bootstrap: confirmed existing floor %s\n' "$pin_path"
+else
+  printf 'updater-bootstrap: initialized floor %s\n' "$pin_path"
+fi
+if [[ -n "$cron_wrapper_dest" ]]; then
+  printf 'updater-bootstrap: installed cron wrapper %s\n' "$cron_wrapper_dest"
+fi

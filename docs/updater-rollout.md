@@ -1,118 +1,114 @@
-# Task Packet — family-updater rollout
+# Family updater rollout
 
-> Historical design record. Issue numbers cited in this document refer to the pre-publication private trackers, not to issues in this repository.
+The updater follows released tags only after verifying the exact tag object it
+will use. SSH tag signatures are the security control. The stable-ring soak is
+only rollout pacing: a signer can backdate `GIT_COMMITTER_DATE`, so tag age must
+never be treated as proof of authenticity.
 
-From: Alpha · SoT: pre-publication private tracker Issue #36
-For: Claude Code, OpenClaw, and Hermes family agents
+## First installation: mechanical bootstrap gate
 
-## Claude Code
+Do not execute the clone's cron wrapper or recurring updater before bootstrap.
+The owner must deliver two values out of band:
 
-### Why (read first)
+1. an SSH `allowed_signers` file, normally
+   `$HOME/.claude/state/updater-allowed-signers`; and
+2. the exact initial release name, such as `v1.3.0`.
 
-Claude Code needs the harness clone to follow released tags without giving the
-updater any write authority. The updater fetches tags, checks out the selected
-release in detached HEAD, runs `install.sh --check`, and rolls back if the check
-fails.
+The signer file must be non-empty, readable, and outside the clone. Never copy
+it from the repository, auto-create it, or fall back to Git configuration. Run
+an out-of-band copy of the bootstrap command (or compare its bytes with a trusted
+copy before execution). The trusted directory must contain both
+`updater-bootstrap` and its sibling `lib-updater-verify.sh`:
 
-### What to do
+```sh
+/trusted/updater-bootstrap \
+  --repo-dir "$HOME/claude-workspace/caty-agent-harness" \
+  --allowed-signers "$HOME/.claude/state/updater-allowed-signers" \
+  --initial-tag v1.3.0 \
+  --cron-wrapper-dest "$HOME/.local/bin/caty-family-updater-cron"
+```
 
-1. Prepare a stable harness clone with a read-only deploy key or fine-grained PAT.
-   Do not use a token with write access.
-2. Copy `templates/updater-cron.tmpl.sh` into a cron-owned scripts location.
-3. Install a cron line like:
-   ```cron
-   12 * * * * REPO_DIR="$HOME/claude-workspace/caty-agent-harness" WORKSPACE="$HOME/claude-workspace" AGENT="claude-code" RING="stable" SOAK_HOURS="24" FMA_SCRIPTS_DIR="$HOME/claude-workspace/family-memory-architecture/scripts" "$HOME/claude-workspace/caty-agent-harness/templates/updater-cron.tmpl.sh" >>"$HOME/claude-workspace/updater-cron.log" 2>&1
-   ```
+Bootstrap verifies exactly the owner-named tag; it does not select a newer tag.
+It captures the tag-object and commit OIDs once, verifies the captured tag object
+with the forced out-of-repo signer pin, binds the `tag` header exactly to the
+owner-named ref, checks out the captured commit OID, asserts `HEAD`, records the
+per-repository floor, and only then installs the cron wrapper. A rebound tag is
+refused.
 
-### Constraints
+After bootstrap, configure the copied wrapper. Example:
 
-- The credential on the clone is read-only. The updater never pushes.
-- Keep Claude Code on `stable` unless Alpha assigns a canary duty.
-- The cron wrapper must point at an absolute `REPO_DIR`.
+```cron
+12 * * * * REPO_DIR="$HOME/claude-workspace/caty-agent-harness" WORKSPACE="$HOME/claude-workspace" AGENT="claude-code" RING="stable" SOAK_HOURS="24" FMA_SCRIPTS_DIR="$HOME/claude-workspace/family-memory-architecture/scripts" CATY_UPDATER_ALLOWED_SIGNERS="$HOME/.claude/state/updater-allowed-signers" "$HOME/.local/bin/caty-family-updater-cron" >>"$HOME/claude-workspace/updater-cron.log" 2>&1
+```
 
-### Done when
+Use `RING=canary SOAK_HOURS=0` only for the assigned canary. Give every clone a
+read-only deploy credential; the updater never pushes.
 
-- [ ] Cron is installed and points at the intended clone and workspace.
-- [ ] `scripts/family-updater --repo-dir <clone> --workspace <ws> --ring stable`
-      succeeds once manually.
-- [ ] Heartbeats appear as `job-heartbeat updater-claude-code`.
-- [ ] Local ledger entries appear for real updates and failures in
-      `~/.claude/state/installed-versions.log`; no-op already-current runs do
-      not add a line.
+## Persistent state
 
-## OpenClaw / Claire
+Each clone basename has an independent monotonic pin:
 
-### Why (read first)
+```text
+$HOME/.claude/state/updater-pin/<repo-name>.json
+```
 
-Claire is the family canary. She should receive the newest valid release tag first
-so failures are caught before stable agents update.
+It records the highest successfully installed version and its full commit OID.
+An existing machine without a pin seeds it from pre-fetch `HEAD` only when that
+commit is at a strict semver tag. Otherwise the updater fails closed and names
+`scripts/updater-bootstrap`. Unreadable or malformed pins also fail closed.
 
-> Status: Claire installed as canary on 2026-07-09 (v1.1.0, RING=canary SOAK_HOURS=0,
-> hourly cron, heartbeat `updater-claire.json` ok, 34/34 tests green on host).
-> v1.1.1 is the first tag distributed via the rail itself.
+Rejected or moved names are recorded once at:
 
-> Path correction (install learning, pre-publication private tracker #40): the cron line below shows
-> `WORKSPACE="/path/to/claire-home/.openclaw-claire/workspace"`, but Claire's real workspace
-> is `/path/to/openclaw-home/.openclaw/workspace-claire`. Verify the live workspace path on
-> the host before installing; do not copy packet paths blindly.
+```text
+$HOME/.claude/state/updater-ineligible/<repo-name>.log
+```
 
-### What to do
+Those names remain excluded, but one bad upstream name does not wedge later
+legitimate updates or produce an hourly alert storm.
 
-1. Prepare Claire's harness clone with a read-only deploy key or fine-grained PAT.
-2. Use the updater cron wrapper with Claire on canary:
-   ```cron
-   17 * * * * REPO_DIR="/path/to/clones/caty-agent-harness" WORKSPACE="/path/to/claire-home/.openclaw-claire/workspace" AGENT="claire" RING="canary" SOAK_HOURS="0" FMA_SCRIPTS_DIR="/path/to/fma/scripts" "/path/to/clones/caty-agent-harness/templates/updater-cron.tmpl.sh" >>"/path/to/claire-home/.openclaw-claire/workspace/loop/updater-cron.log" 2>&1
-   ```
+## Release signing and key rotation
 
-### Constraints
+Every update target must be a strict semver annotated tag signed by a pinned SSH
+key. Legacy lightweight or unsigned releases are rollback identities only and
+can never be selected as update targets.
 
-- Claire is canary; do not reuse this ring assignment for other OpenClaw profiles
-  unless Alpha explicitly says so.
-- Keep the harness credential read-only.
-- Failure reports must be caution-only hot-inbox posts from the updater.
+Rotate signing keys with overlap:
 
-### Done when
+1. distribute the new public key in `allowed_signers` while retaining the old;
+2. verify adoption on every updater host;
+3. sign a release with the new key and verify fleet acceptance; then
+4. retire the old key from every host.
 
-- [ ] Claire reports `job-heartbeat updater-claire` after a no-op or successful update.
-- [ ] A failed canary check produces exactly one hot-inbox caution post.
-- [ ] The ledger records real updates and failures under
-      `~/.claude/state/installed-versions.log`; no-op already-current runs do
-      not add a line.
+Never switch the release signer before the overlap has been verified.
 
-## Hermes
+## Fetch behavior and atomicity
 
-### Why (read first)
+Branches are fetched with tags suppressed. Tags are enumerated with
+`git ls-remote --refs --tags`, compared by direct ref OID, and only absent names
+are fetched in one `git fetch --atomic --no-tags` call. A moved name is never
+forced over the local ref. `--atomic` guarantees atomic **ref updates**: a failed
+batch installs no new tag refs. It does not roll back downloaded objects;
+unreachable objects are ordinary `git gc` housekeeping and confer no trust.
 
-Hermes should follow stable release tags after the soak window so the profile gets
-the same harness fixes without being first to absorb release risk.
+## Residual bootstrap risks
 
-### What to do
+A fresh clone has no prior direct OID, so it cannot detect that an existing tag
+name was moved before the clone was created. The owner-named bootstrap removes
+automatic selection, while signature verification prevents substituted content
+and exact header name binding prevents an old genuine tag object being rebound
+under a new version name.
 
-1. Prepare the Hermes harness clone with a read-only deploy key or fine-grained PAT.
-2. Install a stable cron line:
-   ```cron
-   22 * * * * REPO_DIR="$HOME/caty-agent-harness" WORKSPACE="$HOME/.hermes/profiles/default/workspace" AGENT="hermes" RING="stable" SOAK_HOURS="24" FMA_SCRIPTS_DIR="$HOME/claude-workspace/family-memory-architecture/scripts" "$HOME/caty-agent-harness/templates/updater-cron.tmpl.sh" >>"$HOME/.hermes/profiles/default/workspace/loop/updater-cron.log" 2>&1
-   ```
+If an attacker controls both the remote and the owner channel that supplies the
+initial tag name, the owner can still be induced to name an older genuine signed
+release. That owner-channel compromise is out of scope for this mechanism and
+must be addressed by protecting the out-of-band channel.
 
-### Constraints
+## Operational checks
 
-- Use `stable` unless Hermes is explicitly assigned a canary role.
-- Do not give the updater write access to the remote.
-- Keep `WORKSPACE` aligned with the active Hermes profile.
-
-### Done when
-
-- [ ] Manual updater run passes for the target Hermes workspace.
-- [ ] Heartbeats appear as `job-heartbeat updater-hermes`.
-- [ ] Failures, if any, land in hot-inbox as caution posts and the clone rolls back.
-- [ ] The local ledger records real updates and failures; no-op
-      already-current runs do not add a line.
-
-## Deployment inventory example
-
-The live deployment inventory is maintained privately by the operator. Use this
-minimal placeholder pattern and confirm every value on the target host before installing.
-
-| Agent | Host | Trigger | Deploy clone | Credential |
-| --- | --- | --- | --- | --- |
-| `<agent>` | `<host>` | `<cron-or-launchd schedule>` | `/path/to/caty-agent-harness` | `<host>-updater-ro` |
+- Git 2.34 or newer with SSH signature verification is mandatory.
+- A missing, empty, unreadable, or repository-local `allowed_signers` file stops
+  the run.
+- Successful real updates and failures append to
+  `~/.claude/state/installed-versions.log`; no-op current runs do not.
+- A failed install check rolls back to the exact pre-update full commit OID,
+  asserts that identity, and only then runs the rollback install check.

@@ -16,6 +16,8 @@ templates/cron-wrapper.tmpl.sh	guarded	--workspace-or-positional	exit-0-status	s
 templates/updater-cron.tmpl.sh	exempt	none	not-applicable	harness-updater-wrapper-not-member-workspace	-	-
 scripts/attest-wrapper	exempt	none	not-applicable	setup-time-wrapper-attestation	-	-
 scripts/family-updater	exempt	none	not-applicable	harness-clone-updater-not-member-workspace	-	-
+scripts/updater-bootstrap	exempt	none	not-applicable	out-of-band-updater-trust-bootstrap	-	-
+scripts/lib-updater-verify.sh	exempt	none	not-applicable	sourced-updater-verification-library	-	-
 scripts/lib-bounded.sh	exempt	none	not-applicable	sourced-library	-	-
 scripts/lib-classify.sh	exempt	none	not-applicable	sourced-library	-	-
 scripts/lib-donecheck.sh	exempt	none	not-applicable	sourced-library	-	-
