@@ -154,7 +154,7 @@ CHECK a22 PASS source install doc states the self-marking caveat
 CHECK a23 PASS source install doc states the ledger claim
 CHECK a24 PASS source install doc states the archive semantics
 CHECK a25 PASS full repository test suite passes
-RUN t01 fix 1 exit=0 dur=635s
+RUN t01 fix 1 exit=0 dur=1042s
 CHECK a01 PASS engineering doc says the hook outputs are producers only
 CHECK a02 PASS engineering doc says the consumer must be scheduled
 CHECK a03 PASS engineering doc records the schedule window
@@ -180,7 +180,7 @@ CHECK a22 PASS source install doc states the self-marking caveat
 CHECK a23 PASS source install doc states the ledger claim
 CHECK a24 PASS source install doc states the archive semantics
 CHECK a25 PASS full repository test suite passes
-RUN t01 fix 2 exit=0 dur=638s
+RUN t01 fix 2 exit=0 dur=637s
 CHECK a01 PASS engineering doc says the hook outputs are producers only
 CHECK a02 PASS engineering doc says the consumer must be scheduled
 CHECK a03 PASS engineering doc records the schedule window
@@ -206,7 +206,7 @@ CHECK a22 PASS source install doc states the self-marking caveat
 CHECK a23 PASS source install doc states the ledger claim
 CHECK a24 PASS source install doc states the archive semantics
 CHECK a25 PASS full repository test suite passes
-RUN t01 fix 3 exit=0 dur=639s
+RUN t01 fix 3 exit=0 dur=688s
 CHECK a01 PASS engineering doc says the hook outputs are producers only
 CHECK a02 PASS engineering doc says the consumer must be scheduled
 CHECK a03 PASS engineering doc records the schedule window
@@ -232,7 +232,7 @@ CHECK a22 PASS source install doc states the self-marking caveat
 CHECK a23 PASS source install doc states the ledger claim
 CHECK a24 PASS source install doc states the archive semantics
 CHECK a25 PASS full repository test suite passes
-RUN t01 fix 4 exit=0 dur=635s
+RUN t01 fix 4 exit=0 dur=644s
 CHECK a01 PASS engineering doc says the hook outputs are producers only
 CHECK a02 PASS engineering doc says the consumer must be scheduled
 CHECK a03 PASS engineering doc records the schedule window
@@ -258,5 +258,5 @@ CHECK a22 PASS source install doc states the self-marking caveat
 CHECK a23 PASS source install doc states the ledger claim
 CHECK a24 PASS source install doc states the archive semantics
 CHECK a25 PASS full repository test suite passes
-RUN t01 fix 5 exit=0 dur=635s
+RUN t01 fix 5 exit=0 dur=641s
 VERDICT t01 PASS

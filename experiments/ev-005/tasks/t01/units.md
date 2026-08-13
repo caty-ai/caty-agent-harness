@@ -7,19 +7,19 @@ MOOT: 3
 
 | Unit | Class | Source unit (anonymized) | Mapping / disposition |
 | --- | --- | --- | --- |
-| U1 | MECH | `docs/engineering.md` states that the existing hook outputs are producers only. | `a01` (T1 content-presence in `docs/engineering.md`) |
+| U1 | MECH | `docs/engineering.md` states that the existing hook outputs are producers only. | `a01` (T1 content-presence in `docs/engineering.md`). Author-directed revision r2 (F2): was full-sentence fix-prose pin; relaxed to the `producers only` key phrase. |
 | U2 | MECH | `docs/engineering.md` states that a workspace using either producer must also schedule the flush-intake consumer. | `a02` (T1 content-presence in `docs/engineering.md`) |
-| U3 | MECH | `docs/engineering.md` records the flush-intake schedule window. | `a03` (T1 content-presence in `docs/engineering.md`) |
-| U4 | MECH | `docs/engineering.md` records the macOS LaunchAgent scheduler surface. | `a04` (T1 content-presence in `docs/engineering.md`) |
-| U5 | MECH | `docs/engineering.md` records the deadman self-marking caveat. | `a05` (T1 content-presence in `docs/engineering.md`) |
-| U6 | MECH | `docs/engineering.md` points to `adapters/claude-code/INSTALL.md` as the normative setup procedure. | `a06` (T1 content-presence in `docs/engineering.md`) |
-| U7 | MECH | `docs/reference.md` names `loop/pending/intake-runs.log` as the flush-intake ledger. | `a07` (T1 content-presence in `docs/reference.md`) |
-| U8 | MECH | `docs/reference.md` states the archive semantics. | `a08` (T1 content-presence in `docs/reference.md`) |
-| U9 | MECH | `docs/reference.md` points to `adapters/claude-code/INSTALL.md` as the normative setup procedure. | `a09` (T1 content-presence in `docs/reference.md`) |
-| U10 | MECH | `docs/engineering.ja.md` states that the existing hook outputs are producers only. | `a10` (T1 content-presence in `docs/engineering.ja.md`) |
-| U11 | MECH | `docs/engineering.ja.md` states that a workspace using either producer must also schedule the flush-intake consumer. | `a11` (T1 content-presence in `docs/engineering.ja.md`) |
-| U12 | MECH | `docs/engineering.ja.md` records the flush-intake schedule window. | `a12` (T1 content-presence in `docs/engineering.ja.md`) |
-| U13 | MECH | `docs/engineering.ja.md` records the macOS LaunchAgent scheduler surface. | `a13` (T1 content-presence in `docs/engineering.ja.md`) |
+| U3 | MECH | `docs/engineering.md` records the flush-intake schedule window. | `a03` (T1 content-presence in `docs/engineering.md`). Author-directed revision r2 (F2): was full-sentence fix-prose pin; relaxed to the `two to four times per day` schedule phrase. |
+| U4 | MECH | `docs/engineering.md` records the macOS LaunchAgent scheduler surface. | `a04` (T1 content-presence in `docs/engineering.md`). Author-directed revision r2 (F2): was full-sentence fix-prose pin; relaxed to the LaunchAgent + `gui/<uid>` domain fragment. |
+| U5 | MECH | `docs/engineering.md` records the deadman self-marking caveat. | `a05` (T1 content-presence in `docs/engineering.md`). Author-directed revision r2 (F2): was full-sentence fix-prose pin; relaxed to the `touches` + `loop/.deadman/distill.marker` fragment. |
+| U6 | MECH | `docs/engineering.md` points to `adapters/claude-code/INSTALL.md` as the normative setup procedure. | `a06` (T1 content-presence in `docs/engineering.md`). Author-directed revision r2 (F2): was full-sentence fix-prose pin; relaxed to the `adapters/claude-code/INSTALL.md` path + `full setup steps` phrase. |
+| U7 | MECH | `docs/reference.md` names `loop/pending/intake-runs.log` as the flush-intake ledger. | `a07` (T1 content-presence in `docs/reference.md`). Author-directed revision r2 (F2): was full-sentence fix-prose pin; relaxed to the `loop/pending/intake-runs.log` path identifier. |
+| U8 | MECH | `docs/reference.md` states the archive semantics. | `a08` (T1 content-presence in `docs/reference.md`). Author-directed revision r2 (F2): was full-sentence fix-prose pin; relaxed to the `append-only` key phrase. |
+| U9 | MECH | `docs/reference.md` points to `adapters/claude-code/INSTALL.md` as the normative setup procedure. | `a09` (T1 content-presence in `docs/reference.md`). Author-directed revision r2 (F2): was full-sentence fix-prose pin; relaxed to the `adapters/claude-code/INSTALL.md` path + `full ledger format` phrase. |
+| U10 | MECH | `docs/engineering.ja.md` states that the existing hook outputs are producers only. | `a10` (T1 content-presence in `docs/engineering.ja.md`). Author-directed revision r2 (F2): was full-sentence fix-prose pin; relaxed to the `producer に過ぎません` key phrase. |
+| U11 | MECH | `docs/engineering.ja.md` states that a workspace using either producer must also schedule the flush-intake consumer. | `a11` (T1 content-presence in `docs/engineering.ja.md`). Author-directed revision r2 (F2): was full-sentence fix-prose pin; relaxed to the consumer path + `定期実行` fragment. |
+| U12 | MECH | `docs/engineering.ja.md` records the flush-intake schedule window. | `a12` (T1 content-presence in `docs/engineering.ja.md`). Author-directed revision r2 (F2): was full-sentence fix-prose pin; relaxed to the `21600`–`43200` numeric range. |
+| U13 | MECH | `docs/engineering.ja.md` records the macOS LaunchAgent scheduler surface. | `a13` (T1 content-presence in `docs/engineering.ja.md`). Author-directed revision r2 (F2): was full-sentence fix-prose pin; relaxed to the `gui/<uid>` domain + LaunchAgent fragment. |
 | U14 | MECH | `docs/engineering.ja.md` records the deadman self-marking caveat. | `a14` (T1 content-presence in `docs/engineering.ja.md`) |
 | U15 | MECH | `docs/engineering.ja.md` points to `adapters/claude-code/INSTALL.md` as the normative setup procedure. | `a15` (T1 content-presence in `docs/engineering.ja.md`) |
 | U16 | MECH | `docs/reference.ja.md` names `loop/pending/intake-runs.log` as the flush-intake ledger. | `a16` (T1 content-presence in `docs/reference.ja.md`) |

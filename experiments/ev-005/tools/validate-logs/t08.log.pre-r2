@@ -466,7 +466,7 @@ CHECK a74 PASS frozen provider-path variable remains in the contract test
 CHECK a75 PASS frozen wrapper-route variable remains unchanged
 CHECK a76 PASS frozen wrapper-path variable remains unchanged
 CHECK a77 PASS frozen attestation-scratch variable remains unchanged
-RUN t08 fix 1 exit=0 dur=0s
+RUN t08 fix 1 exit=0 dur=1s
 CHECK a01 PASS Claude install stop-hook description uses the public product name
 CHECK a02 PASS Claude install stop-hook description drops the retired product name
 CHECK a03 PASS Claude install precompact section matches the renamed prose block
@@ -622,7 +622,7 @@ CHECK a74 PASS frozen provider-path variable remains in the contract test
 CHECK a75 PASS frozen wrapper-route variable remains unchanged
 CHECK a76 PASS frozen wrapper-path variable remains unchanged
 CHECK a77 PASS frozen attestation-scratch variable remains unchanged
-RUN t08 fix 3 exit=0 dur=0s
+RUN t08 fix 3 exit=0 dur=1s
 CHECK a01 PASS Claude install stop-hook description uses the public product name
 CHECK a02 PASS Claude install stop-hook description drops the retired product name
 CHECK a03 PASS Claude install precompact section matches the renamed prose block
