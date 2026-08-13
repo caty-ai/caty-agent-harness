@@ -115,6 +115,10 @@ updater_default_ineligible_path() {
   printf '%s/.claude/state/updater-ineligible/%s.log\n' "$HOME" "$(updater_repo_state_key "$1")"
 }
 
+updater_default_startup_failure_path() {
+  printf '%s/.claude/state/updater-startup-failures/%s.log\n' "$HOME" "$(updater_repo_state_key "$1")"
+}
+
 updater_path_is_outside_repo() {
   local repo_real signers_dir signers_real
 

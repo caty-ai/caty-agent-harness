@@ -139,6 +139,7 @@ repo_state_key() {
 pin_path() { printf '%s/.claude/state/updater-pin/%s.json\n' "$HOME_DIR" "$(repo_state_key)"; }
 ineligible_path() { printf '%s/.claude/state/updater-ineligible/%s.log\n' "$HOME_DIR" "$(repo_state_key)"; }
 ledger_path() { printf '%s/.claude/state/installed-versions.log\n' "$HOME_DIR"; }
+startup_failure_path() { printf '%s/.claude/state/updater-startup-failures/%s.log\n' "$HOME_DIR" "$(repo_state_key)"; }
 
 append_ok_ledger() {
   local tag=$1
@@ -165,6 +166,76 @@ run_updater() {
       --soak-hours 0 --allowed-signers "$ALLOWED" --fma-scripts-dir "$FMA" "$@" 2>&1
   fi
 }
+
+new_fixture delta4-startup-pin-dedupe
+tag_release signed v1.0.0 "$BASE_COMMIT"
+push_tag v1.0.0
+fetch_local_tag v1.0.0
+startup_output=
+startup_rcs=
+for tick in 1 2 3; do
+  output=$(run_updater); rc=$?
+  startup_output=${startup_output:+$startup_output$'\n'}$output
+  startup_rcs="$startup_rcs $rc"
+done
+first_reports=$(grep -Fc 'updater failed: claire repo pin-failed' "$LOGS/hot-inbox.log" 2>/dev/null || true)
+first_fail_heartbeats=$(grep -Fc 'job-heartbeat updater-claire fail ' "$LOGS/heartbeats.log" 2>/dev/null || true)
+first_errors=$(printf '%s\n' "$startup_output" | grep -Fc 'family-updater error: updater pin is absent and the install ledger has no usable ok entry' || true)
+first_fail_ledger=$(grep -Fc ' pin-failed fail' "$(ledger_path)" 2>/dev/null || true)
+
+write_pin v1.0.0 "$BASE_COMMIT"
+recovery_output=$(run_updater); recovery_rc=$?
+rm -f "$(pin_path)"
+recurrence_output=$(run_updater); recurrence_rc=$?
+total_reports=$(grep -Fc 'updater failed: claire repo pin-failed' "$LOGS/hot-inbox.log" 2>/dev/null || true)
+total_fail_heartbeats=$(grep -Fc 'job-heartbeat updater-claire fail ' "$LOGS/heartbeats.log" 2>/dev/null || true)
+total_errors=$(printf '%s\n%s\n' "$startup_output" "$recurrence_output" | grep -Fc 'family-updater error: updater pin is absent and the install ledger has no usable ok entry' || true)
+total_fail_ledger=$(grep -Fc ' pin-failed fail' "$(ledger_path)" 2>/dev/null || true)
+failure_records=$(grep -Fc 'pin-failed ' "$(startup_failure_path)" 2>/dev/null || true)
+clear_records=$(grep -F 'pin-failed ' "$(startup_failure_path)" 2>/dev/null | grep -Fc ' verification-failure-cleared' || true)
+if [[ "$startup_rcs" == ' 1 1 1' && "$first_reports" -eq 1 \
+  && "$first_fail_heartbeats" -eq 1 && "$first_errors" -eq 3 \
+  && "$first_fail_ledger" -eq 1 && "$recovery_rc" -eq 0 \
+  && "$recurrence_rc" -eq 1 && "$total_reports" -eq 2 \
+  && "$total_fail_heartbeats" -eq 2 && "$total_errors" -eq 4 \
+  && "$total_fail_ledger" -eq 2 && "$failure_records" -eq 3 \
+  && "$clear_records" -eq 1 ]]; then
+  pass "startup pin failure reports once across three ticks, clears on recovery, and reports on recurrence"
+else
+  fail_case "startup pin failure reports once across three ticks, clears on recovery, and reports on recurrence" \
+    "rcs=[$startup_rcs]/$recovery_rc/$recurrence_rc reports=$first_reports/$total_reports heartbeats=$first_fail_heartbeats/$total_fail_heartbeats errors=$first_errors/$total_errors ledger=$first_fail_ledger/$total_fail_ledger records=$failure_records clears=$clear_records recovery=$recovery_output"
+fi
+
+new_fixture delta4-dry-run-diagnostic
+commit_release installed pass
+installed_commit=$RELEASE_COMMIT
+tag_release signed v1.0.0 "$installed_commit"
+push_tag v1.0.0
+fetch_local_tag v1.0.0
+git -C "$REPO" checkout -q --detach "$installed_commit"
+append_ok_ledger v1.0.0
+ledger_before=$(cksum "$(ledger_path)")
+commit_release rejected pass
+tag_release unsigned v1.1.0 "$RELEASE_COMMIT"
+push_tag v1.1.0
+output=$(run_updater --dry-run); rc=$?
+ledger_after=$(cksum "$(ledger_path)")
+if [[ "$rc" -eq 0 && "$ledger_before" == "$ledger_after" \
+  && ! -e "$(pin_path)" && ! -e "$(ineligible_path)" \
+  && ! -e "$(startup_failure_path)" && ! -e "$LOGS/heartbeats.log" \
+  && ! -e "$LOGS/hot-inbox.log" ]] \
+  && printf '%s\n' "$output" | grep -Fq 'family-updater error: SSH signature verification failed: v1.1.0'; then
+  pass "dry-run prints candidate rejection while writing and reporting nothing"
+else
+  fail_case "dry-run prints candidate rejection while writing and reporting nothing" \
+    "rc=$rc pin=$(test -e "$(pin_path)" && echo yes || echo no) ineligible=$(test -e "$(ineligible_path)" && echo yes || echo no) startup=$(test -e "$(startup_failure_path)" && echo yes || echo no) output=$output"
+fi
+
+if [[ "${DELTA4_FOCUSED:-0}" == 1 ]]; then
+  printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+  [[ "$FAIL_COUNT" -eq 0 ]]
+  exit $?
+fi
 
 make_candidate() {
   local kind=$1
@@ -1090,22 +1161,104 @@ fi
 new_fixture capability-old-git
 write_pin v0.0.0 "$BASE_COMMIT"
 before=$(git -C "$REPO" rev-parse HEAD)
-output=$(PATH="$FAKEBIN:$PATH" REAL_GIT="$REAL_GIT" FAKE_OLD_GIT=1 run_updater); rc=$?
+capability_output=
+capability_rcs=
+for tick in 1 2 3; do
+  output=$(PATH="$FAKEBIN:$PATH" REAL_GIT="$REAL_GIT" FAKE_OLD_GIT=1 run_updater); rc=$?
+  capability_output=${capability_output:+$capability_output$'\n'}$output
+  capability_rcs="$capability_rcs $rc"
+done
+first_reports=$(grep -Fc 'updater failed: claire repo capability-failed' "$LOGS/hot-inbox.log" 2>/dev/null || true)
+first_fail_heartbeats=$(grep -Fc 'job-heartbeat updater-claire fail ' "$LOGS/heartbeats.log" 2>/dev/null || true)
+first_errors=$(printf '%s\n' "$capability_output" | grep -Fc 'family-updater error: git 2.34 or newer is required' || true)
+recovery_output=$(run_updater); recovery_rc=$?
+recurrence_output=$(PATH="$FAKEBIN:$PATH" REAL_GIT="$REAL_GIT" FAKE_OLD_GIT=1 run_updater); recurrence_rc=$?
 after=$(git -C "$REPO" rev-parse HEAD)
-if [[ "$rc" -ne 0 && "$before" == "$after" ]] && printf '%s\n' "$output" | grep -Fq 'git 2.34 or newer is required'; then
-  pass "simulated old git fails closed with capability message"
+total_reports=$(grep -Fc 'updater failed: claire repo capability-failed' "$LOGS/hot-inbox.log" 2>/dev/null || true)
+total_fail_heartbeats=$(grep -Fc 'job-heartbeat updater-claire fail ' "$LOGS/heartbeats.log" 2>/dev/null || true)
+clear_records=$(grep -F 'capability-failed ' "$(startup_failure_path)" 2>/dev/null | grep -Fc ' verification-failure-cleared' || true)
+if [[ "$capability_rcs" == ' 1 1 1' && "$recovery_rc" -eq 0 && "$recurrence_rc" -eq 1 \
+  && "$before" == "$after" && "$first_reports" -eq 1 && "$total_reports" -eq 2 \
+  && "$first_fail_heartbeats" -eq 1 && "$total_fail_heartbeats" -eq 2 \
+  && "$first_errors" -eq 3 && "$clear_records" -eq 1 ]]; then
+  pass "capability failure reports once, stays visible each tick, clears, and can report again"
 else
-  fail_case "simulated old git fails closed with capability message" "rc=$rc output=$output"
+  fail_case "capability failure reports once, stays visible each tick, clears, and can report again" \
+    "rcs=[$capability_rcs]/$recovery_rc/$recurrence_rc reports=$first_reports/$total_reports heartbeats=$first_fail_heartbeats/$total_fail_heartbeats errors=$first_errors clears=$clear_records output=$recurrence_output"
 fi
 
 new_fixture missing-signers
 write_pin v0.0.0 "$BASE_COMMIT"
 missing=$BASE/does-not-exist
-output=$(HOME="$HOME_DIR" "$UPDATER" --repo-dir "$REPO" --workspace "$WS" --agent claire --ring canary --allowed-signers "$missing" --fma-scripts-dir "$FMA" 2>&1); rc=$?
-if [[ "$rc" -ne 0 ]] && printf '%s\n' "$output" | grep -Fq "allowed_signers file is absent, unreadable, or empty: $missing"; then
-  pass "missing allowed_signers fails closed and names the file"
+signers_output=
+signers_rcs=
+for tick in 1 2 3; do
+  output=$(HOME="$HOME_DIR" "$UPDATER" --repo-dir "$REPO" --workspace "$WS" --agent claire --ring canary --allowed-signers "$missing" --fma-scripts-dir "$FMA" 2>&1); rc=$?
+  signers_output=${signers_output:+$signers_output$'\n'}$output
+  signers_rcs="$signers_rcs $rc"
+done
+first_reports=$(grep -Fc 'updater failed: claire repo signers-failed' "$LOGS/hot-inbox.log" 2>/dev/null || true)
+first_fail_heartbeats=$(grep -Fc 'job-heartbeat updater-claire fail ' "$LOGS/heartbeats.log" 2>/dev/null || true)
+first_errors=$(printf '%s\n' "$signers_output" | grep -Fc "family-updater error: allowed_signers file is absent, unreadable, or empty: $missing" || true)
+recovery_output=$(run_updater); recovery_rc=$?
+recurrence_output=$(HOME="$HOME_DIR" "$UPDATER" --repo-dir "$REPO" --workspace "$WS" --agent claire --ring canary --allowed-signers "$missing" --fma-scripts-dir "$FMA" 2>&1); recurrence_rc=$?
+total_reports=$(grep -Fc 'updater failed: claire repo signers-failed' "$LOGS/hot-inbox.log" 2>/dev/null || true)
+total_fail_heartbeats=$(grep -Fc 'job-heartbeat updater-claire fail ' "$LOGS/heartbeats.log" 2>/dev/null || true)
+clear_records=$(grep -F 'signers-failed ' "$(startup_failure_path)" 2>/dev/null | grep -Fc ' verification-failure-cleared' || true)
+if [[ "$signers_rcs" == ' 1 1 1' && "$recovery_rc" -eq 0 && "$recurrence_rc" -eq 1 \
+  && "$first_reports" -eq 1 && "$total_reports" -eq 2 \
+  && "$first_fail_heartbeats" -eq 1 && "$total_fail_heartbeats" -eq 2 \
+  && "$first_errors" -eq 3 && "$clear_records" -eq 1 ]]; then
+  pass "signer failure reports once, stays visible each tick, clears, and can report again"
 else
-  fail_case "missing allowed_signers fails closed and names the file" "rc=$rc output=$output"
+  fail_case "signer failure reports once, stays visible each tick, clears, and can report again" \
+    "rcs=[$signers_rcs]/$recovery_rc/$recurrence_rc reports=$first_reports/$total_reports heartbeats=$first_fail_heartbeats/$total_fail_heartbeats errors=$first_errors clears=$clear_records output=$recurrence_output"
+fi
+
+new_fixture invalid-ineligible-state
+write_pin v0.0.0 "$BASE_COMMIT"
+invalid_state=$(ineligible_path)
+mkdir -p "$(dirname "$invalid_state")" "$invalid_state"
+state_output=
+state_rcs=
+for tick in 1 2 3; do
+  output=$(run_updater); rc=$?
+  state_output=${state_output:+$state_output$'\n'}$output
+  state_rcs="$state_rcs $rc"
+done
+first_reports=$(grep -Fc 'updater failed: claire repo state-failed' "$LOGS/hot-inbox.log" 2>/dev/null || true)
+first_fail_heartbeats=$(grep -Fc 'job-heartbeat updater-claire fail ' "$LOGS/heartbeats.log" 2>/dev/null || true)
+first_errors=$(printf '%s\n' "$state_output" | grep -Fc "family-updater error: updater ineligible log is not a regular file: $invalid_state" || true)
+rmdir "$invalid_state"
+recovery_output=$(run_updater); recovery_rc=$?
+mkdir "$invalid_state"
+recurrence_output=$(run_updater); recurrence_rc=$?
+total_reports=$(grep -Fc 'updater failed: claire repo state-failed' "$LOGS/hot-inbox.log" 2>/dev/null || true)
+total_fail_heartbeats=$(grep -Fc 'job-heartbeat updater-claire fail ' "$LOGS/heartbeats.log" 2>/dev/null || true)
+clear_records=$(grep -F 'state-failed ' "$(startup_failure_path)" 2>/dev/null | grep -Fc ' verification-failure-cleared' || true)
+if [[ "$state_rcs" == ' 1 1 1' && "$recovery_rc" -eq 0 && "$recurrence_rc" -eq 1 \
+  && "$first_reports" -eq 1 && "$total_reports" -eq 2 \
+  && "$first_fail_heartbeats" -eq 1 && "$total_fail_heartbeats" -eq 2 \
+  && "$first_errors" -eq 3 && "$clear_records" -eq 1 ]]; then
+  pass "state failure reports once, stays visible each tick, clears, and can report again"
+else
+  fail_case "state failure reports once, stays visible each tick, clears, and can report again" \
+    "rcs=[$state_rcs]/$recovery_rc/$recurrence_rc reports=$first_reports/$total_reports heartbeats=$first_fail_heartbeats/$total_fail_heartbeats errors=$first_errors clears=$clear_records output=$recurrence_output"
+fi
+
+new_fixture startup-dedupe-state-invalid
+write_pin v0.0.0 "$BASE_COMMIT"
+dedupe_path=$(startup_failure_path)
+mkdir -p "$(dirname "$dedupe_path")"
+ln -s "$BASE/dedupe-target" "$dedupe_path"
+before=$(git -C "$REPO" rev-parse HEAD)
+output=$(run_updater); rc=$?
+after=$(git -C "$REPO" rev-parse HEAD)
+if [[ "$rc" -ne 0 && "$before" == "$after" && ! -e "$SENTINEL" ]] \
+  && printf '%s\n' "$output" | grep -Fq "updater startup failure log is not a readable, writable regular file: $dedupe_path"; then
+  pass "invalid startup dedupe state fails closed before update work"
+else
+  fail_case "invalid startup dedupe state fails closed before update work" "rc=$rc output=$output"
 fi
 
 new_fixture repo-local-signers

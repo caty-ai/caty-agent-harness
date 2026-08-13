@@ -17,6 +17,7 @@ lock_acquired=0
 lock_dir=
 pin_path=
 ineligible_path=
+startup_failure_path=
 preupdate_head=
 UPDATER_ROLLBACK_COMPLETED=0
 
@@ -167,6 +168,41 @@ report_failure() {
   append_ledger "$tag" fail
 }
 
+report_startup_failure() {
+  local name=$1
+  local reason=$2
+  local rc
+
+  printf 'family-updater error: %s\n' "$reason" >&2
+  [[ "$dry_run" -eq 0 ]] || return 0
+  if updater_mark_verification_failure "$startup_failure_path" "$name" "$reason"; then
+    send_heartbeat fail "$reason"
+    post_failure_report "$name" "" "$reason"
+    append_ledger "$name" fail
+    return 0
+  else
+    rc=$?
+  fi
+  [[ "$rc" -eq 1 ]] && return 0
+  report_failure "$name" "$UPDATER_VERIFY_REASON" "" "$UPDATER_VERIFY_REASON"
+  return 1
+}
+
+clear_startup_failure() {
+  local name=$1
+  local rc
+
+  [[ "$dry_run" -eq 0 ]] || return 0
+  if updater_clear_verification_failure "$startup_failure_path" "$name"; then
+    return 0
+  else
+    rc=$?
+  fi
+  [[ "$rc" -eq 1 ]] && return 0
+  report_failure "state-failed" "$UPDATER_VERIFY_REASON" "" "$UPDATER_VERIFY_REASON"
+  return 1
+}
+
 # Callback used by updater_sync_remote_tags. Persistence is handled by the
 # shared library before this is called, so repeated ticks do not report again.
 updater_report_ineligible() {
@@ -180,7 +216,10 @@ record_candidate_verification_failure() {
   local reason=$2
   local rc
 
-  [[ "$dry_run" -eq 0 ]] || return 0
+  if [[ "$dry_run" -eq 1 ]]; then
+    printf 'family-updater error: %s\n' "$reason" >&2
+    return 0
+  fi
   if updater_mark_verification_failure "$ineligible_path" "$tag" "$reason"; then
     updater_report_ineligible "$tag" "$reason"
     return 0
@@ -336,24 +375,45 @@ if [[ ! "$preupdate_head" =~ ^[0-9a-f]{40}$ ]]; then
   exit 1
 fi
 
-if ! updater_check_capabilities "$repo_dir"; then
-  report_failure "capability-failed" "$UPDATER_VERIFY_REASON" "" "$UPDATER_VERIFY_REASON"
-  exit 1
-fi
-if ! updater_validate_allowed_signers "$repo_dir" "$allowed_signers"; then
-  report_failure "signers-failed" "$UPDATER_VERIFY_REASON" "" "$UPDATER_VERIFY_REASON"
-  exit 1
-fi
-
 pin_path=$(updater_default_pin_path "$repo_dir")
 ineligible_path=$(updater_default_ineligible_path "$repo_dir")
-if [[ -L "$ineligible_path" || ( -e "$ineligible_path" && ! -f "$ineligible_path" ) ]]; then
-  reason="updater ineligible log is not a regular file: $ineligible_path"
+startup_failure_path=$(updater_default_startup_failure_path "$repo_dir")
+if [[ -L "$startup_failure_path" \
+  || ( -e "$startup_failure_path" && ! -f "$startup_failure_path" ) \
+  || ( -f "$startup_failure_path" && ( ! -r "$startup_failure_path" || ! -w "$startup_failure_path" ) ) ]]; then
+  reason="updater startup failure log is not a readable, writable regular file: $startup_failure_path"
   report_failure "state-failed" "$reason" "" "$reason"
   exit 1
 fi
+
+if ! updater_check_capabilities "$repo_dir"; then
+  report_startup_failure "capability-failed" "$UPDATER_VERIFY_REASON"
+  exit 1
+fi
+if ! clear_startup_failure "capability-failed"; then
+  exit 1
+fi
+if ! updater_validate_allowed_signers "$repo_dir" "$allowed_signers"; then
+  report_startup_failure "signers-failed" "$UPDATER_VERIFY_REASON"
+  exit 1
+fi
+if ! clear_startup_failure "signers-failed"; then
+  exit 1
+fi
+
+if [[ -L "$ineligible_path" || ( -e "$ineligible_path" && ! -f "$ineligible_path" ) ]]; then
+  reason="updater ineligible log is not a regular file: $ineligible_path"
+  report_startup_failure "state-failed" "$reason"
+  exit 1
+fi
+if ! clear_startup_failure "state-failed"; then
+  exit 1
+fi
 if ! updater_load_or_seed_floor "$repo_dir" "$pin_path" "$preupdate_head" "$(ledger_path)" "$((1 - dry_run))"; then
-  report_failure "pin-failed" "$UPDATER_VERIFY_REASON" "" "$UPDATER_VERIFY_REASON"
+  report_startup_failure "pin-failed" "$UPDATER_VERIFY_REASON"
+  exit 1
+fi
+if ! clear_startup_failure "pin-failed"; then
   exit 1
 fi
 
