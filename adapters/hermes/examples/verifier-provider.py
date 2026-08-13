@@ -5,6 +5,7 @@ import json
 import os
 import secrets
 import sys
+import unicodedata
 import urllib.request
 from typing import NoReturn
 
@@ -23,6 +24,15 @@ if len(sys.argv) != 2 or not sys.argv[1]:
 api_key = os.environ.get("ANTHROPIC_API_KEY", "")
 if not api_key:
     fail("provider credential is unavailable")
+
+api_base = os.environ.get("VERIFIER_API_BASE", "https://api.anthropic.com")
+if not api_base.startswith("https://") or any(
+    character.isspace() or unicodedata.category(character) == "Cc"
+    for character in api_base
+):
+    fail("provider API base is invalid")
+if api_base.endswith("/"):
+    api_base = api_base[:-1]
 
 model = os.environ.get("VERIFIER_MODEL", "claude-sonnet-5")
 try:
@@ -55,7 +65,7 @@ payload = json.dumps(
     }
 ).encode("utf-8")
 request = urllib.request.Request(
-    "https://api.anthropic.com/v1/messages",
+    f"{api_base}/v1/messages",
     data=payload,
     method="POST",
     headers={

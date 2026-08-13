@@ -85,6 +85,24 @@ The rules there apply in addition to the Hermes-specific wiring below.
    - `adapters/hermes/examples/verifier-probe.sh` relocates and genuinely calls the
      provider through the wrapper before reporting conformance.
 
+   Anthropic remains the default: set an Anthropic key in `ANTHROPIC_API_KEY`,
+   optionally set `VERIFIER_MODEL`, and leave `VERIFIER_API_BASE` unset to use
+   `https://api.anthropic.com`.
+
+   **Z.ai GLM 5.2 configuration.** Set these values through the job's protected
+   `SECRETS_ENV` (the existing key variable carries the Z.ai member key because the
+   endpoint uses the Anthropic wire format):
+
+   ```sh
+   ANTHROPIC_API_KEY=<Z.ai member key>
+   VERIFIER_MODEL=glm-5.2
+   VERIFIER_API_BASE=https://api.z.ai/api/anthropic
+   ```
+
+   The attestation pins the provider executable and its configured model. A verifier
+   vendor or model swap is a configuration change: update the environment and
+   re-attest before enabling the job with the new vendor/model pair.
+
    Operational contract: the example wrapper forwards only the validated verdict and
    reason lines. It intentionally discards the findings body requested by the bundle
    to remove an injection surface; that body cannot be recovered from this wrapper.

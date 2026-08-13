@@ -191,10 +191,13 @@ else
     "modes_ok=$modes_ok"
 fi
 
+# The single-quoted text below is an intentional literal source pattern.
+# shellcheck disable=SC2016
 if grep -Fq '"$FABLE_CONFORMING_PROVIDER_PATH" "$bundle"' "$CANONICAL_WRAPPER" \
   && grep -Fq 'os.environ.get("ANTHROPIC_API_KEY"' "$PROVIDER" \
   && grep -Fq 'os.environ.get("VERIFIER_MODEL", "claude-sonnet-5")' "$PROVIDER" \
-  && grep -Fq 'https://api.anthropic.com/v1/messages' "$PROVIDER" \
+  && grep -Fq 'os.environ.get("VERIFIER_API_BASE"' "$PROVIDER" \
+  && grep -Fq 'f"{api_base}/v1/messages"' "$PROVIDER" \
   && grep -Fq 'secrets.token_hex' "$PROVIDER" \
   && grep -Fq 'VERIFIER_TEMPERATURE' "$PROVIDER" \
   && grep -Fq '"temperature": temperature' "$PROVIDER" \
@@ -226,6 +229,113 @@ if [ "$temperature_guard_ok" -eq 1 ] \
 else
   fail_case '[10] provider pins temperature to zero and rejects malformed or out-of-range overrides before I/O' \
     'temperature validation contract failed'
+fi
+
+urlopen_stub=$TMP_ROOT/urlopen-stub.py
+cat >"$urlopen_stub" <<'PY'
+#!/usr/bin/env python3
+import json
+import os
+import runpy
+import sys
+import urllib.request
+
+
+class StubResponse:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def read(self):
+        return json.dumps(
+            {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "VERDICT: pass\nstub accepted the request URL",
+                    }
+                ]
+            }
+        ).encode("utf-8")
+
+
+def stub_urlopen(request, timeout):
+    del timeout
+    with open(os.environ["REQUEST_URL_MARKER"], "w", encoding="utf-8") as marker:
+        marker.write(request.full_url)
+    return StubResponse()
+
+
+provider_path, bundle = sys.argv[1:]
+urllib.request.urlopen = stub_urlopen
+sys.argv = [provider_path, bundle]
+runpy.run_path(provider_path, run_name="__main__")
+PY
+
+request_url_marker=$TMP_ROOT/request-url.marker
+expected_anthropic_base='https://api.'"anthropic.com"
+rm -f "$request_url_marker"
+default_base_output=$(env -u VERIFIER_API_BASE ANTHROPIC_API_KEY=fixture \
+  REQUEST_URL_MARKER="$request_url_marker" \
+  python3 "$urlopen_stub" "$PROVIDER" "$bundle")
+default_base_rc=$?
+if [ "$default_base_rc" -eq 0 ] \
+  && [ "$default_base_output" = 'VERDICT: pass
+stub accepted the request URL' ] \
+  && [ "$(cat "$request_url_marker")" = "$expected_anthropic_base/v1/messages" ]; then
+  pass '[11] provider sends the default request to the Anthropic Messages URL'
+else
+  fail_case '[11] provider sends the default request to the Anthropic Messages URL' \
+    "rc=$default_base_rc output=$default_base_output"
+fi
+
+zai_base=https://api.z.ai/api/anthropic
+rm -f "$request_url_marker"
+zai_base_output=$(ANTHROPIC_API_KEY=fixture VERIFIER_API_BASE="$zai_base" \
+  REQUEST_URL_MARKER="$request_url_marker" \
+  python3 "$urlopen_stub" "$PROVIDER" "$bundle")
+zai_base_rc=$?
+if [ "$zai_base_rc" -eq 0 ] \
+  && [ "$(cat "$request_url_marker")" = "$zai_base/v1/messages" ]; then
+  pass '[12] provider sends a Z.ai-compatible request through the configured base URL'
+else
+  fail_case '[12] provider sends a Z.ai-compatible request through the configured base URL' \
+    "rc=$zai_base_rc output=$zai_base_output"
+fi
+
+rm -f "$request_url_marker"
+trailing_slash_output=$(ANTHROPIC_API_KEY=fixture VERIFIER_API_BASE="$zai_base/" \
+  REQUEST_URL_MARKER="$request_url_marker" \
+  python3 "$urlopen_stub" "$PROVIDER" "$bundle")
+trailing_slash_rc=$?
+if [ "$trailing_slash_rc" -eq 0 ] \
+  && [ "$(cat "$request_url_marker")" = "$zai_base/v1/messages" ]; then
+  pass '[13] provider strips one trailing slash before joining the Messages path'
+else
+  fail_case '[13] provider strips one trailing slash before joining the Messages path' \
+    "rc=$trailing_slash_rc output=$trailing_slash_output"
+fi
+
+invalid_base_guard_ok=1
+for invalid_base in 'http://api.example.test' 'https://api.example.test/embedded space'; do
+  set +e
+  invalid_base_output=$(ANTHROPIC_API_KEY=fixture VERIFIER_API_BASE="$invalid_base" \
+    "$PROVIDER" "$bundle" 2>"$TMP_ROOT/invalid-base.err")
+  invalid_base_rc=$?
+  set -e
+  if [ "$invalid_base_rc" -eq 0 ] \
+    || printf '%s\n' "$invalid_base_output" | grep -q '^VERDICT:' \
+    || ! grep -Fqx 'provider API base is invalid' "$TMP_ROOT/invalid-base.err"; then
+    invalid_base_guard_ok=0
+  fi
+done
+if [ "$invalid_base_guard_ok" -eq 1 ]; then
+  pass '[14] provider rejects non-HTTPS or whitespace-bearing API bases without a verdict'
+else
+  fail_case '[14] provider rejects non-HTTPS or whitespace-bearing API bases without a verdict' \
+    'one or more invalid bases escaped the config-error path'
 fi
 
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
