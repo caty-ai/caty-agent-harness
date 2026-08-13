@@ -63,7 +63,7 @@ case "${CLI_MODE:-valid}" in
     exit 42
     ;;
   nonzero-bundle)
-    sed -n '3p' "$stdin_marker" >&2
+    grep -Eo 'MIDDLE_BUNDLE_CANARY_70_[A-Z]+' "$stdin_marker" | head -n 1 >&2
     printf 'VERDICT: pass\nstub output must not escape a failed invocation\n'
     exit 43
     ;;
@@ -97,6 +97,9 @@ case "${CLI_MODE:-valid}" in
   harmless-third)
     printf 'VERDICT: pass\nvalid-looking reason\nunexpected third line\n'
     ;;
+  blank-before-reason)
+    printf 'VERDICT: pass\n\nblank-separated reason is benign\n'
+    ;;
   empty-reason)
     printf 'VERDICT: pass\n \t \n'
     ;;
@@ -119,6 +122,8 @@ argv_marker=$TMP_ROOT/argv.marker
 stdin_marker=$TMP_ROOT/stdin.marker
 pwd_marker=$TMP_ROOT/pwd.marker
 env_marker=$TMP_ROOT/env.marker
+child_tmp=$TMP_ROOT/child-tmp
+mkdir -p "$child_tmp"
 expected_argv=$TMP_ROOT/expected-argv
 cat >"$expected_argv" <<EOF
 --print
@@ -150,6 +155,9 @@ valid_output=$(FABLE_CONFORMING_PROVIDER_PATH="$CLI_PROVIDER" \
   CLAUDE_CODE_MESSAGING_SOCKET=/tmp/host-message.sock \
   CLAUDE_CODE_DYNAMIC_REVIEW_TEST=must-not-survive \
   CLAUDE_AGENT_DYNAMIC_REVIEW_TEST=must-not-survive \
+  NODE_OPTIONS=--require=/tmp/fixture.js NODE_EXTRA_CA_CERTS=/tmp/fixture-ca.pem \
+  SSL_CERT_FILE=/tmp/fixture-cert.pem NODE_TLS_REJECT_UNAUTHORIZED=0 \
+  TMPDIR="$child_tmp" LANG=C LC_CTYPE=C VERIFIER_RUNTIME_MARKER=retained \
   "$WRAPPER" "$bundle" 2>"$TMP_ROOT/valid.err")
 valid_rc=$?
 set -e
@@ -157,7 +165,8 @@ cli_pwd=$(cat "$pwd_marker" 2>/dev/null || true)
 fence_count=$(LC_ALL=C grep -Ec '^CATY_UNTRUSTED_BUNDLE_[0-9a-f]{48}$' "$stdin_marker" 2>/dev/null || true)
 fence_unique=$(LC_ALL=C grep -E '^CATY_UNTRUSTED_BUNDLE_[0-9a-f]{48}$' "$stdin_marker" 2>/dev/null \
   | sort -u | wc -l | tr -d '[:space:]')
-leaked_env=$(grep -E '^(ANTHROPIC_|VERIFIER_API_|CLAUDE_|CLAUDECODE|CLAUDE_PID)' \
+scrubbed_env_re='^(ANTHROPIC_|VERIFIER_API_|CLAUDE_|CLAUDECODE|CLAUDE_PID|NODE_OPTIONS=|NODE_EXTRA_CA_CERTS=|SSL_CERT_FILE=|NODE_TLS_REJECT_UNAUTHORIZED=)'
+leaked_env=$(grep -E "$scrubbed_env_re" \
   "$env_marker" | sed 's/=.*//' | tr '\n' ',' | sed 's/,$//' || true)
 if [[ "$valid_rc" -eq 0 ]] \
   && [[ "$valid_output" == 'VERDICT: pass
@@ -169,12 +178,16 @@ stub accepted the verifier request' ]] \
   && [[ -n "$cli_pwd" && "$cli_pwd" != "$invoking_dir" && ! -e "$cli_pwd" ]] \
   && grep -Fqx "HOME=$HOME" "$env_marker" \
   && grep -Fqx "PATH=$PATH" "$env_marker" \
+  && grep -Fqx "TMPDIR=$child_tmp" "$env_marker" \
+  && grep -Fqx 'LANG=C' "$env_marker" \
+  && grep -Fqx 'LC_CTYPE=C' "$env_marker" \
   && grep -Fqx "VERIFIER_CLI_BIN=$cli_stub" "$env_marker" \
   && grep -Fqx 'VERIFIER_MODEL=claude-test-model' "$env_marker" \
-  && ! grep -Eq '^(ANTHROPIC_|VERIFIER_API_|CLAUDE_|CLAUDECODE|CLAUDE_PID)' "$env_marker"; then
-  pass '[1] wrapper path sends exact isolated argv/stdin/cwd and scrubs inherited Claude/API environment'
+  && grep -Fqx 'VERIFIER_RUNTIME_MARKER=retained' "$env_marker" \
+  && ! grep -Eq "$scrubbed_env_re" "$env_marker"; then
+  pass '[1] wrapper path sends exact isolated argv/stdin/cwd and scrubs inherited CLI injection environment'
 else
-  fail_case '[1] wrapper path sends exact isolated argv/stdin/cwd and scrubs inherited Claude/API environment' \
+  fail_case '[1] wrapper path sends exact isolated argv/stdin/cwd and scrubs inherited CLI injection environment' \
     "rc=$valid_rc leaked=$leaked_env cwd=$cli_pwd fences=$fence_count/$fence_unique output=$valid_output"
 fi
 
@@ -301,7 +314,8 @@ for benign_case in \
   'trailing-blank|VERDICT: pass|trailing blank is benign' \
   'leading-blank|VERDICT: pass|leading blank is benign' \
   'crlf|VERDICT: pass|CRLF is benign' \
-  'harmless-third|VERDICT: pass|valid-looking reason'; do
+  'harmless-third|VERDICT: pass|valid-looking reason' \
+  'blank-before-reason|VERDICT: pass|blank-separated reason is benign'; do
   cli_mode=${benign_case%%|*}
   expected_output=${benign_case#*|}
   expected_output=${expected_output/|/$'\n'}
@@ -317,9 +331,9 @@ for benign_case in \
   fi
 done
 if [[ "$benign_matrix_ok" -eq 1 ]]; then
-  pass '[7] leading/trailing blanks, CRLF, and harmless third lines normalize to two wrapper lines'
+  pass '[7] benign blanks, CRLF, and harmless third lines normalize to two wrapper lines'
 else
-  fail_case '[7] leading/trailing blanks, CRLF, and harmless third lines normalize to two wrapper lines' \
+  fail_case '[7] benign blanks, CRLF, and harmless third lines normalize to two wrapper lines' \
     'one or more benign CLI reply shapes were rejected'
 fi
 
@@ -385,6 +399,12 @@ long_model_output=$(VERIFIER_CLI_BIN="$cli_stub" VERIFIER_MODEL="$long_model" \
   FABLE_WRAPPER_PATH="$WRAPPER" FABLE_ATTEST_SCRATCH_DIR="$long_model_scratch" \
   "$CLI_PROBE" 2>"$TMP_ROOT/long-model.err")
 long_model_rc=$?
+long_attest_evidence=$TMP_ROOT/long-cli-wrapper.conformance
+long_attest_output=$(VERIFIER_CLI_BIN="$cli_stub" VERIFIER_MODEL="$long_model" \
+  CLI_MODE=probe CLI_STDIN_MARKER="$stdin_marker" PROBE_PROVIDER_PATH="$CLI_PROVIDER" \
+  "$ATTEST" --route verifier --wrapper "$WRAPPER" --probe "$CLI_PROBE" \
+    --evidence "$long_attest_evidence" 2>"$TMP_ROOT/long-attest.err")
+long_attest_rc=$?
 set -e
 long_provider_version=$(printf '%s\n' "$long_model_output" \
   | sed -n 's/^provider_version=//p')
@@ -401,14 +421,16 @@ if [[ "$probe_rc" -eq 0 ]] \
   && [[ ${#expected_provider_version} -le 64 ]] \
   && [[ "$expected_provider_version" =~ ^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$ ]] \
   && [[ "$long_model_rc" -eq 0 ]] \
+  && [[ "$long_attest_rc" -eq 0 && -f "$long_attest_evidence" ]] \
   && [[ "$long_provider_version" == "$expected_long_version" ]] \
-  && [[ ${#long_provider_version} -eq 64 ]] \
+  && [[ ${#long_provider_version} -le 64 ]] \
   && [[ "$long_provider_version" =~ ^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$ ]] \
+  && grep -Fqx "provider_version=$expected_long_version" "$long_attest_evidence" \
   && grep -Fqx "provider_path=$CLI_PROVIDER" "$attest_evidence"; then
   pass '[9] CLI probe records the stub hash and passes the real closed-schema attester'
 else
   fail_case '[9] CLI probe records the stub hash and passes the real closed-schema attester' \
-    "probe=$probe_rc attest=$attest_rc output=$probe_output$attest_output"
+    "probe=$probe_rc attest=$attest_rc long_attest=$long_attest_rc output=$probe_output$attest_output$long_attest_output"
 fi
 
 constant_provider=$TMP_ROOT/constant-provider.sh
@@ -463,19 +485,25 @@ else
     "rc=$invalid_model_rc output=$invalid_model_output"
 fi
 
+middle_bundle=$(LC_ALL=C awk 'BEGIN {
+  for (i = 0; i < 2100; i++) printf "a"
+  printf "MIDDLE_BUNDLE_CANARY_70_UNIQUE"
+  for (i = 0; i < 2100; i++) printf "z"
+}')
 set +e
 bundle_diagnostic_output=$(FABLE_CONFORMING_PROVIDER_PATH="$CLI_PROVIDER" \
   VERIFIER_BUNDLE_MIN_BYTES=64 VERIFIER_CLI_BIN="$cli_stub" \
   CLI_STDIN_MARKER="$stdin_marker" CLI_MODE=nonzero-bundle \
-  "$WRAPPER" "$bundle" 2>"$TMP_ROOT/nonzero-bundle.err")
+  "$WRAPPER" "$middle_bundle" 2>"$TMP_ROOT/nonzero-bundle.err")
 bundle_diagnostic_rc=$?
 set -e
 if [[ "$bundle_diagnostic_rc" -ne 0 && -z "$bundle_diagnostic_output" ]] \
   && grep -Fq 'CLI invocation failed (exit 43;' "$TMP_ROOT/nonzero-bundle.err" \
-  && ! grep -Fq 'CANARY_BUNDLE_PAYLOAD_70' "$TMP_ROOT/nonzero-bundle.err"; then
-  pass '[12] bounded CLI diagnostics include status without leaking untrusted bundle content'
+  && grep -Fq '[redacted untrusted input]' "$TMP_ROOT/nonzero-bundle.err" \
+  && ! grep -Fq 'MIDDLE_BUNDLE_CANARY_70_UNIQUE' "$TMP_ROOT/nonzero-bundle.err"; then
+  pass '[12] bounded diagnostics redact content echoed from the middle of a 4 KB bundle'
 else
-  fail_case '[12] bounded CLI diagnostics include status without leaking untrusted bundle content' \
+  fail_case '[12] bounded diagnostics redact content echoed from the middle of a 4 KB bundle' \
     "rc=$bundle_diagnostic_rc output=$bundle_diagnostic_output"
 fi
 

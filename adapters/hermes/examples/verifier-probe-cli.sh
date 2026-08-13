@@ -43,8 +43,13 @@ model=${VERIFIER_MODEL:-claude-sonnet-5}
   || probe_fail 'VERIFIER_MODEL is invalid'
 cli_sha256=$(sha256_file "$cli_bin") \
   || probe_fail 'VERIFIER_CLI_BIN could not be hashed'
-model_prefix=${model:0:43}
-provider_version=${model_prefix}+cli-${cli_sha256:0:16}
+provider_version_limit=64
+provider_version_suffix=+cli-${cli_sha256:0:16}
+model_prefix_limit=$((provider_version_limit - ${#provider_version_suffix}))
+model_prefix=${model:0:model_prefix_limit}
+provider_version=$model_prefix$provider_version_suffix
+[[ ${#provider_version} -le $provider_version_limit ]] \
+  || probe_fail 'provider_version exceeds the attester limit'
 
 relocated_provider=$scratch_dir/claude-cli-verifier-provider
 probe_output=$scratch_dir/verifier-probe-cli.out

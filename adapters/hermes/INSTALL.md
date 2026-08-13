@@ -102,11 +102,17 @@ The rules there apply in addition to the Hermes-specific wiring below.
    `PATH` lookup. It delivers the fenced bundle prompt on stdin from a private temporary
    file and launches the CLI with print mode, no tools, no session persistence, strict
    empty MCP configuration, and safe mode. Before launch it removes API key, endpoint,
-   Claude config/session, and agent-process variables from the child environment while
-   retaining `HOME` for subscription credential discovery. This matters for both trust
-   and billing: if `ANTHROPIC_API_KEY` survives, the CLI authenticates with that key and
-   incurs metered API usage instead of using the logged-in subscription. The provider
-   also starts the CLI in a fresh neutral temporary directory and removes it on exit.
+   Claude config/session, agent-process, Node preload, and TLS trust-override variables
+   from the child environment while retaining `HOME` for subscription credential
+   discovery. The CLI must therefore be authenticated through the login discovered via
+   `HOME`; token/config-directory overrides such as `CLAUDE_CODE_OAUTH_TOKEN` and
+   `CLAUDE_CONFIG_DIR` are deliberately stripped. This matters for both trust and
+   billing: if `ANTHROPIC_API_KEY` survives, the CLI authenticates with that key and
+   incurs metered API usage instead of using the logged-in subscription. The job
+   environment must not set `HTTPS_PROXY`, `HTTP_PROXY`, or `ALL_PROXY` unless the
+   operator intends verifier traffic to traverse that proxy; those variables are not
+   stripped because some deployment hosts require an explicit proxy. The provider also
+   starts the CLI in a fresh neutral temporary directory and removes it on exit.
 
    This is a mandatory defense against the **checkpoint stop-hook final-message
    replacement hazard**: in this family, a host checkpoint hook has replaced the final

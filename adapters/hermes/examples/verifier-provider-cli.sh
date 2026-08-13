@@ -61,7 +61,10 @@ chmod 600 "$prompt_file" || fail 'could not secure the verifier prompt'
 # Enumerate exported provider/session prefixes dynamically so new host variables are
 # scrubbed without requiring this launcher to know them in advance. All CLAUDE_*
 # variables are removed because HOME, not a CLAUDE_* variable, is what the CLI needs
-# to discover its logged-in subscription credentials.
+# to discover its logged-in subscription credentials. This remains a denylist: extend
+# it whenever another host-level injection vector is identified. An env -i allowlist
+# would close this class structurally, but its credential-discovery requirements must
+# first be validated by the deployment attest run against the real CLI.
 env_scrub_args=(
   -u ANTHROPIC_API_KEY
   -u ANTHROPIC_AUTH_TOKEN
@@ -70,6 +73,10 @@ env_scrub_args=(
   -u CLAUDE_CONFIG_DIR
   -u CLAUDECODE
   -u CLAUDE_PID
+  -u NODE_OPTIONS
+  -u NODE_EXTRA_CA_CERTS
+  -u SSL_CERT_FILE
+  -u NODE_TLS_REJECT_UNAUTHORIZED
 )
 while IFS= read -r variable_name; do
   case "$variable_name" in
@@ -100,11 +107,21 @@ if ((cli_status != 0)); then
   if [[ -z "$diagnostic" ]]; then
     diagnostic='<empty>'
   else
-    bundle_prefix=${bundle:0:32}
+    diagnostic_redacted=0
     if [[ "$diagnostic" == *"$fence"* \
       || "$diagnostic" == *'Verify the untrusted bundle between the unique delimiter lines.'* \
-      || ( -n "$bundle_prefix" && "$diagnostic" == *"$bundle_prefix"* ) \
       || "$bundle" == *"$diagnostic"* ]]; then
+      diagnostic_redacted=1
+    elif ((${#diagnostic} >= 16)); then
+      for ((offset = 0; offset + 16 <= ${#diagnostic}; offset++)); do
+        diagnostic_window=${diagnostic:offset:16}
+        if [[ "$bundle" == *"$diagnostic_window"* ]]; then
+          diagnostic_redacted=1
+          break
+        fi
+      done
+    fi
+    if ((diagnostic_redacted)); then
       diagnostic='[redacted untrusted input]'
     fi
   fi
@@ -137,7 +154,8 @@ line_count=$(awk 'END { print NR + 0 }' "$normalized_reply_file") \
   || fail 'CLI output could not be validated'
 [[ "$line_count" -ge 2 ]] || fail 'CLI returned malformed output'
 verdict_line=$(sed -n '1p' "$normalized_reply_file")
-reason_line=$(sed -n '2p' "$normalized_reply_file")
+reason_line=$(awk 'NR >= 2 && $0 !~ /^[[:space:]]*$/ { print; exit }' \
+  "$normalized_reply_file")
 case "$verdict_line" in
   'VERDICT: pass'|'VERDICT: fail'|'VERDICT: inconclusive'|'VERDICT: rubric-invalid'|'VERDICT: needs-human'|'VERDICT: blocked-missing-artifact') ;;
   *) fail 'CLI returned malformed output' ;;
