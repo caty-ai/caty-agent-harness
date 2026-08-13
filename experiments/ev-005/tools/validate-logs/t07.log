@@ -236,3 +236,167 @@ CHECK a34 PASS attest wrapper drops the retired stdout prefix
 CHECK a35 PASS attest wrapper uses the public stderr prefix
 CHECK a36 PASS attest wrapper drops the retired stderr prefix
 CHECK a37 PASS no case-insensitive fable occurrence exists outside the explicit allowlist
+CHECK a38 PASS full repository test suite passes on the branch-equivalent tree
+CHECK a39 PASS repository lint passes on the branch-equivalent tree
+RUN t07 fix 1 exit=0 dur=633s
+CHECK a01 PASS design title uses the public product name
+CHECK a02 PASS design title drops the retired working name
+CHECK a03 PASS task-runner companion note uses the public product name
+CHECK a04 PASS task-runner companion note drops the retired working name
+CHECK a05 PASS task-runner loop description uses the public product name
+CHECK a06 PASS task-runner loop description drops the retired working name
+CHECK a07 PASS task-runner verification sentence uses the public product name
+CHECK a08 PASS task-runner verification sentence drops the retired working name
+CHECK a09 PASS synthesis title uses the public product name
+CHECK a10 PASS synthesis title drops the retired working name
+CHECK a11 PASS synthesis namespace note uses the public product name
+CHECK a12 PASS synthesis namespace note drops the retired working name
+CHECK a13 PASS task-runner synthesis verification sentence uses the public product name
+CHECK a14 PASS task-runner synthesis verification sentence drops the retired working name
+CHECK a15 PASS task-runner synthesis retry wording uses the public product name
+CHECK a16 PASS task-runner synthesis retry wording drops the retired working name
+CHECK a17 PASS governance historical-source prose uses the neutral tracker wording
+CHECK a18 PASS governance historical-source prose drops the retired tracker name
+CHECK a19 PASS governance synthesis-scope row uses the public product name
+CHECK a20 PASS governance synthesis-scope row drops the retired working name
+CHECK a21 PASS governance v1.0 source row uses the neutral tracker wording
+CHECK a22 PASS governance v1.0 source row drops the retired tracker name
+CHECK a23 PASS governance amendment row uses the neutral tracker wording
+CHECK a24 PASS governance amendment row drops the retired tracker name
+CHECK a25 PASS updater rollout source-of-truth line uses the neutral tracker wording
+CHECK a26 PASS updater rollout source-of-truth line drops the retired tracker name
+CHECK a27 PASS updater rollout path-correction note uses the neutral tracker wording
+CHECK a28 PASS updater rollout path-correction note drops the retired tracker name
+CHECK a29 PASS wrapper conformance uses the public stage prefix
+CHECK a30 PASS wrapper conformance drops the retired stage prefix
+CHECK a31 PASS attest wrapper uses the public scratch prefix
+CHECK a32 PASS attest wrapper drops the retired scratch prefix
+CHECK a33 PASS attest wrapper uses the public stdout prefix
+CHECK a34 PASS attest wrapper drops the retired stdout prefix
+CHECK a35 PASS attest wrapper uses the public stderr prefix
+CHECK a36 PASS attest wrapper drops the retired stderr prefix
+CHECK a37 PASS no case-insensitive fable occurrence exists outside the explicit allowlist
+CHECK a38 PASS full repository test suite passes on the branch-equivalent tree
+CHECK a39 PASS repository lint passes on the branch-equivalent tree
+RUN t07 fix 2 exit=0 dur=625s
+CHECK a01 PASS design title uses the public product name
+CHECK a02 PASS design title drops the retired working name
+CHECK a03 PASS task-runner companion note uses the public product name
+CHECK a04 PASS task-runner companion note drops the retired working name
+CHECK a05 PASS task-runner loop description uses the public product name
+CHECK a06 PASS task-runner loop description drops the retired working name
+CHECK a07 PASS task-runner verification sentence uses the public product name
+CHECK a08 PASS task-runner verification sentence drops the retired working name
+CHECK a09 PASS synthesis title uses the public product name
+CHECK a10 PASS synthesis title drops the retired working name
+CHECK a11 PASS synthesis namespace note uses the public product name
+CHECK a12 PASS synthesis namespace note drops the retired working name
+CHECK a13 PASS task-runner synthesis verification sentence uses the public product name
+CHECK a14 PASS task-runner synthesis verification sentence drops the retired working name
+CHECK a15 PASS task-runner synthesis retry wording uses the public product name
+CHECK a16 PASS task-runner synthesis retry wording drops the retired working name
+CHECK a17 PASS governance historical-source prose uses the neutral tracker wording
+CHECK a18 PASS governance historical-source prose drops the retired tracker name
+CHECK a19 PASS governance synthesis-scope row uses the public product name
+CHECK a20 PASS governance synthesis-scope row drops the retired working name
+CHECK a21 PASS governance v1.0 source row uses the neutral tracker wording
+CHECK a22 PASS governance v1.0 source row drops the retired tracker name
+CHECK a23 PASS governance amendment row uses the neutral tracker wording
+CHECK a24 PASS governance amendment row drops the retired tracker name
+CHECK a25 PASS updater rollout source-of-truth line uses the neutral tracker wording
+CHECK a26 PASS updater rollout source-of-truth line drops the retired tracker name
+CHECK a27 PASS updater rollout path-correction note uses the neutral tracker wording
+CHECK a28 PASS updater rollout path-correction note drops the retired tracker name
+CHECK a29 PASS wrapper conformance uses the public stage prefix
+CHECK a30 PASS wrapper conformance drops the retired stage prefix
+CHECK a31 PASS attest wrapper uses the public scratch prefix
+CHECK a32 PASS attest wrapper drops the retired scratch prefix
+CHECK a33 PASS attest wrapper uses the public stdout prefix
+CHECK a34 PASS attest wrapper drops the retired stdout prefix
+CHECK a35 PASS attest wrapper uses the public stderr prefix
+CHECK a36 PASS attest wrapper drops the retired stderr prefix
+CHECK a37 PASS no case-insensitive fable occurrence exists outside the explicit allowlist
+CHECK a38 PASS full repository test suite passes on the branch-equivalent tree
+CHECK a39 PASS repository lint passes on the branch-equivalent tree
+RUN t07 fix 3 exit=0 dur=631s
+CHECK a01 PASS design title uses the public product name
+CHECK a02 PASS design title drops the retired working name
+CHECK a03 PASS task-runner companion note uses the public product name
+CHECK a04 PASS task-runner companion note drops the retired working name
+CHECK a05 PASS task-runner loop description uses the public product name
+CHECK a06 PASS task-runner loop description drops the retired working name
+CHECK a07 PASS task-runner verification sentence uses the public product name
+CHECK a08 PASS task-runner verification sentence drops the retired working name
+CHECK a09 PASS synthesis title uses the public product name
+CHECK a10 PASS synthesis title drops the retired working name
+CHECK a11 PASS synthesis namespace note uses the public product name
+CHECK a12 PASS synthesis namespace note drops the retired working name
+CHECK a13 PASS task-runner synthesis verification sentence uses the public product name
+CHECK a14 PASS task-runner synthesis verification sentence drops the retired working name
+CHECK a15 PASS task-runner synthesis retry wording uses the public product name
+CHECK a16 PASS task-runner synthesis retry wording drops the retired working name
+CHECK a17 PASS governance historical-source prose uses the neutral tracker wording
+CHECK a18 PASS governance historical-source prose drops the retired tracker name
+CHECK a19 PASS governance synthesis-scope row uses the public product name
+CHECK a20 PASS governance synthesis-scope row drops the retired working name
+CHECK a21 PASS governance v1.0 source row uses the neutral tracker wording
+CHECK a22 PASS governance v1.0 source row drops the retired tracker name
+CHECK a23 PASS governance amendment row uses the neutral tracker wording
+CHECK a24 PASS governance amendment row drops the retired tracker name
+CHECK a25 PASS updater rollout source-of-truth line uses the neutral tracker wording
+CHECK a26 PASS updater rollout source-of-truth line drops the retired tracker name
+CHECK a27 PASS updater rollout path-correction note uses the neutral tracker wording
+CHECK a28 PASS updater rollout path-correction note drops the retired tracker name
+CHECK a29 PASS wrapper conformance uses the public stage prefix
+CHECK a30 PASS wrapper conformance drops the retired stage prefix
+CHECK a31 PASS attest wrapper uses the public scratch prefix
+CHECK a32 PASS attest wrapper drops the retired scratch prefix
+CHECK a33 PASS attest wrapper uses the public stdout prefix
+CHECK a34 PASS attest wrapper drops the retired stdout prefix
+CHECK a35 PASS attest wrapper uses the public stderr prefix
+CHECK a36 PASS attest wrapper drops the retired stderr prefix
+CHECK a37 PASS no case-insensitive fable occurrence exists outside the explicit allowlist
+CHECK a38 PASS full repository test suite passes on the branch-equivalent tree
+CHECK a39 PASS repository lint passes on the branch-equivalent tree
+RUN t07 fix 4 exit=0 dur=628s
+CHECK a01 PASS design title uses the public product name
+CHECK a02 PASS design title drops the retired working name
+CHECK a03 PASS task-runner companion note uses the public product name
+CHECK a04 PASS task-runner companion note drops the retired working name
+CHECK a05 PASS task-runner loop description uses the public product name
+CHECK a06 PASS task-runner loop description drops the retired working name
+CHECK a07 PASS task-runner verification sentence uses the public product name
+CHECK a08 PASS task-runner verification sentence drops the retired working name
+CHECK a09 PASS synthesis title uses the public product name
+CHECK a10 PASS synthesis title drops the retired working name
+CHECK a11 PASS synthesis namespace note uses the public product name
+CHECK a12 PASS synthesis namespace note drops the retired working name
+CHECK a13 PASS task-runner synthesis verification sentence uses the public product name
+CHECK a14 PASS task-runner synthesis verification sentence drops the retired working name
+CHECK a15 PASS task-runner synthesis retry wording uses the public product name
+CHECK a16 PASS task-runner synthesis retry wording drops the retired working name
+CHECK a17 PASS governance historical-source prose uses the neutral tracker wording
+CHECK a18 PASS governance historical-source prose drops the retired tracker name
+CHECK a19 PASS governance synthesis-scope row uses the public product name
+CHECK a20 PASS governance synthesis-scope row drops the retired working name
+CHECK a21 PASS governance v1.0 source row uses the neutral tracker wording
+CHECK a22 PASS governance v1.0 source row drops the retired tracker name
+CHECK a23 PASS governance amendment row uses the neutral tracker wording
+CHECK a24 PASS governance amendment row drops the retired tracker name
+CHECK a25 PASS updater rollout source-of-truth line uses the neutral tracker wording
+CHECK a26 PASS updater rollout source-of-truth line drops the retired tracker name
+CHECK a27 PASS updater rollout path-correction note uses the neutral tracker wording
+CHECK a28 PASS updater rollout path-correction note drops the retired tracker name
+CHECK a29 PASS wrapper conformance uses the public stage prefix
+CHECK a30 PASS wrapper conformance drops the retired stage prefix
+CHECK a31 PASS attest wrapper uses the public scratch prefix
+CHECK a32 PASS attest wrapper drops the retired scratch prefix
+CHECK a33 PASS attest wrapper uses the public stdout prefix
+CHECK a34 PASS attest wrapper drops the retired stdout prefix
+CHECK a35 PASS attest wrapper uses the public stderr prefix
+CHECK a36 PASS attest wrapper drops the retired stderr prefix
+CHECK a37 PASS no case-insensitive fable occurrence exists outside the explicit allowlist
+CHECK a38 PASS full repository test suite passes on the branch-equivalent tree
+CHECK a39 PASS repository lint passes on the branch-equivalent tree
+RUN t07 fix 5 exit=0 dur=629s
+VERDICT t07 PASS

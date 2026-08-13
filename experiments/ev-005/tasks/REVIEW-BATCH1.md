@@ -12,7 +12,7 @@ Drafts by Codex (GPT-5.6 Sol) under `../translation-rules.md`; drafting run was 
 | t04 | sgl#1 | **PASS after r1** (re-run 5+5) | deep-reviewed, **revised r1** | accepted pending seat |
 | t05 | harness#18 | PASS | structural only | full review pending |
 | t06 | harness#15 | PASS | structural only | full review pending |
-| t07 | harness#39 | re-validation in progress (killed mid-run at fix 3/5, all checks passing) | deep-reviewed, **task.md revised r1** | accepted pending validity + seat |
+| t07 | harness#39 | **PASS** (independent full re-run 5+5, no violations; `t07.log`) | deep-reviewed, **task.md revised r1** | accepted pending seat |
 | t08 | harness#16 | PASS | deep-reviewed | **F2 pending** — full-sentence needles |
 
 ## Systematic findings
