@@ -1,0 +1,102 @@
+== validate t04 pre=fd0b3897191e9ab908f530f2a644b663c7ec3f51 fix=e43afb69b9574f25b1952ef65de1147e53e2e71d repo=/Users/shojikumaru/claude-workspace/self-growth-loop-catyai ==
+CHECK a01 FAIL public pipeline introduction is missing
+CHECK a02 FAIL linked public repository line is missing or changed
+CHECK a03 FAIL pipeline-routing statement is missing
+CHECK a04 PASS pipeline control inheritance is stated
+CHECK a05 PASS condition 1 still requires the closed prerequisite
+CHECK a06 PASS condition 2 line remains unchanged
+CHECK a07 PASS trial-enqueue T2 isolation string remains unchanged
+CHECK a08 PASS adoption-wiring T2 row remains unchanged
+CHECK a09 PASS no additional private-reference wording was introduced
+RUN t04 pre 1 exit=1 dur=0s
+CHECK a01 FAIL public pipeline introduction is missing
+CHECK a02 FAIL linked public repository line is missing or changed
+CHECK a03 FAIL pipeline-routing statement is missing
+CHECK a04 PASS pipeline control inheritance is stated
+CHECK a05 PASS condition 1 still requires the closed prerequisite
+CHECK a06 PASS condition 2 line remains unchanged
+CHECK a07 PASS trial-enqueue T2 isolation string remains unchanged
+CHECK a08 PASS adoption-wiring T2 row remains unchanged
+CHECK a09 PASS no additional private-reference wording was introduced
+RUN t04 pre 2 exit=1 dur=0s
+CHECK a01 FAIL public pipeline introduction is missing
+CHECK a02 FAIL linked public repository line is missing or changed
+CHECK a03 FAIL pipeline-routing statement is missing
+CHECK a04 PASS pipeline control inheritance is stated
+CHECK a05 PASS condition 1 still requires the closed prerequisite
+CHECK a06 PASS condition 2 line remains unchanged
+CHECK a07 PASS trial-enqueue T2 isolation string remains unchanged
+CHECK a08 PASS adoption-wiring T2 row remains unchanged
+CHECK a09 PASS no additional private-reference wording was introduced
+RUN t04 pre 3 exit=1 dur=0s
+CHECK a01 FAIL public pipeline introduction is missing
+CHECK a02 FAIL linked public repository line is missing or changed
+CHECK a03 FAIL pipeline-routing statement is missing
+CHECK a04 PASS pipeline control inheritance is stated
+CHECK a05 PASS condition 1 still requires the closed prerequisite
+CHECK a06 PASS condition 2 line remains unchanged
+CHECK a07 PASS trial-enqueue T2 isolation string remains unchanged
+CHECK a08 PASS adoption-wiring T2 row remains unchanged
+CHECK a09 PASS no additional private-reference wording was introduced
+RUN t04 pre 4 exit=1 dur=0s
+CHECK a01 FAIL public pipeline introduction is missing
+CHECK a02 FAIL linked public repository line is missing or changed
+CHECK a03 FAIL pipeline-routing statement is missing
+CHECK a04 PASS pipeline control inheritance is stated
+CHECK a05 PASS condition 1 still requires the closed prerequisite
+CHECK a06 PASS condition 2 line remains unchanged
+CHECK a07 PASS trial-enqueue T2 isolation string remains unchanged
+CHECK a08 PASS adoption-wiring T2 row remains unchanged
+CHECK a09 PASS no additional private-reference wording was introduced
+RUN t04 pre 5 exit=1 dur=0s
+CHECK a01 PASS public pipeline introduction is present
+CHECK a02 PASS linked public repository line matches the required target
+CHECK a03 PASS qualifying trials are routed through that pipeline
+CHECK a04 PASS pipeline control inheritance is stated
+CHECK a05 PASS condition 1 still requires the closed prerequisite
+CHECK a06 PASS condition 2 line remains unchanged
+CHECK a07 PASS trial-enqueue T2 isolation string remains unchanged
+CHECK a08 PASS adoption-wiring T2 row remains unchanged
+CHECK a09 PASS no additional private-reference wording was introduced
+RUN t04 fix 1 exit=0 dur=0s
+CHECK a01 PASS public pipeline introduction is present
+CHECK a02 PASS linked public repository line matches the required target
+CHECK a03 PASS qualifying trials are routed through that pipeline
+CHECK a04 PASS pipeline control inheritance is stated
+CHECK a05 PASS condition 1 still requires the closed prerequisite
+CHECK a06 PASS condition 2 line remains unchanged
+CHECK a07 PASS trial-enqueue T2 isolation string remains unchanged
+CHECK a08 PASS adoption-wiring T2 row remains unchanged
+CHECK a09 PASS no additional private-reference wording was introduced
+RUN t04 fix 2 exit=0 dur=0s
+CHECK a01 PASS public pipeline introduction is present
+CHECK a02 PASS linked public repository line matches the required target
+CHECK a03 PASS qualifying trials are routed through that pipeline
+CHECK a04 PASS pipeline control inheritance is stated
+CHECK a05 PASS condition 1 still requires the closed prerequisite
+CHECK a06 PASS condition 2 line remains unchanged
+CHECK a07 PASS trial-enqueue T2 isolation string remains unchanged
+CHECK a08 PASS adoption-wiring T2 row remains unchanged
+CHECK a09 PASS no additional private-reference wording was introduced
+RUN t04 fix 3 exit=0 dur=0s
+CHECK a01 PASS public pipeline introduction is present
+CHECK a02 PASS linked public repository line matches the required target
+CHECK a03 PASS qualifying trials are routed through that pipeline
+CHECK a04 PASS pipeline control inheritance is stated
+CHECK a05 PASS condition 1 still requires the closed prerequisite
+CHECK a06 PASS condition 2 line remains unchanged
+CHECK a07 PASS trial-enqueue T2 isolation string remains unchanged
+CHECK a08 PASS adoption-wiring T2 row remains unchanged
+CHECK a09 PASS no additional private-reference wording was introduced
+RUN t04 fix 4 exit=0 dur=0s
+CHECK a01 PASS public pipeline introduction is present
+CHECK a02 PASS linked public repository line matches the required target
+CHECK a03 PASS qualifying trials are routed through that pipeline
+CHECK a04 PASS pipeline control inheritance is stated
+CHECK a05 PASS condition 1 still requires the closed prerequisite
+CHECK a06 PASS condition 2 line remains unchanged
+CHECK a07 PASS trial-enqueue T2 isolation string remains unchanged
+CHECK a08 PASS adoption-wiring T2 row remains unchanged
+CHECK a09 PASS no additional private-reference wording was introduced
+RUN t04 fix 5 exit=0 dur=0s
+VERDICT t04 PASS

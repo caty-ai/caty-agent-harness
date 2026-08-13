@@ -1,0 +1,82 @@
+== validate t03 pre=46c2318aa6d52bc8209b54e89fcc58e41d515994 fix=2bbc00a4501c7c91af988b28daa524b41b2c8b47 repo=/Users/shojikumaru/claude-workspace/caty-agent-harness ==
+CHECK a01 FAIL workflow does not match the required regenerated snapshot
+CHECK a02 FAIL AUTH none declaration is missing
+CHECK a03 PASS no tracked auth directory paths exist
+CHECK a04 PASS no non-test auth/signin/token filenames exist
+CHECK a05 PASS billing none declaration is present
+CHECK a06 PASS outbound none declaration is present
+CHECK a07 PASS gates none declaration is present
+RUN t03 pre 1 exit=1 dur=0s
+CHECK a01 FAIL workflow does not match the required regenerated snapshot
+CHECK a02 FAIL AUTH none declaration is missing
+CHECK a03 PASS no tracked auth directory paths exist
+CHECK a04 PASS no non-test auth/signin/token filenames exist
+CHECK a05 PASS billing none declaration is present
+CHECK a06 PASS outbound none declaration is present
+CHECK a07 PASS gates none declaration is present
+RUN t03 pre 2 exit=1 dur=0s
+CHECK a01 FAIL workflow does not match the required regenerated snapshot
+CHECK a02 FAIL AUTH none declaration is missing
+CHECK a03 PASS no tracked auth directory paths exist
+CHECK a04 PASS no non-test auth/signin/token filenames exist
+CHECK a05 PASS billing none declaration is present
+CHECK a06 PASS outbound none declaration is present
+CHECK a07 PASS gates none declaration is present
+RUN t03 pre 3 exit=1 dur=0s
+CHECK a01 FAIL workflow does not match the required regenerated snapshot
+CHECK a02 FAIL AUTH none declaration is missing
+CHECK a03 PASS no tracked auth directory paths exist
+CHECK a04 PASS no non-test auth/signin/token filenames exist
+CHECK a05 PASS billing none declaration is present
+CHECK a06 PASS outbound none declaration is present
+CHECK a07 PASS gates none declaration is present
+RUN t03 pre 4 exit=1 dur=0s
+CHECK a01 FAIL workflow does not match the required regenerated snapshot
+CHECK a02 FAIL AUTH none declaration is missing
+CHECK a03 PASS no tracked auth directory paths exist
+CHECK a04 PASS no non-test auth/signin/token filenames exist
+CHECK a05 PASS billing none declaration is present
+CHECK a06 PASS outbound none declaration is present
+CHECK a07 PASS gates none declaration is present
+RUN t03 pre 5 exit=1 dur=0s
+CHECK a01 PASS workflow matches the required regenerated snapshot
+CHECK a02 PASS AUTH none declaration is present
+CHECK a03 PASS no tracked auth directory paths exist
+CHECK a04 PASS no non-test auth/signin/token filenames exist
+CHECK a05 PASS billing none declaration is present
+CHECK a06 PASS outbound none declaration is present
+CHECK a07 PASS gates none declaration is present
+RUN t03 fix 1 exit=0 dur=0s
+CHECK a01 PASS workflow matches the required regenerated snapshot
+CHECK a02 PASS AUTH none declaration is present
+CHECK a03 PASS no tracked auth directory paths exist
+CHECK a04 PASS no non-test auth/signin/token filenames exist
+CHECK a05 PASS billing none declaration is present
+CHECK a06 PASS outbound none declaration is present
+CHECK a07 PASS gates none declaration is present
+RUN t03 fix 2 exit=0 dur=0s
+CHECK a01 PASS workflow matches the required regenerated snapshot
+CHECK a02 PASS AUTH none declaration is present
+CHECK a03 PASS no tracked auth directory paths exist
+CHECK a04 PASS no non-test auth/signin/token filenames exist
+CHECK a05 PASS billing none declaration is present
+CHECK a06 PASS outbound none declaration is present
+CHECK a07 PASS gates none declaration is present
+RUN t03 fix 3 exit=0 dur=0s
+CHECK a01 PASS workflow matches the required regenerated snapshot
+CHECK a02 PASS AUTH none declaration is present
+CHECK a03 PASS no tracked auth directory paths exist
+CHECK a04 PASS no non-test auth/signin/token filenames exist
+CHECK a05 PASS billing none declaration is present
+CHECK a06 PASS outbound none declaration is present
+CHECK a07 PASS gates none declaration is present
+RUN t03 fix 4 exit=0 dur=0s
+CHECK a01 PASS workflow matches the required regenerated snapshot
+CHECK a02 PASS AUTH none declaration is present
+CHECK a03 PASS no tracked auth directory paths exist
+CHECK a04 PASS no non-test auth/signin/token filenames exist
+CHECK a05 PASS billing none declaration is present
+CHECK a06 PASS outbound none declaration is present
+CHECK a07 PASS gates none declaration is present
+RUN t03 fix 5 exit=0 dur=0s
+VERDICT t03 PASS

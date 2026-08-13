@@ -1,0 +1,9 @@
+{
+  "id": "t04",
+  "source_repo": "caty-ai/self-growth-loop",
+  "source_issue": 1,
+  "pre_fix": "fd0b3897191e9ab908f530f2a644b663c7ec3f51",
+  "fix": "e43afb69b9574f25b1952ef65de1147e53e2e71d",
+  "synthetic": false,
+  "timeout_s": 120
+}

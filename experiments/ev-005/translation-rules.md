@@ -33,6 +33,8 @@ Every assertion instantiates one of these forms (extend only by amendment):
 
 Notes:
 - T3 on a full test suite is allowed only when the source Done when itself invokes it; otherwise prefer the narrowest T3/T5 that covers the unit (keeps runtime bounded and failure attribution clean).
+- **Needle calibration (r1, from batch-1 author review):** a T1/T4 needle pins the *unit*, not the historical fix's wording. Use the smallest distinctive fragment — paths, identifiers, numbers, or key phrases of a few words — never a full sentence of fix prose, unless the source Done when quotes exact wording. Rationale: the validity gate (§5) only proves fix-passes/pre-fails; it cannot prove that honest alternative solutions pass. Full-sentence pins collapse the task into transcription from the visible donecheck and reject correct paraphrases.
+- **Criterion-constitutive identifiers (r1):** when the source Done when itself names a target (a URL, a rename target, an exact prefix) that is not derivable from the pre-fix tree, that identifier is spec, not provenance — it stays in task.md verbatim, with an anonymization-sweep exemption recorded in units.md. Deleting it makes the task unsolvable in-replica, which no arm can detect and the validity gate cannot catch.
 - Every assertion emits one line `CHECK <id> PASS|FAIL <short reason>` on stdout; donecheck exits 0 iff all assertions pass (**fail-closed**: any error path, missing file, tool crash, or timeout is FAIL, never skip).
 
 ## 3. Determinism and sealing

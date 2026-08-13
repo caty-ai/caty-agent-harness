@@ -1,0 +1,382 @@
+== validate t05 pre=380d55262f7efd6ad245c5fc5c69d3e997757261 fix=8983415fce0b427f33ed64f0588a62f129b8fae0 repo=/Users/shojikumaru/claude-workspace/caty-agent-harness ==
+CHECK a01 FAIL missing pattern [out/image.svg] in templates/examples/img-pilot.task.md
+CHECK a02 FAIL missing pattern [<svg xmlns="http://www.w3.org/2000/svg"] in templates/examples/img-pilot.task.md
+CHECK a03 FAIL missing pattern ["artifact": "out/image.svg"] in templates/examples/img-pilot.task.md
+CHECK a04 FAIL missing pattern [- bash] in templates/examples/img-pilot.task.md
+CHECK a05 FAIL missing pattern [- python3 standard library] in templates/examples/img-pilot.task.md
+CHECK a06 FAIL forbidden pattern [LUCA_IMAGE_BACKEND] present in templates/examples/img-pilot.task.md
+CHECK a07 FAIL forbidden pattern [FAMILY_PUSH_CHANNEL] present in templates/examples/img-pilot.task.md
+CHECK a08 FAIL forbidden pattern [image.png] present in templates/examples/img-pilot.task.md
+CHECK a09 FAIL forbidden pattern [vision-rubric scoring] present in templates/examples/img-pilot.task.md
+CHECK a10 FAIL missing pattern [~/path/to/your/AGENTS.md] in adapters/codex/INSTALL.md
+CHECK a11 FAIL missing pattern [Replace this placeholder with the operator's own] in adapters/codex/INSTALL.md
+CHECK a12 FAIL missing pattern [~/path/to/your/AGENTS.md] in adapters/kimi/INSTALL.md
+CHECK a13 FAIL missing pattern [operator's own agent charter file path during setup.] in adapters/kimi/INSTALL.md
+CHECK a14 FAIL missing pattern [/path/to/secrets/cron.env] in adapters/hermes/INSTALL.md
+CHECK a15 FAIL missing pattern [/path/to/hermes-home/profiles/example/workspace] in adapters/hermes/INSTALL.md
+CHECK a16 FAIL missing pattern [issued_by: example-operator] in templates/TASK.tmpl.md
+CHECK a17 FAIL missing pattern [escalate_to: example-operator] in templates/TASK.tmpl.md
+CHECK a18 FAIL forbidden pattern [issued_by: sho-alpha] present in templates/TASK.tmpl.md
+CHECK a19 FAIL forbidden pattern [escalate_to: sho] present in templates/TASK.tmpl.md
+CHECK a20 FAIL missing pattern [issued_by: example-operator] in templates/examples/img-pilot.task.md
+CHECK a21 FAIL missing pattern [escalate_to: example-operator] in templates/examples/img-pilot.task.md
+CHECK a22 FAIL forbidden pattern [issued_by: sho-alpha] present in templates/examples/img-pilot.task.md
+CHECK a23 FAIL forbidden pattern [escalate_to: sho] present in templates/examples/img-pilot.task.md
+CHECK a24 FAIL missing pattern [fma_scripts_dir=${FMA_SCRIPTS_DIR:-}] in scripts/family-updater
+CHECK a25 FAIL missing pattern [When omitted, reporting is disabled with a warning.] in scripts/family-updater
+CHECK a26 FAIL missing pattern [Set FMA_SCRIPTS_DIR or pass --fma-scripts-dir <dir>.] in scripts/family-updater
+CHECK a27 FAIL forbidden pattern [$HOME/claude-workspace/family-memory-architecture/scripts] present in scripts/family-updater
+CHECK a28 FAIL missing pattern [FMA_SCRIPTS_DIR is not set; set it to the reporter directory] in templates/updater-cron.tmpl.sh
+CHECK a29 FAIL missing pattern [/path/to/family-memory-architecture/scripts] in templates/updater-cron.tmpl.sh
+CHECK a30 FAIL forbidden pattern [HOME is not set; cannot derive default FMA_SCRIPTS_DIR] present in templates/updater-cron.tmpl.sh
+CHECK a31 FAIL forbidden pattern [FMA_SCRIPTS_DIR=${FMA_SCRIPTS_DIR:-"$HOME/claude-workspace/family-memory-architecture/scripts"}] present in templates/updater-cron.tmpl.sh
+CHECK a32 FAIL missing pattern [remote home directory] in install.sh
+CHECK a33 FAIL forbidden pattern [Claire's STATE.md] present in install.sh
+CHECK a34 FAIL missing pattern [inspect configured] in install.sh
+CHECK a35 FAIL missing pattern [env-supplied external ones] in install.sh
+CHECK a36 PASS probe note says it does not mutate the checked workspace
+CHECK a37 FAIL forbidden pattern [implementation shipped beside this installer] present in install.sh
+RUN t05 pre 1 exit=1 dur=0s
+CHECK a01 FAIL missing pattern [out/image.svg] in templates/examples/img-pilot.task.md
+CHECK a02 FAIL missing pattern [<svg xmlns="http://www.w3.org/2000/svg"] in templates/examples/img-pilot.task.md
+CHECK a03 FAIL missing pattern ["artifact": "out/image.svg"] in templates/examples/img-pilot.task.md
+CHECK a04 FAIL missing pattern [- bash] in templates/examples/img-pilot.task.md
+CHECK a05 FAIL missing pattern [- python3 standard library] in templates/examples/img-pilot.task.md
+CHECK a06 FAIL forbidden pattern [LUCA_IMAGE_BACKEND] present in templates/examples/img-pilot.task.md
+CHECK a07 FAIL forbidden pattern [FAMILY_PUSH_CHANNEL] present in templates/examples/img-pilot.task.md
+CHECK a08 FAIL forbidden pattern [image.png] present in templates/examples/img-pilot.task.md
+CHECK a09 FAIL forbidden pattern [vision-rubric scoring] present in templates/examples/img-pilot.task.md
+CHECK a10 FAIL missing pattern [~/path/to/your/AGENTS.md] in adapters/codex/INSTALL.md
+CHECK a11 FAIL missing pattern [Replace this placeholder with the operator's own] in adapters/codex/INSTALL.md
+CHECK a12 FAIL missing pattern [~/path/to/your/AGENTS.md] in adapters/kimi/INSTALL.md
+CHECK a13 FAIL missing pattern [operator's own agent charter file path during setup.] in adapters/kimi/INSTALL.md
+CHECK a14 FAIL missing pattern [/path/to/secrets/cron.env] in adapters/hermes/INSTALL.md
+CHECK a15 FAIL missing pattern [/path/to/hermes-home/profiles/example/workspace] in adapters/hermes/INSTALL.md
+CHECK a16 FAIL missing pattern [issued_by: example-operator] in templates/TASK.tmpl.md
+CHECK a17 FAIL missing pattern [escalate_to: example-operator] in templates/TASK.tmpl.md
+CHECK a18 FAIL forbidden pattern [issued_by: sho-alpha] present in templates/TASK.tmpl.md
+CHECK a19 FAIL forbidden pattern [escalate_to: sho] present in templates/TASK.tmpl.md
+CHECK a20 FAIL missing pattern [issued_by: example-operator] in templates/examples/img-pilot.task.md
+CHECK a21 FAIL missing pattern [escalate_to: example-operator] in templates/examples/img-pilot.task.md
+CHECK a22 FAIL forbidden pattern [issued_by: sho-alpha] present in templates/examples/img-pilot.task.md
+CHECK a23 FAIL forbidden pattern [escalate_to: sho] present in templates/examples/img-pilot.task.md
+CHECK a24 FAIL missing pattern [fma_scripts_dir=${FMA_SCRIPTS_DIR:-}] in scripts/family-updater
+CHECK a25 FAIL missing pattern [When omitted, reporting is disabled with a warning.] in scripts/family-updater
+CHECK a26 FAIL missing pattern [Set FMA_SCRIPTS_DIR or pass --fma-scripts-dir <dir>.] in scripts/family-updater
+CHECK a27 FAIL forbidden pattern [$HOME/claude-workspace/family-memory-architecture/scripts] present in scripts/family-updater
+CHECK a28 FAIL missing pattern [FMA_SCRIPTS_DIR is not set; set it to the reporter directory] in templates/updater-cron.tmpl.sh
+CHECK a29 FAIL missing pattern [/path/to/family-memory-architecture/scripts] in templates/updater-cron.tmpl.sh
+CHECK a30 FAIL forbidden pattern [HOME is not set; cannot derive default FMA_SCRIPTS_DIR] present in templates/updater-cron.tmpl.sh
+CHECK a31 FAIL forbidden pattern [FMA_SCRIPTS_DIR=${FMA_SCRIPTS_DIR:-"$HOME/claude-workspace/family-memory-architecture/scripts"}] present in templates/updater-cron.tmpl.sh
+CHECK a32 FAIL missing pattern [remote home directory] in install.sh
+CHECK a33 FAIL forbidden pattern [Claire's STATE.md] present in install.sh
+CHECK a34 FAIL missing pattern [inspect configured] in install.sh
+CHECK a35 FAIL missing pattern [env-supplied external ones] in install.sh
+CHECK a36 PASS probe note says it does not mutate the checked workspace
+CHECK a37 FAIL forbidden pattern [implementation shipped beside this installer] present in install.sh
+RUN t05 pre 2 exit=1 dur=0s
+CHECK a01 FAIL missing pattern [out/image.svg] in templates/examples/img-pilot.task.md
+CHECK a02 FAIL missing pattern [<svg xmlns="http://www.w3.org/2000/svg"] in templates/examples/img-pilot.task.md
+CHECK a03 FAIL missing pattern ["artifact": "out/image.svg"] in templates/examples/img-pilot.task.md
+CHECK a04 FAIL missing pattern [- bash] in templates/examples/img-pilot.task.md
+CHECK a05 FAIL missing pattern [- python3 standard library] in templates/examples/img-pilot.task.md
+CHECK a06 FAIL forbidden pattern [LUCA_IMAGE_BACKEND] present in templates/examples/img-pilot.task.md
+CHECK a07 FAIL forbidden pattern [FAMILY_PUSH_CHANNEL] present in templates/examples/img-pilot.task.md
+CHECK a08 FAIL forbidden pattern [image.png] present in templates/examples/img-pilot.task.md
+CHECK a09 FAIL forbidden pattern [vision-rubric scoring] present in templates/examples/img-pilot.task.md
+CHECK a10 FAIL missing pattern [~/path/to/your/AGENTS.md] in adapters/codex/INSTALL.md
+CHECK a11 FAIL missing pattern [Replace this placeholder with the operator's own] in adapters/codex/INSTALL.md
+CHECK a12 FAIL missing pattern [~/path/to/your/AGENTS.md] in adapters/kimi/INSTALL.md
+CHECK a13 FAIL missing pattern [operator's own agent charter file path during setup.] in adapters/kimi/INSTALL.md
+CHECK a14 FAIL missing pattern [/path/to/secrets/cron.env] in adapters/hermes/INSTALL.md
+CHECK a15 FAIL missing pattern [/path/to/hermes-home/profiles/example/workspace] in adapters/hermes/INSTALL.md
+CHECK a16 FAIL missing pattern [issued_by: example-operator] in templates/TASK.tmpl.md
+CHECK a17 FAIL missing pattern [escalate_to: example-operator] in templates/TASK.tmpl.md
+CHECK a18 FAIL forbidden pattern [issued_by: sho-alpha] present in templates/TASK.tmpl.md
+CHECK a19 FAIL forbidden pattern [escalate_to: sho] present in templates/TASK.tmpl.md
+CHECK a20 FAIL missing pattern [issued_by: example-operator] in templates/examples/img-pilot.task.md
+CHECK a21 FAIL missing pattern [escalate_to: example-operator] in templates/examples/img-pilot.task.md
+CHECK a22 FAIL forbidden pattern [issued_by: sho-alpha] present in templates/examples/img-pilot.task.md
+CHECK a23 FAIL forbidden pattern [escalate_to: sho] present in templates/examples/img-pilot.task.md
+CHECK a24 FAIL missing pattern [fma_scripts_dir=${FMA_SCRIPTS_DIR:-}] in scripts/family-updater
+CHECK a25 FAIL missing pattern [When omitted, reporting is disabled with a warning.] in scripts/family-updater
+CHECK a26 FAIL missing pattern [Set FMA_SCRIPTS_DIR or pass --fma-scripts-dir <dir>.] in scripts/family-updater
+CHECK a27 FAIL forbidden pattern [$HOME/claude-workspace/family-memory-architecture/scripts] present in scripts/family-updater
+CHECK a28 FAIL missing pattern [FMA_SCRIPTS_DIR is not set; set it to the reporter directory] in templates/updater-cron.tmpl.sh
+CHECK a29 FAIL missing pattern [/path/to/family-memory-architecture/scripts] in templates/updater-cron.tmpl.sh
+CHECK a30 FAIL forbidden pattern [HOME is not set; cannot derive default FMA_SCRIPTS_DIR] present in templates/updater-cron.tmpl.sh
+CHECK a31 FAIL forbidden pattern [FMA_SCRIPTS_DIR=${FMA_SCRIPTS_DIR:-"$HOME/claude-workspace/family-memory-architecture/scripts"}] present in templates/updater-cron.tmpl.sh
+CHECK a32 FAIL missing pattern [remote home directory] in install.sh
+CHECK a33 FAIL forbidden pattern [Claire's STATE.md] present in install.sh
+CHECK a34 FAIL missing pattern [inspect configured] in install.sh
+CHECK a35 FAIL missing pattern [env-supplied external ones] in install.sh
+CHECK a36 PASS probe note says it does not mutate the checked workspace
+CHECK a37 FAIL forbidden pattern [implementation shipped beside this installer] present in install.sh
+RUN t05 pre 3 exit=1 dur=0s
+CHECK a01 FAIL missing pattern [out/image.svg] in templates/examples/img-pilot.task.md
+CHECK a02 FAIL missing pattern [<svg xmlns="http://www.w3.org/2000/svg"] in templates/examples/img-pilot.task.md
+CHECK a03 FAIL missing pattern ["artifact": "out/image.svg"] in templates/examples/img-pilot.task.md
+CHECK a04 FAIL missing pattern [- bash] in templates/examples/img-pilot.task.md
+CHECK a05 FAIL missing pattern [- python3 standard library] in templates/examples/img-pilot.task.md
+CHECK a06 FAIL forbidden pattern [LUCA_IMAGE_BACKEND] present in templates/examples/img-pilot.task.md
+CHECK a07 FAIL forbidden pattern [FAMILY_PUSH_CHANNEL] present in templates/examples/img-pilot.task.md
+CHECK a08 FAIL forbidden pattern [image.png] present in templates/examples/img-pilot.task.md
+CHECK a09 FAIL forbidden pattern [vision-rubric scoring] present in templates/examples/img-pilot.task.md
+CHECK a10 FAIL missing pattern [~/path/to/your/AGENTS.md] in adapters/codex/INSTALL.md
+CHECK a11 FAIL missing pattern [Replace this placeholder with the operator's own] in adapters/codex/INSTALL.md
+CHECK a12 FAIL missing pattern [~/path/to/your/AGENTS.md] in adapters/kimi/INSTALL.md
+CHECK a13 FAIL missing pattern [operator's own agent charter file path during setup.] in adapters/kimi/INSTALL.md
+CHECK a14 FAIL missing pattern [/path/to/secrets/cron.env] in adapters/hermes/INSTALL.md
+CHECK a15 FAIL missing pattern [/path/to/hermes-home/profiles/example/workspace] in adapters/hermes/INSTALL.md
+CHECK a16 FAIL missing pattern [issued_by: example-operator] in templates/TASK.tmpl.md
+CHECK a17 FAIL missing pattern [escalate_to: example-operator] in templates/TASK.tmpl.md
+CHECK a18 FAIL forbidden pattern [issued_by: sho-alpha] present in templates/TASK.tmpl.md
+CHECK a19 FAIL forbidden pattern [escalate_to: sho] present in templates/TASK.tmpl.md
+CHECK a20 FAIL missing pattern [issued_by: example-operator] in templates/examples/img-pilot.task.md
+CHECK a21 FAIL missing pattern [escalate_to: example-operator] in templates/examples/img-pilot.task.md
+CHECK a22 FAIL forbidden pattern [issued_by: sho-alpha] present in templates/examples/img-pilot.task.md
+CHECK a23 FAIL forbidden pattern [escalate_to: sho] present in templates/examples/img-pilot.task.md
+CHECK a24 FAIL missing pattern [fma_scripts_dir=${FMA_SCRIPTS_DIR:-}] in scripts/family-updater
+CHECK a25 FAIL missing pattern [When omitted, reporting is disabled with a warning.] in scripts/family-updater
+CHECK a26 FAIL missing pattern [Set FMA_SCRIPTS_DIR or pass --fma-scripts-dir <dir>.] in scripts/family-updater
+CHECK a27 FAIL forbidden pattern [$HOME/claude-workspace/family-memory-architecture/scripts] present in scripts/family-updater
+CHECK a28 FAIL missing pattern [FMA_SCRIPTS_DIR is not set; set it to the reporter directory] in templates/updater-cron.tmpl.sh
+CHECK a29 FAIL missing pattern [/path/to/family-memory-architecture/scripts] in templates/updater-cron.tmpl.sh
+CHECK a30 FAIL forbidden pattern [HOME is not set; cannot derive default FMA_SCRIPTS_DIR] present in templates/updater-cron.tmpl.sh
+CHECK a31 FAIL forbidden pattern [FMA_SCRIPTS_DIR=${FMA_SCRIPTS_DIR:-"$HOME/claude-workspace/family-memory-architecture/scripts"}] present in templates/updater-cron.tmpl.sh
+CHECK a32 FAIL missing pattern [remote home directory] in install.sh
+CHECK a33 FAIL forbidden pattern [Claire's STATE.md] present in install.sh
+CHECK a34 FAIL missing pattern [inspect configured] in install.sh
+CHECK a35 FAIL missing pattern [env-supplied external ones] in install.sh
+CHECK a36 PASS probe note says it does not mutate the checked workspace
+CHECK a37 FAIL forbidden pattern [implementation shipped beside this installer] present in install.sh
+RUN t05 pre 4 exit=1 dur=0s
+CHECK a01 FAIL missing pattern [out/image.svg] in templates/examples/img-pilot.task.md
+CHECK a02 FAIL missing pattern [<svg xmlns="http://www.w3.org/2000/svg"] in templates/examples/img-pilot.task.md
+CHECK a03 FAIL missing pattern ["artifact": "out/image.svg"] in templates/examples/img-pilot.task.md
+CHECK a04 FAIL missing pattern [- bash] in templates/examples/img-pilot.task.md
+CHECK a05 FAIL missing pattern [- python3 standard library] in templates/examples/img-pilot.task.md
+CHECK a06 FAIL forbidden pattern [LUCA_IMAGE_BACKEND] present in templates/examples/img-pilot.task.md
+CHECK a07 FAIL forbidden pattern [FAMILY_PUSH_CHANNEL] present in templates/examples/img-pilot.task.md
+CHECK a08 FAIL forbidden pattern [image.png] present in templates/examples/img-pilot.task.md
+CHECK a09 FAIL forbidden pattern [vision-rubric scoring] present in templates/examples/img-pilot.task.md
+CHECK a10 FAIL missing pattern [~/path/to/your/AGENTS.md] in adapters/codex/INSTALL.md
+CHECK a11 FAIL missing pattern [Replace this placeholder with the operator's own] in adapters/codex/INSTALL.md
+CHECK a12 FAIL missing pattern [~/path/to/your/AGENTS.md] in adapters/kimi/INSTALL.md
+CHECK a13 FAIL missing pattern [operator's own agent charter file path during setup.] in adapters/kimi/INSTALL.md
+CHECK a14 FAIL missing pattern [/path/to/secrets/cron.env] in adapters/hermes/INSTALL.md
+CHECK a15 FAIL missing pattern [/path/to/hermes-home/profiles/example/workspace] in adapters/hermes/INSTALL.md
+CHECK a16 FAIL missing pattern [issued_by: example-operator] in templates/TASK.tmpl.md
+CHECK a17 FAIL missing pattern [escalate_to: example-operator] in templates/TASK.tmpl.md
+CHECK a18 FAIL forbidden pattern [issued_by: sho-alpha] present in templates/TASK.tmpl.md
+CHECK a19 FAIL forbidden pattern [escalate_to: sho] present in templates/TASK.tmpl.md
+CHECK a20 FAIL missing pattern [issued_by: example-operator] in templates/examples/img-pilot.task.md
+CHECK a21 FAIL missing pattern [escalate_to: example-operator] in templates/examples/img-pilot.task.md
+CHECK a22 FAIL forbidden pattern [issued_by: sho-alpha] present in templates/examples/img-pilot.task.md
+CHECK a23 FAIL forbidden pattern [escalate_to: sho] present in templates/examples/img-pilot.task.md
+CHECK a24 FAIL missing pattern [fma_scripts_dir=${FMA_SCRIPTS_DIR:-}] in scripts/family-updater
+CHECK a25 FAIL missing pattern [When omitted, reporting is disabled with a warning.] in scripts/family-updater
+CHECK a26 FAIL missing pattern [Set FMA_SCRIPTS_DIR or pass --fma-scripts-dir <dir>.] in scripts/family-updater
+CHECK a27 FAIL forbidden pattern [$HOME/claude-workspace/family-memory-architecture/scripts] present in scripts/family-updater
+CHECK a28 FAIL missing pattern [FMA_SCRIPTS_DIR is not set; set it to the reporter directory] in templates/updater-cron.tmpl.sh
+CHECK a29 FAIL missing pattern [/path/to/family-memory-architecture/scripts] in templates/updater-cron.tmpl.sh
+CHECK a30 FAIL forbidden pattern [HOME is not set; cannot derive default FMA_SCRIPTS_DIR] present in templates/updater-cron.tmpl.sh
+CHECK a31 FAIL forbidden pattern [FMA_SCRIPTS_DIR=${FMA_SCRIPTS_DIR:-"$HOME/claude-workspace/family-memory-architecture/scripts"}] present in templates/updater-cron.tmpl.sh
+CHECK a32 FAIL missing pattern [remote home directory] in install.sh
+CHECK a33 FAIL forbidden pattern [Claire's STATE.md] present in install.sh
+CHECK a34 FAIL missing pattern [inspect configured] in install.sh
+CHECK a35 FAIL missing pattern [env-supplied external ones] in install.sh
+CHECK a36 PASS probe note says it does not mutate the checked workspace
+CHECK a37 FAIL forbidden pattern [implementation shipped beside this installer] present in install.sh
+RUN t05 pre 5 exit=1 dur=0s
+CHECK a01 PASS example task uses a local SVG artifact path
+CHECK a02 PASS example task checks for an SVG root element
+CHECK a03 PASS example task receipt declares the SVG artifact path
+CHECK a04 PASS example task lists bash as a resource
+CHECK a05 PASS example task lists python3 standard library as a resource
+CHECK a06 PASS example task drops the old backend dependency name
+CHECK a07 PASS example task drops the old push channel dependency name
+CHECK a08 PASS example task drops the old PNG artifact path
+CHECK a09 PASS example task drops the old scoring step
+CHECK a10 PASS codex install uses the placeholder charter path
+CHECK a11 PASS codex install includes setup guidance for the placeholder charter path
+CHECK a12 PASS kimi install uses the placeholder charter path
+CHECK a13 PASS kimi install includes setup guidance for the placeholder charter path
+CHECK a14 PASS hermes cron example uses a placeholder secrets path
+CHECK a15 PASS hermes cron example uses a placeholder workspace path
+CHECK a16 PASS task template uses the generic issued_by value
+CHECK a17 PASS task template uses the generic escalate_to value
+CHECK a18 PASS task template drops the old issued_by value
+CHECK a19 PASS task template drops the old escalate_to value
+CHECK a20 PASS example task uses the generic issued_by value
+CHECK a21 PASS example task uses the generic escalate_to value
+CHECK a22 PASS example task drops the old issued_by value
+CHECK a23 PASS example task drops the old escalate_to value
+CHECK a24 PASS family-updater removes the implicit default reporter path
+CHECK a25 PASS family-updater warns when the reporter path is omitted
+CHECK a26 PASS family-updater documents the explicit override for the reporter path
+CHECK a27 PASS family-updater drops the old private default reporter path
+CHECK a28 PASS updater cron template requires an explicit reporter-path setting
+CHECK a29 PASS updater cron template shows a placeholder reporter path
+CHECK a30 PASS updater cron template drops the old HOME-based failure text
+CHECK a31 PASS updater cron template no longer derives the reporter path from HOME
+CHECK a32 PASS installer wording uses generic remote-home phrasing
+CHECK a33 PASS installer wording drops the person-specific remote-home wording
+CHECK a34 PASS probe note says it inspects configured adapter paths
+CHECK a35 PASS probe note says it reads env-supplied external paths
+CHECK a36 PASS probe note says it does not mutate the checked workspace
+CHECK a37 PASS probe note drops the old installer-local inspection wording
+RUN t05 fix 1 exit=0 dur=0s
+CHECK a01 PASS example task uses a local SVG artifact path
+CHECK a02 PASS example task checks for an SVG root element
+CHECK a03 PASS example task receipt declares the SVG artifact path
+CHECK a04 PASS example task lists bash as a resource
+CHECK a05 PASS example task lists python3 standard library as a resource
+CHECK a06 PASS example task drops the old backend dependency name
+CHECK a07 PASS example task drops the old push channel dependency name
+CHECK a08 PASS example task drops the old PNG artifact path
+CHECK a09 PASS example task drops the old scoring step
+CHECK a10 PASS codex install uses the placeholder charter path
+CHECK a11 PASS codex install includes setup guidance for the placeholder charter path
+CHECK a12 PASS kimi install uses the placeholder charter path
+CHECK a13 PASS kimi install includes setup guidance for the placeholder charter path
+CHECK a14 PASS hermes cron example uses a placeholder secrets path
+CHECK a15 PASS hermes cron example uses a placeholder workspace path
+CHECK a16 PASS task template uses the generic issued_by value
+CHECK a17 PASS task template uses the generic escalate_to value
+CHECK a18 PASS task template drops the old issued_by value
+CHECK a19 PASS task template drops the old escalate_to value
+CHECK a20 PASS example task uses the generic issued_by value
+CHECK a21 PASS example task uses the generic escalate_to value
+CHECK a22 PASS example task drops the old issued_by value
+CHECK a23 PASS example task drops the old escalate_to value
+CHECK a24 PASS family-updater removes the implicit default reporter path
+CHECK a25 PASS family-updater warns when the reporter path is omitted
+CHECK a26 PASS family-updater documents the explicit override for the reporter path
+CHECK a27 PASS family-updater drops the old private default reporter path
+CHECK a28 PASS updater cron template requires an explicit reporter-path setting
+CHECK a29 PASS updater cron template shows a placeholder reporter path
+CHECK a30 PASS updater cron template drops the old HOME-based failure text
+CHECK a31 PASS updater cron template no longer derives the reporter path from HOME
+CHECK a32 PASS installer wording uses generic remote-home phrasing
+CHECK a33 PASS installer wording drops the person-specific remote-home wording
+CHECK a34 PASS probe note says it inspects configured adapter paths
+CHECK a35 PASS probe note says it reads env-supplied external paths
+CHECK a36 PASS probe note says it does not mutate the checked workspace
+CHECK a37 PASS probe note drops the old installer-local inspection wording
+RUN t05 fix 2 exit=0 dur=0s
+CHECK a01 PASS example task uses a local SVG artifact path
+CHECK a02 PASS example task checks for an SVG root element
+CHECK a03 PASS example task receipt declares the SVG artifact path
+CHECK a04 PASS example task lists bash as a resource
+CHECK a05 PASS example task lists python3 standard library as a resource
+CHECK a06 PASS example task drops the old backend dependency name
+CHECK a07 PASS example task drops the old push channel dependency name
+CHECK a08 PASS example task drops the old PNG artifact path
+CHECK a09 PASS example task drops the old scoring step
+CHECK a10 PASS codex install uses the placeholder charter path
+CHECK a11 PASS codex install includes setup guidance for the placeholder charter path
+CHECK a12 PASS kimi install uses the placeholder charter path
+CHECK a13 PASS kimi install includes setup guidance for the placeholder charter path
+CHECK a14 PASS hermes cron example uses a placeholder secrets path
+CHECK a15 PASS hermes cron example uses a placeholder workspace path
+CHECK a16 PASS task template uses the generic issued_by value
+CHECK a17 PASS task template uses the generic escalate_to value
+CHECK a18 PASS task template drops the old issued_by value
+CHECK a19 PASS task template drops the old escalate_to value
+CHECK a20 PASS example task uses the generic issued_by value
+CHECK a21 PASS example task uses the generic escalate_to value
+CHECK a22 PASS example task drops the old issued_by value
+CHECK a23 PASS example task drops the old escalate_to value
+CHECK a24 PASS family-updater removes the implicit default reporter path
+CHECK a25 PASS family-updater warns when the reporter path is omitted
+CHECK a26 PASS family-updater documents the explicit override for the reporter path
+CHECK a27 PASS family-updater drops the old private default reporter path
+CHECK a28 PASS updater cron template requires an explicit reporter-path setting
+CHECK a29 PASS updater cron template shows a placeholder reporter path
+CHECK a30 PASS updater cron template drops the old HOME-based failure text
+CHECK a31 PASS updater cron template no longer derives the reporter path from HOME
+CHECK a32 PASS installer wording uses generic remote-home phrasing
+CHECK a33 PASS installer wording drops the person-specific remote-home wording
+CHECK a34 PASS probe note says it inspects configured adapter paths
+CHECK a35 PASS probe note says it reads env-supplied external paths
+CHECK a36 PASS probe note says it does not mutate the checked workspace
+CHECK a37 PASS probe note drops the old installer-local inspection wording
+RUN t05 fix 3 exit=0 dur=0s
+CHECK a01 PASS example task uses a local SVG artifact path
+CHECK a02 PASS example task checks for an SVG root element
+CHECK a03 PASS example task receipt declares the SVG artifact path
+CHECK a04 PASS example task lists bash as a resource
+CHECK a05 PASS example task lists python3 standard library as a resource
+CHECK a06 PASS example task drops the old backend dependency name
+CHECK a07 PASS example task drops the old push channel dependency name
+CHECK a08 PASS example task drops the old PNG artifact path
+CHECK a09 PASS example task drops the old scoring step
+CHECK a10 PASS codex install uses the placeholder charter path
+CHECK a11 PASS codex install includes setup guidance for the placeholder charter path
+CHECK a12 PASS kimi install uses the placeholder charter path
+CHECK a13 PASS kimi install includes setup guidance for the placeholder charter path
+CHECK a14 PASS hermes cron example uses a placeholder secrets path
+CHECK a15 PASS hermes cron example uses a placeholder workspace path
+CHECK a16 PASS task template uses the generic issued_by value
+CHECK a17 PASS task template uses the generic escalate_to value
+CHECK a18 PASS task template drops the old issued_by value
+CHECK a19 PASS task template drops the old escalate_to value
+CHECK a20 PASS example task uses the generic issued_by value
+CHECK a21 PASS example task uses the generic escalate_to value
+CHECK a22 PASS example task drops the old issued_by value
+CHECK a23 PASS example task drops the old escalate_to value
+CHECK a24 PASS family-updater removes the implicit default reporter path
+CHECK a25 PASS family-updater warns when the reporter path is omitted
+CHECK a26 PASS family-updater documents the explicit override for the reporter path
+CHECK a27 PASS family-updater drops the old private default reporter path
+CHECK a28 PASS updater cron template requires an explicit reporter-path setting
+CHECK a29 PASS updater cron template shows a placeholder reporter path
+CHECK a30 PASS updater cron template drops the old HOME-based failure text
+CHECK a31 PASS updater cron template no longer derives the reporter path from HOME
+CHECK a32 PASS installer wording uses generic remote-home phrasing
+CHECK a33 PASS installer wording drops the person-specific remote-home wording
+CHECK a34 PASS probe note says it inspects configured adapter paths
+CHECK a35 PASS probe note says it reads env-supplied external paths
+CHECK a36 PASS probe note says it does not mutate the checked workspace
+CHECK a37 PASS probe note drops the old installer-local inspection wording
+RUN t05 fix 4 exit=0 dur=0s
+CHECK a01 PASS example task uses a local SVG artifact path
+CHECK a02 PASS example task checks for an SVG root element
+CHECK a03 PASS example task receipt declares the SVG artifact path
+CHECK a04 PASS example task lists bash as a resource
+CHECK a05 PASS example task lists python3 standard library as a resource
+CHECK a06 PASS example task drops the old backend dependency name
+CHECK a07 PASS example task drops the old push channel dependency name
+CHECK a08 PASS example task drops the old PNG artifact path
+CHECK a09 PASS example task drops the old scoring step
+CHECK a10 PASS codex install uses the placeholder charter path
+CHECK a11 PASS codex install includes setup guidance for the placeholder charter path
+CHECK a12 PASS kimi install uses the placeholder charter path
+CHECK a13 PASS kimi install includes setup guidance for the placeholder charter path
+CHECK a14 PASS hermes cron example uses a placeholder secrets path
+CHECK a15 PASS hermes cron example uses a placeholder workspace path
+CHECK a16 PASS task template uses the generic issued_by value
+CHECK a17 PASS task template uses the generic escalate_to value
+CHECK a18 PASS task template drops the old issued_by value
+CHECK a19 PASS task template drops the old escalate_to value
+CHECK a20 PASS example task uses the generic issued_by value
+CHECK a21 PASS example task uses the generic escalate_to value
+CHECK a22 PASS example task drops the old issued_by value
+CHECK a23 PASS example task drops the old escalate_to value
+CHECK a24 PASS family-updater removes the implicit default reporter path
+CHECK a25 PASS family-updater warns when the reporter path is omitted
+CHECK a26 PASS family-updater documents the explicit override for the reporter path
+CHECK a27 PASS family-updater drops the old private default reporter path
+CHECK a28 PASS updater cron template requires an explicit reporter-path setting
+CHECK a29 PASS updater cron template shows a placeholder reporter path
+CHECK a30 PASS updater cron template drops the old HOME-based failure text
+CHECK a31 PASS updater cron template no longer derives the reporter path from HOME
+CHECK a32 PASS installer wording uses generic remote-home phrasing
+CHECK a33 PASS installer wording drops the person-specific remote-home wording
+CHECK a34 PASS probe note says it inspects configured adapter paths
+CHECK a35 PASS probe note says it reads env-supplied external paths
+CHECK a36 PASS probe note says it does not mutate the checked workspace
+CHECK a37 PASS probe note drops the old installer-local inspection wording
+RUN t05 fix 5 exit=0 dur=0s
+VERDICT t05 PASS
