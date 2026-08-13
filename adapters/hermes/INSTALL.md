@@ -74,6 +74,42 @@ The rules there apply in addition to the Hermes-specific wiring below.
    `VERIFIER_CMD` must be exactly one absolute wrapper-script path. The adapter
    rejects legacy multi-token command strings and ships no provider default.
 
+   A reference Anthropic Messages implementation is available as three distinct,
+   directly inspectable files:
+
+   - `adapters/hermes/examples/verifier-wrapper.sh` validates the argv bundle and
+     rejects missing, malformed, or multiple verdicts.
+   - `adapters/hermes/examples/verifier-provider.py` makes one stateless API call;
+     set `ANTHROPIC_API_KEY` through the job's protected `SECRETS_ENV`, and optionally
+     set `VERIFIER_MODEL`.
+   - `adapters/hermes/examples/verifier-probe.sh` relocates and genuinely calls the
+     provider through the wrapper before reporting conformance.
+
+   Operational contract: the example wrapper forwards only the validated verdict and
+   reason lines. It intentionally discards the findings body requested by the bundle
+   to remove an injection surface; that body cannot be recovered from this wrapper.
+   The provider SYSTEM prompt enforces first-line verdict placement and overrides the
+   bundle's last-two-lines instruction. A model that follows the bundle instead is
+   rejected fail-closed and surfaces as `needs-human`; when using this example as a
+   production `VERIFIER_CMD`, monitor the `needs-human` rate for formatting flakiness.
+   `VERIFIER_TEMPERATURE` is sent as given, so a model that constrains temperature may
+   reject the request; this normalizes to wrapper exit 70 and `needs-human`. Model id
+   and temperature are therefore coupled configuration.
+
+   Attesting the example performs a real provider request and therefore requires a
+   valid key:
+
+   ```sh
+   HARNESS=/absolute/path/to/caty-agent-harness
+   ATTEST_TIMEOUT_S=180 PROBE_PROVIDER_PATH="$HARNESS/adapters/hermes/examples/verifier-provider.py" \
+     "$HARNESS/scripts/attest-wrapper" --route verifier \
+       --wrapper "$HARNESS/adapters/hermes/examples/verifier-wrapper.sh" \
+       --probe "$HARNESS/adapters/hermes/examples/verifier-probe.sh"
+   ```
+
+   The 180-second attestation bound exceeds the provider's 120-second HTTP default,
+   so a valid slow response is not cut off by the attester's shorter default.
+
    Before enabling the job:
 
    1. Create a single-file verifier wrapper that enforces the runtime-specific
@@ -86,7 +122,7 @@ The rules there apply in addition to the Hermes-specific wiring below.
    3. Run the harness attester:
 
       ```sh
-      scripts/attest-wrapper --route verifier --wrapper /abs/verifier-wrapper.sh --probe /abs/verifier-probe.sh
+      ATTEST_TIMEOUT_S=180 scripts/attest-wrapper --route verifier --wrapper /abs/verifier-wrapper.sh --probe /abs/verifier-probe.sh
       ```
 
       This writes `/abs/verifier-wrapper.sh.conformance`.
@@ -121,6 +157,30 @@ The rules there apply in addition to the Hermes-specific wiring below.
    `git pull` refreshes the adapter and templates in this repository clone only. The
    profile's own `STATE.md`, `skills/`, `skills/_staging/`, and `loop/` contents are
    outside the repo clone and are not touched by an adapter update.
+
+## Flush intake consumer
+
+Hermes CHECKPOINT flushes use the shared deterministic fold through
+`adapters/hermes/flush-intake.sh`. Schedule it as a LaunchAgent every eight hours by
+copying `templates/cron-wrapper.tmpl.sh` into the workspace and setting the plist's
+`ProgramArguments` to `/bin/bash`, the copied wrapper path, and the absolute workspace
+path as the wrapper's single positional target argument. Set these environment values:
+
+```text
+TARGET=/absolute/path/to/caty-agent-harness/adapters/hermes/flush-intake.sh
+CATY_HARNESS_ROOT=/absolute/path/to/caty-agent-harness
+INTAKE_MAX_FOLD=5
+```
+
+Set the LaunchAgent `StartInterval` to `28800`. Hermes jobs use
+`INTAKE_MAX_FOLD=5` so the cap-60 Lessons FIFO has a bounded, gradual eviction rate
+instead of replacing a large share in one run.
+
+Leave `DEADMAN_MARKER` unset for this Hermes target. The cron wrapper's self-marking
+allowlist recognizes only the Claude Code intake entry path; setting a marker for the
+Hermes path would pre-touch it before intake and could mask lock starvation or an
+intake failure. The Hermes intake writes its own successful-run receipt and distill
+marker after the guarded fold completes.
 
 ## Optional stale-claim watchdog
 
