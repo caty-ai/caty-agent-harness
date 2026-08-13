@@ -194,10 +194,13 @@ fi
 # The single-quoted text below is an intentional literal source pattern.
 # shellcheck disable=SC2016
 if grep -Fq '"$FABLE_CONFORMING_PROVIDER_PATH" "$bundle"' "$CANONICAL_WRAPPER" \
+  && grep -Fq 'os.environ.get("VERIFIER_API_KEY"' "$PROVIDER" \
   && grep -Fq 'os.environ.get("ANTHROPIC_API_KEY"' "$PROVIDER" \
   && grep -Fq 'os.environ.get("VERIFIER_MODEL", "claude-sonnet-5")' "$PROVIDER" \
   && grep -Fq 'os.environ.get("VERIFIER_API_BASE"' "$PROVIDER" \
   && grep -Fq 'f"{api_base}/v1/messages"' "$PROVIDER" \
+  && grep -Fq 'urllib.parse.urlsplit(api_base)' "$PROVIDER" \
+  && grep -Fq 'urllib.request.build_opener(NoRedirectHandler())' "$PROVIDER" \
   && grep -Fq 'secrets.token_hex' "$PROVIDER" \
   && grep -Fq 'VERIFIER_TEMPERATURE' "$PROVIDER" \
   && grep -Fq '"temperature": temperature' "$PROVIDER" \
@@ -231,13 +234,14 @@ else
     'temperature validation contract failed'
 fi
 
-urlopen_stub=$TMP_ROOT/urlopen-stub.py
-cat >"$urlopen_stub" <<'PY'
+opener_stub=$TMP_ROOT/opener-stub.py
+cat >"$opener_stub" <<'PY'
 #!/usr/bin/env python3
 import json
 import os
 import runpy
 import sys
+import urllib.error
 import urllib.request
 
 
@@ -261,26 +265,70 @@ class StubResponse:
         ).encode("utf-8")
 
 
-def stub_urlopen(request, timeout):
-    del timeout
-    with open(os.environ["REQUEST_URL_MARKER"], "w", encoding="utf-8") as marker:
-        marker.write(request.full_url)
-    return StubResponse()
+class StubOpener:
+    def __init__(self, redirect_handler):
+        self.redirect_handler = redirect_handler
+
+    def open(self, request, timeout):
+        del timeout
+        with open(os.environ["REQUEST_COUNT_MARKER"], "w", encoding="utf-8") as marker:
+            marker.write("1")
+        with open(os.environ["REQUEST_URL_MARKER"], "w", encoding="utf-8") as marker:
+            marker.write(request.full_url)
+        with open(os.environ["REQUEST_KEY_MARKER"], "w", encoding="utf-8") as marker:
+            marker.write(request.get_header("X-api-key", ""))
+
+        if os.environ.get("STUB_RESPONSE_MODE") == "redirect":
+            redirected = self.redirect_handler.redirect_request(
+                request,
+                None,
+                302,
+                "Found",
+                {},
+                "http://redirect.example.test/collect",
+            )
+            if redirected is not None:
+                with open(
+                    os.environ["REQUEST_COUNT_MARKER"], "w", encoding="utf-8"
+                ) as marker:
+                    marker.write("2")
+                return StubResponse()
+            raise urllib.error.HTTPError(
+                request.full_url, 302, "Found", {}, None
+            )
+
+        return StubResponse()
+
+
+def stub_build_opener(*handlers):
+    redirect_handlers = [
+        handler
+        for handler in handlers
+        if isinstance(handler, urllib.request.HTTPRedirectHandler)
+    ]
+    if len(redirect_handlers) != 1:
+        raise AssertionError("provider must install exactly one redirect handler")
+    return StubOpener(redirect_handlers[0])
 
 
 provider_path, bundle = sys.argv[1:]
-urllib.request.urlopen = stub_urlopen
+urllib.request.build_opener = stub_build_opener
 sys.argv = [provider_path, bundle]
 runpy.run_path(provider_path, run_name="__main__")
 PY
 
 request_url_marker=$TMP_ROOT/request-url.marker
+request_key_marker=$TMP_ROOT/request-key.marker
+request_count_marker=$TMP_ROOT/request-count.marker
 expected_anthropic_base='https://api.'"anthropic.com"
 rm -f "$request_url_marker"
-default_base_output=$(env -u VERIFIER_API_BASE ANTHROPIC_API_KEY=fixture \
-  REQUEST_URL_MARKER="$request_url_marker" \
-  python3 "$urlopen_stub" "$PROVIDER" "$bundle")
+set +e
+default_base_output=$(env -u VERIFIER_API_BASE VERIFIER_API_KEY=fixture \
+  REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+  REQUEST_COUNT_MARKER="$request_count_marker" \
+  python3 "$opener_stub" "$PROVIDER" "$bundle")
 default_base_rc=$?
+set -e
 if [ "$default_base_rc" -eq 0 ] \
   && [ "$default_base_output" = 'VERDICT: pass
 stub accepted the request URL' ] \
@@ -293,10 +341,13 @@ fi
 
 zai_base=https://api.z.ai/api/anthropic
 rm -f "$request_url_marker"
-zai_base_output=$(ANTHROPIC_API_KEY=fixture VERIFIER_API_BASE="$zai_base" \
-  REQUEST_URL_MARKER="$request_url_marker" \
-  python3 "$urlopen_stub" "$PROVIDER" "$bundle")
+set +e
+zai_base_output=$(VERIFIER_API_KEY=fixture VERIFIER_API_BASE="$zai_base" \
+  REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+  REQUEST_COUNT_MARKER="$request_count_marker" \
+  python3 "$opener_stub" "$PROVIDER" "$bundle")
 zai_base_rc=$?
+set -e
 if [ "$zai_base_rc" -eq 0 ] \
   && [ "$(cat "$request_url_marker")" = "$zai_base/v1/messages" ]; then
   pass '[12] provider sends a Z.ai-compatible request through the configured base URL'
@@ -306,10 +357,13 @@ else
 fi
 
 rm -f "$request_url_marker"
-trailing_slash_output=$(ANTHROPIC_API_KEY=fixture VERIFIER_API_BASE="$zai_base/" \
-  REQUEST_URL_MARKER="$request_url_marker" \
-  python3 "$urlopen_stub" "$PROVIDER" "$bundle")
+set +e
+trailing_slash_output=$(VERIFIER_API_KEY=fixture VERIFIER_API_BASE="$zai_base/" \
+  REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+  REQUEST_COUNT_MARKER="$request_count_marker" \
+  python3 "$opener_stub" "$PROVIDER" "$bundle")
 trailing_slash_rc=$?
+set -e
 if [ "$trailing_slash_rc" -eq 0 ] \
   && [ "$(cat "$request_url_marker")" = "$zai_base/v1/messages" ]; then
   pass '[13] provider strips one trailing slash before joining the Messages path'
@@ -318,10 +372,34 @@ else
     "rc=$trailing_slash_rc output=$trailing_slash_output"
 fi
 
+rm -f "$request_url_marker"
+set +e
+double_slash_output=$(VERIFIER_API_KEY=fixture VERIFIER_API_BASE="$zai_base//" \
+  REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+  REQUEST_COUNT_MARKER="$request_count_marker" \
+  python3 "$opener_stub" "$PROVIDER" "$bundle")
+double_slash_rc=$?
+set -e
+if [ "$double_slash_rc" -eq 0 ] \
+  && [ "$(cat "$request_url_marker")" = "$zai_base/v1/messages" ]; then
+  pass '[14] provider strips repeated trailing slashes before joining the Messages path'
+else
+  fail_case '[14] provider strips repeated trailing slashes before joining the Messages path' \
+    "rc=$double_slash_rc output=$double_slash_output"
+fi
+
 invalid_base_guard_ok=1
-for invalid_base in 'http://api.example.test' 'https://api.example.test/embedded space'; do
+zero_width_space=$(printf '\342\200\213')
+for invalid_base in \
+  'http://api.example.test' \
+  'https://' \
+  'https://api.example.test/embedded space' \
+  'https://api.example.test/base#fragment' \
+  'https://api.example.test/base?query=value' \
+  'https://user@api.example.test/base' \
+  "https://api.example.test/$zero_width_space"; do
   set +e
-  invalid_base_output=$(ANTHROPIC_API_KEY=fixture VERIFIER_API_BASE="$invalid_base" \
+  invalid_base_output=$(VERIFIER_API_KEY=fixture VERIFIER_API_BASE="$invalid_base" \
     "$PROVIDER" "$bundle" 2>"$TMP_ROOT/invalid-base.err")
   invalid_base_rc=$?
   set -e
@@ -332,10 +410,76 @@ for invalid_base in 'http://api.example.test' 'https://api.example.test/embedded
   fi
 done
 if [ "$invalid_base_guard_ok" -eq 1 ]; then
-  pass '[14] provider rejects non-HTTPS or whitespace-bearing API bases without a verdict'
+  pass '[15] provider rejects malformed or unsafe API bases without a verdict'
 else
-  fail_case '[14] provider rejects non-HTTPS or whitespace-bearing API bases without a verdict' \
+  fail_case '[15] provider rejects malformed or unsafe API bases without a verdict' \
     'one or more invalid bases escaped the config-error path'
+fi
+
+set +e
+redirect_output=$(VERIFIER_API_KEY=redirect-secret VERIFIER_API_BASE="$zai_base" \
+  STUB_RESPONSE_MODE=redirect REQUEST_URL_MARKER="$request_url_marker" \
+  REQUEST_KEY_MARKER="$request_key_marker" REQUEST_COUNT_MARKER="$request_count_marker" \
+  python3 "$opener_stub" "$PROVIDER" "$bundle" 2>"$TMP_ROOT/redirect.err")
+redirect_rc=$?
+set -e
+redirect_verdicts=$(printf '%s\n' "$redirect_output" | awk '/^VERDICT:/ {count++} END {print count + 0}')
+if [ "$redirect_rc" -ne 0 ] \
+  && [ "$redirect_verdicts" -eq 0 ] \
+  && [ "$(cat "$request_count_marker")" -eq 1 ] \
+  && grep -Fqx 'provider request failed' "$TMP_ROOT/redirect.err"; then
+  pass '[16] provider refuses a 302 without issuing a second request or verdict'
+else
+  fail_case '[16] provider refuses a 302 without issuing a second request or verdict' \
+    "rc=$redirect_rc verdicts=$redirect_verdicts requests=$(cat "$request_count_marker")"
+fi
+
+credential_guard_ok=1
+set +e
+both_keys_output=$(VERIFIER_API_KEY=preferred-key ANTHROPIC_API_KEY=legacy-key \
+  REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+  REQUEST_COUNT_MARKER="$request_count_marker" \
+  python3 "$opener_stub" "$PROVIDER" "$bundle")
+both_keys_rc=$?
+set -e
+if [ "$both_keys_rc" -ne 0 ] \
+  || [ "$both_keys_output" != 'VERDICT: pass
+stub accepted the request URL' ] \
+  || [ "$(cat "$request_key_marker")" != preferred-key ]; then
+  credential_guard_ok=0
+fi
+
+set +e
+legacy_key_output=$(env -u VERIFIER_API_KEY ANTHROPIC_API_KEY=legacy-key \
+  REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+  REQUEST_COUNT_MARKER="$request_count_marker" \
+  python3 "$opener_stub" "$PROVIDER" "$bundle")
+legacy_key_rc=$?
+set -e
+if [ "$legacy_key_rc" -ne 0 ] \
+  || [ "$legacy_key_output" != 'VERDICT: pass
+stub accepted the request URL' ] \
+  || [ "$(cat "$request_key_marker")" != legacy-key ]; then
+  credential_guard_ok=0
+fi
+
+set +e
+missing_key_output=$(env -u VERIFIER_API_KEY -u ANTHROPIC_API_KEY \
+  "$PROVIDER" "$bundle" 2>"$TMP_ROOT/missing-key.err")
+missing_key_rc=$?
+set -e
+missing_key_verdicts=$(printf '%s\n' "$missing_key_output" | awk '/^VERDICT:/ {count++} END {print count + 0}')
+if [ "$missing_key_rc" -eq 0 ] \
+  || [ "$missing_key_verdicts" -ne 0 ] \
+  || ! grep -Fqx 'provider credential is unavailable' "$TMP_ROOT/missing-key.err"; then
+  credential_guard_ok=0
+fi
+
+if [ "$credential_guard_ok" -eq 1 ]; then
+  pass '[17] provider prefers VERIFIER_API_KEY, preserves the legacy fallback, and fails without either key'
+else
+  fail_case '[17] provider prefers VERIFIER_API_KEY, preserves the legacy fallback, and fails without either key' \
+    "both=$both_keys_rc legacy=$legacy_key_rc missing=$missing_key_rc"
 fi
 
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"

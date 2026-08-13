@@ -6,6 +6,7 @@ import os
 import secrets
 import sys
 import unicodedata
+import urllib.parse
 import urllib.request
 from typing import NoReturn
 
@@ -18,21 +19,41 @@ def fail(message: str) -> NoReturn:
     raise SystemExit(1)
 
 
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, new_url):
+        return None
+
+
 if len(sys.argv) != 2 or not sys.argv[1]:
     fail("provider requires one non-empty bundle argument")
 
-api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+api_key = os.environ.get("VERIFIER_API_KEY", "")
+if not api_key:
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
 if not api_key:
     fail("provider credential is unavailable")
 
 api_base = os.environ.get("VERIFIER_API_BASE", "https://api.anthropic.com")
-if not api_base.startswith("https://") or any(
-    character.isspace() or unicodedata.category(character) == "Cc"
-    for character in api_base
-):
+try:
+    parsed_api_base = urllib.parse.urlsplit(api_base)
+    api_base_valid = (
+        api_base.isascii()
+        and not any(
+            character.isspace() or unicodedata.category(character) == "Cc"
+            for character in api_base
+        )
+        and parsed_api_base.scheme == "https"
+        and bool(parsed_api_base.hostname)
+        and parsed_api_base.username is None
+        and parsed_api_base.password is None
+        and not parsed_api_base.query
+        and not parsed_api_base.fragment
+    )
+except ValueError:
+    api_base_valid = False
+if not api_base_valid:
     fail("provider API base is invalid")
-if api_base.endswith("/"):
-    api_base = api_base[:-1]
+api_base = api_base.rstrip("/")
 
 model = os.environ.get("VERIFIER_MODEL", "claude-sonnet-5")
 try:
@@ -76,7 +97,8 @@ request = urllib.request.Request(
 )
 
 try:
-    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+    opener = urllib.request.build_opener(NoRedirectHandler())
+    with opener.open(request, timeout=timeout_seconds) as response:
         response_body = response.read()
     decoded = json.loads(response_body)
     text_parts = [
