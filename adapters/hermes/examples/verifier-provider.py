@@ -34,15 +34,16 @@ if not api_key:
     fail("provider credential is unavailable")
 
 api_base = os.environ.get("VERIFIER_API_BASE", "https://api.anthropic.com")
+api_base_valid = api_base.isascii() and not any(
+    character.isspace() or unicodedata.category(character) == "Cc"
+    for character in api_base
+)
+if not api_base_valid:
+    fail("provider API base is invalid")
 try:
     parsed_api_base = urllib.parse.urlsplit(api_base)
     api_base_valid = (
-        api_base.isascii()
-        and not any(
-            character.isspace() or unicodedata.category(character) == "Cc"
-            for character in api_base
-        )
-        and parsed_api_base.scheme == "https"
+        parsed_api_base.scheme == "https"
         and bool(parsed_api_base.hostname)
         and parsed_api_base.username is None
         and parsed_api_base.password is None
@@ -53,7 +54,9 @@ except ValueError:
     api_base_valid = False
 if not api_base_valid:
     fail("provider API base is invalid")
-api_base = api_base.rstrip("/")
+api_base = (
+    f"{parsed_api_base.scheme}://{parsed_api_base.netloc}{parsed_api_base.path}"
+).rstrip("/")
 
 model = os.environ.get("VERIFIER_MODEL", "claude-sonnet-5")
 try:

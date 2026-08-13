@@ -388,6 +388,25 @@ else
     "rc=$double_slash_rc output=$double_slash_output"
 fi
 
+bare_delimiter_guard_ok=1
+for bare_delimiter in '#' '?'; do
+  rm -f "$request_url_marker"
+  set +e
+  bare_delimiter_output=$(VERIFIER_API_KEY=fixture \
+    VERIFIER_API_BASE="$zai_base$bare_delimiter" \
+    REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+    REQUEST_COUNT_MARKER="$request_count_marker" \
+    python3 "$opener_stub" "$PROVIDER" "$bundle")
+  bare_delimiter_rc=$?
+  set -e
+  if [ "$bare_delimiter_rc" -ne 0 ] \
+    || [ "$bare_delimiter_output" != 'VERDICT: pass
+stub accepted the request URL' ] \
+    || [ "$(cat "$request_url_marker")" != "$zai_base/v1/messages" ]; then
+    bare_delimiter_guard_ok=0
+  fi
+done
+
 invalid_base_guard_ok=1
 zero_width_space=$(printf '\342\200\213')
 for invalid_base in \
@@ -409,11 +428,11 @@ for invalid_base in \
     invalid_base_guard_ok=0
   fi
 done
-if [ "$invalid_base_guard_ok" -eq 1 ]; then
-  pass '[15] provider rejects malformed or unsafe API bases without a verdict'
+if [ "$bare_delimiter_guard_ok" -eq 1 ] && [ "$invalid_base_guard_ok" -eq 1 ]; then
+  pass '[15] provider normalizes bare delimiters and rejects malformed or unsafe API bases'
 else
-  fail_case '[15] provider rejects malformed or unsafe API bases without a verdict' \
-    'one or more invalid bases escaped the config-error path'
+  fail_case '[15] provider normalizes bare delimiters and rejects malformed or unsafe API bases' \
+    'a bare delimiter corrupted the URL or an invalid base escaped the config-error path'
 fi
 
 set +e
