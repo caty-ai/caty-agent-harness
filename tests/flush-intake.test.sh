@@ -2,7 +2,8 @@
 set -u
 
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
-INTAKE=$ROOT/adapters/claude-code/flush-intake.sh
+INTAKE=${INTAKE_UNDER_TEST:-$ROOT/adapters/claude-code/flush-intake.sh}
+INTAKE_CORE=$ROOT/scripts/flush-intake.sh
 PROBE=$ROOT/scripts/deadman-probe.sh
 TMP_ROOT=${TMPDIR:-/tmp}/flush-intake-test.$$
 PASS_COUNT=0
@@ -191,10 +192,12 @@ ws=$(new_ws case-10-cap)
 write_block "$ws/loop/pending/flush-2026-07-05.md" 2026-07-05 'A cap overflow is counted.'
 run_intake "$ws"
 if [ "$(receipt_value "$ws" evicted_by_cap)" -eq 1 ] \
+  && [ "$(receipt_value "$ws" eviction_archive)" = "loop/archive/intake-evictions-$TODAY.md" ] \
+  && grep -Fq 'capped lesson 01' "$ws/loop/archive/intake-evictions-$TODAY.md" \
   && [ "$(awk '/^## Lessons learned/{s=1;next} s&&/^## /{exit} s{n++} END{print n+0}' "$ws/STATE.md")" -eq 60 ]; then
-  pass '[10] STATE caps evict oldest lines and report the count'
+  pass '[10] STATE caps archive evicted lessons and surface the count and path'
 else
-  fail_case '[10] STATE caps evict oldest lines and report the count' "receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+  fail_case '[10] STATE caps archive evicted lessons and surface the count and path' "receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
 fi
 
 ws=$(new_ws case-11-backlog)
@@ -493,10 +496,10 @@ else
 fi
 
 if grep -Fq 'state_fold_candidate_is_duplicate' "$ROOT/adapters/openclaw/distill-audit.sh" \
-  && grep -Fq 'state_fold_candidate_is_duplicate' "$INTAKE" \
-  && grep -Fq 'annotate_reply_dedup_keys' "$INTAKE" \
+  && grep -Fq 'state_fold_candidate_is_duplicate' "$INTAKE_CORE" \
+  && grep -Fq 'annotate_reply_dedup_keys' "$INTAKE_CORE" \
   && grep -Fq 'annotate_reply_dedup_keys' "$ROOT/adapters/openclaw/distill-audit.sh" \
-  && grep -Fq 'split_annotated_reply_sections' "$INTAKE" \
+  && grep -Fq 'split_annotated_reply_sections' "$INTAKE_CORE" \
   && grep -Fq 'split_annotated_reply_sections' "$ROOT/adapters/openclaw/distill-audit.sh"; then
   pass '[27] both consumers call the shared annotation, splitting, and rejection machinery'
 else
@@ -504,7 +507,8 @@ else
 fi
 
 if [ -x "$0" ] && [ -x "$INTAKE" ] \
-  && bash -n "$0" "$INTAKE" "$ROOT/scripts/lib-state-fold.sh" \
+  && [ ! -x "$INTAKE_CORE" ] \
+  && bash -n "$0" "$INTAKE" "$INTAKE_CORE" "$ROOT/scripts/lib-state-fold.sh" \
     "$ROOT/adapters/openclaw/distill-audit.sh" "$ROOT/scripts/deadman-probe.sh"; then
   pass '[28] suite and intake entry points are executable; touched shell files are syntax-valid'
 else
@@ -601,6 +605,42 @@ if [ "$bash32_array_rc" -eq 0 ]; then
   pass '[32] empty section-heading arrays are safe under nounset on system bash'
 else
   fail_case '[32] empty section-heading arrays are safe under nounset on system bash' "rc=$bash32_array_rc error=$(tr '\n' ' ' <"$TMP_ROOT/bash32-array.err")"
+fi
+
+ws=$(new_ws case-33-byte-cap)
+{
+  printf '%s\n' '<!-- flush ts=2026-07-17T01:02:03Z outcome=ok -->'
+  printf '%s\n' '- This short bullet remains.'
+  printf '%s\n' '- This deliberately oversized bullet is much longer than the configured thirty-two-byte intake boundary.'
+} >"$ws/loop/pending/flush-2026-07-17.md"
+run_intake "$ws" INTAKE_MAX_BULLET_BYTES=32
+if grep -Fq 'This short bullet remains.' "$ws/STATE.md" \
+  && ! grep -Fq 'deliberately oversized bullet' "$ws/STATE.md" \
+  && [ "$(receipt_value "$ws" candidates)" -eq 2 ] \
+  && [ "$(receipt_value "$ws" folded)" -eq 1 ] \
+  && [ "$(receipt_value "$ws" dropped_oversize)" -eq 1 ]; then
+  pass '[33] oversized bullets are dropped whole and counted in the receipt'
+else
+  fail_case '[33] oversized bullets are dropped whole and counted in the receipt' "receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+fi
+
+ws=$(new_ws case-34-control-strip)
+{
+  printf '%s\n' '<!-- flush ts=2026-07-18T01:02:03Z outcome=ok -->'
+  printf -- '- Control-byte dedup joins\000 field\007separator\034 text.\n'
+} >"$ws/loop/pending/flush-2026-07-18.md"
+write_block "$ws/loop/pending/flush-2026-07-19.md" 2026-07-19 \
+  'Control-byte dedup joins fieldseparator text.'
+run_intake "$ws"
+LC_ALL=C tr -d '\000-\010\013-\037' <"$ws/STATE.md" >"$TMP_ROOT/control-free-state"
+if grep -Fq 'Control-byte dedup joins fieldseparator text.' "$ws/STATE.md" \
+  && [ "$(grep -Fc 'Control-byte dedup joins' "$ws/STATE.md")" -eq 1 ] \
+  && [ "$(receipt_value "$ws" folded)" -eq 1 ] \
+  && [ "$(receipt_value "$ws" deduped)" -eq 1 ] \
+  && cmp -s "$ws/STATE.md" "$TMP_ROOT/control-free-state"; then
+  pass '[34] C0 controls are stripped before FS-delimited parsing and dedup'
+else
+  fail_case '[34] C0 controls are stripped before FS-delimited parsing and dedup' "receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
 fi
 
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"

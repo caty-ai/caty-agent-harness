@@ -306,6 +306,13 @@ assert_paused_automation_capture "paused Claude Code flush intake" "$ws" claude-
 assert_eq "paused Claude Code flush intake leaves exact workspace snapshot" \
   "$intake_before" "$(snapshot_workspace "$ws")"
 cover adapters/claude-code/flush-intake.sh exit-0-status
+
+hermes_intake_before=$(snapshot_workspace "$ws")
+capture_run hermes-intake-paused "$ROOT/adapters/hermes/flush-intake.sh" "$ws"
+assert_paused_automation_capture "paused Hermes flush intake" "$ws" hermes-flush-intake
+assert_eq "paused Hermes flush intake leaves exact workspace snapshot" \
+  "$hermes_intake_before" "$(snapshot_workspace "$ws")"
+cover adapters/hermes/flush-intake.sh exit-0-status
 [[ ! -e "$model_sentinel" ]] \
   && pass "all paused automated model paths make zero model calls" \
   || fail_case "all paused automated model paths make zero model calls" "model sentinel exists"

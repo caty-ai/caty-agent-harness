@@ -17,7 +17,7 @@ workspace=$(caty_pause_canonical_workspace "$1" 2>/dev/null) || {
   usage
   exit 2
 }
-CATY_INTAKE_ADAPTER=claude-code
+CATY_INTAKE_ADAPTER=hermes
 adapter_identity="${CATY_INTAKE_ADAPTER}-flush-intake"
 pause_state=$(caty_pause_workspace_state "$workspace")
 if [[ "$pause_state" != enabled ]]; then

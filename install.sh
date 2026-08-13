@@ -851,9 +851,11 @@ probe_adapter_distiller_cron() {
   case "$adapter" in
     claude-code|codex|kimi)
       probe_executable_contains "$repo_root/adapters/claude-code/flush-intake.sh" \
-        "snapshot_pending_dedup_keys \"\$pending_dir\"" \
-        && probe_executable_contains "$repo_root/adapters/claude-code/flush-intake.sh" \
-          "atomic_write_file \"\$ledger_source\" \"\$ledger_file\"" \
+        'source "$repo_root/scripts/flush-intake.sh"' \
+        && grep -Fq -- "snapshot_pending_dedup_keys \"\$pending_dir\"" \
+          "$repo_root/scripts/flush-intake.sh" \
+        && grep -Fq -- "atomic_write_file \"\$ledger_source\" \"\$ledger_file\"" \
+          "$repo_root/scripts/flush-intake.sh" \
         && probe_executable_contains "$repo_root/templates/cron-wrapper.tmpl.sh" \
           '# fable-loop cron wrapper template v1'
       ;;

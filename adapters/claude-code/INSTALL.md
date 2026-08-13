@@ -137,6 +137,11 @@ The consumer owns `loop/pending/intake-<UTC-date>.md` key ledgers. A ledger may 
 deleted only when no unarchived `flush-*.md` file predates it. Folded keys are retained
 after STATE cap eviction to prevent refold oscillation. `loop/archive/` is append-only,
 is never auto-pruned, and is deleted only by a human or operations owner.
+Each parsed bullet is limited to `INTAKE_MAX_BULLET_BYTES` bytes (default `512` after
+control-character stripping); an oversized bullet is dropped whole and counted as
+`dropped_oversize` in the run receipt. Lessons displaced by the STATE cap are appended
+to `loop/archive/intake-evictions-<UTC-date>.md`, while `evicted_by_cap` and the archive
+path remain visible in the receipt.
 
 The consumer itself touches `loop/.deadman/distill.marker` only after acquiring the
 shared STATE lock and completing without an infrastructure error. The checked-in

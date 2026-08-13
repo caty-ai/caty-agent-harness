@@ -74,6 +74,28 @@ The rules there apply in addition to the Hermes-specific wiring below.
    `VERIFIER_CMD` must be exactly one absolute wrapper-script path. The adapter
    rejects legacy multi-token command strings and ships no provider default.
 
+   A reference Anthropic Messages implementation is available as three distinct,
+   directly inspectable files:
+
+   - `adapters/hermes/examples/verifier-wrapper.sh` validates the argv bundle and
+     rejects missing, malformed, or multiple verdicts.
+   - `adapters/hermes/examples/verifier-provider.py` makes one stateless API call;
+     set `ANTHROPIC_API_KEY` through the job's protected `SECRETS_ENV`, and optionally
+     set `VERIFIER_MODEL`.
+   - `adapters/hermes/examples/verifier-probe.sh` relocates and genuinely calls the
+     provider through the wrapper before reporting conformance.
+
+   Attesting the example performs a real provider request and therefore requires a
+   valid key:
+
+   ```sh
+   HARNESS=/absolute/path/to/caty-agent-harness
+   PROBE_PROVIDER_PATH="$HARNESS/adapters/hermes/examples/verifier-provider.py" \
+     "$HARNESS/scripts/attest-wrapper" --route verifier \
+       --wrapper "$HARNESS/adapters/hermes/examples/verifier-wrapper.sh" \
+       --probe "$HARNESS/adapters/hermes/examples/verifier-probe.sh"
+   ```
+
    Before enabling the job:
 
    1. Create a single-file verifier wrapper that enforces the runtime-specific
@@ -121,6 +143,30 @@ The rules there apply in addition to the Hermes-specific wiring below.
    `git pull` refreshes the adapter and templates in this repository clone only. The
    profile's own `STATE.md`, `skills/`, `skills/_staging/`, and `loop/` contents are
    outside the repo clone and are not touched by an adapter update.
+
+## Flush intake consumer
+
+Hermes CHECKPOINT flushes use the shared deterministic fold through
+`adapters/hermes/flush-intake.sh`. Schedule it as a LaunchAgent every eight hours by
+copying `templates/cron-wrapper.tmpl.sh` into the workspace and setting the plist's
+`ProgramArguments` to `/bin/bash`, the copied wrapper path, and the absolute workspace
+path as the wrapper's single positional target argument. Set these environment values:
+
+```text
+TARGET=/absolute/path/to/caty-agent-harness/adapters/hermes/flush-intake.sh
+CATY_HARNESS_ROOT=/absolute/path/to/caty-agent-harness
+INTAKE_MAX_FOLD=5
+```
+
+Set the LaunchAgent `StartInterval` to `28800`. Hermes jobs use
+`INTAKE_MAX_FOLD=5` so the cap-60 Lessons FIFO has a bounded, gradual eviction rate
+instead of replacing a large share in one run.
+
+Leave `DEADMAN_MARKER` unset for this Hermes target. The cron wrapper's self-marking
+allowlist recognizes only the Claude Code intake entry path; setting a marker for the
+Hermes path would pre-touch it before intake and could mask lock starvation or an
+intake failure. The Hermes intake writes its own successful-run receipt and distill
+marker after the guarded fold completes.
 
 ## Optional stale-claim watchdog
 
