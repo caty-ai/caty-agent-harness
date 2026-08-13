@@ -46,31 +46,57 @@ read-only deploy credential; the updater never pushes.
 
 ## Persistent state
 
-Each clone basename has an independent monotonic pin:
+Each physical clone path has an independent monotonic pin. The readable clone
+basename is suffixed with a stable short hash of its resolved physical path, so
+two clones named alike do not share state:
 
 ```text
-$HOME/.claude/state/updater-pin/<repo-name>.json
+$HOME/.claude/state/updater-pin/<repo-name>-<path-hash>.json
 ```
 
 It records the highest successfully installed version and its full commit OID.
-An existing machine without a pin seeds it from pre-fetch `HEAD` only when that
-commit is at a strict semver tag. Otherwise the updater fails closed and names
-`scripts/updater-bootstrap`. Unreadable or malformed pins also fail closed.
+An existing machine without a pin takes the version name only from the most
+recent `ok` entry for this repository in the machine-written
+`$HOME/.claude/state/installed-versions.log`, and accepts it only when that name
+still points at pre-fetch `HEAD`. The floor commit is always that recorded
+pre-fetch OID. Without consistent ledger evidence the updater fails closed and
+names `scripts/updater-bootstrap`. Unreadable or malformed pins also fail
+closed. A `--dry-run` computes this floor in memory but writes no pin, dedupe or
+ledger state and sends no heartbeat or hot-inbox report.
 
-Rejected or moved names are recorded once at:
+Moved names, report dedupe, and exact install-failure identities are recorded in
+the append-only state log at:
 
 ```text
-$HOME/.claude/state/updater-ineligible/<repo-name>.log
+$HOME/.claude/state/updater-ineligible/<repo-name>-<path-hash>.log
 ```
 
-Those names remain excluded, but one bad upstream name does not wedge later
-legitimate updates or produce an hourly alert storm.
+A moved name remains excluded. A cryptographic or floor verification failure is
+retried on later ticks so signer rotation or another out-of-band repair can
+recover it; its report is deduplicated until that name passes verification.
+Structurally valid remote records with non-semver tag names are skipped with a
+local stdout note. They never become candidates and produce no report or
+persistent record. Skipped names do not enter duplicate detection, so a repeated
+non-semver record is skipped again. Duplicate strict-semver names and unparsable
+remote records still stop the run and report once per offending name. An
+`install.sh --check` failure excludes only the exact tag-name/commit-OID pair
+after rollback, preventing hourly checkout and report churn.
 
 ## Release signing and key rotation
 
 Every update target must be a strict semver annotated tag signed by a pinned SSH
 key. Legacy lightweight or unsigned releases are rollback identities only and
 can never be selected as update targets.
+
+The gate binds a verified tag to its exact name and a pinned signing key; it
+does **not** bind that tag to a repository. Each repository therefore must have
+its own signing key and its own `allowed_signers` file. Sharing a key across
+repositories lets a release signed for one repository pass the gate and be
+installed by another repository.
+
+A tag name rejected as moved is permanently excluded on that machine. Publish
+the corrected release under a higher version; never re-push it under the same
+name.
 
 Rotate signing keys with overlap:
 

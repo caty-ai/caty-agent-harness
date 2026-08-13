@@ -16,21 +16,6 @@ mkdir -p "$TMP_ROOT"
 pass() { PASS_COUNT=$((PASS_COUNT + 1)); printf 'PASS %s\n' "$1"; }
 fail_case() { FAIL_COUNT=$((FAIL_COUNT + 1)); printf 'FAIL %s: %s\n' "$1" "$2"; }
 
-assert_true() {
-  local name=$1
-  shift
-  if "$@"; then pass "$name"; else fail_case "$name" "assertion failed: $*"; fi
-}
-
-assert_contains() {
-  local name=$1 file=$2 text=$3
-  if [[ -f "$file" ]] && grep -Fq "$text" "$file"; then
-    pass "$name"
-  else
-    fail_case "$name" "missing '$text' in $file"
-  fi
-}
-
 write_fake_install() {
   local src=$1 result=$2
   cat >"$src/install.sh" <<'INSTALL'
@@ -121,19 +106,19 @@ CRON_WRAPPER
 }
 
 tag_release() {
-  local kind=$1 name=$2 commit=$3
+  local kind=$1 name=$2 commit=$3 tag_date=${4:-2020-02-01T00:00:00Z}
   case "$kind" in
     signed)
       git -C "$SRC" config user.signingkey "$KEY"
-      GIT_COMMITTER_DATE=2020-02-01T00:00:00Z git -C "$SRC" tag -s "$name" "$commit" -m "$name"
+      GIT_COMMITTER_DATE="$tag_date" git -C "$SRC" tag -s "$name" "$commit" -m "$name"
       ;;
     unpinned)
       git -C "$SRC" config user.signingkey "$OTHER_KEY"
-      GIT_COMMITTER_DATE=2020-02-01T00:00:00Z git -C "$SRC" tag -s "$name" "$commit" -m "$name"
+      GIT_COMMITTER_DATE="$tag_date" git -C "$SRC" tag -s "$name" "$commit" -m "$name"
       git -C "$SRC" config user.signingkey "$KEY"
       ;;
     unsigned)
-      GIT_COMMITTER_DATE=2020-02-01T00:00:00Z git -C "$SRC" tag -a "$name" "$commit" -m "$name"
+      GIT_COMMITTER_DATE="$tag_date" git -C "$SRC" tag -a "$name" "$commit" -m "$name"
       ;;
     lightweight)
       git -C "$SRC" tag "$name" "$commit"
@@ -145,8 +130,20 @@ push_tag() { git -C "$SRC" push -q "$ORIGIN" "refs/tags/$1:refs/tags/$1"; }
 force_push_tag() { git -C "$SRC" push -q --force "$ORIGIN" "refs/tags/$1:refs/tags/$1"; }
 fetch_local_tag() { git -C "$REPO" fetch -q --no-tags "$ORIGIN" "refs/tags/$1:refs/tags/$1"; }
 
-pin_path() { printf '%s/.claude/state/updater-pin/%s.json\n' "$HOME_DIR" "$(basename "$REPO")"; }
-ineligible_path() { printf '%s/.claude/state/updater-ineligible/%s.log\n' "$HOME_DIR" "$(basename "$REPO")"; }
+repo_state_key() {
+  local repo_real repo_hash
+  repo_real=$(cd "$REPO" && pwd -P)
+  repo_hash=$(printf '%s' "$repo_real" | git hash-object --stdin)
+  printf '%s-%s\n' "$(basename "$repo_real")" "${repo_hash:0:12}"
+}
+pin_path() { printf '%s/.claude/state/updater-pin/%s.json\n' "$HOME_DIR" "$(repo_state_key)"; }
+ineligible_path() { printf '%s/.claude/state/updater-ineligible/%s.log\n' "$HOME_DIR" "$(repo_state_key)"; }
+ledger_path() { printf '%s/.claude/state/installed-versions.log\n' "$HOME_DIR"; }
+
+append_ok_ledger() {
+  local tag=$1
+  printf '2020-01-01T00:00:00Z claire %s %s ok\n' "$(basename "$REPO")" "$tag" >>"$(ledger_path)"
+}
 
 write_pin() {
   local version=$1 commit=$2 path
@@ -189,6 +186,272 @@ make_candidate() {
   fi
   push_tag "$CANDIDATE_TAG"
 }
+
+if [[ "${SKIP_DELTA2_CASES:-0}" == 0 ]]; then
+  # E1: a remote-supplied high name at the installed commit is not trusted as
+  # floor evidence. The machine-authored ledger supplies the installed name.
+  for poison_kind in unsigned lightweight; do
+    new_fixture "delta2-floor-poison-$poison_kind"
+    commit_release installed pass
+    installed_commit=$RELEASE_COMMIT
+    tag_release signed v0.2.3 "$installed_commit"
+    push_tag v0.2.3
+    fetch_local_tag v0.2.3
+    git -C "$REPO" checkout -q --detach "$installed_commit"
+    append_ok_ledger v0.2.3
+    tag_release "$poison_kind" v99.0.0 "$installed_commit"
+    push_tag v99.0.0
+    fetch_local_tag v99.0.0
+    commit_release genuine pass
+    genuine_commit=$RELEASE_COMMIT
+    tag_release signed v0.3.0 "$genuine_commit"
+    push_tag v0.3.0
+    output=$(run_updater); rc=$?
+    if [[ "$rc" -eq 0 && $(git -C "$REPO" rev-parse HEAD) == "$genuine_commit" ]] \
+      && grep -Fq '"version":"v0.3.0"' "$(pin_path)"; then
+      pass "ledger floor ignores $poison_kind high tag at installed HEAD"
+    else
+      fail_case "ledger floor ignores $poison_kind high tag at installed HEAD" "rc=$rc head=$(git -C "$REPO" rev-parse HEAD) output=$output"
+    fi
+  done
+
+  new_fixture delta2-floor-no-ledger
+  tag_release lightweight v99.0.0 "$BASE_COMMIT"
+  push_tag v99.0.0
+  fetch_local_tag v99.0.0
+  output=$(run_updater); rc=$?
+  if [[ "$rc" -ne 0 && ! -e "$(pin_path)" ]] \
+    && printf '%s\n' "$output" | grep -Fq 'scripts/updater-bootstrap'; then
+    pass "floor seed without a usable ledger fails closed and names bootstrap"
+  else
+    fail_case "floor seed without a usable ledger fails closed and names bootstrap" "rc=$rc pin=$(test -e "$(pin_path)" && echo yes || echo no) output=$output"
+  fi
+
+  new_fixture delta2-dry-run-state
+  commit_release installed pass
+  installed_commit=$RELEASE_COMMIT
+  tag_release signed v1.0.0 "$installed_commit"
+  push_tag v1.0.0
+  fetch_local_tag v1.0.0
+  git -C "$REPO" checkout -q --detach "$installed_commit"
+  append_ok_ledger v1.0.0
+  ledger_before=$(cksum "$(ledger_path)")
+  commit_release invalid pass
+  tag_release unsigned v1.1.0 "$RELEASE_COMMIT"
+  push_tag v1.1.0
+  output=$(run_updater --dry-run); rc=$?
+  ledger_after=$(cksum "$(ledger_path)")
+  if [[ "$rc" -eq 0 && "$ledger_before" == "$ledger_after" \
+    && ! -e "$(pin_path)" && ! -e "$(ineligible_path)" \
+    && ! -e "$LOGS/heartbeats.log" && ! -e "$LOGS/hot-inbox.log" ]]; then
+    pass "dry-run writes no pin, dedupe, ledger, heartbeat, or hot-inbox state"
+  else
+    fail_case "dry-run writes no pin, dedupe, ledger, heartbeat, or hot-inbox state" \
+      "rc=$rc pin=$(test -e "$(pin_path)" && echo yes || echo no) ineligible=$(test -e "$(ineligible_path)" && echo yes || echo no) output=$output"
+  fi
+
+  # CP2 v3.3: plain and rc-shaped non-semver names are outside candidate
+  # selection. They are skipped locally without reporting or persistent state.
+  new_fixture delta3-non-semver-skip
+  write_pin v0.0.0 "$BASE_COMMIT"
+  commit_release genuine pass
+  genuine_commit=$RELEASE_COMMIT
+  tag_release lightweight latest "$genuine_commit"
+  push_tag latest
+  tag_release lightweight v1.2.3-rc1 "$genuine_commit"
+  push_tag v1.2.3-rc1
+  tag_release signed v0.3.0 "$genuine_commit"
+  push_tag v0.3.0
+  output=$(run_updater); rc=$?
+  first_head=$(git -C "$REPO" rev-parse HEAD)
+  parse_rcs=$rc
+  for tick in 2 3; do
+    run_updater >/dev/null
+    parse_rcs="$parse_rcs $?"
+  done
+  latest_reports=$(grep -Fc 'latest' "$LOGS/hot-inbox.log" 2>/dev/null || true)
+  rc_reports=$(grep -Fc 'v1.2.3-rc1' "$LOGS/hot-inbox.log" 2>/dev/null || true)
+  latest_records=$(grep -Fc 'latest' "$(ineligible_path)" 2>/dev/null || true)
+  rc_records=$(grep -Fc 'v1.2.3-rc1' "$(ineligible_path)" 2>/dev/null || true)
+  if [[ "$parse_rcs" == '0 0 0' && "$first_head" == "$genuine_commit" \
+    && $(git -C "$REPO" rev-parse HEAD) == "$genuine_commit" \
+    && "$latest_reports" -eq 0 && "$rc_reports" -eq 0 \
+    && "$latest_records" -eq 0 && "$rc_records" -eq 0 ]] \
+    && ! git -C "$REPO" show-ref --verify --quiet refs/tags/latest \
+    && ! git -C "$REPO" show-ref --verify --quiet refs/tags/v1.2.3-rc1 \
+    && printf '%s\n' "$output" | grep -Fq 'family-updater: skipping non-semver remote tag name: latest' \
+    && printf '%s\n' "$output" | grep -Fq 'family-updater: skipping non-semver remote tag name: v1.2.3-rc1'; then
+    pass "non-semver and rc-shaped remote names skip without reports while genuine release installs"
+  else
+    fail_case "non-semver and rc-shaped remote names skip without reports while genuine release installs" \
+      "rcs=[$parse_rcs] first-head=$first_head head=$(git -C "$REPO" rev-parse HEAD) reports=$latest_reports/$rc_reports records=$latest_records/$rc_records output=$output"
+  fi
+
+  # A deterministic ls-remote shim injects duplicate and peeled records that
+  # --refs should normally suppress. Both must remain fail-closed.
+  parse_fakebin=$BASE/parse-fakebin
+  mkdir -p "$parse_fakebin"
+  cat >"$parse_fakebin/git" <<'PARSE_GIT_SHIM'
+#!/usr/bin/env bash
+set -u
+if [[ "$*" == *" ls-remote --refs --tags origin"* ]]; then
+  output=$($REAL_GIT "$@") || exit $?
+  printf '%s\n' "$output"
+  first=$(printf '%s\n' "$output" | sed -n '1p')
+  if [[ "${INJECT_DUPLICATE:-0}" == 1 ]]; then
+    printf '%s\n' "$first"
+  elif [[ "${INJECT_PEELED:-0}" == 1 ]]; then
+    oid=${first%%$'\t'*}
+    ref=${first#*$'\t'}
+    printf '%s\t%s^{}\n' "$oid" "$ref"
+  elif [[ "${INJECT_NONSEMVER_DUP:-0}" == 1 ]]; then
+    oid=${first%%$'\t'*}
+    printf '%s\trefs/tags/latest\n' "$oid"
+    printf '%s\trefs/tags/latest\n' "$oid"
+  fi
+  exit 0
+fi
+exec "$REAL_GIT" "$@"
+PARSE_GIT_SHIM
+  chmod +x "$parse_fakebin/git"
+  for injection in duplicate peeled; do
+    new_fixture "delta2-parse-$injection"
+    write_pin v0.0.0 "$BASE_COMMIT"
+    commit_release candidate pass
+    tag_release signed v1.1.0 "$RELEASE_COMMIT"
+    push_tag v1.1.0
+    before=$(git -C "$REPO" rev-parse HEAD)
+    parse_rcs=
+    for tick in 1 2 3; do
+      if [[ "$injection" == duplicate ]]; then
+        output=$(PATH="$parse_fakebin:$PATH" REAL_GIT="$REAL_GIT" INJECT_DUPLICATE=1 run_updater)
+      else
+        output=$(PATH="$parse_fakebin:$PATH" REAL_GIT="$REAL_GIT" INJECT_PEELED=1 run_updater)
+      fi
+      parse_rcs="$parse_rcs $?"
+    done
+    if [[ "$injection" == duplicate ]]; then
+      expected='duplicate remote tag name'
+    else
+      expected='unparsable remote tag record'
+    fi
+    after=$(git -C "$REPO" rev-parse HEAD)
+    reports=$(grep -Fc "$expected" "$LOGS/hot-inbox.log" 2>/dev/null || true)
+    if [[ "$parse_rcs" == ' 1 1 1' && "$before" == "$after" && "$reports" -eq 1 ]]; then
+      pass "$injection remote tag record fails closed and reports once across three ticks"
+    else
+      fail_case "$injection remote tag record fails closed and reports once across three ticks" \
+        "rcs=[$parse_rcs] reports=$reports output=$output"
+    fi
+  done
+
+  new_fixture delta3-parse-non-semver-duplicate
+  write_pin v0.0.0 "$BASE_COMMIT"
+  commit_release genuine pass
+  genuine_commit=$RELEASE_COMMIT
+  tag_release signed v0.3.0 "$genuine_commit"
+  push_tag v0.3.0
+  output=$(PATH="$parse_fakebin:$PATH" REAL_GIT="$REAL_GIT" INJECT_NONSEMVER_DUP=1 run_updater); rc=$?
+  reports=$(grep -Fc 'latest' "$LOGS/hot-inbox.log" 2>/dev/null || true)
+  ineligible_records=$(grep -Fc 'latest' "$(ineligible_path)" 2>/dev/null || true)
+  skip_notes=$(printf '%s\n' "$output" | grep -Fc 'family-updater: skipping non-semver remote tag name: latest' || true)
+  if [[ "$rc" -eq 0 && $(git -C "$REPO" rev-parse HEAD) == "$genuine_commit" \
+    && "$reports" -eq 0 && "$ineligible_records" -eq 0 && "$skip_notes" -eq 2 ]]; then
+    pass "duplicated non-semver records are skipped outside duplicate detection"
+  else
+    fail_case "duplicated non-semver records are skipped outside duplicate detection" \
+      "rc=$rc head=$(git -C "$REPO" rev-parse HEAD) reports=$reports records=$ineligible_records notes=$skip_notes output=$output"
+  fi
+
+  # E3: one broken (name, commit) pair is tried once, rolled back once, and
+  # then skipped without repeating checkout or reports.
+  new_fixture delta2-install-failure-once
+  commit_release installed pass
+  installed_commit=$RELEASE_COMMIT
+  tag_release signed v1.0.0 "$installed_commit"
+  push_tag v1.0.0
+  fetch_local_tag v1.0.0
+  git -C "$REPO" checkout -q --detach "$installed_commit"
+  write_pin v1.0.0 "$installed_commit"
+  commit_release broken fail
+  broken_commit=$RELEASE_COMMIT
+  tag_release signed v1.1.0 "$broken_commit"
+  push_tag v1.1.0
+  install_rcs=
+  for tick in 1 2 3; do
+    run_updater >/dev/null
+    install_rcs="$install_rcs $?"
+  done
+  installs=$(wc -l <"$SENTINEL" 2>/dev/null || printf '0')
+  reports=$(grep -Fc 'updater failed: claire repo v1.1.0' "$LOGS/hot-inbox.log" 2>/dev/null || true)
+  install_failure_records=$(awk -v commit="$broken_commit" \
+    '$1 == "v1.1.0" && $3 == "install-failure" && $4 == commit {count++} END {print count+0}' \
+    "$(ineligible_path)" 2>/dev/null || printf '0')
+  if HOME="$HOME_DIR" bash -c \
+    'source "$1"; updater_has_install_failure "$2" v1.1.0 0000000000000000000000000000000000000000' \
+    _ "$ROOT/scripts/lib-updater-verify.sh" "$(ineligible_path)"; then
+    different_pair_suppressed=1
+  else
+    different_pair_suppressed=0
+  fi
+  if [[ "$install_rcs" == ' 1 0 0' && "$installs" -eq 2 && "$reports" -eq 1 \
+    && "$install_failure_records" -eq 1 && "$different_pair_suppressed" -eq 0 \
+    && $(git -C "$REPO" rev-parse HEAD) == "$installed_commit" ]]; then
+    pass "install failure reports once and exact pair causes no repeated checkout churn"
+  else
+    fail_case "install failure reports once and exact pair causes no repeated checkout churn" \
+      "rcs=[$install_rcs] installs=$installs reports=$reports records=$install_failure_records different-pair=$different_pair_suppressed"
+  fi
+
+  # E7: fail only the second candidate refspec. A single atomic batch leaves
+  # the first ref absent; a per-candidate loop would install it before failing.
+  new_fixture delta2-atomic-second
+  commit_release first pass
+  tag_release signed v1.1.0 "$RELEASE_COMMIT"
+  push_tag v1.1.0
+  commit_release second pass
+  tag_release signed v1.2.0 "$RELEASE_COMMIT"
+  push_tag v1.2.0
+  write_pin v1.0.0 "$BASE_COMMIT"
+  atomic_fakebin=$BASE/atomic-fakebin
+  atomic_counter=$BASE/atomic-counter
+  mkdir -p "$atomic_fakebin"
+  cat >"$atomic_fakebin/git" <<'ATOMIC_GIT_SHIM'
+#!/usr/bin/env bash
+set -u
+if [[ "$*" == *" fetch --atomic "* ]]; then
+  args=()
+  for arg in "$@"; do
+    if [[ "$arg" == refs/tags/*:refs/tags/* ]]; then
+      count=0
+      [[ ! -f "$ATOMIC_COUNTER" ]] || count=$(sed -n '1p' "$ATOMIC_COUNTER")
+      count=$((count + 1))
+      printf '%s\n' "$count" >"$ATOMIC_COUNTER"
+      if [[ "$count" -eq 2 ]]; then
+        arg='refs/tags/v404.0.0:refs/tags/v404.0.0'
+      fi
+    fi
+    args+=("$arg")
+  done
+  exec "$REAL_GIT" "${args[@]}"
+fi
+exec "$REAL_GIT" "$@"
+ATOMIC_GIT_SHIM
+  chmod +x "$atomic_fakebin/git"
+  output=$(PATH="$atomic_fakebin:$PATH" REAL_GIT="$REAL_GIT" ATOMIC_COUNTER="$atomic_counter" run_updater); rc=$?
+  if [[ "$rc" -ne 0 ]] && ! git -C "$REPO" show-ref --verify --quiet refs/tags/v1.1.0 \
+    && ! git -C "$REPO" show-ref --verify --quiet refs/tags/v1.2.0; then
+    pass "second-candidate fetch failure leaves first and second tag refs absent"
+  else
+    fail_case "second-candidate fetch failure leaves first and second tag refs absent" "rc=$rc tags=[$(git -C "$REPO" tag | sort)] output=$output"
+  fi
+
+  if [[ "${DELTA2_FOCUSED:-0}" == 1 ]]; then
+    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    [[ "$FAIL_COUNT" -eq 0 ]]
+    exit $?
+  fi
+fi
 
 run_side_path_variant() {
   local kind=$1 mode=$2 expected=$3 label=$4
@@ -360,6 +623,23 @@ else
   fail_case "floor comparison is numeric per semver component" "rc=$rc output=$output"
 fi
 
+# Reverse numeric direction: v0.9.0 must be refused below a v0.10.0 floor.
+new_fixture numeric-floor-reverse
+commit_release lower-numeric pass
+lower_numeric_commit=$RELEASE_COMMIT
+tag_release signed v0.9.0 "$lower_numeric_commit"
+push_tag v0.9.0
+write_pin v0.10.0 "$BASE_COMMIT"
+before=$(git -C "$REPO" rev-parse HEAD)
+output=$(run_updater); rc=$?
+after=$(git -C "$REPO" rev-parse HEAD)
+if [[ "$rc" -ne 0 && "$before" == "$after" && ! -e "$SENTINEL" ]] \
+  && printf '%s\n' "$output" | grep -Fq 'tag v0.9.0 is below installed floor v0.10.0'; then
+  pass "floor comparison refuses v0.9.0 below v0.10.0"
+else
+  fail_case "floor comparison refuses v0.9.0 below v0.10.0" "rc=$rc output=$output"
+fi
+
 # One moved tag is excluded, reported once, and does not wedge a valid update.
 new_fixture moved-continues
 commit_release old-moved pass
@@ -478,9 +758,6 @@ fi
 if [[ "${FAKE_LS_REMOTE:-0}" == 1 && "$*" == *" ls-remote "* ]]; then
   exit 71
 fi
-if [[ "${EXTRA_BAD_REFSPEC:-0}" == 1 && "$*" == *" fetch --atomic "* ]]; then
-  exec "$REAL_GIT" "$@" 'refs/tags/v404.0.0:refs/tags/v404.0.0'
-fi
 if [[ -n "${MISMATCH_REPO:-}" && "$*" == "-C $MISMATCH_REPO rev-parse HEAD" ]]; then
   count=0
   [[ -f "$MISMATCH_STATE" ]] && count=$(sed -n '1p' "$MISMATCH_STATE")
@@ -507,23 +784,6 @@ if [[ "$rc" -ne 0 && "$before" == "$after" && ! -e "$SENTINEL" ]] && printf '%s\
   pass "ls-remote failure stops without checkout or install"
 else
   fail_case "ls-remote failure stops without checkout or install" "rc=$rc output=$output"
-fi
-
-new_fixture atomic-partial-failure
-commit_release one pass
-tag_release signed v1.1.0 "$RELEASE_COMMIT"
-push_tag v1.1.0
-commit_release two pass
-tag_release signed v1.2.0 "$RELEASE_COMMIT"
-push_tag v1.2.0
-write_pin v1.0.0 "$BASE_COMMIT"
-before_tags=$(git -C "$REPO" tag | sort)
-output=$(PATH="$FAKEBIN:$PATH" REAL_GIT="$REAL_GIT" EXTRA_BAD_REFSPEC=1 run_updater); rc=$?
-after_tags=$(git -C "$REPO" tag | sort)
-if [[ "$rc" -ne 0 && "$before_tags" == "$after_tags" && ! -e "$SENTINEL" ]]; then
-  pass "failed multi-candidate atomic fetch installs no new local tag refs"
-else
-  fail_case "failed multi-candidate atomic fetch installs no new local tag refs" "rc=$rc before=[$before_tags] after=[$after_tags] output=$output"
 fi
 
 # Rollback uses the full pre-update OID and runs install only after asserting it.
@@ -566,6 +826,165 @@ if [[ "$rc" -ne 0 && "$sentinel_lines" -eq 1 ]] && printf '%s\n' "$output" | gre
   pass "rollback identity mismatch executes no rollback install.sh"
 else
   fail_case "rollback identity mismatch executes no rollback install.sh" "rc=$rc lines=$sentinel_lines output=$output"
+fi
+
+# Reinstated operational coverage from the pre-CP2 suite.
+new_fixture stable-soak-skip
+commit_release fresh pass
+fresh_commit=$RELEASE_COMMIT
+tag_release signed v1.1.0 "$fresh_commit" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+push_tag v1.1.0
+write_pin v1.0.0 "$BASE_COMMIT"
+before=$(git -C "$REPO" rev-parse HEAD)
+output=$(HOME="$HOME_DIR" UPDATER_INSTALL_SENTINEL="$SENTINEL" "$UPDATER" \
+  --repo-dir "$REPO" --workspace "$WS" --agent claire --ring stable \
+  --soak-hours 1 --allowed-signers "$ALLOWED" --fma-scripts-dir "$FMA" 2>&1); rc=$?
+after=$(git -C "$REPO" rev-parse HEAD)
+if [[ "$rc" -eq 0 && "$before" == "$after" && ! -e "$LOGS/hot-inbox.log" ]] \
+  && printf '%s\n' "$output" | grep -Fq 'no stable tag old enough for 1 hour soak'; then
+  pass "stable-ring soak skip leaves HEAD unchanged and sends no hot-inbox"
+else
+  fail_case "stable-ring soak skip leaves HEAD unchanged and sends no hot-inbox" "rc=$rc output=$output"
+fi
+output=$(HOME="$HOME_DIR" UPDATER_INSTALL_SENTINEL="$SENTINEL" "$UPDATER" \
+  --repo-dir "$REPO" --workspace "$WS" --agent claire --ring canary \
+  --soak-hours 999 --allowed-signers "$ALLOWED" --fma-scripts-dir "$FMA" 2>&1); rc=$?
+if [[ "$rc" -eq 0 && $(git -C "$REPO" rev-parse HEAD) == "$fresh_commit" ]]; then
+  pass "canary ignores soak hours"
+else
+  fail_case "canary ignores soak hours" "rc=$rc output=$output"
+fi
+
+new_fixture live-lock
+write_pin v0.0.0 "$BASE_COMMIT"
+mkdir "$REPO/.family-updater.lock"
+printf '%s\n' "$$" >"$REPO/.family-updater.lock/pid"
+before=$(git -C "$REPO" rev-parse HEAD)
+output=$(run_updater); rc=$?
+after=$(git -C "$REPO" rev-parse HEAD)
+rm -rf "$REPO/.family-updater.lock"
+if [[ "$rc" -ne 0 && "$before" == "$after" ]] \
+  && grep -Fq 'lock held by live pid' "$LOGS/heartbeats.log"; then
+  pass "live lock refuses the run and sends a failure heartbeat"
+else
+  fail_case "live lock refuses the run and sends a failure heartbeat" "rc=$rc output=$output"
+fi
+
+new_fixture stale-lock
+commit_release candidate pass
+stale_lock_commit=$RELEASE_COMMIT
+tag_release signed v1.1.0 "$stale_lock_commit"
+push_tag v1.1.0
+write_pin v1.0.0 "$BASE_COMMIT"
+mkdir "$REPO/.family-updater.lock"
+printf '%s\n' 999999 >"$REPO/.family-updater.lock/pid"
+output=$(run_updater); rc=$?
+if [[ "$rc" -eq 0 && $(git -C "$REPO" rev-parse HEAD) == "$stale_lock_commit" \
+  && ! -d "$REPO/.family-updater.lock" ]]; then
+  pass "stale lock is reclaimed and released"
+else
+  fail_case "stale lock is reclaimed and released" "rc=$rc output=$output"
+fi
+
+new_fixture dirty-worktree
+commit_release candidate pass
+tag_release signed v1.1.0 "$RELEASE_COMMIT"
+push_tag v1.1.0
+write_pin v1.0.0 "$BASE_COMMIT"
+printf 'local change\n' >>"$REPO/VERSION.fixture"
+before=$(git -C "$REPO" rev-parse HEAD)
+output=$(run_updater); rc=$?
+after=$(git -C "$REPO" rev-parse HEAD)
+if [[ "$rc" -ne 0 && "$before" == "$after" && ! -e "$SENTINEL" ]] \
+  && grep -Fq 'repo has local modifications, refusing to update' "$LOGS/hot-inbox.log" \
+  && grep -Fq ' v1.1.0 fail' "$(ledger_path)"; then
+  pass "dirty worktree refuses checkout and records the failure"
+else
+  fail_case "dirty worktree refuses checkout and records the failure" "rc=$rc output=$output"
+fi
+
+new_fixture already-current
+commit_release current pass
+current_commit=$RELEASE_COMMIT
+tag_release signed v1.1.0 "$current_commit"
+push_tag v1.1.0
+fetch_local_tag v1.1.0
+git -C "$REPO" checkout -q --detach "$current_commit"
+write_pin v1.1.0 "$current_commit"
+output=$(run_updater); rc=$?
+if [[ "$rc" -eq 0 && ! -e "$(ledger_path)" && ! -e "$LOGS/hot-inbox.log" ]] \
+  && grep -Fq 'job-heartbeat updater-claire ok --reason v1.1.0' "$LOGS/heartbeats.log"; then
+  pass "already-up-to-date sends heartbeat but skips ledger and hot-inbox"
+else
+  fail_case "already-up-to-date sends heartbeat but skips ledger and hot-inbox" "rc=$rc output=$output"
+fi
+
+new_fixture missing-reporter
+commit_release candidate pass
+missing_reporter_commit=$RELEASE_COMMIT
+tag_release signed v1.1.0 "$missing_reporter_commit"
+push_tag v1.1.0
+write_pin v1.0.0 "$BASE_COMMIT"
+FMA=$BASE/missing-fma
+output=$(run_updater); rc=$?
+if [[ "$rc" -eq 0 && $(git -C "$REPO" rev-parse HEAD) == "$missing_reporter_commit" ]] \
+  && printf '%s\n' "$output" | grep -Fq 'warning: reporter script missing'; then
+  pass "missing reporters warn while a valid update succeeds"
+else
+  fail_case "missing reporters warn while a valid update succeeds" "rc=$rc output=$output"
+fi
+
+new_fixture failing-reporter
+commit_release candidate pass
+failing_reporter_commit=$RELEASE_COMMIT
+tag_release signed v1.1.0 "$failing_reporter_commit"
+push_tag v1.1.0
+write_pin v1.0.0 "$BASE_COMMIT"
+cat >"$FMA/job-heartbeat" <<'FAILING_REPORTER'
+#!/usr/bin/env bash
+exit 1
+FAILING_REPORTER
+chmod +x "$FMA/job-heartbeat"
+output=$(run_updater); rc=$?
+if [[ "$rc" -eq 0 && $(git -C "$REPO" rev-parse HEAD) == "$failing_reporter_commit" ]] \
+  && printf '%s\n' "$output" | grep -Fq 'warning: heartbeat reporter failed'; then
+  pass "failing heartbeat reporter warns while a valid update succeeds"
+else
+  fail_case "failing heartbeat reporter warns while a valid update succeeds" "rc=$rc output=$output"
+fi
+
+new_fixture rollback-also-fails
+commit_release failing-base fail
+failing_base_commit=$RELEASE_COMMIT
+tag_release signed v1.0.0 "$failing_base_commit"
+push_tag v1.0.0
+fetch_local_tag v1.0.0
+git -C "$REPO" checkout -q --detach "$failing_base_commit"
+write_pin v1.0.0 "$failing_base_commit"
+commit_release broken-target fail
+tag_release signed v1.1.0 "$RELEASE_COMMIT"
+push_tag v1.1.0
+output=$(run_updater); rc=$?
+report_lines=$(wc -l <"$LOGS/hot-inbox.log" 2>/dev/null || printf '0')
+if [[ "$rc" -ne 0 && $(git -C "$REPO" rev-parse HEAD) == "$failing_base_commit" \
+  && "$report_lines" -eq 1 ]] && grep -Fq 'ALSO failed its check' "$LOGS/hot-inbox.log"; then
+  pass "rollback check failure produces one caution with the ALSO-failed shape"
+else
+  fail_case "rollback check failure produces one caution with the ALSO-failed shape" "rc=$rc reports=$report_lines output=$output"
+fi
+
+state_collision_base=$TMP_ROOT/state-key-collision
+mkdir -p "$state_collision_base/one/repo" "$state_collision_base/two/repo" "$state_collision_base/home"
+first_state_path=$(HOME="$state_collision_base/home" bash -c \
+  'source "$1"; updater_default_pin_path "$2"' _ "$ROOT/scripts/lib-updater-verify.sh" "$state_collision_base/one/repo")
+second_state_path=$(HOME="$state_collision_base/home" bash -c \
+  'source "$1"; updater_default_pin_path "$2"' _ "$ROOT/scripts/lib-updater-verify.sh" "$state_collision_base/two/repo")
+if [[ "$first_state_path" != "$second_state_path" \
+  && $(basename "$first_state_path") == repo-*.json \
+  && $(basename "$second_state_path") == repo-*.json ]]; then
+  pass "same-basename clones receive distinct physical-path state keys"
+else
+  fail_case "same-basename clones receive distinct physical-path state keys" "$first_state_path == $second_state_path"
 fi
 
 # Bootstrap: exact owner tag only, substituted/rebound content rejected.

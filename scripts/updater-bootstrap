@@ -87,8 +87,8 @@ if ! updater_capture_verify_and_bind "$repo_dir" "$initial_tag" "$allowed_signer
 fi
 
 # A prior attempt may have written the verified floor and then failed while
-# installing the cron wrapper. Only that exact version/commit identity may be
-# resumed; every other pre-existing pin remains a hard refusal.
+# installing the cron wrapper. The pre-existing pin identity check below allows
+# only that exact version/commit to resume and refuses every other pin.
 if [[ -e "$pin_path" || -L "$pin_path" ]]; then
   if ! updater_read_pin "$pin_path" \
     || [[ "$UPDATER_FLOOR_VERSION" != "$initial_tag" \
@@ -96,14 +96,6 @@ if [[ -e "$pin_path" || -L "$pin_path" ]]; then
     fail "updater pin already exists; bootstrap will not replace it: $pin_path"
   fi
   pin_already_matches=1
-fi
-
-# The bootstrap floor is the verified initial identity itself. Running the same
-# equality rule makes a same-version/different-content seed impossible.
-UPDATER_FLOOR_VERSION=$initial_tag
-UPDATER_FLOOR_COMMIT=$UPDATER_CAPTURED_COMMIT
-if ! updater_check_floor "$initial_tag" "$UPDATER_CAPTURED_COMMIT"; then
-  fail "$UPDATER_VERIFY_REASON"
 fi
 
 # B-ALG step 6: checkout and assert only the captured commit OID, never the ref.

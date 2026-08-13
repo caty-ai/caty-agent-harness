@@ -11,6 +11,8 @@ UPDATER_CAPTURED_EPOCH=
 UPDATER_FLOOR_VERSION=
 UPDATER_FLOOR_COMMIT=
 UPDATER_REMOTE_TAGS=
+UPDATER_MOVED_TAGS=
+UPDATER_SYNC_FAILURE_HANDLED=0
 
 updater_is_semver() {
   [[ "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
@@ -96,12 +98,21 @@ updater_repo_name() {
   basename "$(cd "$1" && pwd -P)"
 }
 
+updater_repo_state_key() {
+  local repo_real repo_name path_hash
+
+  repo_real=$(cd "$1" && pwd -P) || return 1
+  repo_name=$(basename "$repo_real")
+  path_hash=$(printf '%s' "$repo_real" | git hash-object --stdin) || return 1
+  printf '%s-%s\n' "$repo_name" "${path_hash:0:12}"
+}
+
 updater_default_pin_path() {
-  printf '%s/.claude/state/updater-pin/%s.json\n' "$HOME" "$(updater_repo_name "$1")"
+  printf '%s/.claude/state/updater-pin/%s.json\n' "$HOME" "$(updater_repo_state_key "$1")"
 }
 
 updater_default_ineligible_path() {
-  printf '%s/.claude/state/updater-ineligible/%s.log\n' "$HOME" "$(updater_repo_name "$1")"
+  printf '%s/.claude/state/updater-ineligible/%s.log\n' "$HOME" "$(updater_repo_state_key "$1")"
 }
 
 updater_path_is_outside_repo() {
@@ -240,21 +251,34 @@ updater_load_or_seed_floor() {
   local repo=$1
   local path=$2
   local prefetch_head=$3
-  local tags tag sorted
+  local ledger=$4
+  local persist_seed=${5:-1}
+  local repo_name tag recorded_commit
 
   if [[ -e "$path" || -L "$path" ]]; then
     updater_read_pin "$path"
     return $?
   fi
 
-  tags=$(git -C "$repo" tag --points-at "$prefetch_head" 2>/dev/null || true)
-  sorted=$(updater_sort_semvers_desc "$(printf '%s\n' "$tags" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)")
-  tag=$(printf '%s\n' "$sorted" | sed -n '1p')
-  if [[ -z "$tag" ]]; then
-    UPDATER_VERIFY_REASON="updater pin is absent and pre-fetch HEAD is not at a semver tag; bootstrap with scripts/updater-bootstrap: $path"
+  repo_name=$(updater_repo_name "$repo")
+  tag=$(awk -v repo="$repo_name" '
+    NF == 5 && $3 == repo && $5 == "ok" {tag=$4}
+    END {if (tag != "") print tag}
+  ' "$ledger" 2>/dev/null || true)
+  if [[ -z "$tag" ]] || ! updater_is_semver "$tag"; then
+    UPDATER_VERIFY_REASON="updater pin is absent and the install ledger has no usable ok entry for this repository; bootstrap with scripts/updater-bootstrap: $path"
     return 1
   fi
-  updater_write_pin "$path" "$tag" "$prefetch_head" || return 1
+
+  recorded_commit=$(git -C "$repo" rev-parse --verify "refs/tags/$tag^{commit}" 2>/dev/null || true)
+  if [[ "$recorded_commit" != "$prefetch_head" ]]; then
+    UPDATER_VERIFY_REASON="updater pin is absent and the install ledger tag does not point at pre-fetch HEAD; bootstrap with scripts/updater-bootstrap: $path"
+    return 1
+  fi
+
+  if [[ "$persist_seed" -eq 1 ]]; then
+    updater_write_pin "$path" "$tag" "$prefetch_head" || return 1
+  fi
   UPDATER_FLOOR_VERSION=$tag
   UPDATER_FLOOR_COMMIT=$prefetch_head
 }
@@ -294,9 +318,8 @@ updater_has_verification_failure() {
 
   [[ -f "$path" ]] && awk -v name="$name" '
     $1 == name {
-      if ($3 == "moved-tag") next
-      if ($3 == "verification-failure-cleared") active=0
-      else active=1
+      if ($3 == "verification-failure") active=1
+      else if ($3 == "verification-failure-cleared") active=0
     }
     END {exit active ? 0 : 1}
   ' "$path"
@@ -346,6 +369,38 @@ updater_clear_verification_failure() {
   return 0
 }
 
+updater_has_install_failure() {
+  local path=$1
+  local name=$2
+  local commit=$3
+
+  [[ -f "$path" ]] && awk -v name="$name" -v commit="$commit" \
+    '$1 == name && $3 == "install-failure" && $4 == commit {found=1; exit}
+     END {exit found ? 0 : 1}' "$path"
+}
+
+# Install failures are selection exclusions for one exact release identity.
+# A different commit OID is a different pair and is not suppressed here.
+updater_mark_install_failure() {
+  local path=$1
+  local name=$2
+  local commit=$3
+  local dir timestamp
+
+  if updater_has_install_failure "$path" "$name" "$commit"; then
+    return 1
+  fi
+  dir=$(dirname "$path")
+  updater_prepare_private_dir "$dir" || return 2
+  timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+  if ! printf '%s %s install-failure %s\n' "$name" "$timestamp" "$commit" >>"$path" \
+    || ! chmod 600 "$path"; then
+    UPDATER_VERIFY_REASON="cannot append updater install-failure record: $path"
+    return 2
+  fi
+  return 0
+}
+
 updater_remote_oid_for() {
   local records=$1
   local wanted=$2
@@ -360,6 +415,51 @@ updater_remote_oid_for() {
   return 1
 }
 
+updater_remote_record_name() {
+  local line=$1
+  local ref=$2
+  local name hash
+
+  if [[ "$ref" == refs/tags/* ]]; then
+    name=${ref#refs/tags/}
+  fi
+  if [[ -n "${name:-}" && "$name" != *[[:space:]]* ]]; then
+    printf '%s\n' "$name"
+    return 0
+  fi
+  hash=$(printf '%s' "$line" | git hash-object --stdin) || return 1
+  printf 'remote-record-%s\n' "${hash:0:12}"
+}
+
+# Record and report a remote-listing failure once per offending name. Returns
+# nonzero so the caller preserves the contract's fail-closed stop.
+updater_fail_remote_listing() {
+  local path=$1
+  local name=$2
+  local reason=$3
+  local dry_run=$4
+  local mark_rc
+
+  UPDATER_VERIFY_REASON=$reason
+  if [[ "$dry_run" -eq 1 ]]; then
+    return 1
+  fi
+  if ! declare -F updater_report_ineligible >/dev/null 2>&1; then
+    UPDATER_VERIFY_REASON="updater reporting callback is unavailable for: $reason"
+    return 1
+  fi
+  if updater_mark_verification_failure "$path" "$name" "$reason"; then
+    updater_report_ineligible "$name" "$reason"
+    UPDATER_SYNC_FAILURE_HANDLED=1
+  else
+    mark_rc=$?
+    if [[ "$mark_rc" -eq 1 ]]; then
+      UPDATER_SYNC_FAILURE_HANDLED=1
+    fi
+  fi
+  return 1
+}
+
 # Fetches branches without tags, validates the remote tag listing, identifies
 # moved names, then installs all absent tag refs in one atomic ref-update batch.
 # A failed atomic fetch can leave unreachable objects, but it installs no new
@@ -367,9 +467,13 @@ updater_remote_oid_for() {
 updater_sync_remote_tags() {
   local repo=$1
   local ineligible_path=$2
-  local output line oid ref name extra local_oid mark_rc
+  local dry_run=${3:-0}
+  local output line oid ref name extra local_oid mark_rc reason record_name
   local names= records= candidates=
   local -a refspecs
+
+  UPDATER_MOVED_TAGS=
+  UPDATER_SYNC_FAILURE_HANDLED=0
 
   if ! git -C "$repo" fetch --no-tags --prune origin '+refs/heads/*:refs/remotes/origin/*'; then
     UPDATER_VERIFY_REASON="branch fetch failed"
@@ -385,16 +489,19 @@ updater_sync_remote_tags() {
     oid= ref= extra=
     IFS=$'\t' read -r oid ref extra <<<"$line"
     if [[ -n "$extra" || ! "$oid" =~ ^[0-9a-f]{40}$ || "$ref" != refs/tags/* || "$ref" == *'^{}' ]]; then
-      UPDATER_VERIFY_REASON="unparsable remote tag record: $line"
+      reason="unparsable remote tag record: $line"
+      record_name=$(updater_remote_record_name "$line" "$ref") || record_name=remote-record-unavailable
+      updater_fail_remote_listing "$ineligible_path" "$record_name" "$reason" "$dry_run"
       return 1
     fi
     name=${ref#refs/tags/}
     if ! updater_is_semver "$name"; then
-      UPDATER_VERIFY_REASON="remote tag name is not strict semver: $name"
-      return 1
+      printf 'family-updater: skipping non-semver remote tag name: %s\n' "$name"
+      continue
     fi
     if printf '%s\n' "$names" | grep -Fxq "$name"; then
-      UPDATER_VERIFY_REASON="duplicate remote tag name: $name"
+      reason="duplicate remote tag name: $name"
+      updater_fail_remote_listing "$ineligible_path" "$name" "$reason" "$dry_run"
       return 1
     fi
     names=${names:+$names$'\n'}$name
@@ -405,6 +512,14 @@ updater_sync_remote_tags() {
     [[ -n "$name" ]] || continue
     if local_oid=$(git -C "$repo" show-ref --verify --hash "refs/tags/$name" 2>/dev/null); then
       if [[ "$local_oid" != "$oid" ]]; then
+        UPDATER_MOVED_TAGS=${UPDATER_MOVED_TAGS:+$UPDATER_MOVED_TAGS$'\n'}$name
+        if [[ "$dry_run" -eq 1 ]]; then
+          continue
+        fi
+        if ! declare -F updater_report_ineligible >/dev/null 2>&1; then
+          UPDATER_VERIFY_REASON="updater reporting callback is unavailable for moved tag: $name"
+          return 1
+        fi
         updater_mark_ineligible "$ineligible_path" "$name" "moved-tag" || mark_rc=$?
         mark_rc=${mark_rc:-0}
         if [[ "$mark_rc" -eq 0 ]]; then

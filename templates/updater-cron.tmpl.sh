@@ -36,8 +36,11 @@ if [[ ! -x "$REPO_DIR/scripts/family-updater" ]]; then
   fail "family-updater is not executable: $REPO_DIR/scripts/family-updater"
 fi
 
-repo_name=$(basename "$(cd "$REPO_DIR" && pwd -P)")
-pin_path="$HOME/.claude/state/updater-pin/$repo_name.json"
+repo_real=$(cd "$REPO_DIR" && pwd -P)
+repo_name=$(basename "$repo_real")
+repo_hash=$(printf '%s' "$repo_real" | git hash-object --stdin) || fail "cannot hash physical REPO_DIR path"
+repo_state_key="$repo_name-${repo_hash:0:12}"
+pin_path="$HOME/.claude/state/updater-pin/$repo_state_key.json"
 if [[ ! -r "$pin_path" ]]; then
   fail "verified updater pin is missing; run scripts/updater-bootstrap before enabling this wrapper: $pin_path"
 fi
