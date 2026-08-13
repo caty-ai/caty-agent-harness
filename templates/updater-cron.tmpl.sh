@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Caty Agent Harness updater cron wrapper template v1
+# Caty Agent Harness updater cron wrapper template v2
 #
 # Copy this file next to a checked-out harness clone, set REPO_DIR to the
 # absolute clone path, and run it from cron. It validates wrapper-level
@@ -20,6 +20,7 @@ WORKSPACE=${WORKSPACE:-$PWD}
 AGENT=${AGENT:-${USER:-unknown}}
 RING=${RING:-stable}
 SOAK_HOURS=${SOAK_HOURS:-24}
+ALLOWED_SIGNERS=${CATY_UPDATER_ALLOWED_SIGNERS:-$HOME/.claude/state/updater-allowed-signers}
 
 if [[ -z "${FMA_SCRIPTS_DIR:-}" ]]; then
   fail "FMA_SCRIPTS_DIR is not set; set it to the reporter directory (for example, /path/to/family-memory-architecture/scripts)"
@@ -35,10 +36,23 @@ if [[ ! -x "$REPO_DIR/scripts/family-updater" ]]; then
   fail "family-updater is not executable: $REPO_DIR/scripts/family-updater"
 fi
 
+repo_real=$(cd "$REPO_DIR" && pwd -P)
+repo_name=$(basename "$repo_real")
+repo_hash=$(printf '%s' "$repo_real" | git hash-object --stdin) || fail "cannot hash physical REPO_DIR path"
+repo_state_key="$repo_name-${repo_hash:0:12}"
+pin_path="$HOME/.claude/state/updater-pin/$repo_state_key.json"
+if [[ ! -r "$pin_path" ]]; then
+  fail "verified updater pin is missing; run scripts/updater-bootstrap before enabling this wrapper: $pin_path"
+fi
+if [[ ! -r "$ALLOWED_SIGNERS" || ! -s "$ALLOWED_SIGNERS" ]]; then
+  fail "allowed_signers file is absent, unreadable, or empty: $ALLOWED_SIGNERS"
+fi
+
 exec "$REPO_DIR/scripts/family-updater" \
   --repo-dir "$REPO_DIR" \
   --workspace "$WORKSPACE" \
   --agent "$AGENT" \
   --ring "$RING" \
   --soak-hours "$SOAK_HOURS" \
+  --allowed-signers "$ALLOWED_SIGNERS" \
   --fma-scripts-dir "$FMA_SCRIPTS_DIR"

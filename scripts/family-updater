@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# shellcheck source=scripts/lib-updater-verify.sh
+source "$SCRIPT_DIR/lib-updater-verify.sh"
+
 repo_dir=
 workspace=$PWD
 agent=${USER:-unknown}
@@ -8,23 +12,31 @@ ring=stable
 soak_hours=24
 dry_run=0
 fma_scripts_dir=${FMA_SCRIPTS_DIR:-}
+allowed_signers=${CATY_UPDATER_ALLOWED_SIGNERS:-$HOME/.claude/state/updater-allowed-signers}
 lock_acquired=0
 lock_dir=
+pin_path=
+ineligible_path=
+startup_failure_path=
+preupdate_head=
+UPDATER_ROLLBACK_COMPLETED=0
 
 usage() {
   cat <<'USAGE'
 Usage:
   scripts/family-updater --repo-dir <path> [--workspace <dir>] [--agent <name>]
                          [--ring canary|stable] [--soak-hours N] [--dry-run]
-                         [--fma-scripts-dir <dir>]
+                         [--allowed-signers <path>] [--fma-scripts-dir <dir>]
 
 Flags:
   --repo-dir <path>       Local caty-agent-harness clone to update. Required.
   --workspace <dir>       Workspace passed to install.sh --check.
   --agent <name>          Reporting agent name. Defaults to $USER.
-  --ring canary|stable    Canary takes the newest semver tag. Stable waits for soak.
+  --ring canary|stable    Canary takes the newest eligible tag. Stable adds soak.
   --soak-hours N          Stable tag minimum age in hours. Defaults to 24.
-  --dry-run               Print the planned update without fetching or changing files.
+  --dry-run               Verify and fetch refs, but do not checkout, install,
+                          write updater state, or send heartbeat/hot-inbox reports.
+  --allowed-signers <p>   Out-of-repo SSH allowed_signers file. Flag overrides env.
   --fma-scripts-dir <dir> Directory containing job-heartbeat and hot-inbox-post.
                            When omitted, reporting is disabled with a warning.
   -h, --help              Show this help.
@@ -54,7 +66,6 @@ trap 'cleanup_lock' EXIT HUP INT TERM
 
 is_live_pid() {
   local pid=$1
-
   [[ "$pid" =~ ^[0-9]+$ ]] || return 1
   kill -0 "$pid" 2>/dev/null
 }
@@ -75,75 +86,8 @@ acquire_lock() {
     fi
     rm -rf "$lock_dir"
   done
-
   lock_acquired=1
   printf '%s\n' "$$" >"$pid_file"
-}
-
-semver_tags() {
-  local tag_output
-
-  if ! tag_output=$(git -C "$repo_dir" tag --sort=-v:refname); then
-    return 1
-  fi
-  printf '%s\n' "$tag_output" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true
-}
-
-tag_epoch() {
-  local tag=$1
-  local epoch
-
-  epoch=$(git -C "$repo_dir" for-each-ref --format='%(taggerdate:unix)' "refs/tags/$tag")
-  if [[ -z "$epoch" ]]; then
-    epoch=$(git -C "$repo_dir" log -1 --format=%ct "$tag^{}" 2>/dev/null || true)
-  fi
-  printf '%s\n' "$epoch"
-}
-
-select_target_tag() {
-  local tags=$1
-  local now_epoch=$2
-  local min_age_seconds=$((soak_hours * 3600))
-  local tag
-  local epoch
-  local age
-
-  [[ -n "$tags" ]] || return 0
-
-  if [[ "$ring" == "canary" ]]; then
-    printf '%s\n' "$tags" | head -n 1
-    return 0
-  fi
-
-  while IFS= read -r tag; do
-    [[ -n "$tag" ]] || continue
-    epoch=$(tag_epoch "$tag")
-    [[ "$epoch" =~ ^[0-9]+$ ]] || continue
-    age=$((now_epoch - epoch))
-    if (( age >= min_age_seconds )); then
-      printf '%s\n' "$tag"
-      return 0
-    fi
-  done <<EOF
-$tags
-EOF
-}
-
-current_points_at_tag() {
-  local tag=$1
-
-  git -C "$repo_dir" tag --points-at HEAD | grep -Fxq "$tag"
-}
-
-rollback_ref() {
-  local tag
-
-  tag=$(git -C "$repo_dir" describe --tags --exact-match 2>/dev/null || true)
-  if [[ -n "$tag" ]]; then
-    printf '%s\n' "$tag"
-  else
-    git -C "$repo_dir" rev-parse --short HEAD
-  fi
 }
 
 ledger_path() {
@@ -153,12 +97,11 @@ ledger_path() {
 append_ledger() {
   local tag=$1
   local status=$2
-  local path
-  local repo_name
-  local timestamp
+  local path repo_name timestamp
 
+  [[ "$dry_run" -eq 0 ]] || return 0
   path=$(ledger_path)
-  repo_name=$(basename "$(cd "$repo_dir" && pwd)")
+  repo_name=$(updater_repo_name "$repo_dir")
   timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
   mkdir -p "$(dirname "$path")"
   printf '%s %s %s %s %s\n' "$timestamp" "$agent" "$repo_name" "$tag" "$status" >>"$path"
@@ -171,10 +114,11 @@ warn_missing_reporter() {
 send_heartbeat() {
   local status=$1
   local reason=$2
+  local reporter
 
+  [[ "$dry_run" -eq 0 ]] || return 0
   [[ -n "$fma_scripts_dir" ]] || return 0
-  local reporter="$fma_scripts_dir/job-heartbeat"
-
+  reporter="$fma_scripts_dir/job-heartbeat"
   if [[ ! -x "$reporter" ]]; then
     warn_missing_reporter "$reporter"
     return 0
@@ -188,22 +132,19 @@ post_failure_report() {
   local tag=$1
   local rollback=$2
   local summary=$3
+  local reporter repo_name report_summary=$summary
 
+  [[ "$dry_run" -eq 0 ]] || return 0
   [[ -n "$fma_scripts_dir" ]] || return 0
-  local reporter="$fma_scripts_dir/hot-inbox-post"
-  local repo_name
-  local report_summary=$summary
-
+  reporter="$fma_scripts_dir/hot-inbox-post"
   if [[ ! -x "$reporter" ]]; then
     warn_missing_reporter "$reporter"
     return 0
   fi
-
   if [[ -n "$rollback" && "$summary" != *"rollback to $rollback ALSO failed"* ]]; then
     report_summary="$summary; rolled back to $rollback"
   fi
-
-  repo_name=$(basename "$(cd "$repo_dir" && pwd)")
+  repo_name=$(updater_repo_name "$repo_dir")
   if ! "$reporter" \
     --kind caution \
     --title "updater failed: $agent $repo_name $tag" \
@@ -221,9 +162,92 @@ report_failure() {
   local rollback=$3
   local summary=$4
 
+  printf 'family-updater error: %s\n' "$summary" >&2
   send_heartbeat fail "$reason"
   post_failure_report "$tag" "$rollback" "$summary"
   append_ledger "$tag" fail
+}
+
+report_startup_failure() {
+  local name=$1
+  local reason=$2
+  local rc
+
+  printf 'family-updater error: %s\n' "$reason" >&2
+  [[ "$dry_run" -eq 0 ]] || return 0
+  if updater_mark_verification_failure "$startup_failure_path" "$name" "$reason"; then
+    send_heartbeat fail "$reason"
+    post_failure_report "$name" "" "$reason"
+    append_ledger "$name" fail
+    return 0
+  else
+    rc=$?
+  fi
+  [[ "$rc" -eq 1 ]] && return 0
+  report_failure "$name" "$UPDATER_VERIFY_REASON" "" "$UPDATER_VERIFY_REASON"
+  return 1
+}
+
+clear_startup_failure() {
+  local name=$1
+  local rc
+
+  [[ "$dry_run" -eq 0 ]] || return 0
+  if updater_clear_verification_failure "$startup_failure_path" "$name"; then
+    return 0
+  else
+    rc=$?
+  fi
+  [[ "$rc" -eq 1 ]] && return 0
+  report_failure "state-failed" "$UPDATER_VERIFY_REASON" "" "$UPDATER_VERIFY_REASON"
+  return 1
+}
+
+# Callback used by updater_sync_remote_tags. Persistence is handled by the
+# shared library before this is called, so repeated ticks do not report again.
+updater_report_ineligible() {
+  local tag=$1
+  local reason=$2
+  report_failure "$tag" "$reason" "" "$reason"
+}
+
+record_candidate_verification_failure() {
+  local tag=$1
+  local reason=$2
+  local rc
+
+  if [[ "$dry_run" -eq 1 ]]; then
+    printf 'family-updater error: %s\n' "$reason" >&2
+    return 0
+  fi
+  if updater_mark_verification_failure "$ineligible_path" "$tag" "$reason"; then
+    updater_report_ineligible "$tag" "$reason"
+    return 0
+  else
+    rc=$?
+  fi
+  [[ "$rc" -eq 1 ]] && return 0
+  return 1
+}
+
+clear_candidate_verification_failure() {
+  local tag=$1
+  local rc
+
+  [[ "$dry_run" -eq 0 ]] || return 0
+  if updater_clear_verification_failure "$ineligible_path" "$tag"; then
+    return 0
+  else
+    rc=$?
+  fi
+  [[ "$rc" -eq 1 ]] && return 0
+  return 1
+}
+
+candidate_was_moved_this_tick() {
+  local tag=$1
+
+  printf '%s\n' "$UPDATER_MOVED_TAGS" | grep -Fxq "$tag"
 }
 
 run_install_check() {
@@ -244,19 +268,40 @@ first_line_or_default() {
   local text=$1
   local fallback=$2
   local line
-
   line=$(printf '%s\n' "$text" | sed -n '1p')
-  if [[ -n "$line" ]]; then
-    printf '%s\n' "$line"
-  else
-    printf '%s\n' "$fallback"
-  fi
+  printf '%s\n' "${line:-$fallback}"
 }
 
 compact_summary() {
-  local text=$1
+  printf '%s' "$1" | tr '\n' ' ' | cut -c1-200
+}
 
-  printf '%s' "$text" | tr '\n' ' ' | cut -c1-200
+rollback_after_install_failure() {
+  local target_tag=$1
+  local error_head=$2
+  local summary=$3
+  local rollback_output rollback_head actual_head
+
+  UPDATER_ROLLBACK_COMPLETED=0
+  if ! git -C "$repo_dir" checkout --detach "$preupdate_head" >/dev/null; then
+    report_failure "$target_tag" "$error_head" "" "$summary; rollback checkout to $preupdate_head FAILED"
+    return 1
+  fi
+  actual_head=$(git -C "$repo_dir" rev-parse HEAD 2>/dev/null || true)
+  if [[ "$actual_head" != "$preupdate_head" ]]; then
+    report_failure "$target_tag" "$error_head" "" "$summary; rollback identity mismatch: expected $preupdate_head found ${actual_head:-unreadable}; rollback install.sh was not executed"
+    return 1
+  fi
+
+  rollback_output=
+  if ! run_install_check rollback_output; then
+    rollback_head=$(first_line_or_default "$rollback_output" "rollback install check failed")
+    printf 'warning: rollback check did not pass: %s\n' "$rollback_head" >&2
+    summary="$summary; rollback to $preupdate_head ALSO failed its check"
+  fi
+  UPDATER_ROLLBACK_COMPLETED=1
+  report_failure "$target_tag" "$error_head" "$preupdate_head" "$summary"
+  return 1
 }
 
 while (($# > 0)); do
@@ -290,6 +335,11 @@ while (($# > 0)); do
       dry_run=1
       shift
       ;;
+    --allowed-signers)
+      (($# >= 2)) || die_usage
+      allowed_signers=$2
+      shift 2
+      ;;
     --fma-scripts-dir)
       (($# >= 2)) || die_usage
       fma_scripts_dir=$2
@@ -299,9 +349,7 @@ while (($# > 0)); do
       usage
       exit 0
       ;;
-    *)
-      die_usage
-      ;;
+    *) die_usage ;;
   esac
 done
 
@@ -310,57 +358,170 @@ if [[ -z "$fma_scripts_dir" ]]; then
 fi
 
 [[ -n "$repo_dir" ]] || die_usage
-[[ "$ring" == "canary" || "$ring" == "stable" ]] || die "invalid ring: $ring"
+[[ "$ring" == canary || "$ring" == stable ]] || die "invalid ring: $ring"
 [[ "$soak_hours" =~ ^[0-9]+$ ]] || die "invalid soak-hours: $soak_hours"
 [[ -d "$repo_dir" ]] || die "repo dir not found: $repo_dir"
 
 acquire_lock "$repo_dir/.family-updater.lock"
-
-if ! git -C "$repo_dir" rev-parse --git-dir >/dev/null; then
-  reason="repo is not a git repository"
-  send_heartbeat fail "$reason" || true
+if ! git -C "$repo_dir" rev-parse --git-dir >/dev/null 2>&1; then
+  report_failure "startup-failed" "repo is not a git repository" "" "repo is not a git repository"
   exit 1
 fi
 [[ -x "$repo_dir/install.sh" ]] || die "install.sh is not executable: $repo_dir/install.sh"
 
-if [[ "$dry_run" -eq 0 ]]; then
-  if ! git -C "$repo_dir" fetch --tags --prune origin; then
-    report_failure "fetch-failed" "git fetch failed" "" "git fetch failed"
-    exit 1
-  fi
-else
-  printf 'dry-run: would fetch tags from origin\n'
-fi
-
-if ! tags=$(semver_tags); then
-  reason="git tag listing failed"
-  report_failure "tag-list-failed" "$reason" "" "$reason"
+preupdate_head=$(git -C "$repo_dir" rev-parse --verify HEAD 2>/dev/null || true)
+if [[ ! "$preupdate_head" =~ ^[0-9a-f]{40}$ ]]; then
+  report_failure "startup-failed" "cannot record pre-update HEAD full commit OID" "" "cannot record pre-update HEAD full commit OID"
   exit 1
 fi
-if [[ -z "$tags" ]]; then
-  printf 'family-updater: no eligible semver tags found; already up to date\n'
-  exit 0
+
+pin_path=$(updater_default_pin_path "$repo_dir")
+ineligible_path=$(updater_default_ineligible_path "$repo_dir")
+startup_failure_path=$(updater_default_startup_failure_path "$repo_dir")
+if [[ -L "$startup_failure_path" \
+  || ( -e "$startup_failure_path" && ! -f "$startup_failure_path" ) \
+  || ( -f "$startup_failure_path" && ( ! -r "$startup_failure_path" || ! -w "$startup_failure_path" ) ) ]]; then
+  reason="updater startup failure log is not a readable, writable regular file: $startup_failure_path"
+  report_failure "state-failed" "$reason" "" "$reason"
+  exit 1
 fi
 
-target_tag=$(select_target_tag "$tags" "$(date -u '+%s')")
+if ! updater_check_capabilities "$repo_dir"; then
+  report_startup_failure "capability-failed" "$UPDATER_VERIFY_REASON"
+  exit 1
+fi
+if ! clear_startup_failure "capability-failed"; then
+  exit 1
+fi
+if ! updater_validate_allowed_signers "$repo_dir" "$allowed_signers"; then
+  report_startup_failure "signers-failed" "$UPDATER_VERIFY_REASON"
+  exit 1
+fi
+if ! clear_startup_failure "signers-failed"; then
+  exit 1
+fi
+
+if [[ -L "$ineligible_path" || ( -e "$ineligible_path" && ! -f "$ineligible_path" ) ]]; then
+  reason="updater ineligible log is not a regular file: $ineligible_path"
+  report_startup_failure "state-failed" "$reason"
+  exit 1
+fi
+if ! clear_startup_failure "state-failed"; then
+  exit 1
+fi
+if ! updater_load_or_seed_floor "$repo_dir" "$pin_path" "$preupdate_head" "$(ledger_path)" "$((1 - dry_run))"; then
+  report_startup_failure "pin-failed" "$UPDATER_VERIFY_REASON"
+  exit 1
+fi
+if ! clear_startup_failure "pin-failed"; then
+  exit 1
+fi
+
+if ! updater_sync_remote_tags "$repo_dir" "$ineligible_path" "$dry_run"; then
+  if [[ "$UPDATER_SYNC_FAILURE_HANDLED" -eq 0 ]]; then
+    report_failure "fetch-failed" "$UPDATER_VERIFY_REASON" "" "$UPDATER_VERIFY_REASON"
+  fi
+  exit 1
+fi
+
+remote_names=
+while IFS=$'\t' read -r remote_name remote_oid; do
+  [[ -n "$remote_name" ]] || continue
+  remote_names=${remote_names:+$remote_names$'\n'}$remote_name
+done <<<"$UPDATER_REMOTE_TAGS"
+sorted_names=$(updater_sort_semvers_desc "$remote_names")
+
+target_tag=
+target_commit=
+verified_seen=0
+now_epoch=$(date -u '+%s')
+min_age_seconds=$((soak_hours * 3600))
+
+while IFS= read -r candidate; do
+  [[ -n "$candidate" ]] || continue
+  if updater_is_moved_tag_ineligible "$ineligible_path" "$candidate" \
+    || candidate_was_moved_this_tick "$candidate"; then
+    continue
+  fi
+
+  # B-ALG step 1 uses the direct OID enumerated from the remote. Lightweight
+  # refs are rejected before capture; capture repeats the type assertion.
+  candidate_oid=$(updater_remote_oid_for "$UPDATER_REMOTE_TAGS" "$candidate" || true)
+  candidate_type=$(git -C "$repo_dir" cat-file -t "$candidate_oid" 2>/dev/null || true)
+  if [[ "$candidate_type" != tag ]]; then
+    reason="tag is lightweight or not annotated: $candidate"
+    if ! record_candidate_verification_failure "$candidate" "$reason"; then
+      report_failure "$candidate" "$UPDATER_VERIFY_REASON" "" "$UPDATER_VERIFY_REASON"
+      exit 1
+    fi
+    continue
+  fi
+
+  # B-ALG steps 2-4: capture once, verify T with forced config, parse only T's
+  # header block, and bind its embedded tag name exactly to the candidate name.
+  if ! updater_capture_verify_and_bind "$repo_dir" "$candidate" "$allowed_signers"; then
+    reason=$UPDATER_VERIFY_REASON
+    if ! record_candidate_verification_failure "$candidate" "$reason"; then
+      report_failure "$candidate" "$UPDATER_VERIFY_REASON" "" "$UPDATER_VERIFY_REASON"
+      exit 1
+    fi
+    continue
+  fi
+
+  # B-ALG step 5: numeric monotonic floor, including equal-version identity.
+  if ! updater_check_floor "$candidate" "$UPDATER_CAPTURED_COMMIT"; then
+    reason=$UPDATER_VERIFY_REASON
+    if ! record_candidate_verification_failure "$candidate" "$reason"; then
+      report_failure "$candidate" "$UPDATER_VERIFY_REASON" "" "$UPDATER_VERIFY_REASON"
+      exit 1
+    fi
+    continue
+  fi
+  if updater_has_install_failure "$ineligible_path" "$candidate" "$UPDATER_CAPTURED_COMMIT"; then
+    continue
+  fi
+  if ! clear_candidate_verification_failure "$candidate"; then
+    report_failure "$candidate" "$UPDATER_VERIFY_REASON" "" "$UPDATER_VERIFY_REASON"
+    exit 1
+  fi
+  verified_seen=1
+
+  # Soak is applied only after cryptographic eligibility. It is rollout pacing,
+  # not a security control: a signer can backdate the tagger timestamp.
+  if [[ "$ring" == stable ]] && (( now_epoch - UPDATER_CAPTURED_EPOCH < min_age_seconds )); then
+    continue
+  fi
+
+  target_tag=$UPDATER_CAPTURED_TAG
+  target_commit=$UPDATER_CAPTURED_COMMIT
+  break
+done <<<"$sorted_names"
+
 if [[ -z "$target_tag" ]]; then
-  printf 'family-updater: no %s tag old enough for %s hour soak; already up to date\n' "$ring" "$soak_hours"
-  exit 0
+  if [[ "$verified_seen" -eq 1 ]]; then
+    printf 'family-updater: no stable tag old enough for %s hour soak; already up to date\n' "$soak_hours"
+    exit 0
+  fi
+  if [[ -z "$remote_names" ]]; then
+    printf 'family-updater: remote has no eligible semver tags; already up to date\n'
+    exit 0
+  fi
+  printf 'family-updater: no remote tag passed the verification and floor gate\n' >&2
+  exit 1
 fi
 
-if current_points_at_tag "$target_tag"; then
+current_head=$(git -C "$repo_dir" rev-parse HEAD)
+if [[ "$current_head" == "$target_commit" ]]; then
   if [[ "$dry_run" -eq 1 ]]; then
-    printf 'dry-run: already at %s, nothing to do\n' "$target_tag"
+    printf 'dry-run: verified already-current %s (%s), nothing to do\n' "$target_tag" "$target_commit"
     exit 0
   fi
   send_heartbeat ok "$target_tag"
   exit 0
 fi
 
-rollback=$(rollback_ref)
-
 if [[ "$dry_run" -eq 1 ]]; then
-  printf 'dry-run: would update %s from %s to %s\n' "$repo_dir" "$rollback" "$target_tag"
+  printf 'dry-run: verified update %s from %s to %s (%s); no checkout or install executed\n' "$repo_dir" "$preupdate_head" "$target_tag" "$target_commit"
   exit 0
 fi
 
@@ -370,14 +531,21 @@ if [[ -n "$(git -C "$repo_dir" status --porcelain -- . ':!.family-updater.lock')
   exit 1
 fi
 
-if ! git -C "$repo_dir" checkout --detach "$target_tag" >/dev/null; then
-  reason="checkout of $target_tag failed"
-  report_failure "$target_tag" "$reason" "" "$reason"
+# B-ALG step 6. The selected name is never resolved again; checkout and the
+# post-checkout assertion use only the commit OID captured before verification.
+if ! updater_checkout_captured_commit "$repo_dir" "$target_commit"; then
+  report_failure "$target_tag" "$UPDATER_VERIFY_REASON" "" "$UPDATER_VERIFY_REASON; install.sh was not executed"
   exit 1
 fi
 
+# B-ALG step 7: repo code executes only after every trust and identity check.
 check_output=
 if run_install_check check_output; then
+  if ! updater_write_pin "$pin_path" "$target_tag" "$target_commit"; then
+    pin_error=$UPDATER_VERIFY_REASON
+    rollback_after_install_failure "$target_tag" "$pin_error" "$pin_error"
+    exit 1
+  fi
   send_heartbeat ok "$target_tag"
   append_ledger "$target_tag" ok
   exit 0
@@ -388,17 +556,16 @@ fi
 error_head=$(first_line_or_default "$check_output" "install check failed with exit $check_rc")
 summary=$(compact_summary "$check_output")
 [[ -n "$summary" ]] || summary=$error_head
-
-if ! git -C "$repo_dir" checkout --detach "$rollback" >/dev/null; then
-  report_failure "$target_tag" "$error_head" "" "$summary; rollback checkout to $rollback FAILED"
-  exit 1
+rollback_rc=0
+rollback_after_install_failure "$target_tag" "$error_head" "$summary" || rollback_rc=$?
+if [[ "$UPDATER_ROLLBACK_COMPLETED" -eq 1 ]]; then
+  if updater_mark_install_failure "$ineligible_path" "$target_tag" "$target_commit"; then
+    :
+  else
+    mark_rc=$?
+    if [[ "$mark_rc" -eq 2 ]]; then
+      printf 'family-updater error: %s\n' "$UPDATER_VERIFY_REASON" >&2
+    fi
+  fi
 fi
-rollback_output=
-if ! run_install_check rollback_output; then
-  rollback_head=$(first_line_or_default "$rollback_output" "rollback install check failed")
-  printf 'warning: rollback check did not pass: %s\n' "$rollback_head" >&2
-  summary="$summary; rollback to $rollback ALSO failed its check"
-fi
-
-report_failure "$target_tag" "$error_head" "$rollback" "$summary"
-exit 1
+exit "${rollback_rc:-1}"
