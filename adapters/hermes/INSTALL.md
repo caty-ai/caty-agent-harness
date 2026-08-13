@@ -80,10 +80,36 @@ The rules there apply in addition to the Hermes-specific wiring below.
    - `adapters/hermes/examples/verifier-wrapper.sh` validates the argv bundle and
      rejects missing, malformed, or multiple verdicts.
    - `adapters/hermes/examples/verifier-provider.py` makes one stateless API call;
-     set `ANTHROPIC_API_KEY` through the job's protected `SECRETS_ENV`, and optionally
-     set `VERIFIER_MODEL`.
+     set `VERIFIER_API_KEY` through the job's protected `SECRETS_ENV`, and optionally
+     set `VERIFIER_MODEL`. `ANTHROPIC_API_KEY` remains a backward-compatible fallback.
    - `adapters/hermes/examples/verifier-probe.sh` relocates and genuinely calls the
      provider through the wrapper before reporting conformance.
+
+   Anthropic remains the default: set an Anthropic key in `VERIFIER_API_KEY`,
+   optionally set `VERIFIER_MODEL`, and leave `VERIFIER_API_BASE` unset to use
+   `https://api.anthropic.com`.
+
+   **Z.ai GLM 5.2 configuration.** Set these values through the job's protected
+   `SECRETS_ENV`:
+
+   ```sh
+   VERIFIER_API_KEY=<Z.ai member key>
+   VERIFIER_MODEL=glm-5.2
+   VERIFIER_API_BASE=https://api.z.ai/api/anthropic
+   ```
+
+   `SECRETS_ENV` is an additive overlay. When switching vendors, remove or overwrite
+   the old key line: a leftover key for vendor A will be sent to vendor B. Prefer
+   `VERIFIER_API_KEY` for both vendors; `ANTHROPIC_API_KEY` is accepted only as a
+   backward-compatible fallback when the preferred variable is unset or empty.
+
+   The conformance gate pins the staged wrapper, provider, and probe files by SHA-256,
+   plus the TTL and recorded behavioral flags. It does not pin the API key,
+   `VERIFIER_API_BASE`, or live `VERIFIER_MODEL`; `provider_version` is only the model
+   label present at attestation time, not the model actually served. Re-attesting after
+   a vendor, model, or endpoint change is therefore an operator duty the gate cannot
+   enforce today; a follow-up issue tracks gating the endpoint and served model in the
+   evidence record.
 
    Operational contract: the example wrapper forwards only the validated verdict and
    reason lines. It intentionally discards the findings body requested by the bundle
