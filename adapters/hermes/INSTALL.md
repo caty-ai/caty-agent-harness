@@ -85,6 +85,17 @@ The rules there apply in addition to the Hermes-specific wiring below.
    - `adapters/hermes/examples/verifier-probe.sh` relocates and genuinely calls the
      provider through the wrapper before reporting conformance.
 
+   Operational contract: the example wrapper forwards only the validated verdict and
+   reason lines. It intentionally discards the findings body requested by the bundle
+   to remove an injection surface; that body cannot be recovered from this wrapper.
+   The provider SYSTEM prompt enforces first-line verdict placement and overrides the
+   bundle's last-two-lines instruction. A model that follows the bundle instead is
+   rejected fail-closed and surfaces as `needs-human`; when using this example as a
+   production `VERIFIER_CMD`, monitor the `needs-human` rate for formatting flakiness.
+   `VERIFIER_TEMPERATURE` is sent as given, so a model that constrains temperature may
+   reject the request; this normalizes to wrapper exit 70 and `needs-human`. Model id
+   and temperature are therefore coupled configuration.
+
    Attesting the example performs a real provider request and therefore requires a
    valid key:
 

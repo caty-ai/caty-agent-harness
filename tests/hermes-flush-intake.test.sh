@@ -131,22 +131,43 @@ ws=$(new_ws unsentineled-source)
 assert_core_refusal '[7] sourcing the core without the guarded-entry sentinel has no side effects' \
   "$ws" source
 
-ws=$(new_ws canonical-argv)
+ws=$(new_ws 'canonical argv with space')
 canonical_ws=$(cd "$ws" && pwd -P)
 noncanonical_ws="$ws/./"
+mkdir_shim="$TMP_ROOT/mkdir-shim"
+lock_path_log="$TMP_ROOT/lock-paths.log"
+real_mkdir=$(command -v mkdir)
+mkdir -p "$mkdir_shim"
+cat >"$mkdir_shim/mkdir" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$1" >>"$CATY_LOCK_PATH_LOG"
+exec "$CATY_REAL_MKDIR" "$@"
+SH
+chmod 0755 "$mkdir_shim/mkdir"
 printf '%s\n' \
   '<!-- flush origin=checkpoint session=canonical-test ts=2026-07-22T01:02:03Z outcome=ok unverified=true -->' \
   '- Canonical workspace paths survive adapter handoff.' \
   >"$ws/loop/pending/flush-2026-07-22.md"
-INTAKE_LOCK_SLEEP_S=0 "$CLAUDE_INTAKE" "$noncanonical_ws"
+PATH="$mkdir_shim:$PATH" CATY_LOCK_PATH_LOG="$lock_path_log" CATY_REAL_MKDIR="$real_mkdir" \
+  INTAKE_LOCK_SLEEP_S=0 "$CLAUDE_INTAKE" "$noncanonical_ws"
 receipt=$(tail -n 1 "$ws/loop/pending/intake-runs.log")
+receipt_tokens_clean=1
+for receipt_token in $receipt; do
+  case "$receipt_token" in
+    [A-Za-z_][A-Za-z0-9_]*=*) ;;
+    *) receipt_tokens_clean=0 ;;
+  esac
+done
+parsed_folded=$(printf '%s\n' "$receipt" | tr ' ' '\n' | sed -n 's/^folded=//p')
 if grep -Fq 'Canonical workspace paths survive adapter handoff.' "$ws/STATE.md" \
-  && printf '%s\n' "$receipt" | grep -Fq "workspace=$canonical_ws " \
-  && ! printf '%s\n' "$receipt" | grep -Fq "workspace=$noncanonical_ws "; then
-  pass '[8] non-canonical argv folds and receipts use the canonical workspace'
+  && grep -Fqx "$canonical_ws/loop/.distill-state.lock" "$lock_path_log" \
+  && ! grep -Fqx "$noncanonical_ws/loop/.distill-state.lock" "$lock_path_log" \
+  && [ "$receipt_tokens_clean" -eq 1 ] && [ "$parsed_folded" -eq 1 ] \
+  && ! printf '%s\n' "$receipt" | grep -Fq 'workspace='; then
+  pass '[8] spaced non-canonical argv folds through the canonical lock path with a parser-clean receipt'
 else
-  fail_case '[8] non-canonical argv folds and receipts use the canonical workspace' \
-    "receipt=$receipt canonical=$canonical_ws raw=$noncanonical_ws"
+  fail_case '[8] spaced non-canonical argv folds through the canonical lock path with a parser-clean receipt' \
+    "receipt=$receipt canonical=$canonical_ws raw=$noncanonical_ws locks=$(tr '\n' ';' <"$lock_path_log")"
 fi
 
 ws=$(new_ws canonical-paused-status)

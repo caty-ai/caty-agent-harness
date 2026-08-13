@@ -103,8 +103,8 @@ write_receipt() {
   local timestamp
 
   timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-  printf 'ts=%s workspace=%s files_scanned=%s blocks=%s candidates=%s folded=%s deduped=%s evicted_by_cap=%s eviction_archive=%s dropped_oversize=%s deferred=%s headerless_bullets=%s torn_lines=%s quarantined=%s lock=%s marker=%s error=%s%s\n' \
-    "$timestamp" "$workspace" "$files_scanned" "$blocks" "$candidates" "$folded" "$deduped" \
+  printf 'ts=%s files_scanned=%s blocks=%s candidates=%s folded=%s deduped=%s evicted_by_cap=%s eviction_archive=%s dropped_oversize=%s deferred=%s headerless_bullets=%s torn_lines=%s quarantined=%s lock=%s marker=%s error=%s%s\n' \
+    "$timestamp" "$files_scanned" "$blocks" "$candidates" "$folded" "$deduped" \
     "$evicted_by_cap" "$eviction_archive" "$dropped_oversize" "$deferred" \
     "$headerless_bullets" "$torn_lines" \
     "$quarantined" "$lock_status" "$marker_status" "$receipt_error" "$quarantined_paths" \
