@@ -1,6 +1,6 @@
 # Batch-1 author review record (Alpha, 2026-08-14)
 
-Drafts by Codex (GPT-5.6 Sol) under `../translation-rules.md`; drafting run was killed by a supervisor false-stall SIGTERM after producing all 8 task dirs and 7/8 validity verdicts (its own summary report was never written — this record supersedes it). Every admitted line is author-reviewed per R13; review below is the author's, not the drafter's.
+Drafts by Codex (GPT-5.6 Sol) under `../translation-rules.md`; drafting run was killed by a supervisor false-stall SIGTERM after producing all 8 task dirs and 7/8 validity verdicts. The drafter's own `BATCH1-REPORT.md` was written just before the kill and contains one claim its logs do not support: it reports `VERDICT t07 PASS`, but the on-disk t07 log at kill time (`t07.log.codex-partial`) ends mid-run (fix 3/5, no final VERDICT; an earlier donecheck revision had ended FAIL). Treat that report as the drafter's unverified self-report — this record and the independent t07 re-validation supersede it. Every admitted line is author-reviewed per R13; review below is the author's, not the drafter's.
 
 ## Verdict summary
 
