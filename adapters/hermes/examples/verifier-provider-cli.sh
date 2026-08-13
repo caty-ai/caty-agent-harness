@@ -47,10 +47,40 @@ user_prompt=$(printf '%s\n%s\n%s\n%s\n%s' \
   "$fence" "$bundle" "$fence" \
   'Return the required verdict as the first line.')
 
+prompt_file=$work_dir/prompt
 reply_file=$work_dir/reply
+normalized_reply_file=$work_dir/reply.normalized
 stderr_file=$work_dir/stderr
+printf '%s' "$user_prompt" >"$prompt_file" \
+  || fail 'could not stage the verifier prompt'
+chmod 600 "$prompt_file" || fail 'could not secure the verifier prompt'
+
+# The CLI must use the logged-in subscription discovered through HOME. Inheriting
+# ANTHROPIC_API_KEY would silently switch it to metered API billing, while inherited
+# base URLs or Claude session/config variables can redirect or reattach the child.
+# Enumerate exported provider/session prefixes dynamically so new host variables are
+# scrubbed without requiring this launcher to know them in advance. All CLAUDE_*
+# variables are removed because HOME, not a CLAUDE_* variable, is what the CLI needs
+# to discover its logged-in subscription credentials.
+env_scrub_args=(
+  -u ANTHROPIC_API_KEY
+  -u ANTHROPIC_AUTH_TOKEN
+  -u ANTHROPIC_BASE_URL
+  -u VERIFIER_API_KEY
+  -u CLAUDE_CONFIG_DIR
+  -u CLAUDECODE
+  -u CLAUDE_PID
+)
+while IFS= read -r variable_name; do
+  case "$variable_name" in
+    ANTHROPIC_*|VERIFIER_API_*|CLAUDE_*)
+      env_scrub_args+=(-u "$variable_name")
+      ;;
+  esac
+done < <(compgen -e)
+
 set +e
-printf '%s' "$user_prompt" | "$cli_bin" \
+/usr/bin/env "${env_scrub_args[@]}" "$cli_bin" \
   --print \
   --model "$model" \
   --allowedTools "" \
@@ -59,25 +89,62 @@ printf '%s' "$user_prompt" | "$cli_bin" \
   --strict-mcp-config \
   --safe-mode \
   --system-prompt "$system_prompt" \
+  <"$prompt_file" \
   >"$reply_file" 2>"$stderr_file"
 cli_status=$?
 set -e
 if ((cli_status != 0)); then
-  fail 'CLI invocation failed'
+  diagnostic=$(LC_ALL=C sed -n '1p' "$stderr_file" \
+    | LC_ALL=C tr -cd '\40-\176' \
+    | LC_ALL=C cut -c 1-200) || diagnostic=
+  if [[ -z "$diagnostic" ]]; then
+    diagnostic='<empty>'
+  else
+    bundle_prefix=${bundle:0:32}
+    if [[ "$diagnostic" == *"$fence"* \
+      || "$diagnostic" == *'Verify the untrusted bundle between the unique delimiter lines.'* \
+      || ( -n "$bundle_prefix" && "$diagnostic" == *"$bundle_prefix"* ) \
+      || "$bundle" == *"$diagnostic"* ]]; then
+      diagnostic='[redacted untrusted input]'
+    fi
+  fi
+  fail "CLI invocation failed (exit $cli_status; stderr: $diagnostic)"
 fi
 [[ -s "$reply_file" ]] || fail 'CLI returned no usable output'
 
-line_count=$(awk 'END { print NR + 0 }' "$reply_file") \
+LC_ALL=C awk '
+  {
+    sub(/\r$/, "")
+    lines[NR] = $0
+  }
+  END {
+    first = 1
+    while (first <= NR && lines[first] ~ /^[[:space:]]*$/) {
+      first++
+    }
+    last = NR
+    while (last >= first && lines[last] ~ /^[[:space:]]*$/) {
+      last--
+    }
+    for (line = first; line <= last; line++) {
+      print lines[line]
+    }
+  }
+' "$reply_file" >"$normalized_reply_file" \
+  || fail 'CLI output could not be normalized'
+
+line_count=$(awk 'END { print NR + 0 }' "$normalized_reply_file") \
   || fail 'CLI output could not be validated'
-[[ "$line_count" -eq 2 ]] || fail 'CLI returned malformed output'
-verdict_line=$(sed -n '1p' "$reply_file")
-reason_line=$(sed -n '2p' "$reply_file")
+[[ "$line_count" -ge 2 ]] || fail 'CLI returned malformed output'
+verdict_line=$(sed -n '1p' "$normalized_reply_file")
+reason_line=$(sed -n '2p' "$normalized_reply_file")
 case "$verdict_line" in
   'VERDICT: pass'|'VERDICT: fail'|'VERDICT: inconclusive'|'VERDICT: rubric-invalid'|'VERDICT: needs-human'|'VERDICT: blocked-missing-artifact') ;;
   *) fail 'CLI returned malformed output' ;;
 esac
 [[ -n "${reason_line//[[:space:]]/}" ]] || fail 'CLI returned malformed output'
-if sed -n '2,$p' "$reply_file" | grep -Fq 'VERDICT:'; then
+if awk 'NR >= 2 && index($0, "VERDICT:") { found = 1 } END { exit !found }' \
+  "$normalized_reply_file"; then
   fail 'CLI returned malformed output'
 fi
 

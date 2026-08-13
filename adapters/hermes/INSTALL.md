@@ -99,11 +99,14 @@ The rules there apply in addition to the Hermes-specific wiring below.
    ```
 
    `VERIFIER_CLI_BIN` defaults to `$HOME/.local/bin/claude`; the provider never uses a
-   `PATH` lookup. It pipes the fenced bundle prompt on stdin and launches the CLI with
-   print mode, no tools, no session persistence, strict empty MCP configuration, and
-   safe mode. Safe mode disables custom hooks and other user/project customizations.
-   The provider also starts the CLI in a fresh neutral temporary directory and removes
-   it on exit.
+   `PATH` lookup. It delivers the fenced bundle prompt on stdin from a private temporary
+   file and launches the CLI with print mode, no tools, no session persistence, strict
+   empty MCP configuration, and safe mode. Before launch it removes API key, endpoint,
+   Claude config/session, and agent-process variables from the child environment while
+   retaining `HOME` for subscription credential discovery. This matters for both trust
+   and billing: if `ANTHROPIC_API_KEY` survives, the CLI authenticates with that key and
+   incurs metered API usage instead of using the logged-in subscription. The provider
+   also starts the CLI in a fresh neutral temporary directory and removes it on exit.
 
    This is a mandatory defense against the **checkpoint stop-hook final-message
    replacement hazard**: in this family, a host checkpoint hook has replaced the final
@@ -114,12 +117,22 @@ The rules there apply in addition to the Hermes-specific wiring below.
    swallowed, empty, or malformed response fails the provider and wrapper checks, so it
    becomes gate noise/`needs-human`, never a false pass.
 
+   Safe mode is not an absolute sandbox: admin-managed policy settings still apply, and
+   built-in tools/permissions otherwise work normally. Tool denial here comes from
+   `--tools ""` and `--allowedTools ""`; the residual policy-setting boundary is
+   accepted, and every empty or malformed reply still fails closed. `--bare` is not a
+   substitute because it disables OAuth/keychain credential discovery and would force
+   API-key authentication, defeating this deployment's subscription-auth goal.
+
    The CLI attestation boundary is narrower than the API-client file boundary:
    `provider_sha256` pins only `verifier-provider-cli.sh`. It does not pin the Claude
-   CLI binary, CLI settings files, or login state. Re-attest after changing any of
-   those inputs and at least every three days. Login expiry makes the real probe fail;
-   at runtime it fails closed to `needs-human`, and the three-day re-attestation cadence
-   surfaces it even if no verifier job has run.
+   CLI binary, CLI settings files, or login state. `provider_version` records the model
+   label plus the first 16 hex characters of the CLI binary hash that the probe
+   exercised. This is an honest identity record, not enforcement: the runtime gate does
+   not re-derive that value, so a later CLI auto-update does not invalidate existing
+   evidence. Re-attest after changing any of those inputs and at least every three days.
+   Login expiry makes the real probe fail; at runtime it fails closed to `needs-human`,
+   and the three-day re-attestation cadence surfaces it even if no verifier job has run.
 
    Attest the CLI-backed shape with the authenticated job uid:
 
