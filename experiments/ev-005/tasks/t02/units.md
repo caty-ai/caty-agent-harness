@@ -32,3 +32,9 @@ MOOT: 0
 | U23 | MECH | `docs/agent-guide.md` includes the workspace initialization command for that demo. | `a23` (T1 content-presence in `docs/agent-guide.md`) |
 | U24 | MECH | `docs/agent-guide.md` includes the enqueue command for that demo. | `a24` (T1 content-presence in `docs/agent-guide.md`) |
 | U25 | MECH | `docs/agent-guide.md` includes the task-runner command for that demo. | `a25` (T1 content-presence in `docs/agent-guide.md`) |
+
+## Author revision r2 (F2 needle calibration, 2026-08-14)
+
+- a01–a08: were full 4-language table-row pins (up to 372 chars of fix prose); relaxed to co-presence of two distinctive fragments per row (`check_pair`: OS status cell + Windows/WSL or Linux-expectation cell). Unit mapping unchanged.
+- a21: was a 107-char guide-prose pin; relaxed to the key phrase `run the bundled example`.
+- a09–a20 (badge alts) and a22–a25 (exact paths/commands) kept: functional payload strings, already fragment-level.

@@ -6,14 +6,16 @@ Drafts by Codex (GPT-5.6 Sol) under `../translation-rules.md`; drafting run was 
 
 | task | source | validity | author review | status |
 |---|---|---|---|---|
-| t01 | harness#37 | PASS (5+5, log) | deep-reviewed | **F2 pending** — needle relaxation (a04–a18 pin full fix sentences incl. exact JA wording) |
-| t02 | harness#17 | PASS | structural only | full review pending |
-| t03 | harness#43 | PASS | structural only | full review pending |
+| t01 | harness#37 | **PASS after r2** (re-run 5+5) | deep-reviewed, **F2 r2 applied** (12 needles relaxed, Codex, author-verified) | accepted pending seat |
+| t02 | harness#17 | r2 re-validation running | deep-reviewed, **F2 r2 applied** (author: a01–a08 row-pins → `check_pair` fragments, a21 relaxed; a09–a20/a22–a25 functional strings kept) | accepted pending r2 validity + seat |
+| t03 | harness#43 | PASS | deep-reviewed (needle audit: no fragment >60 chars; structural/`none`-declaration checks; targets in-repo derivable) | accepted pending seat |
 | t04 | sgl#1 | **PASS after r1** (re-run 5+5) | deep-reviewed, **revised r1** | accepted pending seat |
-| t05 | harness#18 | PASS | structural only | full review pending |
-| t06 | harness#15 | PASS | structural only | full review pending |
+| t05 | harness#18 | PASS | deep-reviewed (needle audit: long strings are functional env-var/path lines from the tree itself, incl. the pre-fix private paths being removed — not fix prose) | accepted pending seat |
+| t06 | harness#15 | PASS | deep-reviewed (needle audit clean; see provenance note below) | accepted pending seat |
 | t07 | harness#39 | **PASS** (independent full re-run 5+5, no violations; `t07.log`) | deep-reviewed, **task.md revised r1** | accepted pending seat |
-| t08 | harness#16 | PASS | deep-reviewed | **F2 pending** — full-sentence needles |
+| t08 | harness#16 | **PASS after r2** (re-run 5+5) | deep-reviewed, **F2 r2 applied** (17 needles relaxed, Codex, author-verified) | accepted pending seat |
+
+**Provenance note (t06 and all harness re-enactments):** t06's needles legitimately contain the real public repo URL and public deploy-fleet table content (agent names, hosts) — that is the fix's own published content and the criterion itself. More generally, the replica tree self-identifies (post-rename trees carry the public product name throughout), so anonymization for this bundle means *issue/PR/tracker provenance removal*, not repo-identity concealment — the latter is impossible for re-enactments and is not what the leak canaries target (they target fix-history leakage).
 
 ## Systematic findings
 
@@ -34,7 +36,10 @@ Drafts by Codex (GPT-5.6 Sol) under `../translation-rules.md`; drafting run was 
 
 ## Queue before acceptance hand-off (Caty seat)
 
-1. t07 re-validation verdict (in progress).
-2. F2 needle relaxation for t01, t08 + re-validation.
-3. Full author review of t02, t03, t05, t06 (same lenses: F1 solvability, F2 tightness, anonymization, faithfulness).
-4. Anonymization sweep re-run across all task.md files with the units.md exemption list.
+1. ~~t07 re-validation~~ done (PASS).
+2. ~~F2 relaxation t01/t08~~ done (r2, both PASS).
+3. ~~Author review t02/t03/t05/t06~~ done (t02 F2 r2 applied; t03/t05/t06 clean).
+4. t02 r2 re-validation verdict (running).
+5. ~~Anonymization sweep~~ done: 6/8 task.md zero hits; t04 = 2 hits, t07 = 4 hits — both exactly the criterion-constitutive identifiers exempted in their units.md rows. GREEN.
+
+Once item 4 lands PASS, batch 1 is author-complete and hands off to the non-author acceptance seat (Caty) + the 10–20% second-author re-derivation sample.
