@@ -32,6 +32,42 @@ new_ws() {
   (cd "$ws" && pwd -P)
 }
 
+workspace_snapshot() {
+  local ws=$1
+  find "$ws" -type f -exec shasum -a 256 {} \; | LC_ALL=C sort
+}
+
+assert_core_refusal() {
+  local name=$1
+  local ws=$2
+  local mode=$3
+  local before
+  local after
+  local output
+  local rc
+
+  before=$(workspace_snapshot "$ws")
+  set +e
+  if [ "$mode" = direct ]; then
+    output=$(CATY_INTAKE_ADAPTER=rogue bash "$CORE" "$ws" 2>&1)
+    rc=$?
+  else
+    output=$(CATY_INTAKE_ADAPTER=rogue workspace="$ws" \
+      bash -c 'source "$1"' _ "$CORE" 2>&1)
+    rc=$?
+  fi
+  set -e
+  after=$(workspace_snapshot "$ws")
+  if [ "$rc" -eq 2 ] && [ "$before" = "$after" ] \
+    && [ ! -e "$ws/loop/pending/intake-runs.log" ] \
+    && [ ! -e "$ws/loop/.deadman/distill.marker" ] \
+    && printf '%s\n' "$output" | grep -Fq 'core must be sourced from a guarded adapter entry'; then
+    pass "$name"
+  else
+    fail_case "$name" "rc=$rc output=$output"
+  fi
+}
+
 ws=$(new_ws pause)
 "$ROOT/install.sh" --disable --workspace "$ws" >/dev/null
 before=$(find "$ws" -type f -exec shasum -a 256 {} \; | sort)
@@ -80,6 +116,69 @@ if [ -x "$HERMES_INTAKE" ] && [ -x "$CLAUDE_INTAKE" ] && [ ! -x "$CORE" ] \
 else
   fail_case '[4] both guarded entries are executable and the sourced core is syntax-valid' \
     'mode or syntax contract failed'
+fi
+
+ws=$(new_ws direct-enabled)
+assert_core_refusal '[5] directly executing the core refuses an enabled workspace without side effects' \
+  "$ws" direct
+
+ws=$(new_ws direct-paused)
+"$ROOT/install.sh" --disable --workspace "$ws" >/dev/null
+assert_core_refusal '[6] directly executing the core refuses a paused workspace without side effects' \
+  "$ws" direct
+
+ws=$(new_ws unsentineled-source)
+assert_core_refusal '[7] sourcing the core without the guarded-entry sentinel has no side effects' \
+  "$ws" source
+
+ws=$(new_ws canonical-argv)
+canonical_ws=$(cd "$ws" && pwd -P)
+noncanonical_ws="$ws/./"
+printf '%s\n' \
+  '<!-- flush origin=checkpoint session=canonical-test ts=2026-07-22T01:02:03Z outcome=ok unverified=true -->' \
+  '- Canonical workspace paths survive adapter handoff.' \
+  >"$ws/loop/pending/flush-2026-07-22.md"
+INTAKE_LOCK_SLEEP_S=0 "$CLAUDE_INTAKE" "$noncanonical_ws"
+receipt=$(tail -n 1 "$ws/loop/pending/intake-runs.log")
+if grep -Fq 'Canonical workspace paths survive adapter handoff.' "$ws/STATE.md" \
+  && printf '%s\n' "$receipt" | grep -Fq "workspace=$canonical_ws " \
+  && ! printf '%s\n' "$receipt" | grep -Fq "workspace=$noncanonical_ws "; then
+  pass '[8] non-canonical argv folds and receipts use the canonical workspace'
+else
+  fail_case '[8] non-canonical argv folds and receipts use the canonical workspace' \
+    "receipt=$receipt canonical=$canonical_ws raw=$noncanonical_ws"
+fi
+
+ws=$(new_ws canonical-paused-status)
+canonical_ws=$(cd "$ws" && pwd -P)
+noncanonical_ws="$ws/./"
+"$ROOT/install.sh" --disable --workspace "$ws" >/dev/null
+before=$(workspace_snapshot "$ws")
+output=$("$CLAUDE_INTAKE" "$noncanonical_ws" 2>&1)
+rc=$?
+after=$(workspace_snapshot "$ws")
+if [ "$rc" -eq 0 ] && [ "$before" = "$after" ] \
+  && [ "$output" = "status=paused workspace=$canonical_ws entrypoint=claude-code-flush-intake" ]; then
+  pass '[9] non-canonical paused argv reports the canonical workspace without mutation'
+else
+  fail_case '[9] non-canonical paused argv reports the canonical workspace without mutation' \
+    "rc=$rc output=$output"
+fi
+
+full_suite_log="$TMP_ROOT/hermes-full-suite.log"
+set +e
+INTAKE_UNDER_TEST="$HERMES_INTAKE" \
+  INTAKE_EXPECTED_LABEL=hermes-flush-intake \
+  INTAKE_SELF_MARKING=0 \
+  bash "$ROOT/tests/flush-intake.test.sh" >"$full_suite_log" 2>&1
+full_suite_rc=$?
+set -e
+if [ "$full_suite_rc" -eq 0 ] \
+  && grep -Fqx 'Summary: 34 PASS, 0 FAIL' "$full_suite_log"; then
+  pass '[10] the full flush-intake behavioural suite passes through the Hermes entry'
+else
+  fail_case '[10] the full flush-intake behavioural suite passes through the Hermes entry' \
+    "rc=$full_suite_rc output=$(tail -n 10 "$full_suite_log" | tr '\n' ';')"
 fi
 
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"

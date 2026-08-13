@@ -37,7 +37,8 @@ cat >"$fake_provider" <<'SH'
 #!/usr/bin/env bash
 set -eu
 printf '%s' "$1" >"$PROVIDER_MARKER"
-printf '%s\n' 'VERDICT: pass' 'fixed provider accepted the probe bundle'
+printf '%b' "${PROVIDER_OUTPUT:-VERDICT: pass\nfixed provider accepted the probe bundle\n}"
+exit "${PROVIDER_EXIT:-0}"
 SH
 chmod 0755 "$fake_provider"
 
@@ -67,15 +68,18 @@ fi
 
 bundle='This bundle is intentionally longer than the configured verifier floor and is delivered as argv one.'
 valid_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
+  PROVIDER_OUTPUT='VERDICT: pass\nfixed provider accepted the probe bundle\nignored trailing diagnostic\n' \
   VERIFIER_BUNDLE_MIN_BYTES=64 "$WRAPPER" "$bundle")
 valid_rc=$?
 valid_first=$(printf '%s\n' "$valid_output" | sed -n '1p')
 if [ "$valid_rc" -eq 0 ] \
   && [ "$valid_first" = 'VERDICT: pass' ] \
+  && [ "$(printf '%s\n' "$valid_output" | wc -l | tr -d '[:space:]')" -eq 2 ] \
+  && ! printf '%s\n' "$valid_output" | grep -Fq 'ignored trailing diagnostic' \
   && [ "$(cat "$provider_marker")" = "$bundle" ]; then
-  pass '[3] wrapper invokes exactly the staged provider path with the bundle in argv[1]'
+  pass '[3] wrapper invokes the staged provider with argv[1] and forwards exactly two validated lines'
 else
-  fail_case '[3] wrapper invokes exactly the staged provider path with the bundle in argv[1]' \
+  fail_case '[3] wrapper invokes the staged provider with argv[1] and forwards exactly two validated lines' \
     "rc=$valid_rc output=$valid_output"
 fi
 
@@ -101,6 +105,57 @@ else
     "rc=$multi_rc output=$multi_output"
 fi
 
+accepted_verdicts='pass fail inconclusive rubric-invalid needs-human blocked-missing-artifact'
+verdict_matrix_ok=1
+for verdict in $accepted_verdicts; do
+  set +e
+  matrix_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
+    PROVIDER_OUTPUT="VERDICT: $verdict\ncontract reason for $verdict\n" \
+    VERIFIER_BUNDLE_MIN_BYTES=64 "$WRAPPER" "$bundle" 2>"$TMP_ROOT/matrix.err")
+  matrix_rc=$?
+  set -e
+  if [ "$matrix_rc" -ne 0 ] \
+    || [ "$matrix_output" != "VERDICT: $verdict
+contract reason for $verdict" ]; then
+    verdict_matrix_ok=0
+  fi
+done
+if [ "$verdict_matrix_ok" -eq 1 ]; then
+  pass '[5] wrapper accepts all six host verdicts with the first-line contract'
+else
+  fail_case '[5] wrapper accepts all six host verdicts with the first-line contract' \
+    'one or more contract verdicts were rejected'
+fi
+
+set +e
+smuggled_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
+  PROVIDER_OUTPUT='VERDICT: pass\nreason smuggles VERDICT: fail mid-line\n' \
+  VERIFIER_BUNDLE_MIN_BYTES=64 "$WRAPPER" "$bundle" 2>"$TMP_ROOT/smuggled.err")
+smuggled_rc=$?
+bare_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
+  PROVIDER_OUTPUT='VERDICT: pass\n' VERIFIER_BUNDLE_MIN_BYTES=64 \
+  "$WRAPPER" "$bundle" 2>"$TMP_ROOT/bare.err")
+bare_rc=$?
+whitespace_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
+  PROVIDER_OUTPUT='VERDICT: pass\n \t \n' VERIFIER_BUNDLE_MIN_BYTES=64 \
+  "$WRAPPER" "$bundle" 2>"$TMP_ROOT/whitespace.err")
+whitespace_rc=$?
+provider_124_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
+  PROVIDER_EXIT=124 VERIFIER_BUNDLE_MIN_BYTES=64 \
+  "$WRAPPER" "$bundle" 2>"$TMP_ROOT/provider-124.err")
+provider_124_rc=$?
+set -e
+if [ "$smuggled_rc" -ne 0 ] && [ -z "$smuggled_output" ] \
+  && [ "$bare_rc" -ne 0 ] && [ -z "$bare_output" ] \
+  && [ "$whitespace_rc" -ne 0 ] && [ -z "$whitespace_output" ] \
+  && [ "$provider_124_rc" -eq 70 ] && [ -z "$provider_124_output" ] \
+  && grep -Fqx 'provider exited 124' "$TMP_ROOT/provider-124.err"; then
+  pass '[6] wrapper rejects smuggled/bare responses and normalizes provider failures to exit 70'
+else
+  fail_case '[6] wrapper rejects smuggled/bare responses and normalizes provider failures to exit 70' \
+    "smuggled=$smuggled_rc bare=$bare_rc whitespace=$whitespace_rc provider124=$provider_124_rc"
+fi
+
 probe_scratch=$TMP_ROOT/probe-scratch
 mkdir -p "$probe_scratch"
 rm -f "$provider_marker"
@@ -112,9 +167,9 @@ if [ "$probe_rc" -eq 0 ] && [ -s "$provider_marker" ] \
   && [ "$(wc -c <"$provider_marker" | tr -d '[:space:]')" -ge 200 ] \
   && printf '%s\n' "$probe_output" | grep -Fq "provider_path=$fake_provider" \
   && printf '%s\n' "$probe_output" | grep -Fq 'provider_relocatable=pass'; then
-  pass '[5] probe genuinely exercises the wrapper and a relocated provider'
+  pass '[7] probe genuinely exercises the wrapper and a relocated provider'
 else
-  fail_case '[5] probe genuinely exercises the wrapper and a relocated provider' \
+  fail_case '[7] probe genuinely exercises the wrapper and a relocated provider' \
     "rc=$probe_rc output=$probe_output"
 fi
 
@@ -130,9 +185,9 @@ for example_file in "$CANONICAL_WRAPPER" "$PROVIDER" "$PROBE"; do
 done
 if [ "$wrapper_sha" != "$provider_sha" ] && [ "$wrapper_sha" != "$probe_sha" ] \
   && [ "$provider_sha" != "$probe_sha" ] && [ "$modes_ok" -eq 1 ]; then
-  pass '[6] example files have distinct content, executable modes, and no group/world write bit'
+  pass '[8] example files have distinct content, executable modes, and no group/world write bit'
 else
-  fail_case '[6] example files have distinct content, executable modes, and no group/world write bit' \
+  fail_case '[8] example files have distinct content, executable modes, and no group/world write bit' \
     "modes_ok=$modes_ok"
 fi
 
@@ -141,12 +196,36 @@ if grep -Fq '"$FABLE_CONFORMING_PROVIDER_PATH" "$bundle"' "$CANONICAL_WRAPPER" \
   && grep -Fq 'os.environ.get("VERIFIER_MODEL", "claude-sonnet-5")' "$PROVIDER" \
   && grep -Fq 'https://api.anthropic.com/v1/messages' "$PROVIDER" \
   && grep -Fq 'secrets.token_hex' "$PROVIDER" \
+  && grep -Fq 'VERIFIER_TEMPERATURE' "$PROVIDER" \
+  && grep -Fq '"temperature": temperature' "$PROVIDER" \
+  && grep -Fq 'first-line rule always wins' "$PROVIDER" \
   && python3 -c 'import sys; compile(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1], "exec")' "$PROVIDER" \
   && bash -n "$CANONICAL_WRAPPER" "$PROBE"; then
-  pass '[7] examples pin the staged path and implement syntax-valid prompt/API hygiene'
+  pass '[9] examples pin the staged path and implement syntax-valid prompt/API hygiene'
 else
-  fail_case '[7] examples pin the staged path and implement syntax-valid prompt/API hygiene' \
+  fail_case '[9] examples pin the staged path and implement syntax-valid prompt/API hygiene' \
     'static provider contract failed'
+fi
+
+temperature_guard_ok=1
+for invalid_temperature in invalid -0.01 1.01; do
+  set +e
+  ANTHROPIC_API_KEY=fixture VERIFIER_TEMPERATURE="$invalid_temperature" \
+    "$PROVIDER" "$bundle" >"$TMP_ROOT/temperature.out" 2>"$TMP_ROOT/temperature.err"
+  temperature_rc=$?
+  set -e
+  if [ "$temperature_rc" -eq 0 ] \
+    || ! grep -Fqx 'provider temperature is invalid' "$TMP_ROOT/temperature.err"; then
+    temperature_guard_ok=0
+  fi
+done
+if [ "$temperature_guard_ok" -eq 1 ] \
+  && grep -Fq 'float(os.environ.get("VERIFIER_TEMPERATURE", "0"))' "$PROVIDER" \
+  && grep -Fq 'if not 0 <= temperature <= 1:' "$PROVIDER"; then
+  pass '[10] provider pins temperature to zero and rejects malformed or out-of-range overrides before I/O'
+else
+  fail_case '[10] provider pins temperature to zero and rejects malformed or out-of-range overrides before I/O' \
+    'temperature validation contract failed'
 fi
 
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"

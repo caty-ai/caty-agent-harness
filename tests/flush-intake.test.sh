@@ -3,6 +3,8 @@ set -u
 
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 INTAKE=${INTAKE_UNDER_TEST:-$ROOT/adapters/claude-code/flush-intake.sh}
+INTAKE_EXPECTED_LABEL=${INTAKE_EXPECTED_LABEL:-claude-code-flush-intake}
+INTAKE_SELF_MARKING=${INTAKE_SELF_MARKING:-1}
 INTAKE_CORE=$ROOT/scripts/flush-intake.sh
 PROBE=$ROOT/scripts/deadman-probe.sh
 TMP_ROOT=${TMPDIR:-/tmp}/flush-intake-test.$$
@@ -161,7 +163,7 @@ output=$("$INTAKE" "$ws" 2>&1)
 rc=$?
 after=$(find "$ws" -type f -exec shasum -a 256 {} \; | sort)
 if [ "$rc" -eq 0 ] && [ "$before" = "$after" ] \
-  && [ "$output" = "status=paused workspace=$ws entrypoint=claude-code-flush-intake" ]; then
+  && [ "$output" = "status=paused workspace=$ws entrypoint=$INTAKE_EXPECTED_LABEL" ]; then
   pass '[8] pause guard returns the stable status without mutation'
 else
   fail_case '[8] pause guard returns the stable status without mutation' "rc=$rc output=$output"
@@ -338,11 +340,18 @@ TARGET="$INTAKE" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$ws" \
   DEADMAN_MARKER="$distill_marker_arg" \
   INTAKE_LOCK_ATTEMPTS=1 INTAKE_LOCK_SLEEP_S=0 "$wrapper" "$ws" >/dev/null 2>&1
 marker_mtime_after=$(file_mtime "$distill_marker")
-if [ "$marker_mtime_before" = "$marker_mtime_after" ] \
-  && grep -Fq 'lock=busy marker=untouched' "$ws/loop/pending/intake-runs.log"; then
-  pass '[19] cron wrapper cannot pre-touch the intake distill marker'
+if { [ "$INTAKE_SELF_MARKING" -eq 1 ] && [ "$marker_mtime_before" = "$marker_mtime_after" ]; } \
+  || { [ "$INTAKE_SELF_MARKING" -eq 0 ] && [ "$marker_mtime_before" != "$marker_mtime_after" ]; }; then
+  marker_contract=1
 else
-  fail_case '[19] cron wrapper cannot pre-touch the intake distill marker' 'marker was masked by wrapper'
+  marker_contract=0
+fi
+if [ "$marker_contract" -eq 1 ] \
+  && grep -Fq 'lock=busy marker=untouched' "$ws/loop/pending/intake-runs.log"; then
+  pass '[19] cron wrapper applies the configured adapter deadman-marking contract'
+else
+  fail_case '[19] cron wrapper applies the configured adapter deadman-marking contract' \
+    "self_marking=$INTAKE_SELF_MARKING before=$marker_mtime_before after=$marker_mtime_after"
 fi
 
 ws=$(new_ws case-20-dual-route)

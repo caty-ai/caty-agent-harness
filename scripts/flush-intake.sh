@@ -1,6 +1,16 @@
+#!/usr/bin/env bash
 # shellcheck shell=bash
 # Shared flush-intake core. Adapter entry points validate and pause-guard the
 # workspace before sourcing this file.
+
+(return 0 2>/dev/null) || {
+  printf 'flush-intake core must be sourced from a guarded adapter entry\n' >&2
+  exit 2
+}
+[[ "${CATY_INTAKE_GUARDED_ENTRY:-}" == 1 ]] || {
+  printf 'flush-intake core must be sourced from a guarded adapter entry\n' >&2
+  exit 2
+}
 
 usage() {
   printf 'Usage: flush-intake.sh <workspace-dir>\n' >&2
@@ -93,8 +103,8 @@ write_receipt() {
   local timestamp
 
   timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-  printf 'ts=%s files_scanned=%s blocks=%s candidates=%s folded=%s deduped=%s evicted_by_cap=%s eviction_archive=%s dropped_oversize=%s deferred=%s headerless_bullets=%s torn_lines=%s quarantined=%s lock=%s marker=%s error=%s%s\n' \
-    "$timestamp" "$files_scanned" "$blocks" "$candidates" "$folded" "$deduped" \
+  printf 'ts=%s workspace=%s files_scanned=%s blocks=%s candidates=%s folded=%s deduped=%s evicted_by_cap=%s eviction_archive=%s dropped_oversize=%s deferred=%s headerless_bullets=%s torn_lines=%s quarantined=%s lock=%s marker=%s error=%s%s\n' \
+    "$timestamp" "$workspace" "$files_scanned" "$blocks" "$candidates" "$folded" "$deduped" \
     "$evicted_by_cap" "$eviction_archive" "$dropped_oversize" "$deferred" \
     "$headerless_bullets" "$torn_lines" \
     "$quarantined" "$lock_status" "$marker_status" "$receipt_error" "$quarantined_paths" \
@@ -193,12 +203,7 @@ consider_candidate() {
   return 0
 }
 
-[[ $# -eq 1 ]] || {
-  usage
-  exit 2
-}
-workspace=$1
-[[ -d "$workspace" ]] || {
+[[ -n "${workspace:-}" && -d "$workspace" ]] || {
   usage
   exit 2
 }

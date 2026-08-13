@@ -90,11 +90,14 @@ The rules there apply in addition to the Hermes-specific wiring below.
 
    ```sh
    HARNESS=/absolute/path/to/caty-agent-harness
-   PROBE_PROVIDER_PATH="$HARNESS/adapters/hermes/examples/verifier-provider.py" \
+   ATTEST_TIMEOUT_S=180 PROBE_PROVIDER_PATH="$HARNESS/adapters/hermes/examples/verifier-provider.py" \
      "$HARNESS/scripts/attest-wrapper" --route verifier \
        --wrapper "$HARNESS/adapters/hermes/examples/verifier-wrapper.sh" \
        --probe "$HARNESS/adapters/hermes/examples/verifier-probe.sh"
    ```
+
+   The 180-second attestation bound exceeds the provider's 120-second HTTP default,
+   so a valid slow response is not cut off by the attester's shorter default.
 
    Before enabling the job:
 
@@ -108,7 +111,7 @@ The rules there apply in addition to the Hermes-specific wiring below.
    3. Run the harness attester:
 
       ```sh
-      scripts/attest-wrapper --route verifier --wrapper /abs/verifier-wrapper.sh --probe /abs/verifier-probe.sh
+      ATTEST_TIMEOUT_S=180 scripts/attest-wrapper --route verifier --wrapper /abs/verifier-wrapper.sh --probe /abs/verifier-probe.sh
       ```
 
       This writes `/abs/verifier-wrapper.sh.conformance`.

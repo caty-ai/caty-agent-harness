@@ -26,13 +26,20 @@ set +e
 "$FABLE_CONFORMING_PROVIDER_PATH" "$bundle" >"$provider_output"
 provider_status=$?
 set -e
-((provider_status == 0)) || exit "$provider_status"
+if ((provider_status != 0)); then
+  printf 'provider exited %s\n' "$provider_status" >&2
+  exit 70
+fi
 
-verdict_lines=$(awk '/^VERDICT:/ {count++} END {print count + 0}' "$provider_output")
-((verdict_lines == 1)) || exit 65
-case "$(sed -n '1p' "$provider_output")" in
-  'VERDICT: pass'|'VERDICT: fail'|'VERDICT: needs-human') ;;
+verdict_line=$(sed -n '1p' "$provider_output")
+reason_line=$(sed -n '2p' "$provider_output")
+case "$verdict_line" in
+  'VERDICT: pass'|'VERDICT: fail'|'VERDICT: inconclusive'|'VERDICT: rubric-invalid'|'VERDICT: needs-human'|'VERDICT: blocked-missing-artifact') ;;
   *) exit 65 ;;
 esac
+[[ -n "${reason_line//[[:space:]]/}" ]] || exit 65
+if tail -n +2 "$provider_output" | grep -Fq 'VERDICT:'; then
+  exit 65
+fi
 
-cat "$provider_output"
+printf '%s\n%s\n' "$verdict_line" "$reason_line"

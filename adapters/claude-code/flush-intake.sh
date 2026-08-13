@@ -26,4 +26,5 @@ if [[ "$pause_state" != enabled ]]; then
 fi
 
 # shellcheck disable=SC1091
+CATY_INTAKE_GUARDED_ENTRY=1
 source "$repo_root/scripts/flush-intake.sh"

@@ -20,9 +20,10 @@ FABLE_CONFORMING_PROVIDER_PATH="$relocated_provider" \
 
 [[ "$(awk '/^VERDICT:/ {count++} END {print count + 0}' "$probe_output")" -eq 1 ]]
 case "$(sed -n '1p' "$probe_output")" in
-  'VERDICT: pass'|'VERDICT: fail'|'VERDICT: needs-human') ;;
+  'VERDICT: pass'|'VERDICT: fail'|'VERDICT: inconclusive'|'VERDICT: rubric-invalid'|'VERDICT: needs-human'|'VERDICT: blocked-missing-artifact') ;;
   *) exit 1 ;;
 esac
+[[ -n "$(sed -n '2p' "$probe_output" | tr -d '[:space:]')" ]]
 
 printf '%s\n' \
   'provider_id=anthropic-messages' \
