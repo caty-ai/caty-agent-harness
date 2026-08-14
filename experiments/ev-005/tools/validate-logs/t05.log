@@ -36,7 +36,9 @@ CHECK a34 FAIL missing pattern [inspect configured] in install.sh
 CHECK a35 FAIL missing pattern [env-supplied external ones] in install.sh
 CHECK a36 PASS probe note says it does not mutate the checked workspace
 CHECK a37 FAIL forbidden pattern [implementation shipped beside this installer] present in install.sh
-RUN t05 pre 1 exit=1 dur=0s
+CHECK a40 PASS wrapper-conformance library remains unchanged
+CHECK a41 PASS wrapper-conformance test expectations remain unchanged
+RUN t05 pre 1 exit=1 dur=1s
 CHECK a01 FAIL missing pattern [out/image.svg] in templates/examples/img-pilot.task.md
 CHECK a02 FAIL missing pattern [<svg xmlns="http://www.w3.org/2000/svg"] in templates/examples/img-pilot.task.md
 CHECK a03 FAIL missing pattern ["artifact": "out/image.svg"] in templates/examples/img-pilot.task.md
@@ -74,6 +76,8 @@ CHECK a34 FAIL missing pattern [inspect configured] in install.sh
 CHECK a35 FAIL missing pattern [env-supplied external ones] in install.sh
 CHECK a36 PASS probe note says it does not mutate the checked workspace
 CHECK a37 FAIL forbidden pattern [implementation shipped beside this installer] present in install.sh
+CHECK a40 PASS wrapper-conformance library remains unchanged
+CHECK a41 PASS wrapper-conformance test expectations remain unchanged
 RUN t05 pre 2 exit=1 dur=0s
 CHECK a01 FAIL missing pattern [out/image.svg] in templates/examples/img-pilot.task.md
 CHECK a02 FAIL missing pattern [<svg xmlns="http://www.w3.org/2000/svg"] in templates/examples/img-pilot.task.md
@@ -112,6 +116,8 @@ CHECK a34 FAIL missing pattern [inspect configured] in install.sh
 CHECK a35 FAIL missing pattern [env-supplied external ones] in install.sh
 CHECK a36 PASS probe note says it does not mutate the checked workspace
 CHECK a37 FAIL forbidden pattern [implementation shipped beside this installer] present in install.sh
+CHECK a40 PASS wrapper-conformance library remains unchanged
+CHECK a41 PASS wrapper-conformance test expectations remain unchanged
 RUN t05 pre 3 exit=1 dur=0s
 CHECK a01 FAIL missing pattern [out/image.svg] in templates/examples/img-pilot.task.md
 CHECK a02 FAIL missing pattern [<svg xmlns="http://www.w3.org/2000/svg"] in templates/examples/img-pilot.task.md
@@ -150,6 +156,8 @@ CHECK a34 FAIL missing pattern [inspect configured] in install.sh
 CHECK a35 FAIL missing pattern [env-supplied external ones] in install.sh
 CHECK a36 PASS probe note says it does not mutate the checked workspace
 CHECK a37 FAIL forbidden pattern [implementation shipped beside this installer] present in install.sh
+CHECK a40 PASS wrapper-conformance library remains unchanged
+CHECK a41 PASS wrapper-conformance test expectations remain unchanged
 RUN t05 pre 4 exit=1 dur=0s
 CHECK a01 FAIL missing pattern [out/image.svg] in templates/examples/img-pilot.task.md
 CHECK a02 FAIL missing pattern [<svg xmlns="http://www.w3.org/2000/svg"] in templates/examples/img-pilot.task.md
@@ -188,6 +196,8 @@ CHECK a34 FAIL missing pattern [inspect configured] in install.sh
 CHECK a35 FAIL missing pattern [env-supplied external ones] in install.sh
 CHECK a36 PASS probe note says it does not mutate the checked workspace
 CHECK a37 FAIL forbidden pattern [implementation shipped beside this installer] present in install.sh
+CHECK a40 PASS wrapper-conformance library remains unchanged
+CHECK a41 PASS wrapper-conformance test expectations remain unchanged
 RUN t05 pre 5 exit=1 dur=0s
 CHECK a01 PASS example task uses a local SVG artifact path
 CHECK a02 PASS example task checks for an SVG root element
@@ -226,6 +236,8 @@ CHECK a34 PASS probe note says it inspects configured adapter paths
 CHECK a35 PASS probe note says it reads env-supplied external paths
 CHECK a36 PASS probe note says it does not mutate the checked workspace
 CHECK a37 PASS probe note drops the old installer-local inspection wording
+CHECK a40 PASS wrapper-conformance library remains unchanged
+CHECK a41 PASS wrapper-conformance test expectations remain unchanged
 RUN t05 fix 1 exit=0 dur=0s
 CHECK a01 PASS example task uses a local SVG artifact path
 CHECK a02 PASS example task checks for an SVG root element
@@ -264,6 +276,8 @@ CHECK a34 PASS probe note says it inspects configured adapter paths
 CHECK a35 PASS probe note says it reads env-supplied external paths
 CHECK a36 PASS probe note says it does not mutate the checked workspace
 CHECK a37 PASS probe note drops the old installer-local inspection wording
+CHECK a40 PASS wrapper-conformance library remains unchanged
+CHECK a41 PASS wrapper-conformance test expectations remain unchanged
 RUN t05 fix 2 exit=0 dur=0s
 CHECK a01 PASS example task uses a local SVG artifact path
 CHECK a02 PASS example task checks for an SVG root element
@@ -302,6 +316,8 @@ CHECK a34 PASS probe note says it inspects configured adapter paths
 CHECK a35 PASS probe note says it reads env-supplied external paths
 CHECK a36 PASS probe note says it does not mutate the checked workspace
 CHECK a37 PASS probe note drops the old installer-local inspection wording
+CHECK a40 PASS wrapper-conformance library remains unchanged
+CHECK a41 PASS wrapper-conformance test expectations remain unchanged
 RUN t05 fix 3 exit=0 dur=0s
 CHECK a01 PASS example task uses a local SVG artifact path
 CHECK a02 PASS example task checks for an SVG root element
@@ -340,6 +356,8 @@ CHECK a34 PASS probe note says it inspects configured adapter paths
 CHECK a35 PASS probe note says it reads env-supplied external paths
 CHECK a36 PASS probe note says it does not mutate the checked workspace
 CHECK a37 PASS probe note drops the old installer-local inspection wording
+CHECK a40 PASS wrapper-conformance library remains unchanged
+CHECK a41 PASS wrapper-conformance test expectations remain unchanged
 RUN t05 fix 4 exit=0 dur=0s
 CHECK a01 PASS example task uses a local SVG artifact path
 CHECK a02 PASS example task checks for an SVG root element
@@ -378,5 +396,7 @@ CHECK a34 PASS probe note says it inspects configured adapter paths
 CHECK a35 PASS probe note says it reads env-supplied external paths
 CHECK a36 PASS probe note says it does not mutate the checked workspace
 CHECK a37 PASS probe note drops the old installer-local inspection wording
+CHECK a40 PASS wrapper-conformance library remains unchanged
+CHECK a41 PASS wrapper-conformance test expectations remain unchanged
 RUN t05 fix 5 exit=0 dur=0s
 VERDICT t05 PASS

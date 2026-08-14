@@ -1,35 +1,25 @@
-# t06 units ledger
+# t06 faithfulness record
 
-Units: 26 total; covered 26/26
-MECH: 26
-HUMAN: 0
-MOOT: 0
+Units: 16 total; covered 16/16
+MECH: 12
+HUMAN: 2
+MOOT: 2
 
 | Unit | Class | Source unit (anonymized) | Mapping / disposition |
 | --- | --- | --- | --- |
-| U1 | MECH | The agent guide states that the repository is public. | `a01` (T1 content-presence in `docs/agent-guide.md`) |
-| U2 | MECH | The agent guide states that no invitation is needed. | `a02` (T1 content-presence in `docs/agent-guide.md`) |
-| U3 | MECH | The agent guide no longer claims that the public home is still forthcoming. | `a03` (T4 content-absence in `docs/agent-guide.md`) |
-| U4 | MECH | The Hermes install guide says to clone the public repository. | `a04` (T1 content-presence in `adapters/hermes/INSTALL.md`) |
-| U5 | MECH | The Hermes install guide includes the public clone command. | `a05` (T1 content-presence in `adapters/hermes/INSTALL.md`) |
-| U6 | MECH | The Hermes install guide no longer says the repository is private. | `a06` (T4 content-absence in `adapters/hermes/INSTALL.md`) |
-| U7 | MECH | The Hermes install guide no longer says access is by invitation or deploy key. | `a07` (T4 content-absence in `adapters/hermes/INSTALL.md`) |
-| U8 | MECH | The OpenClaw install guide says to clone the public repository. | `a08` (T1 content-presence in `adapters/openclaw/INSTALL.md`) |
-| U9 | MECH | The OpenClaw install guide includes the public clone command. | `a09` (T1 content-presence in `adapters/openclaw/INSTALL.md`) |
-| U10 | MECH | The OpenClaw install guide no longer says the repository is private. | `a10` (T4 content-absence in `adapters/openclaw/INSTALL.md`) |
-| U11 | MECH | The OpenClaw install guide no longer says access is by invitation or deploy key. | `a11` (T4 content-absence in `adapters/openclaw/INSTALL.md`) |
-| U12 | MECH | The agent guide no longer tells users that clone auth failures mean the repository is private. | `a12` (T4 content-absence in `docs/agent-guide.md`) |
-| U13 | MECH | The Claude adapter includes the self-contained macOS scheduling explanation. | `a13` (T1 content-presence in `adapters/claude-code/INSTALL.md`) |
-| U14 | MECH | The Claude adapter includes the self-contained host-hook explanation. | `a14` (T1 content-presence in `adapters/claude-code/INSTALL.md`) |
-| U15 | MECH | The Claude adapter no longer cites the old tracker number in those explanations. | `a15` (T4 content-absence in `adapters/claude-code/INSTALL.md`) |
-| U16 | MECH | `DESIGN.md` labels itself as a historical design record. | `a16` (T1 content-presence in `DESIGN.md`) |
-| U17 | MECH | `DESIGN.md` says its legacy issue references point to the pre-publication private tracker. | `a17` (T1 content-presence in `DESIGN.md`) |
-| U18 | MECH | `DESIGN-task-runner.md` labels itself as a historical design record. | `a18` (T1 content-presence in `DESIGN-task-runner.md`) |
-| U19 | MECH | `DESIGN-task-runner.md` says its legacy issue references point to the pre-publication private tracker. | `a19` (T1 content-presence in `DESIGN-task-runner.md`) |
-| U20 | MECH | `docs/governance-rules.md` labels itself as a historical design record. | `a20` (T1 content-presence in `docs/governance-rules.md`) |
-| U21 | MECH | `docs/governance-rules.md` says its legacy references point to the pre-publication private trackers and working repositories. | `a21` (T1 content-presence in `docs/governance-rules.md`) |
-| U22 | MECH | `docs/updater-rollout.md` labels itself as a historical design record. | `a22` (T1 content-presence in `docs/updater-rollout.md`) |
-| U23 | MECH | `docs/updater-rollout.md` uses the placeholder deployment-inventory heading. | `a23` (T1 content-presence in `docs/updater-rollout.md`) |
-| U24 | MECH | `docs/updater-rollout.md` uses the placeholder deployment-inventory row. | `a24` (T1 content-presence in `docs/updater-rollout.md`) |
-| U25 | MECH | `docs/updater-rollout.md` no longer uses the old verified-deployments heading. | `a25` (T4 content-absence in `docs/updater-rollout.md`) |
-| U26 | MECH | `docs/updater-rollout.md` no longer includes the old concrete deployment row. | `a26` (T4 content-absence in `docs/updater-rollout.md`) |
+| U1 | MECH | The agent guide presents a public clone flow and drops the old missing-access diagnosis. | `a01`, `a02`, `a03` (T1 + T4 in `docs/agent-guide.md`). |
+| U2 | MECH | The self-contradictory forthcoming-home note is deleted from the agent guide. | `a04` (T4 in `docs/agent-guide.md`). |
+| U3 | MECH | The Hermes install guide uses the public clone path and drops invite/deploy-key access wording. | `a05`–`a08` (T1 + T4 in `adapters/hermes/INSTALL.md`). |
+| U4 | MECH | The OpenClaw install guide uses the public clone path and drops invite/deploy-key access wording. | `a09`–`a12` (T1 + T4 in `adapters/openclaw/INSTALL.md`). |
+| U5 | MECH | The Claude adapter gives a self-contained macOS scheduling explanation in place of an old numbered citation. | `a13`, `a15` (T1 + T4 in `adapters/claude-code/INSTALL.md`). Needle discipline: the positive check uses small criterion-derived fragments (`Keychain`, `LaunchAgent`) rather than fix-sentence wording. |
+| U6 | MECH | The Claude adapter gives a self-contained hook-isolation explanation in place of an old numbered citation. | `a14`, `a15` (T1 + T4 in `adapters/claude-code/INSTALL.md`). The positive check uses minimal behavioral fragments (`PreToolUse`, `isolate`, `hooks`) instead of the historical sentence. |
+| U7 | MECH | The named historical design-record docs are explicitly fenced as historical before they preserve older tracker context, and the fifth named policy doc participates in the repo-wide public/policy sweep rather than escaping it. | `a16`–`a19` (T1 in `DESIGN.md`, `DESIGN-task-runner.md`, `docs/governance-rules.md`, `docs/updater-rollout.md`) plus `a21` (the dynamic Markdown scope explicitly includes `docs/plugin-convention.md`). This is the mechanized handling of the five named docs from the adopted scope. |
+| U8 | MECH | The updater rollout inventory satisfies the original `genericize OR mark as dated internal record` disjunction. | `a20` (T6 structural disjunction over `docs/updater-rollout.md`). The genericized branch is defined structurally: deployment-inventory section/table present, placeholder-shaped data rows present, and no non-placeholder data row remains. The alternate branch is an inventory-local dated/internal/historical callout. No fix-prose placeholders or concrete host identities are pinned. |
+| U9 | MECH | The release-model exception allowlist is bundled explicitly and records the four exact English/Japanese exception lines. | `a22`–`a26` (T1 over `.ev005-fixtures/release-model-allowlist.tsv`, with exact `path<TAB>line` matching and existence verification against the named files). This covers both mirrored scope-boundary statements and both public-release/private-development status statements. |
+| U10 | MECH | Across tracked Markdown in the replica, no private-access wording remains outside the recorded allowlist. | `a27` (T4 content-absence over `git ls-files '*.md'`, excluding only `tests/fixtures/**` and the four separately header-verified historical-design records: `DESIGN.md`, `DESIGN-task-runner.md`, `docs/governance-rules.md`, and `docs/updater-rollout.md`). `docs/plugin-convention.md` is intentionally part of this repo-wide sweep. |
+| U11 | MECH | Across the same repo-wide sweep, no invite-or-deploy-key onboarding wording remains outside the recorded allowlist. | `a28` (T4 over the same dynamic file set and exact-line allowlist). |
+| U12 | MECH | Across the same repo-wide sweep, no private citation framing or forthcoming-home note remains outside the recorded allowlist; the surviving troubleshooting rows are keyed to concrete observed literals rather than guessed diagnoses. | `a29`, `a30` (T4 + T6 in `docs/agent-guide.md`). Weakening recorded: the full evidence gate is not reducible to an exact troubleshooting row inventory, so the mechanizable core is a repo-wide absence sweep plus a structural table rule: every troubleshooting data row whose Meaning cell is not an em dash must carry a backtick-delimited observed literal in the Symptom cell. |
+| U13 | HUMAN | The updater inventory branch choice is surfaced in owner-review process records. | Dropped (HUMAN: owner-visibility or review-record state is not present in the offline replica). The mechanized core is U8's structural disjunction. |
+| U14 | HUMAN | Every allowed exception line is recorded in owner-facing review material. | Dropped (HUMAN: the external review record is unavailable in the offline replica). Extracted behavioral core: the task ships `fixtures/release-model-allowlist.tsv` as the visible exact-line exception ledger (U9). |
+| U15 | MOOT | The serial blocked-by ordering across sibling tasks is respected. | Dropped (MOOT: the offline replica carries only the content state, not the live issue queue or serial execution context). |
+| U16 | MOOT | The adopted-scope review event itself exists as a linked process record. | Dropped (MOOT: the offline replica does not contain the live review thread; only the resulting content criterion is testable here). |

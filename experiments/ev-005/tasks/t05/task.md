@@ -68,6 +68,8 @@ what the probe actually inspects.
 - [ ] U36. `install.sh` says the probe does not mutate the checked workspace.
 - [ ] U37. `install.sh` no longer uses the old installer-local inspection
   wording.
+- [ ] U38. `scripts/lib-wrapper-conformance.sh` remains unchanged.
+- [ ] U39. `tests/wrapper-conformance.test.sh` expectations remain unchanged.
 
 ## Allowed tools
 

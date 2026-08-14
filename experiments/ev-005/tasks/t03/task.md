@@ -8,8 +8,9 @@ consistent with it.
 
 ## Done when
 
-- [ ] U1. `.github/workflows/review-labels.yml` matches the required regenerated
-  workflow copy for this repository.
+- [ ] U1. `.github/workflows/review-labels.yml` is a mechanical copy of the
+  bundled template (`fixtures/review-labels-template.yml`), with only the four
+  risk-category declaration lines customized.
 - [ ] U2. The workflow explicitly declares `RISK_PATHS_AUTH='none'`.
 - [ ] U3. This repository still has no tracked paths under an `auth/`
   directory.

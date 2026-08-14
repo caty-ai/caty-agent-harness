@@ -3,9 +3,18 @@ set -u
 LC_ALL=C
 export LC_ALL
 
-EXPECT_WORKFLOW_BLOB='f8957a9ab7d2b2b69bf30505f329350d14b725c2'
 WORKFLOW_PATH='.github/workflows/review-labels.yml'
+TEMPLATE_PATH='.ev005-fixtures/review-labels-template.yml'
 failures=0
+tmp_workflow=''
+tmp_template=''
+
+cleanup() {
+  [ -n "$tmp_workflow" ] && [ -f "$tmp_workflow" ] && rm -f "$tmp_workflow"
+  [ -n "$tmp_template" ] && [ -f "$tmp_template" ] && rm -f "$tmp_template"
+}
+
+trap cleanup EXIT HUP INT TERM
 
 pass_check() {
   echo "CHECK $1 PASS $2"
@@ -28,9 +37,16 @@ run_check() {
   fi
 }
 
-check_workflow_blob() {
+check_workflow_matches_template() {
+  local tmp_root
   [ -f "$WORKFLOW_PATH" ] || return 1
-  [ "$(git hash-object -- "$WORKFLOW_PATH" 2>/dev/null)" = "$EXPECT_WORKFLOW_BLOB" ]
+  [ -f "$TEMPLATE_PATH" ] || return 1
+  tmp_root=${TMPDIR:-/tmp}
+  tmp_workflow=$(mktemp "${tmp_root%/}/t03-workflow.XXXXXX") || return 1
+  tmp_template=$(mktemp "${tmp_root%/}/t03-template.XXXXXX") || return 1
+  sed -E 's/^[[:space:]]*RISK_PATHS_[A-Z_]+=.*$/@@DECL@@/' "$WORKFLOW_PATH" > "$tmp_workflow" || return 1
+  sed -E 's/^[[:space:]]*RISK_PATHS_[A-Z_]+=.*$/@@DECL@@/' "$TEMPLATE_PATH" > "$tmp_template" || return 1
+  cmp -s "$tmp_workflow" "$tmp_template"
 }
 
 check_auth_none_decl() {
@@ -69,7 +85,7 @@ check_gates_none_decl() {
   grep -Fq "RISK_PATHS_GATES='none'" "$WORKFLOW_PATH"
 }
 
-run_check "a01" "workflow matches the required regenerated snapshot" "workflow does not match the required regenerated snapshot" check_workflow_blob
+run_check "a01" "workflow matches the bundled template after declaration normalization" "workflow does not match the bundled template after declaration normalization" check_workflow_matches_template
 run_check "a02" "AUTH none declaration is present" "AUTH none declaration is missing" check_auth_none_decl
 run_check "a03" "no tracked auth directory paths exist" "tracked auth directory paths exist" check_no_auth_dir_paths
 run_check "a04" "no non-test auth/signin/token filenames exist" "non-test auth/signin/token filenames exist" check_no_non_test_auth_like_filenames

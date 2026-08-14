@@ -2,56 +2,47 @@
 
 ## Goal
 
-Purge pre-publication wording from public-facing documentation, align the
-diagnostic and install flow with the public repository, and rewrite
-legacy references so public readers get self-contained explanations or clearly
-labeled historical context.
+Purge private-era publication-transition wording from public install and
+policy-facing Markdown, keep troubleshooting self-contained and evidence-shaped,
+preserve older tracker context only behind explicit historical labels where the
+source permits it, and express the remaining release-model exceptions through an
+exact-line allowlist-backed repo-wide sweep.
 
 ## Done when
 
-- [ ] U1. `docs/agent-guide.md` states that the repository is public.
-- [ ] U2. `docs/agent-guide.md` states that no invitation is needed.
-- [ ] U3. `docs/agent-guide.md` no longer claims that the public home is still
-  forthcoming.
-- [ ] U4. `adapters/hermes/INSTALL.md` says to clone the public repository.
-- [ ] U5. `adapters/hermes/INSTALL.md` includes the public clone command.
-- [ ] U6. `adapters/hermes/INSTALL.md` no longer says the repository is private.
-- [ ] U7. `adapters/hermes/INSTALL.md` no longer says access is by invitation or
-  deploy key.
-- [ ] U8. `adapters/openclaw/INSTALL.md` says to clone the public repository.
-- [ ] U9. `adapters/openclaw/INSTALL.md` includes the public clone command.
-- [ ] U10. `adapters/openclaw/INSTALL.md` no longer says the repository is
-  private.
-- [ ] U11. `adapters/openclaw/INSTALL.md` no longer says access is by invitation
-  or deploy key.
-- [ ] U12. `docs/agent-guide.md` no longer tells users that clone auth failures
-  mean the repository is private.
-- [ ] U13. `adapters/claude-code/INSTALL.md` includes the self-contained macOS
-  scheduling explanation.
-- [ ] U14. `adapters/claude-code/INSTALL.md` includes the self-contained
-  host-hook explanation.
-- [ ] U15. `adapters/claude-code/INSTALL.md` no longer cites the old tracker
-  number in those explanations.
-- [ ] U16. `DESIGN.md` labels itself as a historical design record.
-- [ ] U17. `DESIGN.md` says its legacy issue references point to the
-  pre-publication private tracker.
-- [ ] U18. `DESIGN-task-runner.md` labels itself as a historical design record.
-- [ ] U19. `DESIGN-task-runner.md` says its legacy issue references point to the
-  pre-publication private tracker.
-- [ ] U20. `docs/governance-rules.md` labels itself as a historical design
-  record.
-- [ ] U21. `docs/governance-rules.md` says its legacy references point to the
-  pre-publication private trackers and working repositories.
-- [ ] U22. `docs/updater-rollout.md` labels itself as a historical design
-  record.
-- [ ] U23. `docs/updater-rollout.md` uses the placeholder deployment-inventory
-  heading.
-- [ ] U24. `docs/updater-rollout.md` uses the placeholder deployment-inventory
-  row.
-- [ ] U25. `docs/updater-rollout.md` no longer uses the old verified-deployments
-  heading.
-- [ ] U26. `docs/updater-rollout.md` no longer includes the old concrete
-  deployment row.
+- [ ] U1. `docs/agent-guide.md` states that the repository is public, says no
+  invitation is needed, and no longer guesses that clone reachability failures
+  are caused by missing private access.
+- [ ] U2. `docs/agent-guide.md` no longer contains the transitional
+  forthcoming-home note.
+- [ ] U3. `adapters/hermes/INSTALL.md` uses the public clone flow and no longer
+  instructs invite-or-deploy-key access.
+- [ ] U4. `adapters/openclaw/INSTALL.md` uses the public clone flow and no
+  longer instructs invite-or-deploy-key access.
+- [ ] U5. `adapters/claude-code/INSTALL.md` gives a self-contained macOS
+  scheduling explanation instead of an old numbered citation.
+- [ ] U6. `adapters/claude-code/INSTALL.md` gives a self-contained hook-isolation
+  explanation instead of an old numbered citation.
+- [ ] U7. `DESIGN.md`, `DESIGN-task-runner.md`,
+  `docs/governance-rules.md`, and `docs/updater-rollout.md` are explicitly
+  marked as historical design records before preserving older tracker context,
+  while `docs/plugin-convention.md` remains part of the repo-wide public/policy
+  sweep.
+- [ ] U8. `docs/updater-rollout.md` satisfies the source disjunction for the
+  deployment inventory: it is genericized by placeholder-like shape, or it is
+  explicitly labeled as a dated internal or historical record.
+- [ ] U9. `fixtures/release-model-allowlist.tsv` exists and records the only
+  four exact release-model exception lines: the English and Japanese
+  scope-boundary statements, and the English and Japanese
+  public-release/private-development status statements.
+- [ ] U10. A repo-wide grep over tracked user-facing Markdown finds no
+  private-access wording outside the recorded allowlist.
+- [ ] U11. The same repo-wide sweep finds no invite-or-deploy-key onboarding
+  wording outside the recorded allowlist.
+- [ ] U12. The same repo-wide sweep finds no private-tracker framing or
+  forthcoming-home note outside the recorded allowlist, and
+  `docs/agent-guide.md` troubleshooting is keyed to concrete observed strings
+  instead of the guessed clone-auth/private-access row.
 
 ## Allowed tools
 

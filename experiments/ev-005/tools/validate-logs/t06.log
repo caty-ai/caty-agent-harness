@@ -1,272 +1,312 @@
 == validate t06 pre=f6c98ff0a82c2b79b267cdf2ac95ab770d3f14c6 fix=63de4f391a3a062cda07ae52d08957b4cea88e97 repo=/Users/shojikumaru/claude-workspace/caty-agent-harness ==
-CHECK a01 FAIL missing pattern [This repository is public at <https://github.com/caty-ai/caty-agent-harness>] in docs/agent-guide.md
+CHECK a01 FAIL missing pattern [repository is public] in docs/agent-guide.md
 CHECK a02 FAIL missing pattern [no invitation is needed] in docs/agent-guide.md
-CHECK a03 FAIL forbidden pattern [The public home will be] present in docs/agent-guide.md
-CHECK a04 FAIL missing pattern [Clone the public repository into a stable local path.] in adapters/hermes/INSTALL.md
-CHECK a05 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/hermes/INSTALL.md
-CHECK a06 FAIL forbidden pattern [Clone this private repository into a stable local path.] present in adapters/hermes/INSTALL.md
-CHECK a07 FAIL forbidden pattern [Access is by repo invite or deploy key.] present in adapters/hermes/INSTALL.md
-CHECK a08 FAIL missing pattern [Clone the public repository into a stable local path.] in adapters/openclaw/INSTALL.md
-CHECK a09 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/openclaw/INSTALL.md
-CHECK a10 FAIL forbidden pattern [Clone this private repository into a stable local path.] present in adapters/openclaw/INSTALL.md
-CHECK a11 FAIL forbidden pattern [Access is by repo invite or deploy key.] present in adapters/openclaw/INSTALL.md
-CHECK a12 FAIL forbidden pattern [Clone fails with auth error | Repo is private and this account isn't invited] present in docs/agent-guide.md
-CHECK a13 FAIL missing pattern [The Phase-1 pilot on 2026-07-19 therefore adopted] in adapters/claude-code/INSTALL.md
-CHECK a14 FAIL missing pattern [The Phase-1 pilot on 2026-07-19 established the need to] in adapters/claude-code/INSTALL.md
-CHECK a15 FAIL forbidden pattern [#43] present in adapters/claude-code/INSTALL.md
+CHECK a03 FAIL forbidden pattern [private repo or a network problem] present in docs/agent-guide.md
+CHECK a04 FAIL forbidden pattern [public home will be] present in docs/agent-guide.md
+CHECK a05 FAIL missing pattern [Clone the public repository] in adapters/hermes/INSTALL.md
+CHECK a06 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/hermes/INSTALL.md
+CHECK a07 FAIL forbidden pattern [private repository] present in adapters/hermes/INSTALL.md
+CHECK a08 FAIL forbidden pattern [repo invite or deploy key] present in adapters/hermes/INSTALL.md
+CHECK a09 FAIL missing pattern [Clone the public repository] in adapters/openclaw/INSTALL.md
+CHECK a10 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/openclaw/INSTALL.md
+CHECK a11 FAIL forbidden pattern [private repository] present in adapters/openclaw/INSTALL.md
+CHECK a12 FAIL forbidden pattern [repo invite or deploy key] present in adapters/openclaw/INSTALL.md
+CHECK a13 PASS claude adapter explains the macOS scheduler constraint with small behavioral fragments
+CHECK a14 FAIL missing pattern [isolate] in adapters/claude-code/INSTALL.md
+CHECK a15 FAIL forbidden regex [#[[:digit:]]+] matched in adapters/claude-code/INSTALL.md
 CHECK a16 FAIL missing pattern [Historical design record.] in DESIGN.md
-CHECK a17 FAIL missing pattern [pre-publication private tracker] in DESIGN.md
-CHECK a18 FAIL missing pattern [Historical design record.] in DESIGN-task-runner.md
-CHECK a19 FAIL missing pattern [pre-publication private tracker] in DESIGN-task-runner.md
-CHECK a20 FAIL missing pattern [Historical design record.] in docs/governance-rules.md
-CHECK a21 FAIL missing pattern [pre-publication private trackers and working repositories] in docs/governance-rules.md
-CHECK a22 FAIL missing pattern [Historical design record.] in docs/updater-rollout.md
-CHECK a23 FAIL missing pattern [## Deployment inventory example] in docs/updater-rollout.md
-CHECK a24 FAIL missing pattern [| `<agent>` | `<host>` | `<cron-or-launchd schedule>` | `/path/to/caty-agent-harness` | `<host>-updater-ro` |] in docs/updater-rollout.md
-CHECK a25 FAIL forbidden pattern [## Verified deployments — actual paths] present in docs/updater-rollout.md
-CHECK a26 FAIL forbidden pattern [| Claire (canary) | VPS | cron `:17` | `/path/to/clones/caty-agent-harness` | read-only deploy key |] present in docs/updater-rollout.md
-RUN t06 pre 1 exit=1 dur=0s
-CHECK a01 FAIL missing pattern [This repository is public at <https://github.com/caty-ai/caty-agent-harness>] in docs/agent-guide.md
+CHECK a17 FAIL missing pattern [Historical design record.] in DESIGN-task-runner.md
+CHECK a18 FAIL missing pattern [Historical design record.] in docs/governance-rules.md
+CHECK a19 FAIL missing pattern [Historical design record.] in docs/updater-rollout.md
+CHECK a20 FAIL updater rollout does not satisfy the genericized-or-dated inventory disjunction
+CHECK a21 PASS plugin convention is included in the repo-wide public policy sweep
+CHECK a22 PASS allowlist contains exactly four recorded exception lines
+CHECK a23 PASS allowlist records the english scope-boundary exception exactly
+CHECK a24 PASS allowlist records the japanese scope-boundary exception exactly
+CHECK a25 PASS allowlist records the english release-status exception exactly
+CHECK a26 PASS allowlist records the japanese release-status exception exactly
+CHECK a27 FAIL no private-access wording remains outside the recorded allowlist
+CHECK a28 FAIL no invite-or-deploy-key onboarding wording remains outside the recorded allowlist
+CHECK a29 FAIL no private citation framing or forthcoming-home note remains outside the recorded allowlist
+CHECK a30 FAIL agent-guide troubleshooting table is missing observed-literal symptom cells
+RUN t06 pre 1 exit=1 dur=1s
+CHECK a01 FAIL missing pattern [repository is public] in docs/agent-guide.md
 CHECK a02 FAIL missing pattern [no invitation is needed] in docs/agent-guide.md
-CHECK a03 FAIL forbidden pattern [The public home will be] present in docs/agent-guide.md
-CHECK a04 FAIL missing pattern [Clone the public repository into a stable local path.] in adapters/hermes/INSTALL.md
-CHECK a05 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/hermes/INSTALL.md
-CHECK a06 FAIL forbidden pattern [Clone this private repository into a stable local path.] present in adapters/hermes/INSTALL.md
-CHECK a07 FAIL forbidden pattern [Access is by repo invite or deploy key.] present in adapters/hermes/INSTALL.md
-CHECK a08 FAIL missing pattern [Clone the public repository into a stable local path.] in adapters/openclaw/INSTALL.md
-CHECK a09 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/openclaw/INSTALL.md
-CHECK a10 FAIL forbidden pattern [Clone this private repository into a stable local path.] present in adapters/openclaw/INSTALL.md
-CHECK a11 FAIL forbidden pattern [Access is by repo invite or deploy key.] present in adapters/openclaw/INSTALL.md
-CHECK a12 FAIL forbidden pattern [Clone fails with auth error | Repo is private and this account isn't invited] present in docs/agent-guide.md
-CHECK a13 FAIL missing pattern [The Phase-1 pilot on 2026-07-19 therefore adopted] in adapters/claude-code/INSTALL.md
-CHECK a14 FAIL missing pattern [The Phase-1 pilot on 2026-07-19 established the need to] in adapters/claude-code/INSTALL.md
-CHECK a15 FAIL forbidden pattern [#43] present in adapters/claude-code/INSTALL.md
+CHECK a03 FAIL forbidden pattern [private repo or a network problem] present in docs/agent-guide.md
+CHECK a04 FAIL forbidden pattern [public home will be] present in docs/agent-guide.md
+CHECK a05 FAIL missing pattern [Clone the public repository] in adapters/hermes/INSTALL.md
+CHECK a06 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/hermes/INSTALL.md
+CHECK a07 FAIL forbidden pattern [private repository] present in adapters/hermes/INSTALL.md
+CHECK a08 FAIL forbidden pattern [repo invite or deploy key] present in adapters/hermes/INSTALL.md
+CHECK a09 FAIL missing pattern [Clone the public repository] in adapters/openclaw/INSTALL.md
+CHECK a10 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/openclaw/INSTALL.md
+CHECK a11 FAIL forbidden pattern [private repository] present in adapters/openclaw/INSTALL.md
+CHECK a12 FAIL forbidden pattern [repo invite or deploy key] present in adapters/openclaw/INSTALL.md
+CHECK a13 PASS claude adapter explains the macOS scheduler constraint with small behavioral fragments
+CHECK a14 FAIL missing pattern [isolate] in adapters/claude-code/INSTALL.md
+CHECK a15 FAIL forbidden regex [#[[:digit:]]+] matched in adapters/claude-code/INSTALL.md
 CHECK a16 FAIL missing pattern [Historical design record.] in DESIGN.md
-CHECK a17 FAIL missing pattern [pre-publication private tracker] in DESIGN.md
-CHECK a18 FAIL missing pattern [Historical design record.] in DESIGN-task-runner.md
-CHECK a19 FAIL missing pattern [pre-publication private tracker] in DESIGN-task-runner.md
-CHECK a20 FAIL missing pattern [Historical design record.] in docs/governance-rules.md
-CHECK a21 FAIL missing pattern [pre-publication private trackers and working repositories] in docs/governance-rules.md
-CHECK a22 FAIL missing pattern [Historical design record.] in docs/updater-rollout.md
-CHECK a23 FAIL missing pattern [## Deployment inventory example] in docs/updater-rollout.md
-CHECK a24 FAIL missing pattern [| `<agent>` | `<host>` | `<cron-or-launchd schedule>` | `/path/to/caty-agent-harness` | `<host>-updater-ro` |] in docs/updater-rollout.md
-CHECK a25 FAIL forbidden pattern [## Verified deployments — actual paths] present in docs/updater-rollout.md
-CHECK a26 FAIL forbidden pattern [| Claire (canary) | VPS | cron `:17` | `/path/to/clones/caty-agent-harness` | read-only deploy key |] present in docs/updater-rollout.md
+CHECK a17 FAIL missing pattern [Historical design record.] in DESIGN-task-runner.md
+CHECK a18 FAIL missing pattern [Historical design record.] in docs/governance-rules.md
+CHECK a19 FAIL missing pattern [Historical design record.] in docs/updater-rollout.md
+CHECK a20 FAIL updater rollout does not satisfy the genericized-or-dated inventory disjunction
+CHECK a21 PASS plugin convention is included in the repo-wide public policy sweep
+CHECK a22 PASS allowlist contains exactly four recorded exception lines
+CHECK a23 PASS allowlist records the english scope-boundary exception exactly
+CHECK a24 PASS allowlist records the japanese scope-boundary exception exactly
+CHECK a25 PASS allowlist records the english release-status exception exactly
+CHECK a26 PASS allowlist records the japanese release-status exception exactly
+CHECK a27 FAIL no private-access wording remains outside the recorded allowlist
+CHECK a28 FAIL no invite-or-deploy-key onboarding wording remains outside the recorded allowlist
+CHECK a29 FAIL no private citation framing or forthcoming-home note remains outside the recorded allowlist
+CHECK a30 FAIL agent-guide troubleshooting table is missing observed-literal symptom cells
 RUN t06 pre 2 exit=1 dur=0s
-CHECK a01 FAIL missing pattern [This repository is public at <https://github.com/caty-ai/caty-agent-harness>] in docs/agent-guide.md
+CHECK a01 FAIL missing pattern [repository is public] in docs/agent-guide.md
 CHECK a02 FAIL missing pattern [no invitation is needed] in docs/agent-guide.md
-CHECK a03 FAIL forbidden pattern [The public home will be] present in docs/agent-guide.md
-CHECK a04 FAIL missing pattern [Clone the public repository into a stable local path.] in adapters/hermes/INSTALL.md
-CHECK a05 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/hermes/INSTALL.md
-CHECK a06 FAIL forbidden pattern [Clone this private repository into a stable local path.] present in adapters/hermes/INSTALL.md
-CHECK a07 FAIL forbidden pattern [Access is by repo invite or deploy key.] present in adapters/hermes/INSTALL.md
-CHECK a08 FAIL missing pattern [Clone the public repository into a stable local path.] in adapters/openclaw/INSTALL.md
-CHECK a09 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/openclaw/INSTALL.md
-CHECK a10 FAIL forbidden pattern [Clone this private repository into a stable local path.] present in adapters/openclaw/INSTALL.md
-CHECK a11 FAIL forbidden pattern [Access is by repo invite or deploy key.] present in adapters/openclaw/INSTALL.md
-CHECK a12 FAIL forbidden pattern [Clone fails with auth error | Repo is private and this account isn't invited] present in docs/agent-guide.md
-CHECK a13 FAIL missing pattern [The Phase-1 pilot on 2026-07-19 therefore adopted] in adapters/claude-code/INSTALL.md
-CHECK a14 FAIL missing pattern [The Phase-1 pilot on 2026-07-19 established the need to] in adapters/claude-code/INSTALL.md
-CHECK a15 FAIL forbidden pattern [#43] present in adapters/claude-code/INSTALL.md
+CHECK a03 FAIL forbidden pattern [private repo or a network problem] present in docs/agent-guide.md
+CHECK a04 FAIL forbidden pattern [public home will be] present in docs/agent-guide.md
+CHECK a05 FAIL missing pattern [Clone the public repository] in adapters/hermes/INSTALL.md
+CHECK a06 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/hermes/INSTALL.md
+CHECK a07 FAIL forbidden pattern [private repository] present in adapters/hermes/INSTALL.md
+CHECK a08 FAIL forbidden pattern [repo invite or deploy key] present in adapters/hermes/INSTALL.md
+CHECK a09 FAIL missing pattern [Clone the public repository] in adapters/openclaw/INSTALL.md
+CHECK a10 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/openclaw/INSTALL.md
+CHECK a11 FAIL forbidden pattern [private repository] present in adapters/openclaw/INSTALL.md
+CHECK a12 FAIL forbidden pattern [repo invite or deploy key] present in adapters/openclaw/INSTALL.md
+CHECK a13 PASS claude adapter explains the macOS scheduler constraint with small behavioral fragments
+CHECK a14 FAIL missing pattern [isolate] in adapters/claude-code/INSTALL.md
+CHECK a15 FAIL forbidden regex [#[[:digit:]]+] matched in adapters/claude-code/INSTALL.md
 CHECK a16 FAIL missing pattern [Historical design record.] in DESIGN.md
-CHECK a17 FAIL missing pattern [pre-publication private tracker] in DESIGN.md
-CHECK a18 FAIL missing pattern [Historical design record.] in DESIGN-task-runner.md
-CHECK a19 FAIL missing pattern [pre-publication private tracker] in DESIGN-task-runner.md
-CHECK a20 FAIL missing pattern [Historical design record.] in docs/governance-rules.md
-CHECK a21 FAIL missing pattern [pre-publication private trackers and working repositories] in docs/governance-rules.md
-CHECK a22 FAIL missing pattern [Historical design record.] in docs/updater-rollout.md
-CHECK a23 FAIL missing pattern [## Deployment inventory example] in docs/updater-rollout.md
-CHECK a24 FAIL missing pattern [| `<agent>` | `<host>` | `<cron-or-launchd schedule>` | `/path/to/caty-agent-harness` | `<host>-updater-ro` |] in docs/updater-rollout.md
-CHECK a25 FAIL forbidden pattern [## Verified deployments — actual paths] present in docs/updater-rollout.md
-CHECK a26 FAIL forbidden pattern [| Claire (canary) | VPS | cron `:17` | `/path/to/clones/caty-agent-harness` | read-only deploy key |] present in docs/updater-rollout.md
+CHECK a17 FAIL missing pattern [Historical design record.] in DESIGN-task-runner.md
+CHECK a18 FAIL missing pattern [Historical design record.] in docs/governance-rules.md
+CHECK a19 FAIL missing pattern [Historical design record.] in docs/updater-rollout.md
+CHECK a20 FAIL updater rollout does not satisfy the genericized-or-dated inventory disjunction
+CHECK a21 PASS plugin convention is included in the repo-wide public policy sweep
+CHECK a22 PASS allowlist contains exactly four recorded exception lines
+CHECK a23 PASS allowlist records the english scope-boundary exception exactly
+CHECK a24 PASS allowlist records the japanese scope-boundary exception exactly
+CHECK a25 PASS allowlist records the english release-status exception exactly
+CHECK a26 PASS allowlist records the japanese release-status exception exactly
+CHECK a27 FAIL no private-access wording remains outside the recorded allowlist
+CHECK a28 FAIL no invite-or-deploy-key onboarding wording remains outside the recorded allowlist
+CHECK a29 FAIL no private citation framing or forthcoming-home note remains outside the recorded allowlist
+CHECK a30 FAIL agent-guide troubleshooting table is missing observed-literal symptom cells
 RUN t06 pre 3 exit=1 dur=0s
-CHECK a01 FAIL missing pattern [This repository is public at <https://github.com/caty-ai/caty-agent-harness>] in docs/agent-guide.md
+CHECK a01 FAIL missing pattern [repository is public] in docs/agent-guide.md
 CHECK a02 FAIL missing pattern [no invitation is needed] in docs/agent-guide.md
-CHECK a03 FAIL forbidden pattern [The public home will be] present in docs/agent-guide.md
-CHECK a04 FAIL missing pattern [Clone the public repository into a stable local path.] in adapters/hermes/INSTALL.md
-CHECK a05 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/hermes/INSTALL.md
-CHECK a06 FAIL forbidden pattern [Clone this private repository into a stable local path.] present in adapters/hermes/INSTALL.md
-CHECK a07 FAIL forbidden pattern [Access is by repo invite or deploy key.] present in adapters/hermes/INSTALL.md
-CHECK a08 FAIL missing pattern [Clone the public repository into a stable local path.] in adapters/openclaw/INSTALL.md
-CHECK a09 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/openclaw/INSTALL.md
-CHECK a10 FAIL forbidden pattern [Clone this private repository into a stable local path.] present in adapters/openclaw/INSTALL.md
-CHECK a11 FAIL forbidden pattern [Access is by repo invite or deploy key.] present in adapters/openclaw/INSTALL.md
-CHECK a12 FAIL forbidden pattern [Clone fails with auth error | Repo is private and this account isn't invited] present in docs/agent-guide.md
-CHECK a13 FAIL missing pattern [The Phase-1 pilot on 2026-07-19 therefore adopted] in adapters/claude-code/INSTALL.md
-CHECK a14 FAIL missing pattern [The Phase-1 pilot on 2026-07-19 established the need to] in adapters/claude-code/INSTALL.md
-CHECK a15 FAIL forbidden pattern [#43] present in adapters/claude-code/INSTALL.md
+CHECK a03 FAIL forbidden pattern [private repo or a network problem] present in docs/agent-guide.md
+CHECK a04 FAIL forbidden pattern [public home will be] present in docs/agent-guide.md
+CHECK a05 FAIL missing pattern [Clone the public repository] in adapters/hermes/INSTALL.md
+CHECK a06 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/hermes/INSTALL.md
+CHECK a07 FAIL forbidden pattern [private repository] present in adapters/hermes/INSTALL.md
+CHECK a08 FAIL forbidden pattern [repo invite or deploy key] present in adapters/hermes/INSTALL.md
+CHECK a09 FAIL missing pattern [Clone the public repository] in adapters/openclaw/INSTALL.md
+CHECK a10 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/openclaw/INSTALL.md
+CHECK a11 FAIL forbidden pattern [private repository] present in adapters/openclaw/INSTALL.md
+CHECK a12 FAIL forbidden pattern [repo invite or deploy key] present in adapters/openclaw/INSTALL.md
+CHECK a13 PASS claude adapter explains the macOS scheduler constraint with small behavioral fragments
+CHECK a14 FAIL missing pattern [isolate] in adapters/claude-code/INSTALL.md
+CHECK a15 FAIL forbidden regex [#[[:digit:]]+] matched in adapters/claude-code/INSTALL.md
 CHECK a16 FAIL missing pattern [Historical design record.] in DESIGN.md
-CHECK a17 FAIL missing pattern [pre-publication private tracker] in DESIGN.md
-CHECK a18 FAIL missing pattern [Historical design record.] in DESIGN-task-runner.md
-CHECK a19 FAIL missing pattern [pre-publication private tracker] in DESIGN-task-runner.md
-CHECK a20 FAIL missing pattern [Historical design record.] in docs/governance-rules.md
-CHECK a21 FAIL missing pattern [pre-publication private trackers and working repositories] in docs/governance-rules.md
-CHECK a22 FAIL missing pattern [Historical design record.] in docs/updater-rollout.md
-CHECK a23 FAIL missing pattern [## Deployment inventory example] in docs/updater-rollout.md
-CHECK a24 FAIL missing pattern [| `<agent>` | `<host>` | `<cron-or-launchd schedule>` | `/path/to/caty-agent-harness` | `<host>-updater-ro` |] in docs/updater-rollout.md
-CHECK a25 FAIL forbidden pattern [## Verified deployments — actual paths] present in docs/updater-rollout.md
-CHECK a26 FAIL forbidden pattern [| Claire (canary) | VPS | cron `:17` | `/path/to/clones/caty-agent-harness` | read-only deploy key |] present in docs/updater-rollout.md
+CHECK a17 FAIL missing pattern [Historical design record.] in DESIGN-task-runner.md
+CHECK a18 FAIL missing pattern [Historical design record.] in docs/governance-rules.md
+CHECK a19 FAIL missing pattern [Historical design record.] in docs/updater-rollout.md
+CHECK a20 FAIL updater rollout does not satisfy the genericized-or-dated inventory disjunction
+CHECK a21 PASS plugin convention is included in the repo-wide public policy sweep
+CHECK a22 PASS allowlist contains exactly four recorded exception lines
+CHECK a23 PASS allowlist records the english scope-boundary exception exactly
+CHECK a24 PASS allowlist records the japanese scope-boundary exception exactly
+CHECK a25 PASS allowlist records the english release-status exception exactly
+CHECK a26 PASS allowlist records the japanese release-status exception exactly
+CHECK a27 FAIL no private-access wording remains outside the recorded allowlist
+CHECK a28 FAIL no invite-or-deploy-key onboarding wording remains outside the recorded allowlist
+CHECK a29 FAIL no private citation framing or forthcoming-home note remains outside the recorded allowlist
+CHECK a30 FAIL agent-guide troubleshooting table is missing observed-literal symptom cells
 RUN t06 pre 4 exit=1 dur=0s
-CHECK a01 FAIL missing pattern [This repository is public at <https://github.com/caty-ai/caty-agent-harness>] in docs/agent-guide.md
+CHECK a01 FAIL missing pattern [repository is public] in docs/agent-guide.md
 CHECK a02 FAIL missing pattern [no invitation is needed] in docs/agent-guide.md
-CHECK a03 FAIL forbidden pattern [The public home will be] present in docs/agent-guide.md
-CHECK a04 FAIL missing pattern [Clone the public repository into a stable local path.] in adapters/hermes/INSTALL.md
-CHECK a05 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/hermes/INSTALL.md
-CHECK a06 FAIL forbidden pattern [Clone this private repository into a stable local path.] present in adapters/hermes/INSTALL.md
-CHECK a07 FAIL forbidden pattern [Access is by repo invite or deploy key.] present in adapters/hermes/INSTALL.md
-CHECK a08 FAIL missing pattern [Clone the public repository into a stable local path.] in adapters/openclaw/INSTALL.md
-CHECK a09 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/openclaw/INSTALL.md
-CHECK a10 FAIL forbidden pattern [Clone this private repository into a stable local path.] present in adapters/openclaw/INSTALL.md
-CHECK a11 FAIL forbidden pattern [Access is by repo invite or deploy key.] present in adapters/openclaw/INSTALL.md
-CHECK a12 FAIL forbidden pattern [Clone fails with auth error | Repo is private and this account isn't invited] present in docs/agent-guide.md
-CHECK a13 FAIL missing pattern [The Phase-1 pilot on 2026-07-19 therefore adopted] in adapters/claude-code/INSTALL.md
-CHECK a14 FAIL missing pattern [The Phase-1 pilot on 2026-07-19 established the need to] in adapters/claude-code/INSTALL.md
-CHECK a15 FAIL forbidden pattern [#43] present in adapters/claude-code/INSTALL.md
+CHECK a03 FAIL forbidden pattern [private repo or a network problem] present in docs/agent-guide.md
+CHECK a04 FAIL forbidden pattern [public home will be] present in docs/agent-guide.md
+CHECK a05 FAIL missing pattern [Clone the public repository] in adapters/hermes/INSTALL.md
+CHECK a06 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/hermes/INSTALL.md
+CHECK a07 FAIL forbidden pattern [private repository] present in adapters/hermes/INSTALL.md
+CHECK a08 FAIL forbidden pattern [repo invite or deploy key] present in adapters/hermes/INSTALL.md
+CHECK a09 FAIL missing pattern [Clone the public repository] in adapters/openclaw/INSTALL.md
+CHECK a10 FAIL missing pattern [git clone https://github.com/caty-ai/caty-agent-harness.git] in adapters/openclaw/INSTALL.md
+CHECK a11 FAIL forbidden pattern [private repository] present in adapters/openclaw/INSTALL.md
+CHECK a12 FAIL forbidden pattern [repo invite or deploy key] present in adapters/openclaw/INSTALL.md
+CHECK a13 PASS claude adapter explains the macOS scheduler constraint with small behavioral fragments
+CHECK a14 FAIL missing pattern [isolate] in adapters/claude-code/INSTALL.md
+CHECK a15 FAIL forbidden regex [#[[:digit:]]+] matched in adapters/claude-code/INSTALL.md
 CHECK a16 FAIL missing pattern [Historical design record.] in DESIGN.md
-CHECK a17 FAIL missing pattern [pre-publication private tracker] in DESIGN.md
-CHECK a18 FAIL missing pattern [Historical design record.] in DESIGN-task-runner.md
-CHECK a19 FAIL missing pattern [pre-publication private tracker] in DESIGN-task-runner.md
-CHECK a20 FAIL missing pattern [Historical design record.] in docs/governance-rules.md
-CHECK a21 FAIL missing pattern [pre-publication private trackers and working repositories] in docs/governance-rules.md
-CHECK a22 FAIL missing pattern [Historical design record.] in docs/updater-rollout.md
-CHECK a23 FAIL missing pattern [## Deployment inventory example] in docs/updater-rollout.md
-CHECK a24 FAIL missing pattern [| `<agent>` | `<host>` | `<cron-or-launchd schedule>` | `/path/to/caty-agent-harness` | `<host>-updater-ro` |] in docs/updater-rollout.md
-CHECK a25 FAIL forbidden pattern [## Verified deployments — actual paths] present in docs/updater-rollout.md
-CHECK a26 FAIL forbidden pattern [| Claire (canary) | VPS | cron `:17` | `/path/to/clones/caty-agent-harness` | read-only deploy key |] present in docs/updater-rollout.md
-RUN t06 pre 5 exit=1 dur=0s
-CHECK a01 PASS agent guide states the repository is public
+CHECK a17 FAIL missing pattern [Historical design record.] in DESIGN-task-runner.md
+CHECK a18 FAIL missing pattern [Historical design record.] in docs/governance-rules.md
+CHECK a19 FAIL missing pattern [Historical design record.] in docs/updater-rollout.md
+CHECK a20 FAIL updater rollout does not satisfy the genericized-or-dated inventory disjunction
+CHECK a21 PASS plugin convention is included in the repo-wide public policy sweep
+CHECK a22 PASS allowlist contains exactly four recorded exception lines
+CHECK a23 PASS allowlist records the english scope-boundary exception exactly
+CHECK a24 PASS allowlist records the japanese scope-boundary exception exactly
+CHECK a25 PASS allowlist records the english release-status exception exactly
+CHECK a26 PASS allowlist records the japanese release-status exception exactly
+CHECK a27 FAIL no private-access wording remains outside the recorded allowlist
+CHECK a28 FAIL no invite-or-deploy-key onboarding wording remains outside the recorded allowlist
+CHECK a29 FAIL no private citation framing or forthcoming-home note remains outside the recorded allowlist
+CHECK a30 FAIL agent-guide troubleshooting table is missing observed-literal symptom cells
+RUN t06 pre 5 exit=1 dur=1s
+CHECK a01 PASS agent guide states that the repository is public with the public repo identifier
 CHECK a02 PASS agent guide states that no invitation is needed
-CHECK a03 PASS agent guide drops the forthcoming-public-home note
-CHECK a04 PASS hermes install says to clone the public repository
-CHECK a05 PASS hermes install includes the public clone command
-CHECK a06 PASS hermes install drops the old private-repository text
-CHECK a07 PASS hermes install drops the old invitation-or-deploy-key access text
-CHECK a08 PASS openclaw install says to clone the public repository
-CHECK a09 PASS openclaw install includes the public clone command
-CHECK a10 PASS openclaw install drops the old private-repository text
-CHECK a11 PASS openclaw install drops the old invitation-or-deploy-key access text
-CHECK a12 PASS agent guide drops the old clone-auth troubleshooting row
-CHECK a13 PASS claude adapter includes the self-contained macOS scheduling explanation
-CHECK a14 PASS claude adapter includes the self-contained host-hook explanation
-CHECK a15 PASS claude adapter drops the old tracker-number citation
-CHECK a16 PASS design document labels itself as a historical design record
-CHECK a17 PASS design document says its legacy issue references point to the pre-publication private tracker
-CHECK a18 PASS task-runner design document labels itself as a historical design record
-CHECK a19 PASS task-runner design document says its legacy issue references point to the pre-publication private tracker
-CHECK a20 PASS governance rules labels itself as a historical design record
-CHECK a21 PASS governance rules says its legacy references point to the pre-publication private trackers and working repositories
-CHECK a22 PASS updater rollout labels itself as a historical design record
-CHECK a23 PASS updater rollout uses the placeholder deployment-inventory heading
-CHECK a24 PASS updater rollout uses the placeholder deployment-inventory row
-CHECK a25 PASS updater rollout drops the old verified-deployments heading
-CHECK a26 PASS updater rollout drops the old concrete deployment row
-RUN t06 fix 1 exit=0 dur=0s
-CHECK a01 PASS agent guide states the repository is public
+CHECK a03 PASS agent guide drops the old missing-access diagnosis
+CHECK a04 PASS agent guide drops the transitional forthcoming-home note
+CHECK a05 PASS hermes install uses the public clone flow
+CHECK a06 PASS hermes install includes the public clone command
+CHECK a07 PASS hermes install drops the old private-repository wording
+CHECK a08 PASS hermes install drops the invite-or-deploy-key wording
+CHECK a09 PASS openclaw install uses the public clone flow
+CHECK a10 PASS openclaw install includes the public clone command
+CHECK a11 PASS openclaw install drops the old private-repository wording
+CHECK a12 PASS openclaw install drops the invite-or-deploy-key wording
+CHECK a13 PASS claude adapter explains the macOS scheduler constraint with small behavioral fragments
+CHECK a14 PASS claude adapter explains the hook-isolation failure mode with small behavioral fragments
+CHECK a15 PASS claude adapter drops numbered citations from those explanations
+CHECK a16 PASS design document is explicitly labeled historical
+CHECK a17 PASS task-runner design document is explicitly labeled historical
+CHECK a18 PASS governance rules are explicitly labeled historical
+CHECK a19 PASS updater rollout is explicitly labeled historical
+CHECK a20 PASS updater rollout satisfies the genericized-or-dated inventory disjunction
+CHECK a21 PASS plugin convention is included in the repo-wide public policy sweep
+CHECK a22 PASS allowlist contains exactly four recorded exception lines
+CHECK a23 PASS allowlist records the english scope-boundary exception exactly
+CHECK a24 PASS allowlist records the japanese scope-boundary exception exactly
+CHECK a25 PASS allowlist records the english release-status exception exactly
+CHECK a26 PASS allowlist records the japanese release-status exception exactly
+CHECK a27 PASS no private-access wording remains outside the recorded allowlist
+CHECK a28 PASS no invite-or-deploy-key onboarding wording remains outside the recorded allowlist
+CHECK a29 PASS no private citation framing or forthcoming-home note remains outside the recorded allowlist
+CHECK a30 PASS agent-guide troubleshooting rows with non-dash meanings carry observed-literal symptom cells
+RUN t06 fix 1 exit=0 dur=1s
+CHECK a01 PASS agent guide states that the repository is public with the public repo identifier
 CHECK a02 PASS agent guide states that no invitation is needed
-CHECK a03 PASS agent guide drops the forthcoming-public-home note
-CHECK a04 PASS hermes install says to clone the public repository
-CHECK a05 PASS hermes install includes the public clone command
-CHECK a06 PASS hermes install drops the old private-repository text
-CHECK a07 PASS hermes install drops the old invitation-or-deploy-key access text
-CHECK a08 PASS openclaw install says to clone the public repository
-CHECK a09 PASS openclaw install includes the public clone command
-CHECK a10 PASS openclaw install drops the old private-repository text
-CHECK a11 PASS openclaw install drops the old invitation-or-deploy-key access text
-CHECK a12 PASS agent guide drops the old clone-auth troubleshooting row
-CHECK a13 PASS claude adapter includes the self-contained macOS scheduling explanation
-CHECK a14 PASS claude adapter includes the self-contained host-hook explanation
-CHECK a15 PASS claude adapter drops the old tracker-number citation
-CHECK a16 PASS design document labels itself as a historical design record
-CHECK a17 PASS design document says its legacy issue references point to the pre-publication private tracker
-CHECK a18 PASS task-runner design document labels itself as a historical design record
-CHECK a19 PASS task-runner design document says its legacy issue references point to the pre-publication private tracker
-CHECK a20 PASS governance rules labels itself as a historical design record
-CHECK a21 PASS governance rules says its legacy references point to the pre-publication private trackers and working repositories
-CHECK a22 PASS updater rollout labels itself as a historical design record
-CHECK a23 PASS updater rollout uses the placeholder deployment-inventory heading
-CHECK a24 PASS updater rollout uses the placeholder deployment-inventory row
-CHECK a25 PASS updater rollout drops the old verified-deployments heading
-CHECK a26 PASS updater rollout drops the old concrete deployment row
+CHECK a03 PASS agent guide drops the old missing-access diagnosis
+CHECK a04 PASS agent guide drops the transitional forthcoming-home note
+CHECK a05 PASS hermes install uses the public clone flow
+CHECK a06 PASS hermes install includes the public clone command
+CHECK a07 PASS hermes install drops the old private-repository wording
+CHECK a08 PASS hermes install drops the invite-or-deploy-key wording
+CHECK a09 PASS openclaw install uses the public clone flow
+CHECK a10 PASS openclaw install includes the public clone command
+CHECK a11 PASS openclaw install drops the old private-repository wording
+CHECK a12 PASS openclaw install drops the invite-or-deploy-key wording
+CHECK a13 PASS claude adapter explains the macOS scheduler constraint with small behavioral fragments
+CHECK a14 PASS claude adapter explains the hook-isolation failure mode with small behavioral fragments
+CHECK a15 PASS claude adapter drops numbered citations from those explanations
+CHECK a16 PASS design document is explicitly labeled historical
+CHECK a17 PASS task-runner design document is explicitly labeled historical
+CHECK a18 PASS governance rules are explicitly labeled historical
+CHECK a19 PASS updater rollout is explicitly labeled historical
+CHECK a20 PASS updater rollout satisfies the genericized-or-dated inventory disjunction
+CHECK a21 PASS plugin convention is included in the repo-wide public policy sweep
+CHECK a22 PASS allowlist contains exactly four recorded exception lines
+CHECK a23 PASS allowlist records the english scope-boundary exception exactly
+CHECK a24 PASS allowlist records the japanese scope-boundary exception exactly
+CHECK a25 PASS allowlist records the english release-status exception exactly
+CHECK a26 PASS allowlist records the japanese release-status exception exactly
+CHECK a27 PASS no private-access wording remains outside the recorded allowlist
+CHECK a28 PASS no invite-or-deploy-key onboarding wording remains outside the recorded allowlist
+CHECK a29 PASS no private citation framing or forthcoming-home note remains outside the recorded allowlist
+CHECK a30 PASS agent-guide troubleshooting rows with non-dash meanings carry observed-literal symptom cells
 RUN t06 fix 2 exit=0 dur=0s
-CHECK a01 PASS agent guide states the repository is public
+CHECK a01 PASS agent guide states that the repository is public with the public repo identifier
 CHECK a02 PASS agent guide states that no invitation is needed
-CHECK a03 PASS agent guide drops the forthcoming-public-home note
-CHECK a04 PASS hermes install says to clone the public repository
-CHECK a05 PASS hermes install includes the public clone command
-CHECK a06 PASS hermes install drops the old private-repository text
-CHECK a07 PASS hermes install drops the old invitation-or-deploy-key access text
-CHECK a08 PASS openclaw install says to clone the public repository
-CHECK a09 PASS openclaw install includes the public clone command
-CHECK a10 PASS openclaw install drops the old private-repository text
-CHECK a11 PASS openclaw install drops the old invitation-or-deploy-key access text
-CHECK a12 PASS agent guide drops the old clone-auth troubleshooting row
-CHECK a13 PASS claude adapter includes the self-contained macOS scheduling explanation
-CHECK a14 PASS claude adapter includes the self-contained host-hook explanation
-CHECK a15 PASS claude adapter drops the old tracker-number citation
-CHECK a16 PASS design document labels itself as a historical design record
-CHECK a17 PASS design document says its legacy issue references point to the pre-publication private tracker
-CHECK a18 PASS task-runner design document labels itself as a historical design record
-CHECK a19 PASS task-runner design document says its legacy issue references point to the pre-publication private tracker
-CHECK a20 PASS governance rules labels itself as a historical design record
-CHECK a21 PASS governance rules says its legacy references point to the pre-publication private trackers and working repositories
-CHECK a22 PASS updater rollout labels itself as a historical design record
-CHECK a23 PASS updater rollout uses the placeholder deployment-inventory heading
-CHECK a24 PASS updater rollout uses the placeholder deployment-inventory row
-CHECK a25 PASS updater rollout drops the old verified-deployments heading
-CHECK a26 PASS updater rollout drops the old concrete deployment row
+CHECK a03 PASS agent guide drops the old missing-access diagnosis
+CHECK a04 PASS agent guide drops the transitional forthcoming-home note
+CHECK a05 PASS hermes install uses the public clone flow
+CHECK a06 PASS hermes install includes the public clone command
+CHECK a07 PASS hermes install drops the old private-repository wording
+CHECK a08 PASS hermes install drops the invite-or-deploy-key wording
+CHECK a09 PASS openclaw install uses the public clone flow
+CHECK a10 PASS openclaw install includes the public clone command
+CHECK a11 PASS openclaw install drops the old private-repository wording
+CHECK a12 PASS openclaw install drops the invite-or-deploy-key wording
+CHECK a13 PASS claude adapter explains the macOS scheduler constraint with small behavioral fragments
+CHECK a14 PASS claude adapter explains the hook-isolation failure mode with small behavioral fragments
+CHECK a15 PASS claude adapter drops numbered citations from those explanations
+CHECK a16 PASS design document is explicitly labeled historical
+CHECK a17 PASS task-runner design document is explicitly labeled historical
+CHECK a18 PASS governance rules are explicitly labeled historical
+CHECK a19 PASS updater rollout is explicitly labeled historical
+CHECK a20 PASS updater rollout satisfies the genericized-or-dated inventory disjunction
+CHECK a21 PASS plugin convention is included in the repo-wide public policy sweep
+CHECK a22 PASS allowlist contains exactly four recorded exception lines
+CHECK a23 PASS allowlist records the english scope-boundary exception exactly
+CHECK a24 PASS allowlist records the japanese scope-boundary exception exactly
+CHECK a25 PASS allowlist records the english release-status exception exactly
+CHECK a26 PASS allowlist records the japanese release-status exception exactly
+CHECK a27 PASS no private-access wording remains outside the recorded allowlist
+CHECK a28 PASS no invite-or-deploy-key onboarding wording remains outside the recorded allowlist
+CHECK a29 PASS no private citation framing or forthcoming-home note remains outside the recorded allowlist
+CHECK a30 PASS agent-guide troubleshooting rows with non-dash meanings carry observed-literal symptom cells
 RUN t06 fix 3 exit=0 dur=0s
-CHECK a01 PASS agent guide states the repository is public
+CHECK a01 PASS agent guide states that the repository is public with the public repo identifier
 CHECK a02 PASS agent guide states that no invitation is needed
-CHECK a03 PASS agent guide drops the forthcoming-public-home note
-CHECK a04 PASS hermes install says to clone the public repository
-CHECK a05 PASS hermes install includes the public clone command
-CHECK a06 PASS hermes install drops the old private-repository text
-CHECK a07 PASS hermes install drops the old invitation-or-deploy-key access text
-CHECK a08 PASS openclaw install says to clone the public repository
-CHECK a09 PASS openclaw install includes the public clone command
-CHECK a10 PASS openclaw install drops the old private-repository text
-CHECK a11 PASS openclaw install drops the old invitation-or-deploy-key access text
-CHECK a12 PASS agent guide drops the old clone-auth troubleshooting row
-CHECK a13 PASS claude adapter includes the self-contained macOS scheduling explanation
-CHECK a14 PASS claude adapter includes the self-contained host-hook explanation
-CHECK a15 PASS claude adapter drops the old tracker-number citation
-CHECK a16 PASS design document labels itself as a historical design record
-CHECK a17 PASS design document says its legacy issue references point to the pre-publication private tracker
-CHECK a18 PASS task-runner design document labels itself as a historical design record
-CHECK a19 PASS task-runner design document says its legacy issue references point to the pre-publication private tracker
-CHECK a20 PASS governance rules labels itself as a historical design record
-CHECK a21 PASS governance rules says its legacy references point to the pre-publication private trackers and working repositories
-CHECK a22 PASS updater rollout labels itself as a historical design record
-CHECK a23 PASS updater rollout uses the placeholder deployment-inventory heading
-CHECK a24 PASS updater rollout uses the placeholder deployment-inventory row
-CHECK a25 PASS updater rollout drops the old verified-deployments heading
-CHECK a26 PASS updater rollout drops the old concrete deployment row
-RUN t06 fix 4 exit=0 dur=0s
-CHECK a01 PASS agent guide states the repository is public
+CHECK a03 PASS agent guide drops the old missing-access diagnosis
+CHECK a04 PASS agent guide drops the transitional forthcoming-home note
+CHECK a05 PASS hermes install uses the public clone flow
+CHECK a06 PASS hermes install includes the public clone command
+CHECK a07 PASS hermes install drops the old private-repository wording
+CHECK a08 PASS hermes install drops the invite-or-deploy-key wording
+CHECK a09 PASS openclaw install uses the public clone flow
+CHECK a10 PASS openclaw install includes the public clone command
+CHECK a11 PASS openclaw install drops the old private-repository wording
+CHECK a12 PASS openclaw install drops the invite-or-deploy-key wording
+CHECK a13 PASS claude adapter explains the macOS scheduler constraint with small behavioral fragments
+CHECK a14 PASS claude adapter explains the hook-isolation failure mode with small behavioral fragments
+CHECK a15 PASS claude adapter drops numbered citations from those explanations
+CHECK a16 PASS design document is explicitly labeled historical
+CHECK a17 PASS task-runner design document is explicitly labeled historical
+CHECK a18 PASS governance rules are explicitly labeled historical
+CHECK a19 PASS updater rollout is explicitly labeled historical
+CHECK a20 PASS updater rollout satisfies the genericized-or-dated inventory disjunction
+CHECK a21 PASS plugin convention is included in the repo-wide public policy sweep
+CHECK a22 PASS allowlist contains exactly four recorded exception lines
+CHECK a23 PASS allowlist records the english scope-boundary exception exactly
+CHECK a24 PASS allowlist records the japanese scope-boundary exception exactly
+CHECK a25 PASS allowlist records the english release-status exception exactly
+CHECK a26 PASS allowlist records the japanese release-status exception exactly
+CHECK a27 PASS no private-access wording remains outside the recorded allowlist
+CHECK a28 PASS no invite-or-deploy-key onboarding wording remains outside the recorded allowlist
+CHECK a29 PASS no private citation framing or forthcoming-home note remains outside the recorded allowlist
+CHECK a30 PASS agent-guide troubleshooting rows with non-dash meanings carry observed-literal symptom cells
+RUN t06 fix 4 exit=0 dur=1s
+CHECK a01 PASS agent guide states that the repository is public with the public repo identifier
 CHECK a02 PASS agent guide states that no invitation is needed
-CHECK a03 PASS agent guide drops the forthcoming-public-home note
-CHECK a04 PASS hermes install says to clone the public repository
-CHECK a05 PASS hermes install includes the public clone command
-CHECK a06 PASS hermes install drops the old private-repository text
-CHECK a07 PASS hermes install drops the old invitation-or-deploy-key access text
-CHECK a08 PASS openclaw install says to clone the public repository
-CHECK a09 PASS openclaw install includes the public clone command
-CHECK a10 PASS openclaw install drops the old private-repository text
-CHECK a11 PASS openclaw install drops the old invitation-or-deploy-key access text
-CHECK a12 PASS agent guide drops the old clone-auth troubleshooting row
-CHECK a13 PASS claude adapter includes the self-contained macOS scheduling explanation
-CHECK a14 PASS claude adapter includes the self-contained host-hook explanation
-CHECK a15 PASS claude adapter drops the old tracker-number citation
-CHECK a16 PASS design document labels itself as a historical design record
-CHECK a17 PASS design document says its legacy issue references point to the pre-publication private tracker
-CHECK a18 PASS task-runner design document labels itself as a historical design record
-CHECK a19 PASS task-runner design document says its legacy issue references point to the pre-publication private tracker
-CHECK a20 PASS governance rules labels itself as a historical design record
-CHECK a21 PASS governance rules says its legacy references point to the pre-publication private trackers and working repositories
-CHECK a22 PASS updater rollout labels itself as a historical design record
-CHECK a23 PASS updater rollout uses the placeholder deployment-inventory heading
-CHECK a24 PASS updater rollout uses the placeholder deployment-inventory row
-CHECK a25 PASS updater rollout drops the old verified-deployments heading
-CHECK a26 PASS updater rollout drops the old concrete deployment row
-RUN t06 fix 5 exit=0 dur=0s
+CHECK a03 PASS agent guide drops the old missing-access diagnosis
+CHECK a04 PASS agent guide drops the transitional forthcoming-home note
+CHECK a05 PASS hermes install uses the public clone flow
+CHECK a06 PASS hermes install includes the public clone command
+CHECK a07 PASS hermes install drops the old private-repository wording
+CHECK a08 PASS hermes install drops the invite-or-deploy-key wording
+CHECK a09 PASS openclaw install uses the public clone flow
+CHECK a10 PASS openclaw install includes the public clone command
+CHECK a11 PASS openclaw install drops the old private-repository wording
+CHECK a12 PASS openclaw install drops the invite-or-deploy-key wording
+CHECK a13 PASS claude adapter explains the macOS scheduler constraint with small behavioral fragments
+CHECK a14 PASS claude adapter explains the hook-isolation failure mode with small behavioral fragments
+CHECK a15 PASS claude adapter drops numbered citations from those explanations
+CHECK a16 PASS design document is explicitly labeled historical
+CHECK a17 PASS task-runner design document is explicitly labeled historical
+CHECK a18 PASS governance rules are explicitly labeled historical
+CHECK a19 PASS updater rollout is explicitly labeled historical
+CHECK a20 PASS updater rollout satisfies the genericized-or-dated inventory disjunction
+CHECK a21 PASS plugin convention is included in the repo-wide public policy sweep
+CHECK a22 PASS allowlist contains exactly four recorded exception lines
+CHECK a23 PASS allowlist records the english scope-boundary exception exactly
+CHECK a24 PASS allowlist records the japanese scope-boundary exception exactly
+CHECK a25 PASS allowlist records the english release-status exception exactly
+CHECK a26 PASS allowlist records the japanese release-status exception exactly
+CHECK a27 PASS no private-access wording remains outside the recorded allowlist
+CHECK a28 PASS no invite-or-deploy-key onboarding wording remains outside the recorded allowlist
+CHECK a29 PASS no private citation framing or forthcoming-home note remains outside the recorded allowlist
+CHECK a30 PASS agent-guide troubleshooting rows with non-dash meanings carry observed-literal symptom cells
+RUN t06 fix 5 exit=0 dur=1s
 VERDICT t06 PASS

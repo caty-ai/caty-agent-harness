@@ -1,0 +1,5 @@
+# path<TAB>exact-content
+docs/engineering.md	Caty Agent Harness is the vertical axis in Family OS, the maintainers' multi-agent environment: it strengthens an individual agent's ability to learn across work and finish multi-step work. Family Memory Architecture (FMA) is the horizontal axis: it coordinates memory, schedules, and provenance across agents. The two roles are orthogonal, not competing. (Family OS and FMA live in private repositories; their names appear here only to explain this project's scope boundary.)
+docs/engineering.ja.md	Caty Agent Harness は、maintainer たちのマルチエージェント環境 Family OS の縦軸です。個々の agent が仕事をまたいで学び、複数 step の仕事を完走する力を強くします。Family Memory Architecture（FMA）は横軸で、複数 agent 間の memory、schedule、provenance をつなぎます。役割は直交しており、競合しません。（Family OS と FMA は private repository にあり、名前はこのプロジェクトの範囲の境界を説明するためだけに登場します。）
+docs/engineering.md	- This is the public Caty AI release repository. Development happens in a private working repository; releases land here as clean snapshots.
+docs/engineering.ja.md	- ここは Caty AI の public release repository です。開発は private の作業リポジトリで行い、リリースはクリーンなスナップショットとしてここに置かれます。

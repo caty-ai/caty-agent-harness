@@ -58,6 +58,24 @@ check_absent_many() {
   pass "$id" "$reason"
 }
 
+check_exact_blob() {
+  local id reason path expected actual
+  id=$1
+  reason=$2
+  path=$3
+  expected=$4
+  require_file "$path" "$id" || return
+  actual=$(git hash-object -- "$path" 2>/dev/null) || {
+    fail_check "$id" "could not hash $path"
+    return
+  }
+  if [ "$actual" != "$expected" ]; then
+    fail_check "$id" "blob hash mismatch for $path"
+    return
+  fi
+  pass "$id" "$reason"
+}
+
 check_contains a01 "example task uses a local SVG artifact path" \
   "templates/examples/img-pilot.task.md" 'out/image.svg'
 check_contains a02 "example task checks for an SVG root element" \
@@ -132,6 +150,12 @@ check_contains a36 "probe note says it does not mutate the checked workspace" \
   "install.sh" 'mutate the checked workspace'
 check_absent_many a37 "probe note drops the old installer-local inspection wording" \
   "install.sh" 'implementation shipped beside this installer'
+check_exact_blob a40 "wrapper-conformance library remains unchanged" \
+  "scripts/lib-wrapper-conformance.sh" \
+  'a4a51b6e8070c5516607c0081b0beef1e44ba8ce'
+check_exact_blob a41 "wrapper-conformance test expectations remain unchanged" \
+  "tests/wrapper-conformance.test.sh" \
+  '530091f9034e7873647ac3fbf633f452dac2c994'
 
 if [ "$fail" -ne 0 ]; then
   exit 1
