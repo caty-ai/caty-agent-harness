@@ -72,6 +72,12 @@ R12. Runs are executed by `tools/validate-task.sh` (bundle tooling), which write
 4. *Metadata–ledger binding*: a commit that changes a task's meta.json (SHAs, timeout) must re-verify that task's units.md narrative in the same commit (the I-2/N1 failure shape: corrected pair, stale ledger prose).
 5. *Standard units.md footer*: every task ledger ends with the anonymization mapping, the longest needle with its derivability basis, and the timeout rationale (t11's footer is the template). Review findings anchor there instead of being re-derived per round.
 
+**r4 (from batch-3 / round-3 acceptance, pre-sealing):**
+1. *Retroactivity*: a commit that adopts a new rule must list the already-admitted tasks the rule applies to and either backfill them in the same revision cycle or record why each is exempt. (r3-3/r3-5 were initially applied only where their findings arose — P2/P3.)
+2. *Discriminative power (r2 companion)*: when the replica ships a functional test for a criterion unit (e.g. a bundled test suite for a tool the unit requires), the donecheck must use it — or record why bare existence/structure checks suffice. Bare `[ -f ]` on a unit whose functional probe is sitting in-replica is under-testing (P1).
+3. *Span-pair declaration*: when pre_fix is not the fix's first parent (a multi-commit span), units.md must state which assertions are expected to hold on BOTH legs (constant-true on pre), so pre-FAIL breadth is not misread across tasks (P10).
+4. *Class labels follow the mapping*: a unit whose asserted core is fully mechanized is MECH (possibly weakened-MECH with the loss recorded), not HUMAN; HUMAN is reserved for units whose surviving assertion does not decide the claim (P4's inflation shape).
+
 ## 6. Authorship and acceptance
 
 R13. Author of record for every task: Alpha. Codex (GPT-5.6 Sol) may draft under these rules; the author reviews every line before admission.
