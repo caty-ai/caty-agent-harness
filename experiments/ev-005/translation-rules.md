@@ -65,6 +65,13 @@ R12. Runs are executed by `tools/validate-task.sh` (bundle tooling), which write
 
 **Replica solvability (r2, from batch-1 non-author acceptance):** admission additionally requires that the surviving MECH criterion be **satisfiable from the replica tree and bundled fixtures alone** — an honest solver with no access to out-of-replica sources must be able to make the donecheck pass. Assertions that pin content not derivable in-replica (e.g. a full-blob hash of a file whose canonical source lives outside the replica, or content only reconstructible from the historical fix) are inadmissible even though they pass the R11 gate — the gate only runs the historical fix and cannot detect this class. Equality pins against a generator or canonical source are admissible only when that source ships in-replica (T6's regenerator premise). Found by the acceptance seat in batch 1 (t03 a01: blob-hash pin of an out-of-repo template copy).
 
+**r3 (from batch-2 delta acceptance):**
+1. *Disjunction preservation (R4 extension)*: when the source criterion states an explicit disjunction ("X or Y"), the donecheck must accept both branches, or the collapse to one branch must be recorded as a weakening in units.md. The R11 gate is structurally blind to this class — the historical fix always took one branch, so the gate always agrees.
+2. *Derivability covers paths, not just content*: a pinned target path or filename must be derivable from the pre-fix tree, named by the criterion, or given in task.md; otherwise pin the discoverable pointer (e.g. the documented reference line) and resolve the target from it.
+3. *Probe isolation*: T3/T5 probes must isolate mutable process environment (`HOME`, `TMPDIR` at minimum) so concurrent or dirty-workstation runs cannot flake them.
+4. *Metadata–ledger binding*: a commit that changes a task's meta.json (SHAs, timeout) must re-verify that task's units.md narrative in the same commit (the I-2/N1 failure shape: corrected pair, stale ledger prose).
+5. *Standard units.md footer*: every task ledger ends with the anonymization mapping, the longest needle with its derivability basis, and the timeout rationale (t11's footer is the template). Review findings anchor there instead of being re-derived per round.
+
 ## 6. Authorship and acceptance
 
 R13. Author of record for every task: Alpha. Codex (GPT-5.6 Sol) may draft under these rules; the author reviews every line before admission.

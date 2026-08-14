@@ -28,13 +28,15 @@ MOOT: 0
   constitutive and remain visible.
 - Longest T1/T4 needle: `PyYAML` (6 characters). No assertion pins historical
   fix prose.
-- The declared pre-fix tree already has both linters on
-  `scripts/lib_yamlsubset.py`, contains no `PyYAML` in any of the nine named
-  documents, and its full suite reports zero skips. The declared fix changes
-  only generated family-footer blocks in the four READMEs. Consequently this
-  source-faithful gate passes both trees and must fail the R11 pre-fix-fails
-  admission requirement; it is intentionally not tightened with unrelated
-  footer checks.
+- Pair note (superseding the drafter's original R11-fail paragraph; author
+  correction under ledger finding I-2, seat finding N1): the originally
+  surveyed pre_fix (`a55397b5`, the feature-branch tip of a
+  reverse-merge-then-fast-forward) already satisfied every check, which is why
+  the first validity run honestly FAILed. The corrected `pre_fix = 25b426bb`
+  (main before the port landed) has `import yaml` in both linters and PyYAML
+  guidance in the named documents; the corrected pair validates
+  pre FAIL×5 / fix PASS×5 (`../../tools/validate-logs/t12.log`). The gate was
+  not tightened with unrelated footer checks at any point.
 - Timeout remains 120 seconds. The source criterion explicitly demands the full
   suite, so the suite is retained despite the otherwise preferred narrow-probe
   rule.
