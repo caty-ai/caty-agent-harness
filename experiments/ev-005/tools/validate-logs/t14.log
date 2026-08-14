@@ -1,0 +1,142 @@
+== validate t14 pre=0f9cfc69ac06ff39c3d0fe438d87fb8f7ce719c3 fix=8d1b89810b63c7572f970eed65a59be470569256 repo=/Users/shojikumaru/claude-workspace/family-os-caty ==
+CHECK a01 FAIL self-growth repository target is not current
+CHECK a02 FAIL self-growth status is not published
+CHECK a03 FAIL self-growth license is not MIT
+CHECK a04 FAIL self-growth family footer is not enabled
+modules in registry : 9
+retired repositories: 3
+link occurrences    : 118
+reality check       : skipped
+
+OK — every module claim matches the registry.
+CHECK a05 PASS registry checker passes offline
+OK — family footer selftest passed.
+CHECK a06 PASS family-footer self-test passes
+RUN t14 pre 1 exit=1 dur=0s
+CHECK a01 FAIL self-growth repository target is not current
+CHECK a02 FAIL self-growth status is not published
+CHECK a03 FAIL self-growth license is not MIT
+CHECK a04 FAIL self-growth family footer is not enabled
+modules in registry : 9
+retired repositories: 3
+link occurrences    : 118
+reality check       : skipped
+
+OK — every module claim matches the registry.
+CHECK a05 PASS registry checker passes offline
+OK — family footer selftest passed.
+CHECK a06 PASS family-footer self-test passes
+RUN t14 pre 2 exit=1 dur=0s
+CHECK a01 FAIL self-growth repository target is not current
+CHECK a02 FAIL self-growth status is not published
+CHECK a03 FAIL self-growth license is not MIT
+CHECK a04 FAIL self-growth family footer is not enabled
+modules in registry : 9
+retired repositories: 3
+link occurrences    : 118
+reality check       : skipped
+
+OK — every module claim matches the registry.
+CHECK a05 PASS registry checker passes offline
+OK — family footer selftest passed.
+CHECK a06 PASS family-footer self-test passes
+RUN t14 pre 3 exit=1 dur=0s
+CHECK a01 FAIL self-growth repository target is not current
+CHECK a02 FAIL self-growth status is not published
+CHECK a03 FAIL self-growth license is not MIT
+CHECK a04 FAIL self-growth family footer is not enabled
+modules in registry : 9
+retired repositories: 3
+link occurrences    : 118
+reality check       : skipped
+
+OK — every module claim matches the registry.
+CHECK a05 PASS registry checker passes offline
+OK — family footer selftest passed.
+CHECK a06 PASS family-footer self-test passes
+RUN t14 pre 4 exit=1 dur=0s
+CHECK a01 FAIL self-growth repository target is not current
+CHECK a02 FAIL self-growth status is not published
+CHECK a03 FAIL self-growth license is not MIT
+CHECK a04 FAIL self-growth family footer is not enabled
+modules in registry : 9
+retired repositories: 3
+link occurrences    : 118
+reality check       : skipped
+
+OK — every module claim matches the registry.
+CHECK a05 PASS registry checker passes offline
+OK — family footer selftest passed.
+CHECK a06 PASS family-footer self-test passes
+RUN t14 pre 5 exit=1 dur=0s
+CHECK a01 PASS self-growth repository target is current
+CHECK a02 PASS self-growth status is published
+CHECK a03 PASS self-growth license is MIT
+CHECK a04 PASS self-growth family footer is enabled
+modules in registry : 9
+retired repositories: 3
+link occurrences    : 112
+reality check       : skipped
+
+OK — every module claim matches the registry.
+CHECK a05 PASS registry checker passes offline
+OK — family footer selftest passed.
+CHECK a06 PASS family-footer self-test passes
+RUN t14 fix 1 exit=0 dur=0s
+CHECK a01 PASS self-growth repository target is current
+CHECK a02 PASS self-growth status is published
+CHECK a03 PASS self-growth license is MIT
+CHECK a04 PASS self-growth family footer is enabled
+modules in registry : 9
+retired repositories: 3
+link occurrences    : 112
+reality check       : skipped
+
+OK — every module claim matches the registry.
+CHECK a05 PASS registry checker passes offline
+OK — family footer selftest passed.
+CHECK a06 PASS family-footer self-test passes
+RUN t14 fix 2 exit=0 dur=1s
+CHECK a01 PASS self-growth repository target is current
+CHECK a02 PASS self-growth status is published
+CHECK a03 PASS self-growth license is MIT
+CHECK a04 PASS self-growth family footer is enabled
+modules in registry : 9
+retired repositories: 3
+link occurrences    : 112
+reality check       : skipped
+
+OK — every module claim matches the registry.
+CHECK a05 PASS registry checker passes offline
+OK — family footer selftest passed.
+CHECK a06 PASS family-footer self-test passes
+RUN t14 fix 3 exit=0 dur=0s
+CHECK a01 PASS self-growth repository target is current
+CHECK a02 PASS self-growth status is published
+CHECK a03 PASS self-growth license is MIT
+CHECK a04 PASS self-growth family footer is enabled
+modules in registry : 9
+retired repositories: 3
+link occurrences    : 112
+reality check       : skipped
+
+OK — every module claim matches the registry.
+CHECK a05 PASS registry checker passes offline
+OK — family footer selftest passed.
+CHECK a06 PASS family-footer self-test passes
+RUN t14 fix 4 exit=0 dur=0s
+CHECK a01 PASS self-growth repository target is current
+CHECK a02 PASS self-growth status is published
+CHECK a03 PASS self-growth license is MIT
+CHECK a04 PASS self-growth family footer is enabled
+modules in registry : 9
+retired repositories: 3
+link occurrences    : 112
+reality check       : skipped
+
+OK — every module claim matches the registry.
+CHECK a05 PASS registry checker passes offline
+OK — family footer selftest passed.
+CHECK a06 PASS family-footer self-test passes
+RUN t14 fix 5 exit=0 dur=0s
+VERDICT t14 PASS

@@ -1,0 +1,38 @@
+# t11 units ledger
+
+Units: 14 total; covered 14/14
+MECH: 14
+HUMAN: 0
+MOOT: 0
+
+| Unit | Class | Source unit (anonymized) | Mapping / disposition |
+| --- | --- | --- | --- |
+| U1 | MECH | The checker applies the wrapper's symlink refusal. | `a01` (T3 discovered targeted regression test) and `a02` (T5 direct parity probe). |
+| U2 | MECH | Both consumers allow an indented assignment. | `a01` (T3) and `a03` (T5 direct accepted-input probe). |
+| U3 | MECH | Both consumers reject a malformed non-assignment line. | `a01` (T3) and `a04` (T5 direct parity probe). |
+| U4 | MECH | Both consumers reject a value continued onto a second physical line. | `a05` (T5 direct parity probe with an assignment followed by a continuation line). This is separated from U3 because the source explicitly excludes multi-line values. |
+| U5 | MECH | Both consumers reject embedded NUL bytes. | `a01` (T3) and `a06` (T5 direct parity probe). |
+| U6 | MECH | Both consumers reject interpreter- or loader-control names. | `a01` (T3) and `a07` (T5 direct parity probe using `BASH_ENV`, a representative refusal name derivable from the pre-fix wrapper). |
+| U7 | MECH | Rejection is visible as either a stderr `warning:` advisory or a documented stdout `FAIL` row. | `a02`, `a04`–`a07` (T5: each accepts the source's two alternatives). The warning branch requires a `warning:`-prefixed `SECRETS_ENV` row on stderr and no such stdout diagnostic. The `FAIL` branch requires a `SECRETS_ENV`/`FAIL` machine row on stdout, no such stderr diagnostic, and a repository documentation paragraph that co-locates `SECRETS_ENV` with `FAIL`; an undocumented `FAIL` does not pass. |
+| U8 | MECH | A `SECRETS_ENV` advisory does not change the successful check exit contract. | `a02`, `a04`–`a07` (T5: every rejected fixture requires `install.sh --check` exit 0). |
+| U9 | MECH | Grammar and refusal rules have one production source shared by both consumers. | `a08` (T6 structural proxy: the pre-fix-derivable assignment grammar and refusal-list anchor each occur in exactly one identical tracked production file) plus `a02`–`a07` behavior parity. This accepts a shared library or a generated single production source retaining the existing grammar/refusal forms. |
+| U10 | MECH | A targeted regression test proves a wrapper-rejected file is diagnosed by the checker. | `a01` (T3: discover and execute every tracked `tests/*.test.sh` containing the source-derived reject/accept parity markers). On the historical fix the discovery resolves to `bash tests/secrets-env-rules.test.sh`; the filename is intentionally not pinned because it is absent from the pre-fix replica and an honest solution may name the focused test differently. `a02`, `a04`–`a07` independently exercise rejection behavior. |
+| U11 | MECH | A targeted regression test proves wrapper-accepted input stays clean in the checker. | `a01` (same T3 discovery) and `a03` (T5: wrapper succeeds and the checker emits no `SECRETS_ENV` diagnostic). |
+| U12 | MECH | The exact `warning:` prefix remains on stderr. | `a09` (T3 command-exit: `bash tests/check-tickprobe.test.sh`, a pre-fix-derivable focused contract suite) plus the rejected-input probes `a02`, `a04`–`a07`. |
+| U13 | MECH | The exact `missing ` prefix remains on stdout. | `a10` (T5 absent-required-path stream probe). |
+| U14 | MECH | Existing stdout machine rows remain on stdout. | `a09` (T3 focused contract suite, including exact state/bootstrap and learning-row regression checks) and `a11` (T5 healthy-workspace probe requiring the documented row shapes on stdout and none on stderr). |
+
+## Anonymization and needle record
+
+- Mapping: the source repository is rendered as “this repository”; tracker,
+  review-seat, and scheduling-time provenance is omitted.
+- Anonymization-sweep exemptions: `SECRETS_ENV`, `warning:`, and `missing ` are
+  retained because the source criterion names these exact functional tokens.
+  `BASH_ENV` is retained as a pre-fix-derivable representative refusal name,
+  so it does not require an exemption.
+- Longest fixed structural needle: `([A-Za-z_][A-Za-z0-9_]*)=(.*)` (34
+  characters). It is the pre-fix assignment grammar, not a sentence of fix
+  prose; no T1/T4 needle pins historical fix wording.
+- Timeout remains the default 120 seconds. The two focused T3 suites and the
+  temporary-workspace T5 probes replace a full `make test` run, so no
+  escalation is needed.

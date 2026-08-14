@@ -1,0 +1,9 @@
+{
+  "id": "t13",
+  "source_repo": "caty-ai/family-memory-architecture",
+  "source_issue": 11,
+  "pre_fix": "8676d8385bc08e1a3e2604fe1ff24b3fa35ba1f4",
+  "fix": "775fc364058575444d23bb63f672b30c94b4f932",
+  "synthetic": false,
+  "timeout_s": 120
+}

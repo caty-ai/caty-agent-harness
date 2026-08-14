@@ -1,0 +1,248 @@
+#!/bin/bash
+set -u
+LC_ALL=C
+export LC_ALL
+
+ROOT=$(pwd)
+FIXTURES="$ROOT/.ev005-fixtures"
+TMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/ev005-t11.XXXXXX") || exit 1
+failures=0
+trap 'rm -rf "$TMP_ROOT"' EXIT HUP INT TERM
+
+pass_check() {
+  printf 'CHECK %s PASS %s\n' "$1" "$2"
+}
+
+fail_check() {
+  printf 'CHECK %s FAIL %s\n' "$1" "$2"
+  failures=$((failures + 1))
+}
+
+run_check() {
+  local check_id=$1
+  local pass_msg=$2
+  local fail_msg=$3
+  shift 3
+  if "$@"; then
+    pass_check "$check_id" "$pass_msg"
+  else
+    fail_check "$check_id" "$fail_msg"
+  fi
+}
+
+seed_workspace() {
+  local name=$1
+  local workspace="$TMP_ROOT/ws-$name"
+  "$ROOT/install.sh" --workspace "$workspace" >/dev/null 2>&1 || return 1
+  printf '%s\n' '- fixture; 2000-01-01T00:00' >>"$workspace/STATE.md" || return 1
+  printf '%s\n' '- 2000-01-01 | task=fixture | verifier=test | verdict=pass | fixture' \
+    >>"$workspace/loop/VERIFY.log.md" || return 1
+  printf '%s\n' "$workspace"
+}
+
+install_configured_wrapper() {
+  local workspace=$1
+  local secrets_file=$2
+  local wrapper="$workspace/scripts/cron-wrapper.sh"
+  mkdir -p "$workspace/scripts" || return 1
+  awk -v secrets_file="$secrets_file" '
+    NR == 2 { printf "SECRETS_ENV=\"%s\"\n", secrets_file }
+    { print }
+  ' "$ROOT/templates/cron-wrapper.tmpl.sh" >"$wrapper" || return 1
+  chmod +x "$wrapper" || return 1
+  printf '%s\n' "$wrapper"
+}
+
+has_documented_secrets_fail_contract() {
+  local doc
+  for doc in $(git ls-files -- '*.md' 2>/dev/null); do
+    [ -f "$doc" ] || continue
+    if awk 'BEGIN { RS="" } /SECRETS_ENV/ && /FAIL/ { found=1 } END { exit !found }' "$doc"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+run_prediction() {
+  local name=$1
+  local secrets_file=$2
+  local expected=$3
+  local fragment=$4
+  local workspace wrapper check_rc wrapper_rc
+
+  workspace=$(seed_workspace "$name") || return 1
+  wrapper=$(install_configured_wrapper "$workspace" "$secrets_file") || return 1
+
+  "$ROOT/install.sh" --check --workspace "$workspace" \
+    >"$TMP_ROOT/$name.check.out" 2>"$TMP_ROOT/$name.check.err"
+  check_rc=$?
+  TARGET="$TMP_ROOT/recorder" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$workspace" \
+    "$wrapper" >"$TMP_ROOT/$name.wrapper.out" 2>"$TMP_ROOT/$name.wrapper.err"
+  wrapper_rc=$?
+
+  if [ "$expected" = accept ]; then
+    [ "$check_rc" -eq 0 ] \
+      && [ "$wrapper_rc" -eq 0 ] \
+      && grep -Fxq 'ran' "$TMP_ROOT/$name.wrapper.out" \
+      && ! grep -Fq 'SECRETS_ENV' "$TMP_ROOT/$name.check.out" \
+      && ! grep -Fq 'SECRETS_ENV' "$TMP_ROOT/$name.check.err"
+    return
+  fi
+
+  [ "$check_rc" -eq 0 ] || return 1
+  [ "$wrapper_rc" -ne 0 ] || return 1
+  grep -Fq 'cron-wrapper infra error:' "$TMP_ROOT/$name.wrapper.err" || return 1
+  if grep -Fq "$fragment" "$TMP_ROOT/$name.check.err" \
+    && grep -Eq '^warning: .*SECRETS_ENV' "$TMP_ROOT/$name.check.err" \
+    && ! grep -Fq 'SECRETS_ENV' "$TMP_ROOT/$name.check.out"; then
+    return 0
+  fi
+  grep -Fq "$fragment" "$TMP_ROOT/$name.check.out" \
+    && grep -Eiq '(^|[[:space:]])FAIL([[:space:]]|:).*SECRETS_ENV|SECRETS_ENV.*(^|[[:space:]])FAIL([[:space:]]|:)' \
+      "$TMP_ROOT/$name.check.out" \
+    && ! grep -Fq 'SECRETS_ENV' "$TMP_ROOT/$name.check.err" \
+    && has_documented_secrets_fail_contract
+}
+
+check_targeted_secrets_regression() {
+  local test_path matched marker
+  local found=0
+  for test_path in tests/*.test.sh; do
+    [ -f "$test_path" ] || continue
+    matched=1
+    for marker in 'SECRETS_ENV' 'install.sh' '--check' 'wrapper' 'symlink' \
+      'embedded NUL' 'interpreter-control'; do
+      if ! grep -Fqi -- "$marker" "$test_path"; then
+        matched=0
+        break
+      fi
+    done
+    if [ "$matched" -eq 1 ] \
+      && grep -Eqi 'reject' "$test_path" \
+      && grep -Eqi 'accept' "$test_path"; then
+      found=$((found + 1))
+      bash "$test_path" >/dev/null 2>&1 || return 1
+    fi
+  done
+  [ "$found" -ge 1 ]
+}
+
+check_single_source() {
+  local production_files file
+  local refusal_locations=''
+  local grammar_locations=''
+  production_files=$(git ls-files -- install.sh templates/cron-wrapper.tmpl.sh scripts 2>/dev/null) || return 1
+  [ -n "$production_files" ] || return 1
+  while IFS= read -r file; do
+    [ -f "$file" ] || continue
+    if grep -Fq 'BASH_ENV|ENV|SHELLOPTS' "$file"; then
+      refusal_locations="${refusal_locations}${file}\n"
+    fi
+    if grep -Fq '([A-Za-z_][A-Za-z0-9_]*)=(.*)' "$file"; then
+      grammar_locations="${grammar_locations}${file}\n"
+    fi
+  done <<EOF
+$production_files
+EOF
+  [ "$(printf '%b' "$refusal_locations" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 1 ] \
+    && [ "$(printf '%b' "$grammar_locations" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 1 ] \
+    && [ "$refusal_locations" = "$grammar_locations" ]
+}
+
+check_cli_contract_suite() {
+  bash tests/check-tickprobe.test.sh >/dev/null 2>&1
+}
+
+check_missing_prefix() {
+  local workspace check_rc
+  workspace=$(seed_workspace prefix-missing) || return 1
+  rm "$workspace/STATE.md" || return 1
+  "$ROOT/install.sh" --check --workspace "$workspace" \
+    >"$TMP_ROOT/prefix-missing.out" 2>"$TMP_ROOT/prefix-missing.err"
+  check_rc=$?
+  [ "$check_rc" -ne 0 ] \
+    && grep -Eq '^missing path: ' "$TMP_ROOT/prefix-missing.out" \
+    && ! grep -Eq '^missing (path|header): ' "$TMP_ROOT/prefix-missing.err"
+}
+
+check_stdout_rows() {
+  local workspace check_rc
+  workspace=$(seed_workspace stdout-rows) || return 1
+  "$ROOT/install.sh" --check --workspace "$workspace" \
+    >"$TMP_ROOT/stdout-rows.out" 2>"$TMP_ROOT/stdout-rows.err"
+  check_rc=$?
+  [ "$check_rc" -eq 0 ] \
+    && grep -Fqx 'state=enabled' "$TMP_ROOT/stdout-rows.out" \
+    && grep -Fqx 'bootstrap_state=unknown' "$TMP_ROOT/stdout-rows.out" \
+    && grep -Eq '^check: workspace /' "$TMP_ROOT/stdout-rows.out" \
+    && grep -Eq '^learning path: adapter=[^ ]+ \| route=.+ \| (PASS|FAIL)$' "$TMP_ROOT/stdout-rows.out" \
+    && grep -Fqx 'ok: required layout and STATE.md headers present' "$TMP_ROOT/stdout-rows.out" \
+    && ! grep -Eq '^(state=|bootstrap_state=|check:|missing path:|missing header:|ok:|learning path:)' \
+      "$TMP_ROOT/stdout-rows.err"
+}
+
+[ -d "$FIXTURES" ] || {
+  fail_check a01 'bundled fixtures are missing'
+  exit 1
+}
+
+for fixture in valid.env malformed.env multiline.env refused.env; do
+  [ -f "$FIXTURES/$fixture" ] || {
+    fail_check a01 "bundled fixture $fixture is missing"
+    exit 1
+  }
+done
+
+cat >"$TMP_ROOT/recorder" <<'EOF'
+#!/bin/bash
+printf 'ran\n'
+EOF
+chmod +x "$TMP_ROOT/recorder"
+
+cp "$FIXTURES/valid.env" "$TMP_ROOT/valid.env"
+cp "$FIXTURES/malformed.env" "$TMP_ROOT/malformed.env"
+cp "$FIXTURES/multiline.env" "$TMP_ROOT/multiline.env"
+cp "$FIXTURES/refused.env" "$TMP_ROOT/refused.env"
+printf 'GOOD=left\nBROKEN=right\0tail\n' >"$TMP_ROOT/nul.env"
+printf 'GOOD=value\n' >"$TMP_ROOT/symlink-target.env"
+ln -s "$TMP_ROOT/symlink-target.env" "$TMP_ROOT/symlink.env"
+chmod 600 "$TMP_ROOT/valid.env" "$TMP_ROOT/malformed.env" \
+  "$TMP_ROOT/multiline.env" "$TMP_ROOT/refused.env" "$TMP_ROOT/nul.env" \
+  "$TMP_ROOT/symlink-target.env"
+
+run_check a01 'targeted reject/accept regression test passes' \
+  'targeted reject/accept regression test is missing or fails' \
+  check_targeted_secrets_regression
+run_check a02 'symlink refusal is predicted with an advisory' \
+  'symlink refusal is not predicted with an advisory' \
+  run_prediction symlink "$TMP_ROOT/symlink.env" reject 'symlink'
+run_check a03 'indented assignment is accepted and stays clean' \
+  'indented assignment is rejected or diagnosed' \
+  run_prediction valid "$TMP_ROOT/valid.env" accept ''
+run_check a04 'malformed assignment is rejected and predicted' \
+  'malformed assignment is not rejected and predicted' \
+  run_prediction malformed "$TMP_ROOT/malformed.env" reject 'KEY=VALUE assignment'
+run_check a05 'multi-line value is rejected and predicted' \
+  'multi-line value is not rejected and predicted' \
+  run_prediction multiline "$TMP_ROOT/multiline.env" reject 'KEY=VALUE assignment'
+run_check a06 'embedded NUL is rejected and predicted' \
+  'embedded NUL is not rejected and predicted' \
+  run_prediction nul "$TMP_ROOT/nul.env" reject 'embedded NUL byte'
+run_check a07 'interpreter-control name is rejected and predicted' \
+  'interpreter-control name is not rejected and predicted' \
+  run_prediction refused "$TMP_ROOT/refused.env" reject 'interpreter-control name BASH_ENV'
+run_check a08 'acceptance grammar and refusal list have one production source' \
+  'acceptance grammar and refusal list do not have one production source' \
+  check_single_source
+run_check a09 'focused checker output-contract regression suite passes' \
+  'focused checker output-contract regression suite fails' \
+  check_cli_contract_suite
+run_check a10 'missing prefix remains on stdout' \
+  'missing prefix or its stream changed' \
+  check_missing_prefix
+run_check a11 'documented machine-row shapes remain on stdout' \
+  'documented machine-row shapes or their stream changed' \
+  check_stdout_rows
+
+[ "$failures" -eq 0 ]

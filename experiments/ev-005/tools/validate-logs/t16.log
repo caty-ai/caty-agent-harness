@@ -1,0 +1,72 @@
+== validate t16 pre=bf6483d4d90d71a193ea6c3d3cb2873e54374b9b fix=45b29ee31479bcca8db40d88b3a9a0bc8594b51e repo=/Users/shojikumaru/claude-workspace/fma-public ==
+CHECK a01 PASS recall accepts a mode-0600 credentials env file
+CHECK a02 FAIL recall accepts a non-0600 file or its error does not identify the mode requirement
+CHECK a03 FAIL no recall regression test mechanically covers mode-0600 acceptance
+CHECK a04 FAIL no recall regression test mechanically covers non-0600 rejection
+CHECK a05 PASS the targeted recall regression test module passes
+CHECK a06 FAIL recall usage does not document runtime mode-0600 enforcement
+RUN t16 pre 1 exit=1 dur=2s
+CHECK a01 PASS recall accepts a mode-0600 credentials env file
+CHECK a02 FAIL recall accepts a non-0600 file or its error does not identify the mode requirement
+CHECK a03 FAIL no recall regression test mechanically covers mode-0600 acceptance
+CHECK a04 FAIL no recall regression test mechanically covers non-0600 rejection
+CHECK a05 PASS the targeted recall regression test module passes
+CHECK a06 FAIL recall usage does not document runtime mode-0600 enforcement
+RUN t16 pre 2 exit=1 dur=2s
+CHECK a01 PASS recall accepts a mode-0600 credentials env file
+CHECK a02 FAIL recall accepts a non-0600 file or its error does not identify the mode requirement
+CHECK a03 FAIL no recall regression test mechanically covers mode-0600 acceptance
+CHECK a04 FAIL no recall regression test mechanically covers non-0600 rejection
+CHECK a05 PASS the targeted recall regression test module passes
+CHECK a06 FAIL recall usage does not document runtime mode-0600 enforcement
+RUN t16 pre 3 exit=1 dur=2s
+CHECK a01 PASS recall accepts a mode-0600 credentials env file
+CHECK a02 FAIL recall accepts a non-0600 file or its error does not identify the mode requirement
+CHECK a03 FAIL no recall regression test mechanically covers mode-0600 acceptance
+CHECK a04 FAIL no recall regression test mechanically covers non-0600 rejection
+CHECK a05 PASS the targeted recall regression test module passes
+CHECK a06 FAIL recall usage does not document runtime mode-0600 enforcement
+RUN t16 pre 4 exit=1 dur=2s
+CHECK a01 PASS recall accepts a mode-0600 credentials env file
+CHECK a02 FAIL recall accepts a non-0600 file or its error does not identify the mode requirement
+CHECK a03 FAIL no recall regression test mechanically covers mode-0600 acceptance
+CHECK a04 FAIL no recall regression test mechanically covers non-0600 rejection
+CHECK a05 PASS the targeted recall regression test module passes
+CHECK a06 FAIL recall usage does not document runtime mode-0600 enforcement
+RUN t16 pre 5 exit=1 dur=2s
+CHECK a01 PASS recall accepts a mode-0600 credentials env file
+CHECK a02 PASS recall clearly rejects a non-0600 credentials env file
+CHECK a03 PASS the recall regression tests cover mode-0600 acceptance
+CHECK a04 PASS the recall regression tests cover non-0600 rejection
+CHECK a05 PASS the targeted recall regression test module passes
+CHECK a06 PASS recall usage documents runtime mode-0600 enforcement
+RUN t16 fix 1 exit=0 dur=2s
+CHECK a01 PASS recall accepts a mode-0600 credentials env file
+CHECK a02 PASS recall clearly rejects a non-0600 credentials env file
+CHECK a03 PASS the recall regression tests cover mode-0600 acceptance
+CHECK a04 PASS the recall regression tests cover non-0600 rejection
+CHECK a05 PASS the targeted recall regression test module passes
+CHECK a06 PASS recall usage documents runtime mode-0600 enforcement
+RUN t16 fix 2 exit=0 dur=2s
+CHECK a01 PASS recall accepts a mode-0600 credentials env file
+CHECK a02 PASS recall clearly rejects a non-0600 credentials env file
+CHECK a03 PASS the recall regression tests cover mode-0600 acceptance
+CHECK a04 PASS the recall regression tests cover non-0600 rejection
+CHECK a05 PASS the targeted recall regression test module passes
+CHECK a06 PASS recall usage documents runtime mode-0600 enforcement
+RUN t16 fix 3 exit=0 dur=2s
+CHECK a01 PASS recall accepts a mode-0600 credentials env file
+CHECK a02 PASS recall clearly rejects a non-0600 credentials env file
+CHECK a03 PASS the recall regression tests cover mode-0600 acceptance
+CHECK a04 PASS the recall regression tests cover non-0600 rejection
+CHECK a05 PASS the targeted recall regression test module passes
+CHECK a06 PASS recall usage documents runtime mode-0600 enforcement
+RUN t16 fix 4 exit=0 dur=2s
+CHECK a01 PASS recall accepts a mode-0600 credentials env file
+CHECK a02 PASS recall clearly rejects a non-0600 credentials env file
+CHECK a03 PASS the recall regression tests cover mode-0600 acceptance
+CHECK a04 PASS the recall regression tests cover non-0600 rejection
+CHECK a05 PASS the targeted recall regression test module passes
+CHECK a06 PASS recall usage documents runtime mode-0600 enforcement
+RUN t16 fix 5 exit=0 dur=2s
+VERDICT t16 PASS

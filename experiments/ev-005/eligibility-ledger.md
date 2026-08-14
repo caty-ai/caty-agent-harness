@@ -15,6 +15,8 @@
 | test_cmd claims | harness Makefile `test` target, FMA README run_tests line, sgl README `tests/run.sh` | OK as quoted |
 | fact/judgement separation | survey contains only facts + UNKNOWN cells with evidence | OK |
 
+**Finding I-2 (pair correction, batch-2 authoring 2026-08-14):** family-memory-architecture#1's PR #8 was merged by reverse-merge-then-fast-forward: the recorded merge commit `8676d838` was created **on the feature branch** ("Merge main into issue-1-stdlib-port"), so its parent[0] is the feature tip `a55397b5` — which already contains the port. The survey convention `pre_fix = parent[0] of fix` therefore yielded a pre-tree that satisfies the criterion, caught mechanically by the batch-2 drafter's honest validity FAIL (all derived checks pass on the wrong pre-tree). Corrected pair: `pre_fix = 25b426bb` (parent[1], main before the port landed; `import yaml` present in both scripts), `fix = 8676d838` (unchanged). Row updated below. The other 17 re-enactment pairs are functionally confirmed by their validity runs (pre FAIL×5 / fix PASS×5), which this failure mode cannot survive.
+
 **Finding I-1 (survey correction, adopted):** the survey's `done_when` column detected *headings* only (`## Done when` / `完了条件`). Five family-memory-architecture issues (#1 #2 #3 #4 #11) carry an inline `Done when:` sentence in the body prose — substantively a completion criterion. Their `done_when` is corrected NO → **YES (inline)**. All other NO rows were re-read and stay NO (harness#19 and #14 are epic bodies whose only "Done when" occurrences are checkpoint-table references; family-os#10/#5/#2 have none).
 
 ## 2. Verdict vocabulary

@@ -1,0 +1,142 @@
+== validate t12 pre=25b426bbe34c28ce0e18a3db84f557e18350b793 fix=8676d8385bc08e1a3e2604fe1ff24b3fa35ba1f4 repo=/Users/shojikumaru/claude-workspace/fma-public ==
+CHECK a01 FAIL content-lint imports yaml or cannot be parsed
+CHECK a02 FAIL injection-lint imports yaml or cannot be parsed
+CHECK a03 FAIL README.md retains PyYAML guidance or is missing
+CHECK a04 FAIL README.ja.md retains PyYAML guidance or is missing
+CHECK a05 FAIL README.th.md retains PyYAML guidance or is missing
+CHECK a06 FAIL README.zh.md retains PyYAML guidance or is missing
+CHECK a07 FAIL repository map retains PyYAML guidance or is missing
+CHECK a08 FAIL getting started retains PyYAML guidance or is missing
+CHECK a09 FAIL agent guide retains PyYAML guidance or is missing
+CHECK a10 FAIL contributing guide retains PyYAML guidance or is missing
+CHECK a11 FAIL security guide retains PyYAML guidance or is missing
+CHECK a12 PASS full repository suite passes
+CHECK a13 PASS full repository suite reports no skips
+RUN t12 pre 1 exit=1 dur=22s
+CHECK a01 FAIL content-lint imports yaml or cannot be parsed
+CHECK a02 FAIL injection-lint imports yaml or cannot be parsed
+CHECK a03 FAIL README.md retains PyYAML guidance or is missing
+CHECK a04 FAIL README.ja.md retains PyYAML guidance or is missing
+CHECK a05 FAIL README.th.md retains PyYAML guidance or is missing
+CHECK a06 FAIL README.zh.md retains PyYAML guidance or is missing
+CHECK a07 FAIL repository map retains PyYAML guidance or is missing
+CHECK a08 FAIL getting started retains PyYAML guidance or is missing
+CHECK a09 FAIL agent guide retains PyYAML guidance or is missing
+CHECK a10 FAIL contributing guide retains PyYAML guidance or is missing
+CHECK a11 FAIL security guide retains PyYAML guidance or is missing
+CHECK a12 PASS full repository suite passes
+CHECK a13 PASS full repository suite reports no skips
+RUN t12 pre 2 exit=1 dur=22s
+CHECK a01 FAIL content-lint imports yaml or cannot be parsed
+CHECK a02 FAIL injection-lint imports yaml or cannot be parsed
+CHECK a03 FAIL README.md retains PyYAML guidance or is missing
+CHECK a04 FAIL README.ja.md retains PyYAML guidance or is missing
+CHECK a05 FAIL README.th.md retains PyYAML guidance or is missing
+CHECK a06 FAIL README.zh.md retains PyYAML guidance or is missing
+CHECK a07 FAIL repository map retains PyYAML guidance or is missing
+CHECK a08 FAIL getting started retains PyYAML guidance or is missing
+CHECK a09 FAIL agent guide retains PyYAML guidance or is missing
+CHECK a10 FAIL contributing guide retains PyYAML guidance or is missing
+CHECK a11 FAIL security guide retains PyYAML guidance or is missing
+CHECK a12 PASS full repository suite passes
+CHECK a13 PASS full repository suite reports no skips
+RUN t12 pre 3 exit=1 dur=21s
+CHECK a01 FAIL content-lint imports yaml or cannot be parsed
+CHECK a02 FAIL injection-lint imports yaml or cannot be parsed
+CHECK a03 FAIL README.md retains PyYAML guidance or is missing
+CHECK a04 FAIL README.ja.md retains PyYAML guidance or is missing
+CHECK a05 FAIL README.th.md retains PyYAML guidance or is missing
+CHECK a06 FAIL README.zh.md retains PyYAML guidance or is missing
+CHECK a07 FAIL repository map retains PyYAML guidance or is missing
+CHECK a08 FAIL getting started retains PyYAML guidance or is missing
+CHECK a09 FAIL agent guide retains PyYAML guidance or is missing
+CHECK a10 FAIL contributing guide retains PyYAML guidance or is missing
+CHECK a11 FAIL security guide retains PyYAML guidance or is missing
+CHECK a12 PASS full repository suite passes
+CHECK a13 PASS full repository suite reports no skips
+RUN t12 pre 4 exit=1 dur=22s
+CHECK a01 FAIL content-lint imports yaml or cannot be parsed
+CHECK a02 FAIL injection-lint imports yaml or cannot be parsed
+CHECK a03 FAIL README.md retains PyYAML guidance or is missing
+CHECK a04 FAIL README.ja.md retains PyYAML guidance or is missing
+CHECK a05 FAIL README.th.md retains PyYAML guidance or is missing
+CHECK a06 FAIL README.zh.md retains PyYAML guidance or is missing
+CHECK a07 FAIL repository map retains PyYAML guidance or is missing
+CHECK a08 FAIL getting started retains PyYAML guidance or is missing
+CHECK a09 FAIL agent guide retains PyYAML guidance or is missing
+CHECK a10 FAIL contributing guide retains PyYAML guidance or is missing
+CHECK a11 FAIL security guide retains PyYAML guidance or is missing
+CHECK a12 PASS full repository suite passes
+CHECK a13 PASS full repository suite reports no skips
+RUN t12 pre 5 exit=1 dur=21s
+CHECK a01 PASS content-lint has no yaml import
+CHECK a02 PASS injection-lint has no yaml import
+CHECK a03 PASS README.md has no PyYAML guidance
+CHECK a04 PASS README.ja.md has no PyYAML guidance
+CHECK a05 PASS README.th.md has no PyYAML guidance
+CHECK a06 PASS README.zh.md has no PyYAML guidance
+CHECK a07 PASS repository map has no PyYAML guidance
+CHECK a08 PASS getting started has no PyYAML guidance
+CHECK a09 PASS agent guide has no PyYAML guidance
+CHECK a10 PASS contributing guide has no PyYAML guidance
+CHECK a11 PASS security guide has no PyYAML guidance
+CHECK a12 PASS full repository suite passes
+CHECK a13 PASS full repository suite reports no skips
+RUN t12 fix 1 exit=0 dur=22s
+CHECK a01 PASS content-lint has no yaml import
+CHECK a02 PASS injection-lint has no yaml import
+CHECK a03 PASS README.md has no PyYAML guidance
+CHECK a04 PASS README.ja.md has no PyYAML guidance
+CHECK a05 PASS README.th.md has no PyYAML guidance
+CHECK a06 PASS README.zh.md has no PyYAML guidance
+CHECK a07 PASS repository map has no PyYAML guidance
+CHECK a08 PASS getting started has no PyYAML guidance
+CHECK a09 PASS agent guide has no PyYAML guidance
+CHECK a10 PASS contributing guide has no PyYAML guidance
+CHECK a11 PASS security guide has no PyYAML guidance
+CHECK a12 PASS full repository suite passes
+CHECK a13 PASS full repository suite reports no skips
+RUN t12 fix 2 exit=0 dur=22s
+CHECK a01 PASS content-lint has no yaml import
+CHECK a02 PASS injection-lint has no yaml import
+CHECK a03 PASS README.md has no PyYAML guidance
+CHECK a04 PASS README.ja.md has no PyYAML guidance
+CHECK a05 PASS README.th.md has no PyYAML guidance
+CHECK a06 PASS README.zh.md has no PyYAML guidance
+CHECK a07 PASS repository map has no PyYAML guidance
+CHECK a08 PASS getting started has no PyYAML guidance
+CHECK a09 PASS agent guide has no PyYAML guidance
+CHECK a10 PASS contributing guide has no PyYAML guidance
+CHECK a11 PASS security guide has no PyYAML guidance
+CHECK a12 PASS full repository suite passes
+CHECK a13 PASS full repository suite reports no skips
+RUN t12 fix 3 exit=0 dur=21s
+CHECK a01 PASS content-lint has no yaml import
+CHECK a02 PASS injection-lint has no yaml import
+CHECK a03 PASS README.md has no PyYAML guidance
+CHECK a04 PASS README.ja.md has no PyYAML guidance
+CHECK a05 PASS README.th.md has no PyYAML guidance
+CHECK a06 PASS README.zh.md has no PyYAML guidance
+CHECK a07 PASS repository map has no PyYAML guidance
+CHECK a08 PASS getting started has no PyYAML guidance
+CHECK a09 PASS agent guide has no PyYAML guidance
+CHECK a10 PASS contributing guide has no PyYAML guidance
+CHECK a11 PASS security guide has no PyYAML guidance
+CHECK a12 PASS full repository suite passes
+CHECK a13 PASS full repository suite reports no skips
+RUN t12 fix 4 exit=0 dur=22s
+CHECK a01 PASS content-lint has no yaml import
+CHECK a02 PASS injection-lint has no yaml import
+CHECK a03 PASS README.md has no PyYAML guidance
+CHECK a04 PASS README.ja.md has no PyYAML guidance
+CHECK a05 PASS README.th.md has no PyYAML guidance
+CHECK a06 PASS README.zh.md has no PyYAML guidance
+CHECK a07 PASS repository map has no PyYAML guidance
+CHECK a08 PASS getting started has no PyYAML guidance
+CHECK a09 PASS agent guide has no PyYAML guidance
+CHECK a10 PASS contributing guide has no PyYAML guidance
+CHECK a11 PASS security guide has no PyYAML guidance
+CHECK a12 PASS full repository suite passes
+CHECK a13 PASS full repository suite reports no skips
+RUN t12 fix 5 exit=0 dur=22s
+VERDICT t12 PASS
