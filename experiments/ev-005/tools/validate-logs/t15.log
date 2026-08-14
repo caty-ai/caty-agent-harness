@@ -1,52 +1,52 @@
 == validate t15 pre=7ca137241bda11caaa8130123c5fb1e23eeeeeab fix=b875dae96015f5e0759da643d42bea68516f4b63 repo=/Users/shojikumaru/claude-workspace/fma-public ==
-CHECK a01 FAIL injection-budget-check bundled input is missing or does not exit 0
-CHECK a02 FAIL injection-lint bundled input is missing or does not exit 0
-CHECK a03 FAIL watchdog bundled input is missing or does not exit 0
-CHECK a04 FAIL no README or repository-map line points to the fixture set
+CHECK a01 FAIL could not uniquely resolve a documented fixture path or flag
+CHECK a02 FAIL could not uniquely resolve a documented fixture path or flag
+CHECK a03 FAIL could not uniquely resolve a documented fixture path or flag
+CHECK a04 FAIL no unique README or repository-map line resolves the fixture path or flag
 RUN t15 pre 1 exit=1 dur=0s
-CHECK a01 FAIL injection-budget-check bundled input is missing or does not exit 0
-CHECK a02 FAIL injection-lint bundled input is missing or does not exit 0
-CHECK a03 FAIL watchdog bundled input is missing or does not exit 0
-CHECK a04 FAIL no README or repository-map line points to the fixture set
+CHECK a01 FAIL could not uniquely resolve a documented fixture path or flag
+CHECK a02 FAIL could not uniquely resolve a documented fixture path or flag
+CHECK a03 FAIL could not uniquely resolve a documented fixture path or flag
+CHECK a04 FAIL no unique README or repository-map line resolves the fixture path or flag
 RUN t15 pre 2 exit=1 dur=0s
-CHECK a01 FAIL injection-budget-check bundled input is missing or does not exit 0
-CHECK a02 FAIL injection-lint bundled input is missing or does not exit 0
-CHECK a03 FAIL watchdog bundled input is missing or does not exit 0
-CHECK a04 FAIL no README or repository-map line points to the fixture set
+CHECK a01 FAIL could not uniquely resolve a documented fixture path or flag
+CHECK a02 FAIL could not uniquely resolve a documented fixture path or flag
+CHECK a03 FAIL could not uniquely resolve a documented fixture path or flag
+CHECK a04 FAIL no unique README or repository-map line resolves the fixture path or flag
 RUN t15 pre 3 exit=1 dur=0s
-CHECK a01 FAIL injection-budget-check bundled input is missing or does not exit 0
-CHECK a02 FAIL injection-lint bundled input is missing or does not exit 0
-CHECK a03 FAIL watchdog bundled input is missing or does not exit 0
-CHECK a04 FAIL no README or repository-map line points to the fixture set
+CHECK a01 FAIL could not uniquely resolve a documented fixture path or flag
+CHECK a02 FAIL could not uniquely resolve a documented fixture path or flag
+CHECK a03 FAIL could not uniquely resolve a documented fixture path or flag
+CHECK a04 FAIL no unique README or repository-map line resolves the fixture path or flag
 RUN t15 pre 4 exit=1 dur=0s
-CHECK a01 FAIL injection-budget-check bundled input is missing or does not exit 0
-CHECK a02 FAIL injection-lint bundled input is missing or does not exit 0
-CHECK a03 FAIL watchdog bundled input is missing or does not exit 0
-CHECK a04 FAIL no README or repository-map line points to the fixture set
-RUN t15 pre 5 exit=1 dur=1s
-CHECK a01 PASS injection-budget-check accepts its bundled input
-CHECK a02 PASS injection-lint accepts its bundled input
-CHECK a03 PASS watchdog accepts its bundled input
-CHECK a04 PASS a README or the repository map points to the fixture set
-RUN t15 fix 1 exit=0 dur=0s
-CHECK a01 PASS injection-budget-check accepts its bundled input
-CHECK a02 PASS injection-lint accepts its bundled input
-CHECK a03 PASS watchdog accepts its bundled input
-CHECK a04 PASS a README or the repository map points to the fixture set
-RUN t15 fix 2 exit=0 dur=0s
-CHECK a01 PASS injection-budget-check accepts its bundled input
-CHECK a02 PASS injection-lint accepts its bundled input
-CHECK a03 PASS watchdog accepts its bundled input
-CHECK a04 PASS a README or the repository map points to the fixture set
-RUN t15 fix 3 exit=0 dur=0s
-CHECK a01 PASS injection-budget-check accepts its bundled input
-CHECK a02 PASS injection-lint accepts its bundled input
-CHECK a03 PASS watchdog accepts its bundled input
-CHECK a04 PASS a README or the repository map points to the fixture set
+CHECK a01 FAIL could not uniquely resolve a documented fixture path or flag
+CHECK a02 FAIL could not uniquely resolve a documented fixture path or flag
+CHECK a03 FAIL could not uniquely resolve a documented fixture path or flag
+CHECK a04 FAIL no unique README or repository-map line resolves the fixture path or flag
+RUN t15 pre 5 exit=1 dur=0s
+CHECK a01 PASS injection-budget-check accepts its documented bundled input
+CHECK a02 PASS injection-lint accepts its documented bundled input
+CHECK a03 PASS watchdog accepts its documented bundled input
+CHECK a04 PASS one README or repository-map line resolves the fixture path or flag
+RUN t15 fix 1 exit=0 dur=1s
+CHECK a01 PASS injection-budget-check accepts its documented bundled input
+CHECK a02 PASS injection-lint accepts its documented bundled input
+CHECK a03 PASS watchdog accepts its documented bundled input
+CHECK a04 PASS one README or repository-map line resolves the fixture path or flag
+RUN t15 fix 2 exit=0 dur=1s
+CHECK a01 PASS injection-budget-check accepts its documented bundled input
+CHECK a02 PASS injection-lint accepts its documented bundled input
+CHECK a03 PASS watchdog accepts its documented bundled input
+CHECK a04 PASS one README or repository-map line resolves the fixture path or flag
+RUN t15 fix 3 exit=0 dur=1s
+CHECK a01 PASS injection-budget-check accepts its documented bundled input
+CHECK a02 PASS injection-lint accepts its documented bundled input
+CHECK a03 PASS watchdog accepts its documented bundled input
+CHECK a04 PASS one README or repository-map line resolves the fixture path or flag
 RUN t15 fix 4 exit=0 dur=0s
-CHECK a01 PASS injection-budget-check accepts its bundled input
-CHECK a02 PASS injection-lint accepts its bundled input
-CHECK a03 PASS watchdog accepts its bundled input
-CHECK a04 PASS a README or the repository map points to the fixture set
-RUN t15 fix 5 exit=0 dur=0s
+CHECK a01 PASS injection-budget-check accepts its documented bundled input
+CHECK a02 PASS injection-lint accepts its documented bundled input
+CHECK a03 PASS watchdog accepts its documented bundled input
+CHECK a04 PASS one README or repository-map line resolves the fixture path or flag
+RUN t15 fix 5 exit=0 dur=1s
 VERDICT t15 PASS

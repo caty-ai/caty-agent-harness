@@ -16,15 +16,29 @@ fail_check() {
 }
 
 run_probe() {
-  check_id=$1
-  probe_mode=$2
-  pass_msg=$3
-  fail_msg=$4
+  local check_id=$1
+  local probe_mode=$2
+  local pass_msg=$3
+  local fail_msg=$4
+  local env_root rc
   if [ ! -f "$PROBE" ]; then
     fail_check "$check_id" "missing bundled behavior probe"
     return
   fi
-  if PYTHONDONTWRITEBYTECODE=1 python3 "$PROBE" "$probe_mode" >/dev/null 2>&1; then
+  env_root=$(mktemp -d "${TMPDIR:-/tmp}/ev005-t16-probe.XXXXXX") || {
+    fail_check "$check_id" "could not create isolated behavior-probe root"
+    return
+  }
+  mkdir -p "$env_root/home" "$env_root/tmp" || {
+    rm -rf "$env_root"
+    fail_check "$check_id" "could not create isolated HOME and TMPDIR"
+    return
+  }
+  HOME="$env_root/home" TMPDIR="$env_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
+    python3 "$PROBE" "$probe_mode" >/dev/null 2>&1
+  rc=$?
+  rm -rf "$env_root"
+  if [ "$rc" -eq 0 ]; then
     pass_check "$check_id" "$pass_msg"
   else
     fail_check "$check_id" "$fail_msg"
@@ -32,8 +46,44 @@ run_probe() {
 }
 
 check_recall_tests() {
+  local env_root python_path rc
   [ -f scripts/tests/test_recall.py ] || return 1
-  PYTHONDONTWRITEBYTECODE=1 python3 scripts/tests/test_recall.py >/dev/null 2>&1
+  env_root=$(mktemp -d "${TMPDIR:-/tmp}/ev005-t16-tests.XXXXXX") || return 1
+  python_path="$env_root/pythonpath"
+  mkdir -p "$env_root/home" "$env_root/tmp" "$python_path" || {
+    rm -rf "$env_root"
+    return 1
+  }
+  if ! cat >"$python_path/sitecustomize.py" <<'PY'
+import os
+import pwd
+
+
+_ISOLATED_HOME = os.environ["HOME"]
+_ORIGINAL_GETPWUID = pwd.getpwuid
+
+
+def _isolated_getpwuid(uid):
+    entry = _ORIGINAL_GETPWUID(uid)
+    if uid != os.getuid():
+        return entry
+    fields = list(entry)
+    fields[5] = _ISOLATED_HOME
+    return pwd.struct_passwd(fields)
+
+
+pwd.getpwuid = _isolated_getpwuid
+PY
+  then
+    rm -rf "$env_root"
+    return 1
+  fi
+  HOME="$env_root/home" TMPDIR="$env_root/tmp" PYTHONPATH="$python_path" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    python3 scripts/tests/test_recall.py >/dev/null 2>&1
+  rc=$?
+  rm -rf "$env_root"
+  return "$rc"
 }
 
 check_docs_enforcement() {

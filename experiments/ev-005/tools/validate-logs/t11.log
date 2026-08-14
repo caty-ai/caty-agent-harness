@@ -6,11 +6,11 @@ CHECK a04 FAIL malformed assignment is not rejected and predicted
 CHECK a05 FAIL multi-line value is not rejected and predicted
 CHECK a06 FAIL embedded NUL is not rejected and predicted
 CHECK a07 FAIL interpreter-control name is not rejected and predicted
-CHECK a08 PASS acceptance grammar and refusal list have one production source
+CHECK a08 PASS acceptance grammar and refusal list have one source or an aligned generated copy
 CHECK a09 PASS focused checker output-contract regression suite passes
 CHECK a10 PASS missing prefix remains on stdout
 CHECK a11 PASS documented machine-row shapes remain on stdout
-RUN t11 pre 1 exit=1 dur=10s
+RUN t11 pre 1 exit=1 dur=14s
 CHECK a01 FAIL targeted reject/accept regression test is missing or fails
 CHECK a02 PASS symlink refusal is predicted with an advisory
 CHECK a03 PASS indented assignment is accepted and stays clean
@@ -18,11 +18,11 @@ CHECK a04 FAIL malformed assignment is not rejected and predicted
 CHECK a05 FAIL multi-line value is not rejected and predicted
 CHECK a06 FAIL embedded NUL is not rejected and predicted
 CHECK a07 FAIL interpreter-control name is not rejected and predicted
-CHECK a08 PASS acceptance grammar and refusal list have one production source
+CHECK a08 PASS acceptance grammar and refusal list have one source or an aligned generated copy
 CHECK a09 PASS focused checker output-contract regression suite passes
 CHECK a10 PASS missing prefix remains on stdout
 CHECK a11 PASS documented machine-row shapes remain on stdout
-RUN t11 pre 2 exit=1 dur=10s
+RUN t11 pre 2 exit=1 dur=13s
 CHECK a01 FAIL targeted reject/accept regression test is missing or fails
 CHECK a02 PASS symlink refusal is predicted with an advisory
 CHECK a03 PASS indented assignment is accepted and stays clean
@@ -30,11 +30,11 @@ CHECK a04 FAIL malformed assignment is not rejected and predicted
 CHECK a05 FAIL multi-line value is not rejected and predicted
 CHECK a06 FAIL embedded NUL is not rejected and predicted
 CHECK a07 FAIL interpreter-control name is not rejected and predicted
-CHECK a08 PASS acceptance grammar and refusal list have one production source
+CHECK a08 PASS acceptance grammar and refusal list have one source or an aligned generated copy
 CHECK a09 PASS focused checker output-contract regression suite passes
 CHECK a10 PASS missing prefix remains on stdout
 CHECK a11 PASS documented machine-row shapes remain on stdout
-RUN t11 pre 3 exit=1 dur=10s
+RUN t11 pre 3 exit=1 dur=13s
 CHECK a01 FAIL targeted reject/accept regression test is missing or fails
 CHECK a02 PASS symlink refusal is predicted with an advisory
 CHECK a03 PASS indented assignment is accepted and stays clean
@@ -42,11 +42,11 @@ CHECK a04 FAIL malformed assignment is not rejected and predicted
 CHECK a05 FAIL multi-line value is not rejected and predicted
 CHECK a06 FAIL embedded NUL is not rejected and predicted
 CHECK a07 FAIL interpreter-control name is not rejected and predicted
-CHECK a08 PASS acceptance grammar and refusal list have one production source
+CHECK a08 PASS acceptance grammar and refusal list have one source or an aligned generated copy
 CHECK a09 PASS focused checker output-contract regression suite passes
 CHECK a10 PASS missing prefix remains on stdout
 CHECK a11 PASS documented machine-row shapes remain on stdout
-RUN t11 pre 4 exit=1 dur=9s
+RUN t11 pre 4 exit=1 dur=13s
 CHECK a01 FAIL targeted reject/accept regression test is missing or fails
 CHECK a02 PASS symlink refusal is predicted with an advisory
 CHECK a03 PASS indented assignment is accepted and stays clean
@@ -54,11 +54,11 @@ CHECK a04 FAIL malformed assignment is not rejected and predicted
 CHECK a05 FAIL multi-line value is not rejected and predicted
 CHECK a06 FAIL embedded NUL is not rejected and predicted
 CHECK a07 FAIL interpreter-control name is not rejected and predicted
-CHECK a08 PASS acceptance grammar and refusal list have one production source
+CHECK a08 PASS acceptance grammar and refusal list have one source or an aligned generated copy
 CHECK a09 PASS focused checker output-contract regression suite passes
 CHECK a10 PASS missing prefix remains on stdout
 CHECK a11 PASS documented machine-row shapes remain on stdout
-RUN t11 pre 5 exit=1 dur=10s
+RUN t11 pre 5 exit=1 dur=13s
 CHECK a01 PASS targeted reject/accept regression test passes
 CHECK a02 PASS symlink refusal is predicted with an advisory
 CHECK a03 PASS indented assignment is accepted and stays clean
@@ -66,11 +66,11 @@ CHECK a04 PASS malformed assignment is rejected and predicted
 CHECK a05 PASS multi-line value is rejected and predicted
 CHECK a06 PASS embedded NUL is rejected and predicted
 CHECK a07 PASS interpreter-control name is rejected and predicted
-CHECK a08 PASS acceptance grammar and refusal list have one production source
+CHECK a08 PASS acceptance grammar and refusal list have one source or an aligned generated copy
 CHECK a09 PASS focused checker output-contract regression suite passes
 CHECK a10 PASS missing prefix remains on stdout
 CHECK a11 PASS documented machine-row shapes remain on stdout
-RUN t11 fix 1 exit=0 dur=16s
+RUN t11 fix 1 exit=0 dur=21s
 CHECK a01 PASS targeted reject/accept regression test passes
 CHECK a02 PASS symlink refusal is predicted with an advisory
 CHECK a03 PASS indented assignment is accepted and stays clean
@@ -78,11 +78,11 @@ CHECK a04 PASS malformed assignment is rejected and predicted
 CHECK a05 PASS multi-line value is rejected and predicted
 CHECK a06 PASS embedded NUL is rejected and predicted
 CHECK a07 PASS interpreter-control name is rejected and predicted
-CHECK a08 PASS acceptance grammar and refusal list have one production source
+CHECK a08 PASS acceptance grammar and refusal list have one source or an aligned generated copy
 CHECK a09 PASS focused checker output-contract regression suite passes
 CHECK a10 PASS missing prefix remains on stdout
 CHECK a11 PASS documented machine-row shapes remain on stdout
-RUN t11 fix 2 exit=0 dur=16s
+RUN t11 fix 2 exit=0 dur=20s
 CHECK a01 PASS targeted reject/accept regression test passes
 CHECK a02 PASS symlink refusal is predicted with an advisory
 CHECK a03 PASS indented assignment is accepted and stays clean
@@ -90,11 +90,11 @@ CHECK a04 PASS malformed assignment is rejected and predicted
 CHECK a05 PASS multi-line value is rejected and predicted
 CHECK a06 PASS embedded NUL is rejected and predicted
 CHECK a07 PASS interpreter-control name is rejected and predicted
-CHECK a08 PASS acceptance grammar and refusal list have one production source
+CHECK a08 PASS acceptance grammar and refusal list have one source or an aligned generated copy
 CHECK a09 PASS focused checker output-contract regression suite passes
 CHECK a10 PASS missing prefix remains on stdout
 CHECK a11 PASS documented machine-row shapes remain on stdout
-RUN t11 fix 3 exit=0 dur=16s
+RUN t11 fix 3 exit=0 dur=20s
 CHECK a01 PASS targeted reject/accept regression test passes
 CHECK a02 PASS symlink refusal is predicted with an advisory
 CHECK a03 PASS indented assignment is accepted and stays clean
@@ -102,11 +102,11 @@ CHECK a04 PASS malformed assignment is rejected and predicted
 CHECK a05 PASS multi-line value is rejected and predicted
 CHECK a06 PASS embedded NUL is rejected and predicted
 CHECK a07 PASS interpreter-control name is rejected and predicted
-CHECK a08 PASS acceptance grammar and refusal list have one production source
+CHECK a08 PASS acceptance grammar and refusal list have one source or an aligned generated copy
 CHECK a09 PASS focused checker output-contract regression suite passes
 CHECK a10 PASS missing prefix remains on stdout
 CHECK a11 PASS documented machine-row shapes remain on stdout
-RUN t11 fix 4 exit=0 dur=16s
+RUN t11 fix 4 exit=0 dur=20s
 CHECK a01 PASS targeted reject/accept regression test passes
 CHECK a02 PASS symlink refusal is predicted with an advisory
 CHECK a03 PASS indented assignment is accepted and stays clean
@@ -114,9 +114,9 @@ CHECK a04 PASS malformed assignment is rejected and predicted
 CHECK a05 PASS multi-line value is rejected and predicted
 CHECK a06 PASS embedded NUL is rejected and predicted
 CHECK a07 PASS interpreter-control name is rejected and predicted
-CHECK a08 PASS acceptance grammar and refusal list have one production source
+CHECK a08 PASS acceptance grammar and refusal list have one source or an aligned generated copy
 CHECK a09 PASS focused checker output-contract regression suite passes
 CHECK a10 PASS missing prefix remains on stdout
 CHECK a11 PASS documented machine-row shapes remain on stdout
-RUN t11 fix 5 exit=0 dur=16s
+RUN t11 fix 5 exit=0 dur=23s
 VERDICT t11 PASS
