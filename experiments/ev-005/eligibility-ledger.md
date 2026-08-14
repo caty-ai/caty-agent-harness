@@ -9,7 +9,7 @@
 | check | method | result |
 |---|---|---|
 | fix SHA exists | `GET /repos/{repo}/commits/{fix}` | 18/18 OK |
-| pre_fix = first parent of fix | parent[0] of fix commit compared to pre_fix | 18/18 OK |
+| pre_fix = first parent of fix | parent[0] of fix commit compared to pre_fix | 18/18 structurally OK — **semantically falsified for FMA#1 by I-2** (reverse-merge parent-order; corrected pair in row and t12 meta) |
 | PR merge SHA = fix | `GET /repos/{repo}/pulls/{pr}` `.merge_commit_sha` (merged=true) | 18/18 OK |
 | Done when quotes | spot re-read of issue bodies (#49 heading, #19/#14 epic tables, all rows marked NO) | 1 systematic finding (below) |
 | test_cmd claims | harness Makefile `test` target, FMA README run_tests line, sgl README `tests/run.sh` | OK as quoted |
@@ -36,50 +36,52 @@
 | caty-agent-harness#43 | OK | YES | REENACT | 1 file, CI template regeneration |
 | caty-agent-harness#39 | OK | YES | REENACT | rename sweep, 8 files ±18 |
 | caty-agent-harness#37 | OK | YES | REENACT | docs 4 files +32 |
-| caty-agent-harness#30 | no pair (multi-PR, unidentified) | YES | SYNTH-SOURCE | labels/required-checks pattern |
+| caty-agent-harness#30 | OK (I-3: fix `d81202b`, pre `18e8975`) | YES | REENACT | admitted as t30; CI-gates deployment |
 | caty-agent-harness#27 | OK | YES | REENACT | size-XL (25 files, +1826/−299) — flag `size-risk` |
-| caty-agent-harness#23 | no pair | YES | SYNTH-SOURCE | lint/template contract pattern |
-| caty-agent-harness#22 | no pair | YES | SYNTH-SOURCE | failure-visibility pattern |
-| caty-agent-harness#21 | no pair | YES | SYNTH-SOURCE | conventions-note pattern |
-| caty-agent-harness#20 | no pair | YES | SYNTH-SOURCE | input-validation pattern |
+| caty-agent-harness#23 | OK (I-3: fix `875acb9`, pre `06b763a`) | YES | REENACT | admitted as t21; skill-lint contract |
+| caty-agent-harness#22 | OK (I-3: fix `1db3a71`, pre `19032f7`) | YES | REENACT | admitted as t17; failure visibility |
+| caty-agent-harness#21 | OK (I-3: fix `157855c`, pre `18e8975`) | YES | REENACT | admitted as t26; conventions note |
+| caty-agent-harness#20 | OK (I-3: fix `1aa6bda`, pre `5ae0686`) | YES | REENACT | admitted as t23; input validation |
 | caty-agent-harness#19 | no pair | NO (epic container) | INELIGIBLE | children #20–#23 are the actionable units |
 | caty-agent-harness#18 | OK | YES | REENACT | 8 files +53/−29 |
 | caty-agent-harness#17 | OK | YES | REENACT | 5 files +38/−17 |
 | caty-agent-harness#16 | OK | YES | REENACT | 12 files +64/−59 |
 | caty-agent-harness#15 | OK | YES | REENACT | 8 files +31/−40 |
 | caty-agent-harness#14 | no pair | NO | INELIGIBLE | epic-style body, no own criterion |
-| caty-agent-harness#12 | no pair | YES | SYNTH-SOURCE | fail-closed updater pattern |
-| caty-agent-harness#11 | no pair | YES | SYNTH-SOURCE | quote-aware parsing pattern |
-| caty-agent-harness#10 | no pair | YES | SYNTH-SOURCE | secrets-parsing pattern |
+| caty-agent-harness#12 | OK (I-3: fix `870fca5`, pre `dfbc094`) | YES | REENACT | admitted as t25; updater verification |
+| caty-agent-harness#11 | OK (I-3: fix `3a3e845`, pre `7155578`) | YES | REENACT | admitted as t28; donecheck boundary |
+| caty-agent-harness#10 | OK (I-3: fix `723acbd`, pre `2bbc00a`) | YES | REENACT | admitted as t19; SECRETS_ENV hardening |
 | family-os#31 | no pair | YES | SYNTH-SOURCE | Done when includes human/agent live tests → not mechanizable as-is |
-| family-os#30 | no pair | YES | SYNTH-SOURCE | README layer work |
-| family-os#29 | no pair | YES | SYNTH-SOURCE | FOR-AGENTS doc pattern |
-| family-os#28 | no pair | YES | SYNTH-SOURCE | growth-model doc pattern |
-| family-os#27 | no pair | YES | SYNTH-SOURCE | evidence.md pattern; fail-closed link vetting |
-| family-os#26 | no pair | YES | SYNTH-SOURCE | registry-conformance pattern |
+| family-os#30 | no pair | YES | SYNTH-SOURCE | README layer work — not re-classified (HUMAN-dominant, not admitted) |
+| family-os#29 | OK (I-3: fix `3b79945`, pre `5938d52`) | YES | REENACT | admitted as t27; FOR-AGENTS doc |
+| family-os#28 | OK (I-3: fix `d66aefe`, pre `d221bd8`) | YES | REENACT | admitted as t29; growth-model doc |
+| family-os#27 | OK (I-3: fix `a7b0c20`, pre `e6e2fa7`) | YES | REENACT | admitted as t20; evidence.md |
+| family-os#26 | OK (I-3: fix `7478c35`, pre `f0ba281`) | YES | REENACT | admitted as t24; publication gate |
 | family-os#25 | no pair | YES | SYNTH-SOURCE | Done when includes owner approval → not mechanizable as-is |
 | family-os#24 | no pair | YES (epic) | SYNTH-SOURCE | epic; children are the patterns |
 | family-os#21 | no pair | YES | SYNTH-SOURCE | Done when includes owner choice → not mechanizable as-is |
 | family-os#19 | OK | YES | REENACT | 1 file +4/−7; no repo-wide test cmd → custom donecheck (registry checker exists in-repo) |
 | family-os#15 | OK | YES | REENACT | 8 files +141/−7; custom donecheck via in-repo render/check tools |
-| family-os#12 | no pair | YES | SYNTH-SOURCE | registry-entry pattern |
+| family-os#12 | OK (I-3: fix `e830a0e`, pre `c48913a`) | YES | REENACT | admitted as t18; registry entry |
 | family-os#10 | no pair | NO | INELIGIBLE | |
 | family-os#5 | no pair | NO | INELIGIBLE | |
 | family-os#2 | no pair | NO | INELIGIBLE | |
-| context-kit#1 | no pair | YES | SYNTH-SOURCE | generalization/de-personalization pattern |
+| context-kit#1 | OK (I-3: span `286c2a3`..`90d5cfe`, pre = grandparent) | YES | REENACT | admitted as t22; kickoff completion (two-milestone span, declared per r4-3) |
 | family-memory-architecture#11 | OK | YES (inline; I-1) | REENACT | 4 files +4/−52; suite `python3 scripts/tests/run_tests.py` |
 | family-memory-architecture#4 | OK | YES (inline; I-1) | REENACT | 10 files +134 |
 | family-memory-architecture#3 | OK | YES (inline; I-1) | REENACT | 9 files +123/−14 |
 | family-memory-architecture#2 | OK | YES (inline; I-1) | REENACT | 6 files +119/−17 |
-| family-memory-architecture#1 | OK | YES (inline; I-1) | REENACT | 4 files +84 |
+| family-memory-architecture#1 | OK (I-2 corrected: fix `8676d838`, pre `25b426bb` = parent[1]; reverse-merge-then-ff) | YES (inline; I-1) | REENACT | admitted as t12; 4 files +84 refers to the surveyed (wrong) pair — the corrected pair's delta is the stdlib port |
 | self-growth-loop#1 | OK | YES | REENACT | 1 file +6; suite `bash tests/run.sh` |
 
 ## 4. Totals
 
-- REENACT: **18** (10 harness / 2 family-os / 5 FMA / 1 sgl); of these, 2 flagged `size-risk` (harness#56, #27)
-- SYNTH-SOURCE: **19**
+- REENACT: **32** after I-3 (18 surveyed + 14 re-classified); of the surveyed 18, 2 flagged `size-risk` (harness#56, #27)
+- **Admitted bundle: 30 of the 32 REENACT candidates.** Selection rule (recorded per panel finding): the two `size-risk` rows (harness#56, #27) are excluded, exercising this ledger's pre-registered option ("16 if both size-risk tasks are dropped"); every other REENACT candidate is admitted. Task-id mapping is in the batch reports (t01–t30).
+- Provenance is two-tier and published as a limitation: the surveyed 18 pairs are GitHub-API-verified (merge SHA, parent linkage); the 14 I-3 pairs rest on issue-referencing commit subjects verified by content inspection, with the R11 validity gate as the mechanical backstop (I-2 is the recorded example of a wrong pre-tree failing loudly there).
+- SYNTH-SOURCE: **5 remaining** (post-I-3: family-os#31/#30/#25/#24/#21 — HUMAN-dominant or epic; none admitted)
 - INELIGIBLE: **5**
 
-Bundle math against the frozen decision (A′ = 30 base, up to 40): 18 re-enactments (16 if both size-risk tasks are dropped) + 12–14 synthetic type-completion tasks reach 30; extension toward 40 draws further synthetic tasks from the 19 patterns, gated by the validity tests and non-author acceptance throughput.
+Bundle math against the frozen decision (A′ = 30 base, up to 40): **30 re-enactments / 0 synthetic** (I-3). The pre-I-3 math ("18 re-enactments + 12–14 synthetic reach 30") is superseded; synthetic type-completion remains available only as the documented fallback if a §5-class task swap is ever needed post-sealing (amendment procedure).
 
 Every task admitted into the bundle gets a per-task row in the bundle manifest (task id ↔ source ↔ SHAs ↔ donecheck hash); this ledger is published with the manifest (design §4).

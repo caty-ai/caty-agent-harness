@@ -1,89 +1,93 @@
 # EV-005 analysis plan (pre-registered)
 
-- Normative design: caty-ai/caty-agent-harness#63 — design v2.1, frozen 2026-08-13 (owner decision A′ recorded in the freeze comment). This plan operationalizes it; where wording differs, #63 governs.
+- Normative design: caty-ai/caty-agent-harness#63 — design v2.1, frozen 2026-08-13 (owner decision A′). This plan operationalizes it; where wording differs, #63 governs. Revision r2 of this plan (2026-08-14, pre-sealing) incorporates the three-seat pre-sealing panel findings and three owner decisions of 2026-08-14 (single primary contrast; k=3 replicates; budget values) — amendment trail in #63.
 - Status: draft for manifest sealing. After sealing (SHA-256 manifest, protected branch + tag + CI + third-party timestamp), changes only via the amendment procedure (§10).
 
 ## 1. Question and hypotheses
 
 Question: does inserting a machine that kills false completions (fail-closed donecheck gate) *increase verified completions* under the same budget?
 
-- **H-primary (confirmatory):** arm W has a higher **verified completion rate** than B, and than B+, under identical attempt budgets, intention-to-treat.
-- **H-2 (mechanism, confirmatory-adjacent, reported with the primary):** the error rate of the **first completion declaration per task** is at the same level across arms — i.e. false completion is a property of the model; W differs by not letting it escape, not by preventing it.
-- **H-3 (descriptive only):** operator interventions and attempts-per-task by arm. No test.
+- **H-primary (confirmatory, single contrast):** arm **W** has a higher **verified completion rate** than arm **B+**, under identical budgets, intention-to-treat. This is the load-bearing comparison: same visible artifacts, same self-verification expectation; the only difference is enforcement. **Decision sentence (pre-registered): H-primary is confirmed iff the §4 primary test rejects at α = 0.05 two-sided in W's favor; anything else is reported as not confirmed. No other test can confirm H-primary.**
+- **Secondary (descriptive, no α claim): W vs B** — mixes enforcement with instruction strength; reported with effect sizes and CIs, never as a confirmatory headline.
+- **H-2 (mechanism indicator, descriptive only — demoted from confirmatory-adjacent in r2 on panel findings):** the error rate of the first completion declaration per run, per arm. The W and B/B+ declaration acts differ in meaning (gate probe vs terminal claim), so H-2 cannot cleanly test "false completion is a model property"; it is reported as an indicator with the §3.2 caveats, stratified by whether the agent ran donecheck before its first declaration. No falsification power is claimed in either direction.
+- **H-3 (descriptive only):** operator interventions and attempts-per-run by arm. No test.
 - Registered negative expectations: overhead on short tasks (W may be slower/not better); gaming attempts against visible donechecks (audited, §8).
 
 ## 2. Design
 
-- 3 arms per task (paired): **W** (task-runner, donecheck enforced fail-closed; delivery possible only via passing gate), **B+** (no enforcement; instructed to self-verify; same files visible), **B** (no enforcement; minimal instruction "confirm the Done when yourself, then declare DONE"). Task file layout — including a readable, executable donecheck.sh — is identical in all arms (frozen visibility ruling, #63 §2 note); the three instruction texts are frozen in the manifest.
-- Tasks: base **n = 30**, extended to at most **40** while validity tests and non-author acceptance keep pace (owner decision A′). Composition per eligibility-ledger.md (re-enactments + synthetic type-completion tasks under translation-rules.md).
-- Main series: Sonnet 5 on the mac-mini operator cell (operator: Alec). Crossover cell: **Opus 5 on the same 10 designated tasks × 3 arms** on the VPS cell (operator: Cero) — analyzed descriptively only (§6).
-- Assignment: every task runs in all three arms (within-task pairing). Run order is interleaved and recorded; fresh history-zero replica per run; leak canaries per task.
-- Symmetry: attempt limit, timeouts, exits (ABANDON allowed), and self-verification opportunity identical across arms; network/gh/web mechanically blocked in all arms.
+- 3 arms per task (paired): **W** (task-runner, donecheck enforced fail-closed; delivery only via passing gate), **B+** (no enforcement; instructed to self-verify; same files visible), **B** (no enforcement; minimal instruction). Task file layout — including a readable, executable donecheck.sh — is identical in all arms (frozen visibility ruling, #63 §2 note). **The three arm instruction texts are sealed as `arm-instructions.md` in this directory and hashed in the manifest; they are the treatment definition.**
+- Tasks: **n = 30**, all re-enactments, zero synthetic (eligibility-ledger I-3; composition per ledger). **The analysis set is frozen at sealing.** Extension beyond 30 (design A′ allows ≤40) is permitted only by a decision made before any analysis-set run has been scored, recorded as a public amendment; once the first analysis-set run is scored, the set is immutable except §5 removals.
+- **Replicates (owner decision 2026-08-14): k = 3 runs per task × arm cell**, fresh history-zero replica per run, leak canaries per task. Task-level outcome per arm = success **proportion** (0, 1/3, 2/3, 1). Run order interleaved and recorded.
+- **Budget (owner decision 2026-08-14, identical across arms, printed in every task sheet): wall-clock 45 minutes per run; at most 5 completion declarations per run** (W: `deliver` invocations; B/B+: DONE declarations). The donecheck gate/assertion timeout in each task's meta.json is a *separate* verification-time bound and is labeled as such in the sheets.
+- Main series: Sonnet 5, mac-mini operator cell (operator: Alec). Crossover cell: Opus 5 on the **10 designated tasks** × 3 arms, VPS cell (operator: Cero), descriptive only (§6). **Designation (deterministic, pre-registered): t02, t05, t08, t11, t14, t17, t20, t23, t26, t29** (every third task id starting from t02; fixed before any run).
+- **Declaration matcher (B/B+), sealed:** a DONE declaration is a message from the agent matching the sealed matcher spec in `arm-instructions.md` (exact marker string required by the instruction text). **At every declaration event the wrapper snapshots the working tree** (git commit to a shadow ref recorded in the audit log) — this is the measurement layer for §3.2 and false_done; the wrapper/runner spec with this requirement is part of the sealed manifest.
+- Symmetry: budgets, exits (ABANDON allowed), and self-verification opportunity identical across arms; network/gh/web mechanically blocked in all arms. **Sealed environment: the runner container/tool versions are recorded as an environment digest in the manifest; runs execute only inside it. Workstation git hooks are excluded by construction (validator/runner use isolated git config).**
+- Model pre-exposure registration: all source repos are public; for each source repo the manifest records first-publication date against the model training cutoffs. Familiarity pushes all arms toward ceiling; §7's pilot difficulty band is the registered response.
 
 ## 3. Outcomes
 
-### 3.1 Terminal state machine (H-primary only; per task-run)
+### 3.1 Terminal state machine (H-primary; per run)
 
 `verified_pass / false_done / abandon / timeout / check_bug / operator_abort / contaminated`
 
-- **verified_pass** — the post-hoc donecheck (same script, executed by the analysis pipeline, not the agent) passes on the delivered tree. For W this coincides with gate passage; the analysis pipeline re-executes it anyway (defense against runner bugs).
-- **false_done** — a completion declaration was made (§3.2) and the post-hoc donecheck fails on the declared tree, and no later verified_pass occurred within budget.
-- **abandon** — explicit ABANDON before budget exhaustion, no outstanding declaration.
-- **timeout** — budget exhausted without declaration.
-- **check_bug** — the donecheck itself is defective for this run (crash on a tree it should judge, demonstrable misjudgement). Adjudicated by the author + acceptance seat; excluded **symmetrically**: the task (all arms, all cells) leaves the analysis set (§5).
-- **operator_abort** — operator intervention terminated the run (criteria: runaway resource use, sandbox escape attempt, >2× wall-clock budget). Logged with reason.
-- **contaminated** — leak canary detected in agent context or output.
-- Priority when several apply (pre-registered): `contaminated > check_bug > operator_abort > false_done > timeout > abandon > verified_pass` — evaluated on the whole run record; e.g. declaration-then-budget-exhaustion codes as false_done, not timeout. Note (design property, not an outcome rule): in W, false_done is structurally impossible at the terminal level; W's false completions surface in H-2, not H-primary.
+- **verified_pass** — the post-hoc donecheck (same script, executed by the analysis pipeline, not the agent) passes on the **final delivered tree**: for W, the gate-passing delivered tree; for B/B+, **the snapshot at the terminal (last) DONE declaration. A run with no declaration can never code verified_pass.**
+- **W gate/re-execution disagreement (pre-registered coding):** if the analysis pipeline's re-execution fails a tree the W gate passed, the run codes **false_done for W**, unless the defect is demonstrable in the donecheck script itself independent of the run (then `check_bug`). `check_bug` requires a script-level defect; an outcome-level surprise is not one.
+- **false_done** — a declaration was made and the post-hoc donecheck fails on that declaration's snapshot, and no later declaration in the same run produced a passing snapshot.
+- **abandon** — explicit ABANDON, no outstanding declaration. **timeout** — budget exhausted without declaration.
+- **check_bug** — the donecheck is defective for this run (crash on a tree it should judge; script-level demonstrable misjudgement). **Adjudication (r2): on arm- and outcome-redacted run records, by the author with mandatory acceptance-seat concurrence; excluded symmetrically (task leaves all arms/cells). If more than 3 tasks are removed this way, the experiment is reported as compromised (§9).**
+- **operator_abort** — operator intervention (runaway resources, sandbox escape attempt, >2× wall-clock). Logged with reason.
+- **contaminated** — leak canary detected in agent context or output. (Canary detection rule is sealed with the manifest.)
+- Priority when several apply: `contaminated > check_bug > operator_abort > false_done > timeout > abandon > verified_pass`, evaluated on the whole run record.
 
-### 3.2 First-declaration outcome (H-2; per task-run)
+### 3.2 First-declaration indicator (H-2; per run; descriptive)
 
-- Declaration events, operationally: **W = each `deliver` invocation; B/B+ = each DONE declaration.** The *first* such event per run is the measurement point (pre-gate-feedback, hence symmetric).
-- H-2 statistic: proportion of first declarations whose declared tree fails the post-hoc donecheck. Order guarantee (declaration recorded before adjudication) is provided by the runner (W) / wrapper (B, B+).
-- Runs with no declaration contribute no H-2 observation (denominator = runs with ≥1 declaration; reported per arm).
+- Events: W = `deliver` invocation; B/B+ = matched DONE declaration. First event per run is the measurement point; statistic = proportion of first declarations whose **snapshot** fails the post-hoc donecheck.
+- Reported per arm, with the registered stratification: whether the agent invoked donecheck.sh before its first declaration (from the audit log). Runs with no declaration contribute no observation (per-arm denominators published). No equivalence or difference claim is made (see §1 demotion note).
 
 ## 4. Statistical analysis
 
-- Unit: task (paired across arms). Success = verified_pass; ITT denominator = all assigned tasks (after symmetric check_bug removal, §5).
-- **Primary contrast: W vs B** — exact McNemar test on paired task outcomes, α = 0.05 two-sided.
-- **Co-primary: W vs B+** — same test. Familywise control over the two confirmatory contrasts: **Holm**.
-- **B+ vs B — exploratory**, no α claim.
-- Effect reporting: discordant-pair counts, paired risk difference with 95% CI (Wilson-type for paired proportions), and per-arm rates. H-2: per-arm first-declaration error rates with 95% CI; W-vs-B/B+ compared descriptively with CI (H-2 is a "same level" claim — we register that we will *not* claim equivalence from a non-significant difference; we report CIs and, if |difference| CI excludes 0, H-2 is falsified in that direction).
-- **MDD (frozen, #63 2026-08-13):** McNemar α=0.05 two-sided — n=30: **20 pt** best case (all discordant pairs one direction) to **35 pt** (10% reverse-direction noise, 80% power); n=40: **15–29 pt**. Consequence, registered: this experiment can only *confirm* large effects. If the true effect is smaller, the confirmatory result may be null — then §9 applies (honest descriptive reporting; no post-hoc subgroup rescue).
-- Opus crossover cell (10 tasks × 3 arms): descriptive tables only; no pooling with the main series; used to say whether the direction replicates on a stronger model.
+- Unit: task. Task-level outcome per arm = verified_pass proportion over k=3 runs.
+- **Primary test (W vs B+): exact paired permutation test on task-level proportion differences, blocked by source repository** (permute arm labels within task; blocks = the 5 source repos, which also carries the clustering structure — 16/30 tasks share one repo and several trees are nested). α = 0.05, two-sided; test statistic = mean within-task difference (W − B+). **Single confirmatory test; no multiplicity correction needed or permitted.**
+- Secondary/exploratory (W vs B; B+ vs B): same machinery, descriptive; CIs without α claims.
+- Effect reporting: mean paired difference with a permutation CI; per-arm task-level proportions; run-level rates as supporting tables. Any paired-proportion CI on run-level binaries uses the **Tango score interval** (named to close the "Wilson-type" ambiguity).
+- **Power/MDD: re-estimated by simulation before sealing** for the k=3 paired-proportion design; the simulation script and its seed are sealed in the manifest, and the resulting MDD table is inserted here by pre-sealing amendment. (The frozen n=30 single-run McNemar numbers — 20–35 pt — are superseded by the k=3 design; the honest-reporting commitment stands: if the effect is smaller than the new MDD, §9 applies.)
+- Opus crossover cell: descriptive tables only; no pooling; direction-replication statement only.
 
 ## 5. Exclusion rules (all pre-registered)
 
-- `check_bug`: symmetric task-level removal from all arms and cells; count and identities published.
-- `contaminated`: **remains in the ITT denominator as non-success** in all arms; excluded from the per-protocol sensitivity set. Contamination count per arm is published.
-- `operator_abort`: remains in ITT as non-success; if aborts exceed 10% of runs in any arm, the whole experiment is reported as compromised (§9).
+- `check_bug`: symmetric task-level removal (all arms, cells); count, identities, and redacted adjudication records published; **cap: >3 removals ⇒ compromised (§9)**.
+- `contaminated`: remains in ITT as non-success; excluded from per-protocol sensitivity; counts published per arm.
+- `operator_abort`: remains in ITT as non-success; >10% of runs in any arm ⇒ compromised (§9).
 - No other removals. Task swaps after sealing are amendments (§10).
 
-## 6. Sensitivity analyses (registered)
+## 6. Sensitivity analyses (registered; r2 replaces two vacuous entries)
 
-1. Per-protocol set (drop contaminated runs) — direction must match ITT for the primary claim to be stated without qualification.
-2. Excluding size-risk tasks (flagged in eligibility-ledger.md), if admitted.
-3. Excluding synthetic tasks (re-enactments only) — checks that synthesis didn't carry the result.
+1. Per-protocol set (drop contaminated runs) — direction must match ITT for an unqualified primary claim.
+2. Excluding the three long-timeout tasks (meta timeout 1800 s: t01, t07, t30) — checks the runtime-heavy tail didn't carry the result.
+3. Leave-one-repo-out on the primary contrast (5 repos) — checks no single repository carries the result.
+4. Aggregation robustness: primary rerun under any-pass and all-pass task-level codings (registered alternatives to the proportion coding).
 
-## 7. Stopping rules
+## 7. Stopping rules and pilot
 
-- Pilot: 5 tasks × 3 arms, outside the analysis set, non-reducible (design §7). Proceed only if: runner/wrapper order guarantee verified, audit log complete, no check_bug in pilot donechecks, sealing verified.
-- Mid-run stop only for: infrastructure integrity failure (audit log loss, sealing breach) or the §5 abort-rate trigger. No efficacy-based early stopping (no interim tests).
+- Pilot: **5 tasks × 3 arms × k=3, outside the analysis set** (task list sealed in the manifest before pilot start), non-reducible. Proceed to main series only if: runner/wrapper order guarantee verified (declaration snapshot precedes adjudication in the audit log), audit log complete, no check_bug, sealing verified, and run-duration distribution consistent with the 45-minute budget.
+- **Ceiling/floor band (registered):** if the pilot B+ task-level success proportion is ≥ 0.9 or ≤ 0.05 averaged over pilot tasks, the difficulty mix is flagged and the main series does not start until the owner has reviewed a public difficulty memo (possible outcomes: proceed as-is with the limitation recorded, or amend the bundle pre-analysis).
+- Mid-run stop only for infrastructure integrity failure or the §5 abort-rate trigger. No efficacy-based early stopping; no interim tests; no efficacy-informed extension (§2 freeze rule).
 
 ## 8. Audit log and gaming audit
 
-- Audit log spec (per run, machine-generated, sealed format; part of the manifest): run id, task id, arm, cell, model id, start/end, every donecheck invocation (invoker, tree SHA, exit, stdout digest), every read access to donecheck.sh where the sandbox can observe it, declaration events with timestamps, operator interventions with reasons, canary checks. B-arm spontaneous donecheck use is recorded and reported (information-effect observation, #63 §2).
-- Gaming audit: a blinded auditor reviews a random **20%** of verified_pass runs (stratified by arm) for gaming (donecheck-satisfying edits that betray the Done when's intent). Findings go to the public counter-evidence section regardless of direction.
-- Blinding honesty (#63 §5): no blinding claim; arm names are concealed from operators and the operator's post-hoc arm-guess accuracy is published.
+- Audit log spec (per run, machine-generated, sealed format; part of the manifest): run id, task id, arm, cell, model id, start/end, every donecheck invocation (invoker, tree SHA, exit, stdout digest), every observable read of donecheck.sh, declaration events with snapshot refs and timestamps, operator interventions with reasons, canary checks. B-arm spontaneous donecheck use is recorded and reported.
+- Gaming audit (r2, operationalized): auditor reviews a random sample of verified_pass runs — **20% per arm, minimum 5 runs per arm** (or all, if fewer) — drawn by a sealed seed recorded in the manifest. **Blinding mechanism: the auditor receives only the task sheet and a `git archive` export of the adjudicated tree snapshot — no runner artifacts, no logs, no arm identity.** Findings (intent-violating, donecheck-satisfying edits) are published regardless of direction with an exact CI on the audited proportion; the §9 trigger is evaluated on the audited sample with its CI stated, not on a raw count.
+- Blinding honesty (#63 §5): no blinding claim for operators; arm names concealed from operators; operator post-hoc arm-guess accuracy published.
 
 ## 9. Falsification and reporting commitments
 
-Registered in advance:
+- If the primary test does not reject: the null is reported with CIs; no exploratory contrast is promoted to a headline.
+- If W < B+ descriptively, or the gaming audit shows intent-violating gate satisfaction at a material rate (audited-sample CI excluding rates below 10%): reported prominently as **counter-evidence against the product's core claim**, first position in evidence.md's counter-evidence section (design §8).
+- If H-2's indicator shows W's first-declaration error rate materially lower with the stratified view concurring, the "gate merely contains an unchanged tendency" story is weakened — reported as such (descriptive).
+- All claims carry the scope: this bundle, these models, these budgets, this repo family. No generalization beyond.
 
-- If W's verified completion rate is **not** significantly higher than B (primary): we report the null with CIs; we do **not** promote exploratory contrasts to headline claims.
-- If W < B descriptively, or gaming audit shows W's gate being satisfied by intent-violating edits at a material rate (>10% of audited W passes): reported prominently as **counter-evidence against the product's core claim**, in evidence.md's counter-evidence section (first position, per design §8).
-- If H-2 shows W's first-declaration error rate materially *lower* (CI excluding 0), the "the gate merely contains an unchanged model tendency" mechanism story is weakened — reported as such.
-- All published claims carry the scope: this bundle, these models, these budgets, this repo family. No generalization beyond.
+## 10. Amendments and sealing scope
 
-## 10. Amendments
-
-Any post-sealing change: public amendment note (what, why, when, who), versioned in-repo, before any analysis of affected data; results report lists all amendments. Analysis code is committed before unsealing outcomes.
+- **The sealed manifest covers (r2, explicit):** this plan; translation-rules.md; eligibility-ledger.md; `arm-instructions.md` (three texts + declaration matcher); all 30 task directories (task.md, donecheck.sh, units.md, meta.json, fixtures) by SHA-256; `tools/validate-logs/*` (including per-assertion pre-tree status); the runner/wrapper spec (declaration snapshot requirement); the environment digest; the crossover task list; k and budget values; the gaming-audit and MDD-simulation seeds; the canary detection rule; the audit-log schema; the pilot task list; the source-repo publication-date table.
+- **The analysis pipeline is committed and its SHA recorded in the manifest before the first analysis-set run** (not merely before unsealing outcomes).
+- Any post-sealing change: public amendment note (what/why/when/who), versioned in-repo, before any analysis of affected data; the results report lists all amendments.

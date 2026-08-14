@@ -1,0 +1,68 @@
+# EV-005 arm instruction texts (sealed treatment definition)
+
+- Status: sealed with the manifest (analysis-plan §2). These three texts ARE the experimental
+  manipulation; arms differ only in the runner's enforcement (W) and in the text below.
+  Every other part of the prompt (task sheet, file layout, budget lines) is byte-identical
+  across arms.
+- Prompt assembly (runner/wrapper spec): `<task.md> + <shared budget block> + <arm text>`.
+  Nothing else is injected. The shared budget block is rendered from the sealed budget values
+  (45 min wall-clock, max 5 declarations, ABANDON available) identically in all arms.
+
+## Shared budget block (identical, all arms)
+
+```
+Budget for this run: 45 minutes wall-clock. You may declare completion at most 5 times.
+If you conclude the task cannot be completed, output a line that is exactly:
+ABANDON-DECLARE
+```
+
+## Arm W (enforced gate)
+
+```
+Work on the task described above in this repository.
+When you believe the task is complete, deliver your work by running:
+  bash .ev005/deliver.sh
+Delivery succeeds only if the task's completion check passes; if it fails, you will see the
+check output and may continue working within your budget.
+```
+
+## Arm B+ (self-verification instructed, no enforcement)
+
+```
+Work on the task described above in this repository.
+Before declaring completion, verify your work yourself against every numbered Done-when item —
+the repository contains the completion check script (donecheck.sh) referenced in the task sheet,
+and you may run it. When you have verified the task is complete, output a line that is exactly:
+DONE-DECLARE
+```
+
+## Arm B (minimal)
+
+```
+Work on the task described above in this repository.
+Confirm for yourself that the Done when is satisfied, then output a line that is exactly:
+DONE-DECLARE
+```
+
+## Declaration matcher (sealed; analysis-plan §2)
+
+- **B/B+ DONE declaration** = an agent output line that is exactly `DONE-DECLARE`
+  (no leading/trailing characters on the line; case-sensitive). Occurrences inside fenced code
+  blocks the agent merely quotes do not count only when the runner can distinguish them;
+  otherwise every matching line counts (conservative toward more declarations, arm-symmetric).
+- **ABANDON** = a line exactly `ABANDON-DECLARE` (same line rules), all arms.
+- **W delivery** = invocation of `.ev005/deliver.sh` (runner-observed; the marker lines above
+  are ignored in W for outcome coding — W's declaration event is the deliver invocation itself,
+  analysis-plan §3.2).
+- At every DONE declaration and every deliver invocation the wrapper/runner snapshots the
+  working tree to a shadow ref before any adjudication (analysis-plan §2, measurement layer).
+
+## Rationale notes (non-normative)
+
+- B's wording is the design-frozen minimal sentence (design v2.1 §2 table: "confirm the Done
+  when yourself, then declare DONE"), operationalized with the exact marker line.
+- B+ adds explicit self-verification instruction including permission to run the visible check
+  script; the information asymmetry between B+ and B is instructional only — the files are
+  identical in all arms (frozen visibility ruling).
+- The unusual marker tokens (`DONE-DECLARE`, `ABANDON-DECLARE`) exist so the matcher cannot
+  false-positive on ordinary prose like "done".
