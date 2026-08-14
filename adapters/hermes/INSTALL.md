@@ -177,13 +177,22 @@ The rules there apply in addition to the Hermes-specific wiring below.
    enforce today; a follow-up issue tracks gating the endpoint and served model in the
    evidence record.
 
-   Operational contract: the example wrapper forwards only the validated verdict and
-   reason lines. It intentionally discards the findings body requested by the bundle
-   to remove an injection surface; that body cannot be recovered from this wrapper.
-   The provider SYSTEM prompt enforces first-line verdict placement and overrides the
-   bundle's last-two-lines instruction. A model that follows the bundle instead is
-   rejected fail-closed and surfaces as `needs-human`; when using this example as a
-   production `VERIFIER_CMD`, monitor the `needs-human` rate for formatting flakiness.
+   Operational contract: the example providers and wrapper forward only the validated
+   verdict and reason lines. They normalize each model-reply line by removing a trailing
+   carriage return and trailing whitespace, require exactly one anchored allowed verdict
+   line anywhere in the reply, and require exactly one `VERDICT:` occurrence across the
+   entire model reply. Before line parsing or normalization, they reject any NUL byte
+   anywhere in the provider/model reply. The reason is the first nonempty normalized line
+   after the verdict. Missing or ambiguous verdicts and missing reasons fail closed.
+   Findings before the verdict and
+   content after the selected reason are intentionally discarded to remove an injection
+   surface; that body cannot be recovered from these examples. The provider prompts align
+   with the bundle's last-two-lines instruction while the parser also accepts a valid
+   verdict-first reply. A reply containing solely one quoted or injected anchored marker
+   and a following reason, with no additional `VERDICT:` text, is indistinguishable from
+   an authentic decision and is adopted; uniqueness is the defense against ambiguity, not
+   proof of provenance. When using an example as a production `VERIFIER_CMD`, operators
+   must monitor the `needs-human` rate for formatting flakiness and anomalous replacement.
    `VERIFIER_TEMPERATURE` is sent as given, so a model that constrains temperature may
    reject the request; this normalizes to wrapper exit 70 and `needs-human`. Model id
    and temperature are therefore coupled configuration.

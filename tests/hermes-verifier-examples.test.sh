@@ -47,7 +47,7 @@ empty_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="
   "$WRAPPER" '' 2>"$TMP_ROOT/empty.err")
 empty_rc=$?
 set -e
-if [ "$empty_rc" -ne 0 ] && [ -z "$empty_output" ] && [ ! -e "$provider_marker" ]; then
+if [ "$empty_rc" -eq 64 ] && [ -z "$empty_output" ] && [ ! -e "$provider_marker" ]; then
   pass '[1] wrapper fails closed before provider launch on an empty argv[1] bundle'
 else
   fail_case '[1] wrapper fails closed before provider launch on an empty argv[1] bundle' \
@@ -59,7 +59,7 @@ short_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="
   VERIFIER_BUNDLE_MIN_BYTES=200 "$WRAPPER" 'too short' 2>"$TMP_ROOT/short.err")
 short_rc=$?
 set -e
-if [ "$short_rc" -ne 0 ] && [ -z "$short_output" ] && [ ! -e "$provider_marker" ]; then
+if [ "$short_rc" -eq 64 ] && [ -z "$short_output" ] && [ ! -e "$provider_marker" ]; then
   pass '[2] wrapper enforces the configurable byte floor before provider launch'
 else
   fail_case '[2] wrapper enforces the configurable byte floor before provider launch' \
@@ -67,19 +67,33 @@ else
 fi
 
 bundle='This bundle is intentionally longer than the configured verifier floor and is delivered as argv one.'
+set +e
+missing_provider_output=$(env -u FABLE_CONFORMING_PROVIDER_PATH \
+  VERIFIER_BUNDLE_MIN_BYTES=64 "$WRAPPER" "$bundle" 2>"$TMP_ROOT/missing-provider.err")
+missing_provider_rc=$?
+set -e
+if [ "$missing_provider_rc" -eq 69 ] && [ -z "$missing_provider_output" ]; then
+  pass '[2b] wrapper reserves exit 69 for an unavailable staged provider'
+else
+  fail_case '[2b] wrapper reserves exit 69 for an unavailable staged provider' \
+    "rc=$missing_provider_rc output=$missing_provider_output"
+fi
+
 valid_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
-  PROVIDER_OUTPUT='VERDICT: pass\nfixed provider accepted the probe bundle\nignored trailing diagnostic\n' \
+  PROVIDER_OUTPUT='No defects found. All three rubric criteria are satisfied by the supplied evidence.\r\n- Request coverage: the result addresses the requested behavior.   \r\n- Manifest consistency: the declared boundaries match the result.\r\n- Evidence sufficiency: the inlined evidence directly supports the result.\r\nResidual risks not ruled out: evidence outside the bounded excerpts was not inspected.   \r\n\r\nVERDICT: pass \t\r\nNo findings; residual risk is limited to evidence outside the bounded excerpts. \t\r\n' \
   VERIFIER_BUNDLE_MIN_BYTES=64 "$WRAPPER" "$bundle")
 valid_rc=$?
 valid_first=$(printf '%s\n' "$valid_output" | sed -n '1p')
 if [ "$valid_rc" -eq 0 ] \
   && [ "$valid_first" = 'VERDICT: pass' ] \
   && [ "$(printf '%s\n' "$valid_output" | wc -l | tr -d '[:space:]')" -eq 2 ] \
-  && ! printf '%s\n' "$valid_output" | grep -Fq 'ignored trailing diagnostic' \
+  && [ "$(printf '%s\n' "$valid_output" | sed -n '2p')" = \
+    'No findings; residual risk is limited to evidence outside the bounded excerpts.' ] \
+  && ! printf '%s\n' "$valid_output" | grep -Fq 'All three rubric criteria' \
   && [ "$(cat "$provider_marker")" = "$bundle" ]; then
-  pass '[3] wrapper invokes the staged provider with argv[1] and forwards exactly two validated lines'
+  pass '[3] wrapper accepts the production-shaped verdict-last reply and forwards two normalized lines'
 else
-  fail_case '[3] wrapper invokes the staged provider with argv[1] and forwards exactly two validated lines' \
+  fail_case '[3] wrapper accepts the production-shaped verdict-last reply and forwards two normalized lines' \
     "rc=$valid_rc output=$valid_output"
 fi
 
@@ -98,7 +112,7 @@ multi_output=$(FABLE_CONFORMING_PROVIDER_PATH="$multi_provider" \
   VERIFIER_BUNDLE_MIN_BYTES=64 "$WRAPPER" "$bundle" 2>"$TMP_ROOT/multi.err")
 multi_rc=$?
 set -e
-if [ "$multi_rc" -ne 0 ] && [ -z "$multi_output" ]; then
+if [ "$multi_rc" -eq 65 ] && [ -z "$multi_output" ]; then
   pass '[4] wrapper rejects multi-verdict provider output without forwarding a verdict'
 else
   fail_case '[4] wrapper rejects multi-verdict provider output without forwarding a verdict' \
@@ -121,39 +135,91 @@ contract reason for $verdict" ]; then
   fi
 done
 if [ "$verdict_matrix_ok" -eq 1 ]; then
-  pass '[5] wrapper accepts all six host verdicts with the first-line contract'
+  pass '[5] wrapper accepts verdict-first replies for all six host verdicts'
 else
-  fail_case '[5] wrapper accepts all six host verdicts with the first-line contract' \
+  fail_case '[5] wrapper accepts verdict-first replies for all six host verdicts' \
     'one or more contract verdicts were rejected'
 fi
 
+invalid_wrapper_matrix_ok=1
+for invalid_case in \
+  'zero-anchor|analysis only\nno marker here\n' \
+  'duplicate-anchored|VERDICT: pass \t\r\nreason\r\nVERDICT: fail   \r\nsecond reason\r\n' \
+  'anchored-extra|VERDICT: pass\nreason repeats VERDICT: fail\n' \
+  'extra-before-anchor|analysis quotes VERDICT: fail\nVERDICT: pass\nreason\n' \
+  'same-line-double|VERDICT: pass VERDICT: fail\ncombined reason\n' \
+  'no-following-reason|VERDICT: pass\n \t \n' \
+  'lowercase-anchor|verdict: pass\nreason\n' \
+  'malformed-anchor|VERDICT: PASS\nreason\n' \
+  'malformed-spacing-anchor|VERDICT : pass\nreason\n' \
+  'leading-space-anchor| VERDICT: pass\nreason\n'; do
+  invalid_name=${invalid_case%%|*}
+  invalid_reply=${invalid_case#*|}
+  set +e
+  invalid_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" \
+    PROVIDER_MARKER="$provider_marker" PROVIDER_OUTPUT="$invalid_reply" \
+    VERIFIER_BUNDLE_MIN_BYTES=64 "$WRAPPER" "$bundle" \
+    2>"$TMP_ROOT/$invalid_name.err")
+  invalid_rc=$?
+  set -e
+  if [ "$invalid_rc" -ne 65 ] || [ -n "$invalid_output" ]; then
+    invalid_wrapper_matrix_ok=0
+  fi
+done
 set +e
-smuggled_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
-  PROVIDER_OUTPUT='VERDICT: pass\nreason smuggles VERDICT: fail mid-line\n' \
-  VERIFIER_BUNDLE_MIN_BYTES=64 "$WRAPPER" "$bundle" 2>"$TMP_ROOT/smuggled.err")
-smuggled_rc=$?
-bare_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
-  PROVIDER_OUTPUT='VERDICT: pass\n' VERIFIER_BUNDLE_MIN_BYTES=64 \
-  "$WRAPPER" "$bundle" 2>"$TMP_ROOT/bare.err")
-bare_rc=$?
-whitespace_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
-  PROVIDER_OUTPUT='VERDICT: pass\n \t \n' VERIFIER_BUNDLE_MIN_BYTES=64 \
-  "$WRAPPER" "$bundle" 2>"$TMP_ROOT/whitespace.err")
-whitespace_rc=$?
 provider_124_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
   PROVIDER_EXIT=124 VERIFIER_BUNDLE_MIN_BYTES=64 \
   "$WRAPPER" "$bundle" 2>"$TMP_ROOT/provider-124.err")
 provider_124_rc=$?
 set -e
-if [ "$smuggled_rc" -ne 0 ] && [ -z "$smuggled_output" ] \
-  && [ "$bare_rc" -ne 0 ] && [ -z "$bare_output" ] \
-  && [ "$whitespace_rc" -ne 0 ] && [ -z "$whitespace_output" ] \
+if [ "$invalid_wrapper_matrix_ok" -eq 1 ] \
   && [ "$provider_124_rc" -eq 70 ] && [ -z "$provider_124_output" ] \
   && grep -Fqx 'provider exited 124' "$TMP_ROOT/provider-124.err"; then
-  pass '[6] wrapper rejects smuggled/bare responses and normalizes provider failures to exit 70'
+  pass '[6] wrapper maps every malformed reply to 65 and provider failures to 70'
 else
-  fail_case '[6] wrapper rejects smuggled/bare responses and normalizes provider failures to exit 70' \
-    "smuggled=$smuggled_rc bare=$bare_rc whitespace=$whitespace_rc provider124=$provider_124_rc"
+  fail_case '[6] wrapper maps every malformed reply to 65 and provider failures to 70' \
+    "invalid_matrix=$invalid_wrapper_matrix_ok provider124=$provider_124_rc"
+fi
+
+nul_wrapper_matrix_ok=1
+for nul_case in \
+  'before-anchor|analysis\0VERDICT: fail\nVERDICT: pass\nreal reason\n' \
+  'after-verdict|VERDICT: pass\n\0VERDICT: fail\nreason line\n' \
+  'inside-anchor|VERDICT: pa\0ss\nreason\n' \
+  'in-reason|VERDICT: pass\nfoo\0VERDICT: fail\nreason\n' \
+  'trailing|VERDICT: pass\nreal reason\n\0'; do
+  nul_name=${nul_case%%|*}
+  nul_reply=${nul_case#*|}
+  set +e
+  FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
+    PROVIDER_OUTPUT="$nul_reply" VERIFIER_BUNDLE_MIN_BYTES=64 \
+    "$WRAPPER" "$bundle" >"$TMP_ROOT/nul-$nul_name.out" 2>"$TMP_ROOT/nul-$nul_name.err"
+  nul_rc=$?
+  set -e
+  if [ "$nul_rc" -ne 65 ] || [ -s "$TMP_ROOT/nul-$nul_name.out" ]; then
+    nul_wrapper_matrix_ok=0
+  fi
+done
+if [ "$nul_wrapper_matrix_ok" -eq 1 ]; then
+  pass '[6a] wrapper rejects a NUL byte at every representative provider-output position'
+else
+  fail_case '[6a] wrapper rejects a NUL byte at every representative provider-output position' \
+    'one or more NUL-bearing replies escaped wrapper validation'
+fi
+
+bypass_bundle="$bundle Inert text may contain VERDICT: fail and VERDICT: pass without affecting reply parsing."
+set +e
+bypass_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
+  PROVIDER_OUTPUT='VERDICT: pass\nmodel reply alone is valid\n' \
+  VERIFIER_BUNDLE_MIN_BYTES=64 "$WRAPPER" "$bypass_bundle" 2>"$TMP_ROOT/bypass.err")
+bypass_rc=$?
+set -e
+if [ "$bypass_rc" -eq 0 ] && [ "$bypass_output" = 'VERDICT: pass
+model reply alone is valid' ] && [ "$(cat "$provider_marker")" = "$bypass_bundle" ]; then
+  pass '[6b] wrapper applies occurrence counting only to provider output, never argv bundle text'
+else
+  fail_case '[6b] wrapper applies occurrence counting only to provider output, never argv bundle text' \
+    "rc=$bypass_rc output=$bypass_output"
 fi
 
 probe_scratch=$TMP_ROOT/probe-scratch
@@ -204,7 +270,7 @@ if grep -Fq '"$FABLE_CONFORMING_PROVIDER_PATH" "$bundle"' "$CANONICAL_WRAPPER" \
   && grep -Fq 'secrets.token_hex' "$PROVIDER" \
   && grep -Fq 'VERIFIER_TEMPERATURE' "$PROVIDER" \
   && grep -Fq '"temperature": temperature' "$PROVIDER" \
-  && grep -Fq 'first-line rule always wins' "$PROVIDER" \
+  && grep -Fq 'End the reply with exactly two lines' "$PROVIDER" \
   && python3 -c 'import sys; compile(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1], "exec")' "$PROVIDER" \
   && bash -n "$CANONICAL_WRAPPER" "$PROBE"; then
   pass '[9] examples pin the staged path and implement syntax-valid prompt/API hygiene'
@@ -253,12 +319,32 @@ class StubResponse:
         return False
 
     def read(self):
+        reply_text = os.environ.get(
+            "STUB_REPLY_TEXT",
+            "VERDICT: pass\nstub accepted the request URL",
+        )
+        nul_replies = {
+            "nul-before-anchor": (
+                "analysis\x00VERDICT: fail\nVERDICT: pass\nreal reason"
+            ),
+            "nul-after-verdict": (
+                "VERDICT: pass\n\x00VERDICT: fail\nreason line"
+            ),
+            "nul-inside-anchor": "VERDICT: pa\x00ss\nreason",
+            "nul-in-reason": (
+                "VERDICT: pass\nfoo\x00VERDICT: fail\nreason"
+            ),
+            "nul-trailing": "VERDICT: pass\nreal reason\n\x00",
+        }
+        reply_text = nul_replies.get(
+            os.environ.get("STUB_REPLY_MODE", ""), reply_text
+        )
         return json.dumps(
             {
                 "content": [
                     {
                         "type": "text",
-                        "text": "VERDICT: pass\nstub accepted the request URL",
+                        "text": reply_text,
                     }
                 ]
             }
@@ -277,6 +363,11 @@ class StubOpener:
             marker.write(request.full_url)
         with open(os.environ["REQUEST_KEY_MARKER"], "w", encoding="utf-8") as marker:
             marker.write(request.get_header("X-api-key", ""))
+        if os.environ.get("REQUEST_BODY_MARKER"):
+            with open(
+                os.environ["REQUEST_BODY_MARKER"], "wb"
+            ) as marker:
+                marker.write(request.data)
 
         if os.environ.get("STUB_RESPONSE_MODE") == "redirect":
             redirected = self.redirect_handler.redirect_request(
@@ -337,6 +428,115 @@ stub accepted the request URL' ] \
 else
   fail_case '[11] provider sends the default request to the Anthropic Messages URL' \
     "rc=$default_base_rc output=$default_base_output"
+fi
+
+api_acceptance_ok=1
+for api_case in \
+  'verdict-last|No defects found. All three rubric criteria are satisfied by the supplied evidence.\r\n- Request coverage: the result addresses the requested behavior.   \r\n- Manifest consistency: the declared boundaries match the result.\r\n- Evidence sufficiency: the inlined evidence directly supports the result.\r\nResidual risks not ruled out: evidence outside the bounded excerpts was not inspected.   \r\n\r\nVERDICT: pass \t\r\nNo findings; residual risk is limited to evidence outside the bounded excerpts. \t\r\n|VERDICT: pass\nNo findings; residual risk is limited to evidence outside the bounded excerpts.' \
+  'verdict-first|VERDICT: fail \t\r\nfirst nonempty reason wins \t\r\nignored trailing finding\r\n|VERDICT: fail\nfirst nonempty reason wins'; do
+  api_case_name=${api_case%%|*}
+  api_case_rest=${api_case#*|}
+  api_reply_encoded=${api_case_rest%%|*}
+  api_expected_encoded=${api_case_rest#*|}
+  api_reply=$(printf '%b' "$api_reply_encoded")
+  api_expected=$(printf '%b' "$api_expected_encoded")
+  set +e
+  api_output=$(VERIFIER_API_KEY=fixture STUB_REPLY_TEXT="$api_reply" \
+    REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+    REQUEST_COUNT_MARKER="$request_count_marker" \
+    python3 "$opener_stub" "$PROVIDER" "$bundle" \
+    2>"$TMP_ROOT/api-$api_case_name.err")
+  api_rc=$?
+  set -e
+  if [ "$api_rc" -ne 0 ] || [ "$api_output" != "$api_expected" ]; then
+    api_acceptance_ok=0
+  fi
+done
+if [ "$api_acceptance_ok" -eq 1 ]; then
+  pass '[11b] API provider accepts verdict-last and verdict-first shapes and emits normalized verdict plus reason'
+else
+  fail_case '[11b] API provider accepts verdict-last and verdict-first shapes and emits normalized verdict plus reason' \
+    'an accepted model-reply shape did not normalize to exactly two lines'
+fi
+
+api_invalid_matrix_ok=1
+for api_invalid_case in \
+  'zero-anchor|analysis only\nno marker here\n' \
+  'duplicate-anchored|VERDICT: pass \t\r\nreason\r\nVERDICT: fail   \r\nsecond reason\r\n' \
+  'anchored-extra|VERDICT: pass\nreason repeats VERDICT: fail\n' \
+  'extra-before-anchor|analysis quotes VERDICT: fail\nVERDICT: pass\nreason\n' \
+  'same-line-double|VERDICT: pass VERDICT: fail\ncombined reason\n' \
+  'no-following-reason|VERDICT: pass\n \t \n' \
+  'lowercase-anchor|verdict: pass\nreason\n' \
+  'malformed-anchor|VERDICT: PASS\nreason\n' \
+  'malformed-spacing-anchor|VERDICT : pass\nreason\n' \
+  'leading-space-anchor| VERDICT: pass\nreason\n'; do
+  api_invalid_name=${api_invalid_case%%|*}
+  api_invalid_reply=$(printf '%b' "${api_invalid_case#*|}")
+  set +e
+  api_invalid_output=$(VERIFIER_API_KEY=fixture STUB_REPLY_TEXT="$api_invalid_reply" \
+    REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+    REQUEST_COUNT_MARKER="$request_count_marker" \
+    python3 "$opener_stub" "$PROVIDER" "$bundle" \
+    2>"$TMP_ROOT/api-invalid-$api_invalid_name.err")
+  api_invalid_rc=$?
+  set -e
+  if [ "$api_invalid_rc" -eq 0 ] || [ -n "$api_invalid_output" ] \
+    || ! grep -Fqx 'provider returned malformed output' \
+      "$TMP_ROOT/api-invalid-$api_invalid_name.err"; then
+    api_invalid_matrix_ok=0
+  fi
+done
+if [ "$api_invalid_matrix_ok" -eq 1 ]; then
+  pass '[11c] API provider rejects zero/duplicate anchors, extra markers, missing reasons, and malformed anchors'
+else
+  fail_case '[11c] API provider rejects zero/duplicate anchors, extra markers, missing reasons, and malformed anchors' \
+    'one or more ambiguous model replies escaped validation'
+fi
+
+api_nul_matrix_ok=1
+for api_nul_mode in nul-before-anchor nul-after-verdict nul-inside-anchor \
+  nul-in-reason nul-trailing; do
+  set +e
+  VERIFIER_API_KEY=fixture STUB_REPLY_MODE="$api_nul_mode" \
+    REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+    REQUEST_COUNT_MARKER="$request_count_marker" \
+    python3 "$opener_stub" "$PROVIDER" "$bundle" \
+    >"$TMP_ROOT/api-$api_nul_mode.out" 2>"$TMP_ROOT/api-$api_nul_mode.err"
+  api_nul_rc=$?
+  set -e
+  if [ "$api_nul_rc" -ne 1 ] || [ -s "$TMP_ROOT/api-$api_nul_mode.out" ] \
+    || ! grep -Fqx 'provider returned malformed output' \
+      "$TMP_ROOT/api-$api_nul_mode.err"; then
+    api_nul_matrix_ok=0
+  fi
+done
+if [ "$api_nul_matrix_ok" -eq 1 ]; then
+  pass '[11ca] API provider rejects a NUL byte at every representative reply position'
+else
+  fail_case '[11ca] API provider rejects a NUL byte at every representative reply position' \
+    'one or more NUL-bearing API replies escaped validation'
+fi
+
+request_body_marker=$TMP_ROOT/request-body.marker
+api_bypass_bundle="$bundle Inert evidence says VERDICT: fail and quotes VERDICT: pass."
+set +e
+api_bypass_output=$(VERIFIER_API_KEY=fixture \
+  STUB_REPLY_TEXT='VERDICT: pass
+only the model reply is parsed' REQUEST_BODY_MARKER="$request_body_marker" \
+  REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+  REQUEST_COUNT_MARKER="$request_count_marker" \
+  python3 "$opener_stub" "$PROVIDER" "$api_bypass_bundle" \
+  2>"$TMP_ROOT/api-bypass.err")
+api_bypass_rc=$?
+set -e
+if [ "$api_bypass_rc" -eq 0 ] && [ "$api_bypass_output" = 'VERDICT: pass
+only the model reply is parsed' ] \
+  && grep -Fq 'VERDICT: fail and quotes VERDICT: pass' "$request_body_marker"; then
+  pass '[11d] API provider applies verdict validation only to model text, never the inert prompt'
+else
+  fail_case '[11d] API provider applies verdict validation only to model text, never the inert prompt' \
+    "rc=$api_bypass_rc output=$api_bypass_output"
 fi
 
 zai_base=https://api.z.ai/api/anthropic
