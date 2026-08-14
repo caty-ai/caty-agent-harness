@@ -77,12 +77,12 @@ run_check a10 'contributing guide has no PyYAML guidance' 'contributing guide re
 run_check a11 'security guide has no PyYAML guidance' 'security guide retains PyYAML guidance or is missing' check_no_pyyaml_note SECURITY.md
 
 suite_root=$(mktemp -d "$TMP_ROOT/suite.XXXXXX")
-if [ $? -ne 0 ] || ! mkdir -p "$suite_root/home" "$suite_root/tmp"; then
+if [ $? -ne 0 ] || ! mkdir -p "$suite_root/tmp"; then
   [ -n "${suite_root:-}" ] && rm -rf "$suite_root"
   fail_check a12 'could not create isolated full-suite environment'
   fail_check a13 'could not create isolated full-suite environment'
 else
-  HOME="$suite_root/home" TMPDIR="$suite_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
+  TMPDIR="$suite_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
     python3 -S scripts/tests/run_tests.py >"$suite_root/suite.log" 2>&1
   suite_rc=$?
   if [ "$suite_rc" -eq 0 ]; then

@@ -18,8 +18,8 @@ MOOT: 0
 | U9 | MECH | `docs/agent-guide.md` has no PyYAML dependency guidance. | `a09` (T4 case-insensitive content-absence). |
 | U10 | MECH | `CONTRIBUTING.md` has no PyYAML dependency guidance. | `a10` (T4 case-insensitive content-absence). |
 | U11 | MECH | `SECURITY.md` has no PyYAML dependency guidance. | `a11` (T4 case-insensitive content-absence). |
-| U12 | MECH | The full suite passes on clean Python. | `a12` (T3 command-exit: `python3 -S scripts/tests/run_tests.py`, explicitly required by the source criterion; `-S` excludes site-packages). The suite invocation receives a fresh `HOME` and `TMPDIR` and is cleaned up before the gate exits. |
-| U13 | MECH | The full suite has no skipped tests. | `a13` (T6 output-shape assertion on the same isolated suite run). |
+| U12 | MECH | The full suite passes on clean Python. | `a12` (T3 command-exit: `python3 -S scripts/tests/run_tests.py`, explicitly required by the source criterion; `-S` excludes site-packages). Under the r4-1 exemption, this suite keeps caller `HOME` because the source suite couples to passwd-home resolution; the runner already supplies a run-private `HOME` per sealed experiment run, while `TMPDIR` remains suite-specific and cleaned up before the gate exits. |
+| U13 | MECH | The full suite has no skipped tests. | `a13` (T6 output-shape assertion on the same caller-`HOME`, suite-`TMPDIR` run). |
 
 ## Anonymization and needles
 
@@ -35,15 +35,23 @@ MOOT: 0
   the first validity run honestly FAILed. The corrected `pre_fix = 25b426bb`
   (main before the port landed) has `import yaml` in both linters and PyYAML
   guidance in the named documents. Before the r4 probe-isolation backfill, the
-  corrected pair validated pre FAIL×5 / fix PASS×5. The authoritative isolated
-  REV3 rerun now records pre FAIL×5 / fix FAIL×5
-  (`../../tools/validate-logs/t12.log`): every fix run fails `a12` because
-  `test_recall.RecallTests.test_search_adapters_guard_leading_dash_query`
-  observes the account passwd-home after clearing the process environment,
-  while its post-context expectation expands against the fresh `HOME`; `a13`
-  still confirms `skipped=0`. A canonical `pwd -P` isolated root reproduced
-  the same single-test failure, ruling out a double-slash or noncanonical temp
-  path. This is an admission finding, not a gate weakening.
+  corrected pair validated pre FAIL×5 / fix PASS×5. The authoritative REV3
+  rerun with a fresh suite `HOME`/`TMPDIR` then recorded pre FAIL×5 / fix
+  FAIL×5 (`../../tools/validate-logs/t12.log`): every fix run fails `a12`
+  because `test_recall.RecallTests.test_search_adapters_guard_leading_dash_query`
+  couples to passwd-home resolution after clearing the process environment,
+  while its post-context expectation expands against the injected fresh
+  `HOME`; `a13` still confirms `skipped=0`. A canonical `pwd -P` isolated root
+  reproduced the same single-test failure, ruling out a double-slash or
+  noncanonical temp path. The r4-1 disposition is a narrow exemption for
+  `a12`/`a13` only: those suite checks now inherit caller `HOME`, relying on
+  the sealed experiment runner's per-run private `HOME`, while `TMPDIR`
+  remains suite-specific and probes `a01`-`a11` retain invocation-specific
+  fresh `HOME`/`TMPDIR`. This is an admissibility ruling, not a gate
+  weakening.
 - Timeout remains 120 seconds. The source criterion explicitly demands the full
   suite, so the suite is retained despite the otherwise preferred narrow-probe
-  rule. The fresh `HOME`/`TMPDIR` suite runs completed in 23–25 seconds.
+  rule. Under the r4-1 exemption, `a12`/`a13` inherit the runner-provided
+  private `HOME` and keep a fresh suite `TMPDIR`; probes `a01`-`a11` remain
+  on invocation-specific fresh `HOME`/`TMPDIR`. The suite runs completed in
+  23–25 seconds.
