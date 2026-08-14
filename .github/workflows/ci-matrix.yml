@@ -159,18 +159,19 @@ jobs:
           fi
           echo "$(brew --prefix bash)/bin" >> "$GITHUB_PATH"
 
-      # This shim affects only PATH-resolved bash. Suites that intentionally hardcode /bin/bash
-      # (pause-contract #74 pins) stay outside this axis; every macOS cell separately asserts /bin/bash 3.2.
-      - name: Put globasciiranges semantic shim on PATH
+      # Semantic cell: disable globasciiranges in every non-interactive bash via BASH_ENV.
+      # A PATH shim exec'ing `bash +O globasciiranges` breaks GHA step shells — bash requires
+      # GNU long options BEFORE short options, so `+O ... --noprofile` is rejected with
+      # "--: invalid option" (observed in dry-run 31836960133). BASH_ENV reaches the PATH
+      # bash AND every child bash the suites spawn; the bracket probe (expected: match)
+      # fail-closed-verifies that the shopt actually flipped.
+      - name: Enable bash-3.2 range semantics via BASH_ENV
         if: matrix.setup == 'globascii-shim'
         shell: bash
         run: |
           set -euo pipefail
-          shim_dir="$RUNNER_TEMP/globascii-shim"
-          mkdir -p "$shim_dir"
-          printf '%s\n' '#!/bin/sh' 'exec /usr/bin/bash +O globasciiranges "$@"' > "$shim_dir/bash"
-          chmod 755 "$shim_dir/bash"
-          echo "$shim_dir" >> "$GITHUB_PATH"
+          printf '%s\n' 'shopt -u globasciiranges' > "$RUNNER_TEMP/disable-globasciiranges.sh"
+          echo "BASH_ENV=$RUNNER_TEMP/disable-globasciiranges.sh" >> "$GITHUB_ENV"
 
       - name: Preflight git-2.34 dependencies
         if: matrix.run_as_nonroot
@@ -198,6 +199,10 @@ jobs:
           cell_script=/tmp/caty-matrix-cell.sh
           cat > "$cell_script" <<'BASH'
           set -euo pipefail
+          # Container su(1) sessions inherit Ubuntu's private-group umask 002; the suites
+          # assert fixtures are not group- or world-writable (dry-run 31836960133,
+          # distill-audit via attest-wrapper). Match the runner default everywhere.
+          umask 022
 
           fail() {
             echo "::error::$*" >&2
