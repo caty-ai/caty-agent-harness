@@ -100,7 +100,7 @@ flowchart LR
 
 | 観点 | 対応 |
 | --- | --- |
-| OS | macOS: ✅ テスト済み（Apple シリコン搭載 macOS でテストスイートを実行） ／ Linux: ⚠️ 動作見込み（POSIX、bash 3.2+、Python 3 標準ライブラリ）— 未検証 |
+| OS | macOS: ✅ CI テスト済み（GitHub Actions `macos-latest`・Apple シリコン） ／ Linux: ✅ CI テスト済み（GitHub Actions `ubuntu-latest`） |
 | Windows | ❌ 非対応（未テスト、WSL も未テスト） |
 | 対応 AI ツール | Claude Code ✅ ／ Codex CLI ✅ ／ Kimi Code CLI ✅ ／ Hermes Agent ✅ ／ OpenClaw ✅ |
 | シェル | bash 3.2+ ✅（macOS 標準のままで OK） |

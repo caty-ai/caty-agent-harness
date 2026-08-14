@@ -100,7 +100,7 @@ flowchart LR
 
 | 类别 | 支持情况 |
 | --- | --- |
-| 操作系统 | macOS：✅ 已测试（测试套件在 Apple 芯片 macOS 上运行） ／ Linux：⚠️ 预计可用（POSIX、bash 3.2+、Python 3 标准库）——尚未验证 |
+| 操作系统 | macOS：✅ 已通过 CI 测试（GitHub Actions `macos-latest`，Apple 芯片） ／ Linux：✅ 已通过 CI 测试（GitHub Actions `ubuntu-latest`） |
 | Windows | ❌ 不支持（未测试；WSL 未测试） |
 | AI 工具 | Claude Code ✅ ／ Codex CLI ✅ ／ Kimi Code CLI ✅ ／ Hermes Agent ✅ ／ OpenClaw ✅ |
 | Shell | bash 3.2+ ✅（macOS 默认版本即可） |

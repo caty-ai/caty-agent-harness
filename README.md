@@ -100,7 +100,7 @@ The supported AI tools all run in a terminal — **but you won't be the one typi
 
 | Category | Supported |
 | --- | --- |
-| OS | macOS: ✅ tested (test suite runs on Apple-silicon macOS) ／ Linux: ⚠️ expected to work (POSIX, bash 3.2+, Python 3 stdlib) — not yet verified |
+| OS | macOS: ✅ CI-tested (GitHub Actions `macos-latest`, Apple silicon) ／ Linux: ✅ CI-tested (GitHub Actions `ubuntu-latest`) |
 | Windows | ❌ not supported (not tested; WSL not tested) |
 | AI tools | Claude Code ✅ ／ Codex CLI ✅ ／ Kimi Code CLI ✅ ／ Hermes Agent ✅ ／ OpenClaw ✅ |
 | Shell | bash 3.2+ ✅ (the macOS default is fine) |
