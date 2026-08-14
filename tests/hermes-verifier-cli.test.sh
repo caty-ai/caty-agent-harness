@@ -124,6 +124,21 @@ case "${CLI_MODE:-valid}" in
   one-line)
     printf 'VERDICT: pass\n'
     ;;
+  nul-before-anchor)
+    printf 'analysis\0VERDICT: fail\nVERDICT: pass\nreal reason\n'
+    ;;
+  nul-after-verdict)
+    printf 'VERDICT: pass\n\0VERDICT: fail\nreason line\n'
+    ;;
+  nul-inside-anchor)
+    printf 'VERDICT: pa\0ss\nreason\n'
+    ;;
+  nul-in-reason)
+    printf 'VERDICT: pass\nfoo\0VERDICT: fail\nreason\n'
+    ;;
+  nul-trailing)
+    printf 'VERDICT: pass\nreal reason\n\0'
+    ;;
   probe)
     challenge=$(LC_ALL=C grep -Eo 'CATY-CLI-PROBE-[0-9a-f]{24}' "$stdin_marker" | head -n 1)
     [[ -n "$challenge" ]]
@@ -307,6 +322,30 @@ if [[ "$failure_matrix_ok" -eq 1 ]] \
 else
   fail_case '[5] missing, duplicate, smuggled, malformed, and reasonless replies fail closed with bounded diagnostics' \
     'one or more invalid CLI outcomes escaped validation'
+fi
+
+cli_nul_matrix_ok=1
+for cli_mode in nul-before-anchor nul-after-verdict nul-inside-anchor \
+  nul-in-reason nul-trailing; do
+  set +e
+  FABLE_CONFORMING_PROVIDER_PATH="$CLI_PROVIDER" \
+    VERIFIER_BUNDLE_MIN_BYTES=64 VERIFIER_CLI_BIN="$cli_stub" \
+    CLI_STDIN_MARKER="$stdin_marker" CLI_MODE="$cli_mode" \
+    "$WRAPPER" "$bundle" >"$TMP_ROOT/$cli_mode.out" 2>"$TMP_ROOT/$cli_mode.err"
+  cli_nul_rc=$?
+  set -e
+  if [[ "$cli_nul_rc" -ne 70 || -s "$TMP_ROOT/$cli_mode.out" ]] \
+    || ! grep -Fqx 'CLI verifier provider: CLI returned malformed output' \
+      "$TMP_ROOT/$cli_mode.err" \
+    || ! grep -Fqx 'provider exited 1' "$TMP_ROOT/$cli_mode.err"; then
+    cli_nul_matrix_ok=0
+  fi
+done
+if [[ "$cli_nul_matrix_ok" -eq 1 ]]; then
+  pass '[5b] CLI provider rejects a NUL byte at every representative reply position before normalization'
+else
+  fail_case '[5b] CLI provider rejects a NUL byte at every representative reply position before normalization' \
+    'one or more NUL-bearing CLI replies escaped the provider malformed-output path'
 fi
 
 set +e

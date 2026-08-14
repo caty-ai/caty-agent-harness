@@ -181,6 +181,32 @@ else
     "invalid_matrix=$invalid_wrapper_matrix_ok provider124=$provider_124_rc"
 fi
 
+nul_wrapper_matrix_ok=1
+for nul_case in \
+  'before-anchor|analysis\0VERDICT: fail\nVERDICT: pass\nreal reason\n' \
+  'after-verdict|VERDICT: pass\n\0VERDICT: fail\nreason line\n' \
+  'inside-anchor|VERDICT: pa\0ss\nreason\n' \
+  'in-reason|VERDICT: pass\nfoo\0VERDICT: fail\nreason\n' \
+  'trailing|VERDICT: pass\nreal reason\n\0'; do
+  nul_name=${nul_case%%|*}
+  nul_reply=${nul_case#*|}
+  set +e
+  FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
+    PROVIDER_OUTPUT="$nul_reply" VERIFIER_BUNDLE_MIN_BYTES=64 \
+    "$WRAPPER" "$bundle" >"$TMP_ROOT/nul-$nul_name.out" 2>"$TMP_ROOT/nul-$nul_name.err"
+  nul_rc=$?
+  set -e
+  if [ "$nul_rc" -ne 65 ] || [ -s "$TMP_ROOT/nul-$nul_name.out" ]; then
+    nul_wrapper_matrix_ok=0
+  fi
+done
+if [ "$nul_wrapper_matrix_ok" -eq 1 ]; then
+  pass '[6a] wrapper rejects a NUL byte at every representative provider-output position'
+else
+  fail_case '[6a] wrapper rejects a NUL byte at every representative provider-output position' \
+    'one or more NUL-bearing replies escaped wrapper validation'
+fi
+
 bypass_bundle="$bundle Inert text may contain VERDICT: fail and VERDICT: pass without affecting reply parsing."
 set +e
 bypass_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
@@ -293,15 +319,32 @@ class StubResponse:
         return False
 
     def read(self):
+        reply_text = os.environ.get(
+            "STUB_REPLY_TEXT",
+            "VERDICT: pass\nstub accepted the request URL",
+        )
+        nul_replies = {
+            "nul-before-anchor": (
+                "analysis\x00VERDICT: fail\nVERDICT: pass\nreal reason"
+            ),
+            "nul-after-verdict": (
+                "VERDICT: pass\n\x00VERDICT: fail\nreason line"
+            ),
+            "nul-inside-anchor": "VERDICT: pa\x00ss\nreason",
+            "nul-in-reason": (
+                "VERDICT: pass\nfoo\x00VERDICT: fail\nreason"
+            ),
+            "nul-trailing": "VERDICT: pass\nreal reason\n\x00",
+        }
+        reply_text = nul_replies.get(
+            os.environ.get("STUB_REPLY_MODE", ""), reply_text
+        )
         return json.dumps(
             {
                 "content": [
                     {
                         "type": "text",
-                        "text": os.environ.get(
-                            "STUB_REPLY_TEXT",
-                            "VERDICT: pass\nstub accepted the request URL",
-                        ),
+                        "text": reply_text,
                     }
                 ]
             }
@@ -449,6 +492,30 @@ if [ "$api_invalid_matrix_ok" -eq 1 ]; then
 else
   fail_case '[11c] API provider rejects zero/duplicate anchors, extra markers, missing reasons, and malformed anchors' \
     'one or more ambiguous model replies escaped validation'
+fi
+
+api_nul_matrix_ok=1
+for api_nul_mode in nul-before-anchor nul-after-verdict nul-inside-anchor \
+  nul-in-reason nul-trailing; do
+  set +e
+  VERIFIER_API_KEY=fixture STUB_REPLY_MODE="$api_nul_mode" \
+    REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+    REQUEST_COUNT_MARKER="$request_count_marker" \
+    python3 "$opener_stub" "$PROVIDER" "$bundle" \
+    >"$TMP_ROOT/api-$api_nul_mode.out" 2>"$TMP_ROOT/api-$api_nul_mode.err"
+  api_nul_rc=$?
+  set -e
+  if [ "$api_nul_rc" -ne 1 ] || [ -s "$TMP_ROOT/api-$api_nul_mode.out" ] \
+    || ! grep -Fqx 'provider returned malformed output' \
+      "$TMP_ROOT/api-$api_nul_mode.err"; then
+    api_nul_matrix_ok=0
+  fi
+done
+if [ "$api_nul_matrix_ok" -eq 1 ]; then
+  pass '[11ca] API provider rejects a NUL byte at every representative reply position'
+else
+  fail_case '[11ca] API provider rejects a NUL byte at every representative reply position' \
+    'one or more NUL-bearing API replies escaped validation'
 fi
 
 request_body_marker=$TMP_ROOT/request-body.marker

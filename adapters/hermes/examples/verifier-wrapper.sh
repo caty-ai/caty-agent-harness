@@ -17,9 +17,10 @@ bundle_bytes=$(LC_ALL=C printf '%s' "$bundle" | wc -c | tr -d '[:space:]')
   && -x "$FABLE_CONFORMING_PROVIDER_PATH" ]] || exit 69
 
 provider_output=$(mktemp "${TMPDIR:-/tmp}/caty-verifier-output.XXXXXX")
+nul_stripped_output=$(mktemp "${TMPDIR:-/tmp}/caty-verifier-nul-stripped.XXXXXX")
 validated_output=$(mktemp "${TMPDIR:-/tmp}/caty-verifier-validated.XXXXXX")
 cleanup() {
-  rm -f "$provider_output" "$validated_output"
+  rm -f "$provider_output" "$nul_stripped_output" "$validated_output"
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -30,6 +31,11 @@ set -e
 if ((provider_status != 0)); then
   printf 'provider exited %s\n' "$provider_status" >&2
   exit 70
+fi
+
+if ! LC_ALL=C tr -d '\0' <"$provider_output" >"$nul_stripped_output" \
+  || ! cmp -s "$provider_output" "$nul_stripped_output"; then
+  exit 65
 fi
 
 if ! LC_ALL=C awk '
@@ -69,4 +75,4 @@ if ! LC_ALL=C awk '
   exit 65
 fi
 
-cat "$validated_output"
+cat "$validated_output" || exit 65

@@ -129,6 +129,11 @@ if ((cli_status != 0)); then
 fi
 [[ -s "$reply_file" ]] || fail 'CLI returned no usable output'
 
+if ! LC_ALL=C tr -d '\0' <"$reply_file" >"$normalized_reply_file" \
+  || ! cmp -s "$reply_file" "$normalized_reply_file"; then
+  fail 'CLI returned malformed output'
+fi
+
 if ! LC_ALL=C awk '
   function count_exact(haystack, needle, count, position) {
     count = 0

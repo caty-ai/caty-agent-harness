@@ -120,6 +120,8 @@ except Exception:
 reply = "\n".join(text_parts)
 if not reply:
     fail("provider returned no text")
+if "\x00" in reply:
+    fail("provider returned malformed output")
 normalized_lines = [line.rstrip("\r\t\v\f ") for line in reply.split("\n")]
 verdict_indexes = [
     index for index, line in enumerate(normalized_lines) if VERDICT_PATTERN.fullmatch(line)
