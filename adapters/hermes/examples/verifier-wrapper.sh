@@ -17,8 +17,9 @@ bundle_bytes=$(LC_ALL=C printf '%s' "$bundle" | wc -c | tr -d '[:space:]')
   && -x "$FABLE_CONFORMING_PROVIDER_PATH" ]] || exit 69
 
 provider_output=$(mktemp "${TMPDIR:-/tmp}/caty-verifier-output.XXXXXX")
+validated_output=$(mktemp "${TMPDIR:-/tmp}/caty-verifier-validated.XXXXXX")
 cleanup() {
-  rm -f "$provider_output"
+  rm -f "$provider_output" "$validated_output"
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -31,15 +32,41 @@ if ((provider_status != 0)); then
   exit 70
 fi
 
-verdict_line=$(sed -n '1p' "$provider_output")
-reason_line=$(sed -n '2p' "$provider_output")
-case "$verdict_line" in
-  'VERDICT: pass'|'VERDICT: fail'|'VERDICT: inconclusive'|'VERDICT: rubric-invalid'|'VERDICT: needs-human'|'VERDICT: blocked-missing-artifact') ;;
-  *) exit 65 ;;
-esac
-[[ -n "${reason_line//[[:space:]]/}" ]] || exit 65
-if tail -n +2 "$provider_output" | grep -Fq 'VERDICT:'; then
+if ! LC_ALL=C awk '
+  function count_exact(haystack, needle, count, position) {
+    count = 0
+    while ((position = index(haystack, needle)) != 0) {
+      count++
+      haystack = substr(haystack, position + length(needle))
+    }
+    return count
+  }
+  {
+    sub(/\r$/, "")
+    sub(/[[:space:]]+$/, "")
+    lines[NR] = $0
+    marker_count += count_exact($0, "VERDICT:")
+    if ($0 ~ /^VERDICT: (pass|fail|inconclusive|rubric-invalid|needs-human|blocked-missing-artifact)$/) {
+      anchor_count++
+      verdict_number = NR
+      verdict = $0
+    }
+  }
+  END {
+    if (marker_count != 1 || anchor_count != 1) {
+      exit 1
+    }
+    for (line = verdict_number + 1; line <= NR; line++) {
+      if (lines[line] != "") {
+        print verdict
+        print lines[line]
+        exit 0
+      }
+    }
+    exit 1
+  }
+' "$provider_output" >"$validated_output"; then
   exit 65
 fi
 
-printf '%s\n%s\n' "$verdict_line" "$reason_line"
+cat "$validated_output"
