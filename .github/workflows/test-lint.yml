@@ -8,6 +8,13 @@
 # - 未設定 = 赤 (fail-closed)。「テストが無いリポでは green」にしない。
 #   fail-open で置くと「置いただけで守られた気になる」(FP-5) ため、導入時に必ずコマンドを書かせる。
 # - set -euo pipefail 必須・`|| true` でゲート判定を飲み込むこと禁止。
+# - test は ubuntu と macOS の両方で走らせる (handbook #54)。開発機は全員 macOS で、
+#   Linux 単独の CI は BSD/GNU のコマンド挙動差 (sed/grep/date/`--`/`\r`) を構造的に見逃すため。
+#   private リポへ配る場合のみ: macOS 分は課金レート10倍のため、owner 判断で main への
+#   push 時限定にしてよい。ただし必ずセットで行う: `on:` に `push: branches: [main]` を追加し、
+#   かつ `test-macos` に `if: github.event_name == 'push'` を付ける。この型は素では
+#   `on: pull_request` のみなので、if だけ付けると常に skipped＝「置いただけ」の穴になる (FP-5)。
+#   注意: workflow 単位で必須化する ruleset のリポでは、job 追加はそのまま必須チェックに加わる。
 # 型の正本: caty-ai/family-dev-handbook templates/ci/
 
 name: Test + Lint
@@ -37,6 +44,28 @@ jobs:
           set -euo pipefail
           # CUSTOMIZE: このリポのテストコマンドに差し替える (例: npm test / pytest / swift test)。
           # 既定は Makefile の `test` ターゲットを試み、無ければ「未設定」として赤で落ちる (fail-closed)。
+          if [ -f Makefile ] && grep -qE '^test:' Makefile; then
+            make test
+          else
+            echo "::error::test command is not configured. Edit the CUSTOMIZE block in test-lint.yml — an unconfigured gate must not pass (fail-closed by design)."
+            exit 1
+          fi
+
+  # test と同一コマンドを macOS (Apple Silicon) でも走らせる。job 名を分けているのは
+  # 既存の required checks 設定 (test / lint) を壊さないため。required に入れるかは各リポの owner 判断。
+  test-macos:
+    name: test-macos
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run tests (macOS)
+        run: |
+          set -euo pipefail
+          # CUSTOMIZE: test ジョブと同じコマンドに揃える (乖離したら片方のゲートが嘘になる)。
           if [ -f Makefile ] && grep -qE '^test:' Makefile; then
             make test
           else
