@@ -40,7 +40,7 @@ CHECK a17 FAIL English README does not have exactly one family module table
 CHECK a18 FAIL Japanese README does not have exactly one family module table
 CHECK a19 FAIL Chinese README does not have exactly one family module table
 CHECK a20 FAIL Thai README does not have exactly one family module table
-RUN t13 pre 2 exit=1 dur=0s
+RUN t13 pre 2 exit=1 dur=1s
 CHECK a01 PASS English family-section prose remains
 CHECK a02 PASS Japanese family-section prose remains
 CHECK a03 PASS Chinese family-section prose remains
@@ -82,7 +82,7 @@ CHECK a17 FAIL English README does not have exactly one family module table
 CHECK a18 FAIL Japanese README does not have exactly one family module table
 CHECK a19 FAIL Chinese README does not have exactly one family module table
 CHECK a20 FAIL Thai README does not have exactly one family module table
-RUN t13 pre 4 exit=1 dur=0s
+RUN t13 pre 4 exit=1 dur=1s
 CHECK a01 PASS English family-section prose remains
 CHECK a02 PASS Japanese family-section prose remains
 CHECK a03 PASS Chinese family-section prose remains
@@ -145,7 +145,7 @@ CHECK a17 PASS English README has one family module table
 CHECK a18 PASS Japanese README has one family module table
 CHECK a19 PASS Chinese README has one family module table
 CHECK a20 PASS Thai README has one family module table
-RUN t13 fix 2 exit=0 dur=1s
+RUN t13 fix 2 exit=0 dur=0s
 CHECK a01 PASS English family-section prose remains
 CHECK a02 PASS Japanese family-section prose remains
 CHECK a03 PASS Chinese family-section prose remains
@@ -187,7 +187,7 @@ CHECK a17 PASS English README has one family module table
 CHECK a18 PASS Japanese README has one family module table
 CHECK a19 PASS Chinese README has one family module table
 CHECK a20 PASS Thai README has one family module table
-RUN t13 fix 4 exit=0 dur=0s
+RUN t13 fix 4 exit=0 dur=1s
 CHECK a01 PASS English family-section prose remains
 CHECK a02 PASS Japanese family-section prose remains
 CHECK a03 PASS Chinese family-section prose remains

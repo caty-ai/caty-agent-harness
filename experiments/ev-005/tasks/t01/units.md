@@ -32,3 +32,16 @@ MOOT: 3
 | U23 | HUMAN | Owner confirmation is obtained before publication. | Dropped (HUMAN: requires an external owner decision outside the offline replica). |
 | U24 | MOOT | A tag is published for this documentation update. | Dropped (MOOT: tag-publication state is not represented inside the history-zero replica). |
 | U25 | MOOT | Release notes are published for this documentation update together with the already-landed feature batches they summarize. | Dropped (MOOT: external release-note publication is not represented inside the history-zero replica). |
+
+## Anonymization and needle record
+
+- Mapping: the public harness repository is rendered as “this repository.”
+  Issue, commit, owner, date, tag, release, and publication provenance is
+  omitted; repository-local documentation and runtime paths remain because the
+  criterion names them or they are present in the pre-fix replica.
+- Longest T1/T4 needle: `` `loop/pending/intake-runs.log` for content-level
+  silence, dedup, deferral, eviction, and`` (88 characters). It is present in
+  the pre-fix normative install document and supports U20's source-parity
+  extraction; the ledger path itself is also named by U7.
+- Timeout is 1800 seconds because the source-required full `make test` suite
+  exceeded 120, 300, and 600 seconds in history-zero admission replicas.

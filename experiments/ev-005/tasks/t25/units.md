@@ -28,3 +28,16 @@ Needle and solvability audit: `SSH`, `allowed_signers`, `outside`, `unsigned`,
 `moved tag`, `lightweight`, and `no install` are short criterion or behavioral
 fragments. No full fix-prose sentence, test name, commit identity, or
 out-of-replica content is pinned. Default timeout remains 120 seconds.
+
+## Anonymization and needle record
+
+- Mapping: the public harness repository is rendered as “this repository.”
+  Issue, pull-request, commit, owner, and date provenance is omitted. Public
+  updater/test/document paths and the selected SSH trust mechanism remain
+  because the task sheet exposes them as criterion targets.
+- Longest T1/T4 needle: `allowed_signers` (15 characters). It is named by U1
+  and the task-visible selected trust mechanism, so it is derivable without
+  historical access; behavioral output checks use shorter semantic fragments.
+- Timeout remains the default 120 seconds because the gate runs one focused
+  updater regression module plus a bounded structural Python check, rather
+  than the full repository suite.

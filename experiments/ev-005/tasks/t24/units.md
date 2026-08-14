@@ -50,8 +50,18 @@ link-check exclusions that live solely in workflow configuration.
 | U26 | MECH | Generated README blocks are current. | `a23` (T3 command-exit: the exact source-named `python3 -B tools/render.py --check`). |
 | U27 | MECH | All new publication checks are green. | `a13`–`a21` (T5 negative behavior families), `a24` (T3 command-exit of the production publication gate on repository sources), and `a25` (T5 clean fixture accepted). |
 
-Replica-solvability and needle audit: all exact public identifiers appear in
-the unit-numbered task sheet. Labels and registry fields are derived from
-`registry/modules.json`; no historical prose or out-of-replica blob is pinned.
-The fixture creates only temporary repositories outside the replica and does
-not mutate tracked task content. Default timeout remains 120 seconds.
+## Anonymization, needles, and timeout
+
+- Mapping: the source repository is called the family map. Public module and
+  retired-repository identifiers remain verbatim because the criterion names
+  them and the publication allowlist requires them; owner-approval identity
+  and issue/process provenance are omitted.
+- Longest T1/T4 needle:
+  `github\.com/shojikumaru/family-memory-architecture` (50 characters). The
+  repository slug is named in the criterion and task sheet, while the escaped
+  `github\.com/` form is derivable from the pre-fix workflow configuration.
+  Labels and registry fields are derived from `registry/modules.json`; no
+  historical prose or out-of-replica blob is pinned.
+- Timeout remains the task's default 120 seconds. The gate and bundled fixture
+  use only local source scans and temporary repositories, and do not mutate
+  tracked task content.

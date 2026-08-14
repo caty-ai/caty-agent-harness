@@ -17,9 +17,16 @@ fail_check() {
 }
 
 check_no_yaml_import() {
+  local script env_root rc
   script=$1
   [ -f "$script" ] || return 1
-  python3 - "$script" <<'PY'
+  env_root=$(mktemp -d "$TMP_ROOT/ast-probe.XXXXXX") || return 1
+  if ! mkdir -p "$env_root/home" "$env_root/tmp"; then
+    rm -rf "$env_root"
+    return 1
+  fi
+  HOME="$env_root/home" TMPDIR="$env_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
+    python3 - "$script" <<'PY'
 import ast
 import sys
 
@@ -34,6 +41,9 @@ for node in ast.walk(tree):
     if isinstance(node, ast.ImportFrom) and node.module and (node.module == "yaml" or node.module.startswith("yaml.")):
         raise SystemExit(1)
 PY
+  rc=$?
+  rm -rf "$env_root"
+  return "$rc"
 }
 
 check_no_pyyaml_note() {
@@ -66,17 +76,26 @@ run_check a09 'agent guide has no PyYAML guidance' 'agent guide retains PyYAML g
 run_check a10 'contributing guide has no PyYAML guidance' 'contributing guide retains PyYAML guidance or is missing' check_no_pyyaml_note CONTRIBUTING.md
 run_check a11 'security guide has no PyYAML guidance' 'security guide retains PyYAML guidance or is missing' check_no_pyyaml_note SECURITY.md
 
-python3 -S scripts/tests/run_tests.py >"$TMP_ROOT/suite.log" 2>&1
-suite_rc=$?
-if [ "$suite_rc" -eq 0 ]; then
-  pass_check a12 'full repository suite passes'
+suite_root=$(mktemp -d "$TMP_ROOT/suite.XXXXXX")
+if [ $? -ne 0 ] || ! mkdir -p "$suite_root/home" "$suite_root/tmp"; then
+  [ -n "${suite_root:-}" ] && rm -rf "$suite_root"
+  fail_check a12 'could not create isolated full-suite environment'
+  fail_check a13 'could not create isolated full-suite environment'
 else
-  fail_check a12 'full repository suite fails'
-fi
-if grep -Eq 'Final summary: .*skipped=0([[:space:]]|$)' "$TMP_ROOT/suite.log"; then
-  pass_check a13 'full repository suite reports no skips'
-else
-  fail_check a13 'full repository suite does not report zero skips'
+  HOME="$suite_root/home" TMPDIR="$suite_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
+    python3 -S scripts/tests/run_tests.py >"$suite_root/suite.log" 2>&1
+  suite_rc=$?
+  if [ "$suite_rc" -eq 0 ]; then
+    pass_check a12 'full repository suite passes'
+  else
+    fail_check a12 'full repository suite fails'
+  fi
+  if grep -Eq 'Final summary: .*skipped=0([[:space:]]|$)' "$suite_root/suite.log"; then
+    pass_check a13 'full repository suite reports no skips'
+  else
+    fail_check a13 'full repository suite does not report zero skips'
+  fi
+  rm -rf "$suite_root"
 fi
 
 [ "$failures" -eq 0 ]

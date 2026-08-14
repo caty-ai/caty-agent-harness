@@ -36,6 +36,19 @@ run_check() {
   fi
 }
 
+run_isolated() (
+  local env_root rc
+  env_root=$(mktemp -d "${TMPDIR:-/tmp}/ev005-t21-probe.XXXXXX") || return 1
+  trap 'rm -rf "$env_root"' EXIT HUP INT TERM
+  if ! mkdir -p "$env_root/home" "$env_root/tmp"; then
+    return 1
+  fi
+  HOME="$env_root/home" TMPDIR="$env_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
+    "$@"
+  rc=$?
+  return "$rc"
+)
+
 check_design_contract() {
   [ -f DESIGN.md ] || return 1
   section=$(grep -A4 -F 'Skill frontmatter:' DESIGN.md 2>/dev/null) || return 1
@@ -59,7 +72,7 @@ prepare_probe() {
   [ -x install.sh ] || return 1
   TMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/t21-skill-lint.XXXXXX") || return 1
   ws=$TMP_ROOT/ws
-  scripts/loop-init --workspace "$ws" >/dev/null 2>&1 || return 1
+  run_isolated scripts/loop-init --workspace "$ws" >/dev/null 2>&1 || return 1
   mkdir -p "$ws/skills/verified-complete" "$ws/skills/draft-without-verification" || return 1
 
   cat >"$ws/skills/verified-complete/SKILL.md" <<'EOF'
@@ -93,7 +106,7 @@ status: draft
 Pending.
 EOF
 
-  BASELINE_OUTPUT=$(./install.sh --check --workspace "$ws" 2>&1)
+  BASELINE_OUTPUT=$(run_isolated ./install.sh --check --workspace "$ws" 2>&1)
   BASELINE_RC=$?
 
   mkdir -p "$ws/skills/verified-missing" || return 1
@@ -111,7 +124,7 @@ status: verified
 
 Checked.
 EOF
-  MISSING_OUTPUT=$(./install.sh --check --workspace "$ws" 2>&1)
+  MISSING_OUTPUT=$(run_isolated ./install.sh --check --workspace "$ws" 2>&1)
   MISSING_RC=$?
 }
 
@@ -138,7 +151,7 @@ check_targeted_regression() {
     grep -Fq 'missing verifier_id' "$test_file" || continue
     grep -Fq 'exit status' "$test_file" || continue
     found=1
-    bash "$test_file" >/dev/null 2>&1 || return 1
+    run_isolated bash "$test_file" >/dev/null 2>&1 || return 1
   done <<EOF
 $(git ls-files -- 'tests/*.test.sh' 2>/dev/null)
 EOF

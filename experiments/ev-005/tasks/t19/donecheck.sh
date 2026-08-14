@@ -6,6 +6,19 @@ export LC_ALL
 failures=0
 PROBE='.ev005-fixtures/t19_probe.sh'
 
+run_isolated() (
+  local env_root rc
+  env_root=$(mktemp -d "${TMPDIR:-/tmp}/ev005-t19-probe.XXXXXX") || return 1
+  trap 'rm -rf "$env_root"' EXIT HUP INT TERM
+  if ! mkdir -p "$env_root/home" "$env_root/tmp"; then
+    return 1
+  fi
+  HOME="$env_root/home" TMPDIR="$env_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
+    "$@"
+  rc=$?
+  return "$rc"
+)
+
 pass_check() {
   printf 'CHECK %s PASS %s\n' "$1" "$2"
 }
@@ -29,7 +42,7 @@ run_check() {
 
 check_test_coverage() {
   mode=$1
-  python3 - "$mode" <<'PY'
+  run_isolated python3 - "$mode" <<'PY'
 import pathlib
 import sys
 
@@ -51,11 +64,11 @@ PY
 }
 
 run_check a01 'valid assignments reach the scheduler target' \
-  'valid KEY=VALUE input is not exported' bash "$PROBE" assignment
+  'valid KEY=VALUE input is not exported' run_isolated bash "$PROBE" assignment
 run_check a02 'shell syntax remains inert data' \
-  'SECRETS_ENV shell syntax executed or was not preserved as data' bash "$PROBE" inert
+  'SECRETS_ENV shell syntax executed or was not preserved as data' run_isolated bash "$PROBE" inert
 run_check a03 'SECRETS_ENV symlinks are refused before target execution' \
-  'a SECRETS_ENV symlink was accepted or reached the target' bash "$PROBE" symlink
+  'a SECRETS_ENV symlink was accepted or reached the target' run_isolated bash "$PROBE" symlink
 run_check a04 'a local regression test covers data-only loading' \
   'no data-only loading regression test was found' check_test_coverage data
 run_check a05 'a local regression test covers symlink refusal' \

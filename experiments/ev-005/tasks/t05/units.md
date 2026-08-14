@@ -46,3 +46,17 @@ MOOT: 0
 | U37 | MECH | The probe note no longer uses the old installer-local inspection wording. | `a37` (T4 content-absence in `install.sh`) |
 | U38 | MECH | The wrapper-conformance library remains unchanged. | `a40` (T6 structural: exact blob pin of `scripts/lib-wrapper-conformance.sh`). Author revision r1: restores the binding fence from the source adopted scope that was previously dropped, using an in-replica invariance pin per the accepted exactness pattern for untouched files. |
 | U39 | MECH | The wrapper-conformance test expectations remain unchanged. | `a41` (T6 structural: exact blob pin of `tests/wrapper-conformance.test.sh`). Author revision r1: restores the second half of the binding fence from the source adopted scope; the blob is identical in pre-fix and fix, so the validity legs remain unchanged while the "do not touch this" constraint becomes explicit. |
+
+## Anonymization and needle record
+
+- Mapping: the public harness repository is rendered as “this repository.”
+  Issue, commit, person, date, and private operator-path provenance is omitted
+  from the task sheet. Old operator-specific values remain only as
+  pre-fix-derived T4 negative baselines; replacement placeholders and public
+  paths are criterion targets.
+- Longest T1/T4 needle:
+  `FMA_SCRIPTS_DIR=${FMA_SCRIPTS_DIR:-"$HOME/claude-workspace/family-memory-architecture/scripts"}`
+  (95 characters). It is a pre-fix-derived forbidden baseline, not historical
+  replacement prose; the a40/a41 equality pins are T6 invariance checks.
+- Timeout remains the default 120 seconds because the gate performs bounded
+  content checks and Git blob comparisons and executes no repository code.

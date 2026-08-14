@@ -6,7 +6,7 @@ CHECK a04 FAIL no marker-agreement regression test was found
 CHECK a05 FAIL the completion-gate timeout override is ineffective
 CHECK a06 FAIL the timeout default or validation is missing
 CHECK a07 FAIL the fixed B0 estimate remains in generated metrics
-RUN t17 pre 1 exit=1 dur=9s
+RUN t17 pre 1 exit=1 dur=8s
 CHECK a01 FAIL failed push evidence is missing
 CHECK a02 FAIL failed push visibility or runner-result behavior is wrong
 CHECK a03 FAIL scheduler templates and probe defaults disagree
@@ -30,7 +30,7 @@ CHECK a04 FAIL no marker-agreement regression test was found
 CHECK a05 FAIL the completion-gate timeout override is ineffective
 CHECK a06 FAIL the timeout default or validation is missing
 CHECK a07 FAIL the fixed B0 estimate remains in generated metrics
-RUN t17 pre 4 exit=1 dur=9s
+RUN t17 pre 4 exit=1 dur=10s
 CHECK a01 FAIL failed push evidence is missing
 CHECK a02 FAIL failed push visibility or runner-result behavior is wrong
 CHECK a03 FAIL scheduler templates and probe defaults disagree
@@ -62,7 +62,7 @@ CHECK a04 PASS a regression test covers marker agreement
 CHECK a05 PASS the completion-gate timeout accepts an effective override
 CHECK a06 PASS the timeout default is 60 seconds and is integer-validated
 CHECK a07 PASS generated metrics contain no fixed B0 estimate row
-RUN t17 fix 3 exit=0 dur=6s
+RUN t17 fix 3 exit=0 dur=7s
 CHECK a01 PASS failed pushes are recorded beside the report
 CHECK a02 PASS failed pushes are surfaced without changing the runner result
 CHECK a03 PASS scheduler marker guidance agrees with probe defaults
@@ -70,7 +70,7 @@ CHECK a04 PASS a regression test covers marker agreement
 CHECK a05 PASS the completion-gate timeout accepts an effective override
 CHECK a06 PASS the timeout default is 60 seconds and is integer-validated
 CHECK a07 PASS generated metrics contain no fixed B0 estimate row
-RUN t17 fix 4 exit=0 dur=6s
+RUN t17 fix 4 exit=0 dur=8s
 CHECK a01 PASS failed pushes are recorded beside the report
 CHECK a02 PASS failed pushes are surfaced without changing the runner result
 CHECK a03 PASS scheduler marker guidance agrees with probe defaults
@@ -78,5 +78,5 @@ CHECK a04 PASS a regression test covers marker agreement
 CHECK a05 PASS the completion-gate timeout accepts an effective override
 CHECK a06 PASS the timeout default is 60 seconds and is integer-validated
 CHECK a07 PASS generated metrics contain no fixed B0 estimate row
-RUN t17 fix 5 exit=0 dur=6s
+RUN t17 fix 5 exit=0 dur=7s
 VERDICT t17 PASS

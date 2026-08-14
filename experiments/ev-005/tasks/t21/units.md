@@ -19,6 +19,7 @@ MOOT: 0
 - Pair: fix `875acb9071e366530efce45fdbb4dc8d22605e17`; resolved parent pre-fix `06b763ab6d2ac0d946ac5220a16b5e210a1251e3`. The fix is an ancestor of `origin/main`.
 - Central spot check before authoring: neither conditional-warning string nor the matching regression case exists at pre-fix; both missing-field warning checks and the unchanged-exit regression case exist at the fix.
 - Interpretation ruling: the six-field lint is advisory. A verified skill missing verification fields produces warnings, and `--check` retains its prior exit status. This is the source criterion's amended-contract branch, not a silent weakening.
+- Warning-row-over-`FAIL`-row ruling: the warning form wins over the available `FAIL`-row form because the fix's actual amended contract pins warnings plus unchanged `install.sh --check` exit semantics; the acceptance seat's dissent is acknowledged.
 - Mapping: the source harness repository is rendered as “this repository,” matching the established harness stand-in. Paths and field names remain because they are criterion targets or are derivable from the pre-fix tree.
 - Longest fixed T1/T4 needle: `skills/_staging/SKILL.tmpl.md` (31 characters, a criterion target path). No T1/T4 assertion pins a sentence of historical fix prose.
 - Timeout remains the default 120 seconds; only one focused repository test and temporary-workspace probes run.

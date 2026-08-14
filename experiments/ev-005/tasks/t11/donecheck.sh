@@ -30,10 +30,23 @@ run_check() {
   fi
 }
 
+run_isolated() (
+  local env_root rc
+  env_root=$(mktemp -d "$TMP_ROOT/isolation.XXXXXX") || return 1
+  trap 'rm -rf "$env_root"' EXIT HUP INT TERM
+  if ! mkdir -p "$env_root/home" "$env_root/tmp"; then
+    return 1
+  fi
+  HOME="$env_root/home" TMPDIR="$env_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
+    "$@"
+  rc=$?
+  return "$rc"
+)
+
 seed_workspace() {
   local name=$1
   local workspace="$TMP_ROOT/ws-$name"
-  "$ROOT/install.sh" --workspace "$workspace" >/dev/null 2>&1 || return 1
+  run_isolated "$ROOT/install.sh" --workspace "$workspace" >/dev/null 2>&1 || return 1
   printf '%s\n' '- fixture; 2000-01-01T00:00' >>"$workspace/STATE.md" || return 1
   printf '%s\n' '- 2000-01-01 | task=fixture | verifier=test | verdict=pass | fixture' \
     >>"$workspace/loop/VERIFY.log.md" || return 1
@@ -74,11 +87,12 @@ run_prediction() {
   workspace=$(seed_workspace "$name") || return 1
   wrapper=$(install_configured_wrapper "$workspace" "$secrets_file") || return 1
 
-  "$ROOT/install.sh" --check --workspace "$workspace" \
+  run_isolated "$ROOT/install.sh" --check --workspace "$workspace" \
     >"$TMP_ROOT/$name.check.out" 2>"$TMP_ROOT/$name.check.err"
   check_rc=$?
-  TARGET="$TMP_ROOT/recorder" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$workspace" \
-    "$wrapper" >"$TMP_ROOT/$name.wrapper.out" 2>"$TMP_ROOT/$name.wrapper.err"
+  run_isolated env TARGET="$TMP_ROOT/recorder" CATY_HARNESS_ROOT="$ROOT" \
+    CATY_WORKSPACE="$workspace" "$wrapper" \
+    >"$TMP_ROOT/$name.wrapper.out" 2>"$TMP_ROOT/$name.wrapper.err"
   wrapper_rc=$?
 
   if [ "$expected" = accept ]; then
@@ -122,7 +136,7 @@ check_targeted_secrets_regression() {
       && grep -Eqi 'reject' "$test_path" \
       && grep -Eqi 'accept' "$test_path"; then
       found=$((found + 1))
-      bash "$test_path" >/dev/null 2>&1 || return 1
+      run_isolated bash "$test_path" >/dev/null 2>&1 || return 1
     fi
   done
   [ "$found" -ge 1 ]
@@ -180,14 +194,14 @@ EOF
 }
 
 check_cli_contract_suite() {
-  bash tests/check-tickprobe.test.sh >/dev/null 2>&1
+  run_isolated bash tests/check-tickprobe.test.sh >/dev/null 2>&1
 }
 
 check_missing_prefix() {
   local workspace check_rc
   workspace=$(seed_workspace prefix-missing) || return 1
   rm "$workspace/STATE.md" || return 1
-  "$ROOT/install.sh" --check --workspace "$workspace" \
+  run_isolated "$ROOT/install.sh" --check --workspace "$workspace" \
     >"$TMP_ROOT/prefix-missing.out" 2>"$TMP_ROOT/prefix-missing.err"
   check_rc=$?
   [ "$check_rc" -ne 0 ] \
@@ -198,7 +212,7 @@ check_missing_prefix() {
 check_stdout_rows() {
   local workspace check_rc
   workspace=$(seed_workspace stdout-rows) || return 1
-  "$ROOT/install.sh" --check --workspace "$workspace" \
+  run_isolated "$ROOT/install.sh" --check --workspace "$workspace" \
     >"$TMP_ROOT/stdout-rows.out" 2>"$TMP_ROOT/stdout-rows.err"
   check_rc=$?
   [ "$check_rc" -eq 0 ] \

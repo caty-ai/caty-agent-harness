@@ -29,6 +29,19 @@ run_check() {
   fi
 }
 
+run_isolated() (
+  local env_root rc
+  env_root=$(mktemp -d "$TMP_ROOT/isolation.XXXXXX") || return 1
+  trap 'rm -rf "$env_root"' EXIT HUP INT TERM
+  if ! mkdir -p "$env_root/home" "$env_root/tmp"; then
+    return 1
+  fi
+  HOME="$env_root/home" TMPDIR="$env_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
+    "$@"
+  rc=$?
+  return "$rc"
+)
+
 check_documented_trust_mechanism() {
   [ -f docs/updater-rollout.md ] || return 1
   grep -Eiq 'SSH.*sign|sign.*SSH' docs/updater-rollout.md || return 1
@@ -39,7 +52,7 @@ check_documented_trust_mechanism() {
 check_verification_order() {
   [ -f scripts/family-updater ] || return 1
   [ -f scripts/lib-updater-verify.sh ] || return 1
-  python3 - <<'PY'
+  run_isolated python3 - <<'PY'
 import pathlib
 
 text = pathlib.Path("scripts/family-updater").read_text(encoding="utf-8")
@@ -63,7 +76,7 @@ run_check a02 'verification precedes captured-OID checkout and installer executi
   'candidate code can be checked out or run before verification' check_verification_order
 
 test_rc=0
-bash tests/family-updater.test.sh >"$TEST_OUTPUT" 2>&1 || test_rc=$?
+run_isolated bash tests/family-updater.test.sh >"$TEST_OUTPUT" 2>&1 || test_rc=$?
 if [ "$test_rc" -eq 0 ]; then
   pass_check a03 'focused family-updater regression module passes'
 else

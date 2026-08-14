@@ -5,6 +5,13 @@ export LC_ALL
 
 failures=0
 PROBE='.ev005-fixtures/publication_gate_probe.py'
+PROBE_ROOT=''
+
+cleanup_probe_root() {
+  [ -z "$PROBE_ROOT" ] || rm -rf "$PROBE_ROOT"
+  PROBE_ROOT=''
+}
+trap cleanup_probe_root EXIT HUP INT TERM
 
 pass_check() {
   printf 'CHECK %s PASS %s\n' "$1" "$2"
@@ -16,21 +23,36 @@ fail_check() {
 }
 
 run_check() {
-  check_id=$1
-  pass_msg=$2
-  fail_msg=$3
+  local check_id=$1
+  local pass_msg=$2
+  local fail_msg=$3
   shift 3
-  if "$@"; then
+  if run_isolated "$@"; then
     pass_check "$check_id" "$pass_msg"
   else
     fail_check "$check_id" "$fail_msg"
   fi
 }
 
+run_isolated() {
+  local probe_home probe_tmp rc
+  PROBE_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/ev005-t24-probe.XXXXXX") || return 1
+  probe_home="$PROBE_ROOT/home"
+  probe_tmp="$PROBE_ROOT/tmp"
+  if ! mkdir -p "$probe_home" "$probe_tmp"; then
+    cleanup_probe_root
+    return 1
+  fi
+  HOME="$probe_home" TMPDIR="$probe_tmp" PYTHONDONTWRITEBYTECODE=1 "$@"
+  rc=$?
+  cleanup_probe_root
+  return "$rc"
+}
+
 run_probe() {
   mode=$1
   [ -f "$PROBE" ] || return 1
-  PYTHONDONTWRITEBYTECODE=1 python3 "$PROBE" "$mode"
+  python3 "$PROBE" "$mode"
 }
 
 check_workflow_absence() {

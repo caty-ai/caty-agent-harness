@@ -13,7 +13,7 @@ CHECK a11 FAIL English equipment category lacks a context-kit bullet
 CHECK a12 FAIL Japanese equipment category lacks a context-kit bullet
 CHECK a13 FAIL Chinese equipment category lacks a context-kit bullet
 CHECK a14 FAIL Thai equipment category lacks a context-kit bullet
-RUN t18 pre 1 exit=1 dur=1s
+RUN t18 pre 1 exit=1 dur=0s
 CHECK a01 FAIL the registry lacks a unique context-kit entry
 CHECK a02 FAIL context-kit is not on the vertical axis
 CHECK a03 FAIL context-kit has the wrong foundation flag
@@ -58,7 +58,7 @@ CHECK a11 FAIL English equipment category lacks a context-kit bullet
 CHECK a12 FAIL Japanese equipment category lacks a context-kit bullet
 CHECK a13 FAIL Chinese equipment category lacks a context-kit bullet
 CHECK a14 FAIL Thai equipment category lacks a context-kit bullet
-RUN t18 pre 4 exit=1 dur=0s
+RUN t18 pre 4 exit=1 dur=1s
 CHECK a01 FAIL the registry lacks a unique context-kit entry
 CHECK a02 FAIL context-kit is not on the vertical axis
 CHECK a03 FAIL context-kit has the wrong foundation flag
@@ -103,7 +103,7 @@ CHECK a11 PASS English equipment category has a context-kit bullet
 CHECK a12 PASS Japanese equipment category has a context-kit bullet
 CHECK a13 PASS Chinese equipment category has a context-kit bullet
 CHECK a14 PASS Thai equipment category has a context-kit bullet
-RUN t18 fix 2 exit=0 dur=0s
+RUN t18 fix 2 exit=0 dur=1s
 CHECK a01 PASS the registry has one context-kit entry
 CHECK a02 PASS context-kit is on the vertical axis
 CHECK a03 PASS context-kit is not a foundation module
@@ -118,7 +118,7 @@ CHECK a11 PASS English equipment category has a context-kit bullet
 CHECK a12 PASS Japanese equipment category has a context-kit bullet
 CHECK a13 PASS Chinese equipment category has a context-kit bullet
 CHECK a14 PASS Thai equipment category has a context-kit bullet
-RUN t18 fix 3 exit=0 dur=1s
+RUN t18 fix 3 exit=0 dur=0s
 CHECK a01 PASS the registry has one context-kit entry
 CHECK a02 PASS context-kit is on the vertical axis
 CHECK a03 PASS context-kit is not a foundation module

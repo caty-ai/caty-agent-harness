@@ -5,11 +5,6 @@ MECH: 20
 HUMAN: 1
 MOOT: 0
 
-Anonymization mapping: the source repository is "this repository"; its
-family-map section is the "hand-written family section"; the source's named
-architecture abbreviation remains only in the executable gate as content
-already present in the replica, not as issue provenance in `task.md`.
-
 | Unit | Class | Source unit (anonymized) | Mapping / disposition |
 | --- | --- | --- | --- |
 | U1 | MECH | The hand-written family section in `README.md` retains its general prose. | `a01` (T1 content-presence of four small prose anchors spanning the family-map introduction, standalone-use claim, handbook link, and closing thanks). |
@@ -24,12 +19,28 @@ already present in the replica, not as issue provenance in `task.md`.
 | U10 | MECH | The hand-written family section in `README.ja.md` drops its module table. | `a10` (T4 content-absence of Markdown table rows inside that section). |
 | U11 | MECH | The hand-written family section in `README.zh.md` drops its module table. | `a11` (T4 content-absence of Markdown table rows inside that section). |
 | U12 | MECH | The hand-written family section in `README.th.md` drops its module table. | `a12` (T4 content-absence of Markdown table rows inside that section). |
-| U13 | MECH | The marker-delimited generated family footer in `README.md` is untouched. | `a13` (T6 structural: exactly one start/end marker pair and exact SHA-256 of the pre-fix generated block). Exactness is source-required invariance, not historical prose pinning. |
-| U14 | MECH | The marker-delimited generated family footer in `README.ja.md` is untouched. | `a14` (T6 structural: unique marker pair and exact pre-fix generated-block SHA-256). |
-| U15 | MECH | The marker-delimited generated family footer in `README.zh.md` is untouched. | `a15` (T6 structural: unique marker pair and exact pre-fix generated-block SHA-256). |
-| U16 | MECH | The marker-delimited generated family footer in `README.th.md` is untouched. | `a16` (T6 structural: unique marker pair and exact pre-fix generated-block SHA-256). |
+| U13 | MECH | The marker-delimited generated family footer in `README.md` is untouched. | `a13` (T6 structural Python probe under an invocation-specific fresh `HOME` and `TMPDIR`: exactly one start/end marker pair and exact SHA-256 of the pre-fix generated block). Exactness is source-required invariance, not historical prose pinning. |
+| U14 | MECH | The marker-delimited generated family footer in `README.ja.md` is untouched. | `a14` (T6 structural Python probe under its own fresh `HOME` and `TMPDIR`: unique marker pair and exact pre-fix generated-block SHA-256). |
+| U15 | MECH | The marker-delimited generated family footer in `README.zh.md` is untouched. | `a15` (T6 structural Python probe under its own fresh `HOME` and `TMPDIR`: unique marker pair and exact pre-fix generated-block SHA-256). |
+| U16 | MECH | The marker-delimited generated family footer in `README.th.md` is untouched. | `a16` (T6 structural Python probe under its own fresh `HOME` and `TMPDIR`: unique marker pair and exact pre-fix generated-block SHA-256). |
 | U17 | MECH | `README.md` leaves the generated footer as its single family module table. | `a17` (T6 structural: the distinctive English family-module table header occurs exactly once in the file; `a13` separately proves that occurrence is inside the unchanged generated block). |
 | U18 | MECH | `README.ja.md` leaves the generated footer as its single family module table. | `a18` (T6 structural: the corresponding Japanese table header occurs exactly once; `a14` locates it in the unchanged generated block). |
 | U19 | MECH | `README.zh.md` leaves the generated footer as its single family module table. | `a19` (T6 structural: the corresponding Chinese table header occurs exactly once; `a15` locates it in the unchanged generated block). |
 | U20 | MECH | `README.th.md` leaves the generated footer as its single family module table. | `a20` (T6 structural: the corresponding Thai table header occurs exactly once; `a16` locates it in the unchanged generated block). |
 | U21 | HUMAN | A four-language inspection passes. | Dropped (HUMAN: a holistic multilingual prose-quality judgment requires a reader). The mechanical core—presence of prose and authority anchors, absence of the duplicate tables, exactly one family module table, and byte-identical generated blocks in all four files—is covered by `a01`–`a20`; lost: fluency and semantic-quality judgment beyond those anchors. |
+
+## Anonymization and needle record
+
+- Mapping: the source repository is “this repository,” and its family-map
+  section is the “hand-written family section.” The source's named architecture
+  abbreviation remains only in the executable gate as content already present
+  in the replica, not as issue provenance in `task.md`.
+- Longest T1/T4 prose needle: `github.com/caty-ai/family-dev-handbook`
+  (38 characters). It is a surviving link in each pre-fix hand-written family
+  section and is pinned because the criterion requires that prose to remain.
+  The generated-block digests are T6 invariants derived from the pre-fix
+  blocks, not prose needles copied from the historical fix.
+- Timeout remains the default 120 seconds. The gate performs bounded local
+  text checks plus four structural Python hash probes; every Python invocation
+  receives a separate fresh `HOME` and `TMPDIR` and is cleaned up immediately
+  after it completes.

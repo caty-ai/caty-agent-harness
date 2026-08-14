@@ -4,12 +4,35 @@ LC_ALL=C
 export LC_ALL
 
 status=0
+PROBE_ROOT=''
+
+cleanup_probe_root() {
+  [ -z "$PROBE_ROOT" ] || rm -rf "$PROBE_ROOT"
+  PROBE_ROOT=''
+}
+trap cleanup_probe_root EXIT HUP INT TERM
+
+try_isolated_command() {
+  local probe_home probe_tmp rc
+  PROBE_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/ev005-t10-probe.XXXXXX") || return 1
+  probe_home="$PROBE_ROOT/home"
+  probe_tmp="$PROBE_ROOT/tmp"
+  if ! mkdir -p "$probe_home" "$probe_tmp"; then
+    cleanup_probe_root
+    return 1
+  fi
+  HOME="$probe_home" TMPDIR="$probe_tmp" PYTHONDONTWRITEBYTECODE=1 \
+    "$@" >/dev/null 2>&1
+  rc=$?
+  cleanup_probe_root
+  return "$rc"
+}
 
 check_cmd() {
-  id=$1
-  reason=$2
+  local id=$1
+  local reason=$2
   shift 2
-  if "$@" >/dev/null 2>&1; then
+  if try_isolated_command "$@"; then
     echo "CHECK $id PASS $reason"
   else
     echo "CHECK $id FAIL $reason"

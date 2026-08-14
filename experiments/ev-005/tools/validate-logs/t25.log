@@ -5,63 +5,63 @@ CHECK a03 PASS focused family-updater regression module passes
 CHECK a04 FAIL regressions do not prove unsigned substituted release refusal
 CHECK a05 FAIL regressions do not prove tampered tag refusal before install
 CHECK a06 FAIL regressions do not prove clear fail-closed verification messages
-RUN t25 pre 1 exit=1 dur=17s
+RUN t25 pre 1 exit=1 dur=16s
 CHECK a01 FAIL signed-tag trust mechanism or signer pin is not documented
 CHECK a02 FAIL candidate code can be checked out or run before verification
 CHECK a03 PASS focused family-updater regression module passes
 CHECK a04 FAIL regressions do not prove unsigned substituted release refusal
 CHECK a05 FAIL regressions do not prove tampered tag refusal before install
 CHECK a06 FAIL regressions do not prove clear fail-closed verification messages
-RUN t25 pre 2 exit=1 dur=18s
+RUN t25 pre 2 exit=1 dur=14s
 CHECK a01 FAIL signed-tag trust mechanism or signer pin is not documented
 CHECK a02 FAIL candidate code can be checked out or run before verification
 CHECK a03 PASS focused family-updater regression module passes
 CHECK a04 FAIL regressions do not prove unsigned substituted release refusal
 CHECK a05 FAIL regressions do not prove tampered tag refusal before install
 CHECK a06 FAIL regressions do not prove clear fail-closed verification messages
-RUN t25 pre 3 exit=1 dur=17s
+RUN t25 pre 3 exit=1 dur=15s
 CHECK a01 FAIL signed-tag trust mechanism or signer pin is not documented
 CHECK a02 FAIL candidate code can be checked out or run before verification
 CHECK a03 PASS focused family-updater regression module passes
 CHECK a04 FAIL regressions do not prove unsigned substituted release refusal
 CHECK a05 FAIL regressions do not prove tampered tag refusal before install
 CHECK a06 FAIL regressions do not prove clear fail-closed verification messages
-RUN t25 pre 4 exit=1 dur=17s
+RUN t25 pre 4 exit=1 dur=15s
 CHECK a01 FAIL signed-tag trust mechanism or signer pin is not documented
 CHECK a02 FAIL candidate code can be checked out or run before verification
 CHECK a03 PASS focused family-updater regression module passes
 CHECK a04 FAIL regressions do not prove unsigned substituted release refusal
 CHECK a05 FAIL regressions do not prove tampered tag refusal before install
 CHECK a06 FAIL regressions do not prove clear fail-closed verification messages
-RUN t25 pre 5 exit=1 dur=20s
+RUN t25 pre 5 exit=1 dur=23s
 CHECK a01 PASS signed-tag trust mechanism and signer pin are documented
 CHECK a02 PASS verification precedes captured-OID checkout and installer execution
 CHECK a03 PASS focused family-updater regression module passes
 CHECK a04 PASS unsigned substituted release is refused
 CHECK a05 PASS moved or lightweight tags cannot trigger candidate install
 CHECK a06 PASS verification failures expose a clear reason
-RUN t25 fix 1 exit=0 dur=51s
+RUN t25 fix 1 exit=0 dur=56s
 CHECK a01 PASS signed-tag trust mechanism and signer pin are documented
 CHECK a02 PASS verification precedes captured-OID checkout and installer execution
 CHECK a03 PASS focused family-updater regression module passes
 CHECK a04 PASS unsigned substituted release is refused
 CHECK a05 PASS moved or lightweight tags cannot trigger candidate install
 CHECK a06 PASS verification failures expose a clear reason
-RUN t25 fix 2 exit=0 dur=49s
+RUN t25 fix 2 exit=0 dur=55s
 CHECK a01 PASS signed-tag trust mechanism and signer pin are documented
 CHECK a02 PASS verification precedes captured-OID checkout and installer execution
 CHECK a03 PASS focused family-updater regression module passes
 CHECK a04 PASS unsigned substituted release is refused
 CHECK a05 PASS moved or lightweight tags cannot trigger candidate install
 CHECK a06 PASS verification failures expose a clear reason
-RUN t25 fix 3 exit=0 dur=49s
+RUN t25 fix 3 exit=0 dur=43s
 CHECK a01 PASS signed-tag trust mechanism and signer pin are documented
 CHECK a02 PASS verification precedes captured-OID checkout and installer execution
 CHECK a03 PASS focused family-updater regression module passes
 CHECK a04 PASS unsigned substituted release is refused
 CHECK a05 PASS moved or lightweight tags cannot trigger candidate install
 CHECK a06 PASS verification failures expose a clear reason
-RUN t25 fix 4 exit=0 dur=48s
+RUN t25 fix 4 exit=0 dur=46s
 CHECK a01 PASS signed-tag trust mechanism and signer pin are documented
 CHECK a02 PASS verification precedes captured-OID checkout and installer execution
 CHECK a03 PASS focused family-updater regression module passes

@@ -5,6 +5,19 @@ export LC_ALL
 
 status=0
 
+run_isolated() (
+  local env_root rc
+  env_root=$(mktemp -d "${TMPDIR:-/tmp}/ev005-t07-probe.XXXXXX") || return 1
+  trap 'rm -rf "$env_root"' EXIT HUP INT TERM
+  if ! mkdir -p "$env_root/home" "$env_root/tmp"; then
+    return 1
+  fi
+  HOME="$env_root/home" TMPDIR="$env_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
+    "$@"
+  rc=$?
+  return "$rc"
+)
+
 check_fixed() {
   local id="$1"
   local file="$2"
@@ -140,7 +153,7 @@ check_fixed "a35" "scripts/attest-wrapper" 'probe_stderr=$(mktemp "${TMPDIR:-/tm
 check_absent "a36" "scripts/attest-wrapper" 'probe_stderr=$(mktemp "${TMPDIR:-/tmp}/fable-attest-wrapper.stderr.XXXXXX")' "attest wrapper drops the retired stderr prefix"
 
 check_no_unallowed_occurrences "a37" "no case-insensitive fable occurrence exists outside the explicit allowlist"
-check_cmd "a38" "full repository test suite passes on the branch-equivalent tree" make test
-check_cmd "a39" "repository lint passes on the branch-equivalent tree" make lint
+check_cmd "a38" "full repository test suite passes on the branch-equivalent tree" run_isolated make test
+check_cmd "a39" "repository lint passes on the branch-equivalent tree" run_isolated make lint
 
 exit "$status"

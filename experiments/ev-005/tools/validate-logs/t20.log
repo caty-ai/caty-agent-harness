@@ -28,7 +28,7 @@ CHECK a06 FAIL the growth-cycle entry or its honest evidence state is missing
 CHECK a07 FAIL the 90-day expiry rule is missing
 CHECK a08 FAIL the scheduled freshness job lacks schema or age enforcement
 CHECK a09 FAIL stale evidence does not fail closed or automation rewrites the register
-RUN t20 pre 3 exit=1 dur=0s
+RUN t20 pre 3 exit=1 dur=1s
 CHECK a01 FAIL docs/evidence.md is missing
 CHECK a02 FAIL claim schema, stable ids, dates, states, or links are incomplete
 CHECK a03 FAIL the silent-failure evidence entry is missing
@@ -48,7 +48,7 @@ CHECK a06 FAIL the growth-cycle entry or its honest evidence state is missing
 CHECK a07 FAIL the 90-day expiry rule is missing
 CHECK a08 FAIL the scheduled freshness job lacks schema or age enforcement
 CHECK a09 FAIL stale evidence does not fail closed or automation rewrites the register
-RUN t20 pre 5 exit=1 dur=1s
+RUN t20 pre 5 exit=1 dur=0s
 CHECK a01 PASS the evidence register exists
 CHECK a02 PASS every claim has the required complete schema
 CHECK a03 PASS the initial register covers silent-failure discovery and repair
@@ -58,7 +58,7 @@ CHECK a06 PASS the governed growth sequence is recorded without overstating evid
 CHECK a07 PASS the register states the 90-day unknown rule
 CHECK a08 PASS the weekly workflow enforces evidence freshness
 CHECK a09 PASS stale evidence fails closed without workflow edits to the register
-RUN t20 fix 1 exit=0 dur=0s
+RUN t20 fix 1 exit=0 dur=1s
 CHECK a01 PASS the evidence register exists
 CHECK a02 PASS every claim has the required complete schema
 CHECK a03 PASS the initial register covers silent-failure discovery and repair
@@ -88,7 +88,7 @@ CHECK a06 PASS the governed growth sequence is recorded without overstating evid
 CHECK a07 PASS the register states the 90-day unknown rule
 CHECK a08 PASS the weekly workflow enforces evidence freshness
 CHECK a09 PASS stale evidence fails closed without workflow edits to the register
-RUN t20 fix 4 exit=0 dur=0s
+RUN t20 fix 4 exit=0 dur=1s
 CHECK a01 PASS the evidence register exists
 CHECK a02 PASS every claim has the required complete schema
 CHECK a03 PASS the initial register covers silent-failure discovery and repair
@@ -98,5 +98,5 @@ CHECK a06 PASS the governed growth sequence is recorded without overstating evid
 CHECK a07 PASS the register states the 90-day unknown rule
 CHECK a08 PASS the weekly workflow enforces evidence freshness
 CHECK a09 PASS stale evidence fails closed without workflow edits to the register
-RUN t20 fix 5 exit=0 dur=1s
+RUN t20 fix 5 exit=0 dur=0s
 VERDICT t20 PASS

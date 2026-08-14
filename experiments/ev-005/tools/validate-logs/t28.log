@@ -9,7 +9,7 @@ CHECK a07 FAIL the resolved receipt boundary is incomplete
 CHECK a08 FAIL spawn-provider path/type/executable checks are incomplete
 CHECK a09 FAIL one or more committed residual risks are undocumented
 CHECK a10 FAIL a focused execution-boundary suite is missing or fails
-RUN t28 pre 1 exit=1 dur=1s
+RUN t28 pre 1 exit=1 dur=2s
 CHECK a01 FAIL the design trust boundary is not documented
 CHECK a02 FAIL quoted hash syntax is altered, rejected, or staged differently
 CHECK a03 FAIL a focused quoted-hash regression is missing or fails
@@ -31,7 +31,7 @@ CHECK a07 FAIL the resolved receipt boundary is incomplete
 CHECK a08 FAIL spawn-provider path/type/executable checks are incomplete
 CHECK a09 FAIL one or more committed residual risks are undocumented
 CHECK a10 FAIL a focused execution-boundary suite is missing or fails
-RUN t28 pre 3 exit=1 dur=1s
+RUN t28 pre 3 exit=1 dur=2s
 CHECK a01 FAIL the design trust boundary is not documented
 CHECK a02 FAIL quoted hash syntax is altered, rejected, or staged differently
 CHECK a03 FAIL a focused quoted-hash regression is missing or fails
@@ -42,7 +42,7 @@ CHECK a07 FAIL the resolved receipt boundary is incomplete
 CHECK a08 FAIL spawn-provider path/type/executable checks are incomplete
 CHECK a09 FAIL one or more committed residual risks are undocumented
 CHECK a10 FAIL a focused execution-boundary suite is missing or fails
-RUN t28 pre 4 exit=1 dur=1s
+RUN t28 pre 4 exit=1 dur=2s
 CHECK a01 FAIL the design trust boundary is not documented
 CHECK a02 FAIL quoted hash syntax is altered, rejected, or staged differently
 CHECK a03 FAIL a focused quoted-hash regression is missing or fails
@@ -53,7 +53,7 @@ CHECK a07 FAIL the resolved receipt boundary is incomplete
 CHECK a08 FAIL spawn-provider path/type/executable checks are incomplete
 CHECK a09 FAIL one or more committed residual risks are undocumented
 CHECK a10 FAIL a focused execution-boundary suite is missing or fails
-RUN t28 pre 5 exit=1 dur=1s
+RUN t28 pre 5 exit=1 dur=0s
 CHECK a01 PASS the design note distinguishes mechanical and operator boundaries
 CHECK a02 PASS quoted hash syntax is accepted from the exact staged task
 CHECK a03 PASS a focused quoted-hash regression passes
@@ -64,7 +64,7 @@ CHECK a07 PASS the resolved receipt boundary is enforced
 CHECK a08 PASS the configured spawn provider is shape-checked
 CHECK a09 PASS the committed residual risks are documented
 CHECK a10 PASS focused execution-boundary suites pass
-RUN t28 fix 1 exit=0 dur=48s
+RUN t28 fix 1 exit=0 dur=43s
 CHECK a01 PASS the design note distinguishes mechanical and operator boundaries
 CHECK a02 PASS quoted hash syntax is accepted from the exact staged task
 CHECK a03 PASS a focused quoted-hash regression passes
@@ -75,7 +75,7 @@ CHECK a07 PASS the resolved receipt boundary is enforced
 CHECK a08 PASS the configured spawn provider is shape-checked
 CHECK a09 PASS the committed residual risks are documented
 CHECK a10 PASS focused execution-boundary suites pass
-RUN t28 fix 2 exit=0 dur=47s
+RUN t28 fix 2 exit=0 dur=48s
 CHECK a01 PASS the design note distinguishes mechanical and operator boundaries
 CHECK a02 PASS quoted hash syntax is accepted from the exact staged task
 CHECK a03 PASS a focused quoted-hash regression passes
@@ -86,7 +86,7 @@ CHECK a07 PASS the resolved receipt boundary is enforced
 CHECK a08 PASS the configured spawn provider is shape-checked
 CHECK a09 PASS the committed residual risks are documented
 CHECK a10 PASS focused execution-boundary suites pass
-RUN t28 fix 3 exit=0 dur=47s
+RUN t28 fix 3 exit=0 dur=48s
 CHECK a01 PASS the design note distinguishes mechanical and operator boundaries
 CHECK a02 PASS quoted hash syntax is accepted from the exact staged task
 CHECK a03 PASS a focused quoted-hash regression passes
@@ -97,7 +97,7 @@ CHECK a07 PASS the resolved receipt boundary is enforced
 CHECK a08 PASS the configured spawn provider is shape-checked
 CHECK a09 PASS the committed residual risks are documented
 CHECK a10 PASS focused execution-boundary suites pass
-RUN t28 fix 4 exit=0 dur=45s
+RUN t28 fix 4 exit=0 dur=39s
 CHECK a01 PASS the design note distinguishes mechanical and operator boundaries
 CHECK a02 PASS quoted hash syntax is accepted from the exact staged task
 CHECK a03 PASS a focused quoted-hash regression passes
@@ -108,5 +108,5 @@ CHECK a07 PASS the resolved receipt boundary is enforced
 CHECK a08 PASS the configured spawn provider is shape-checked
 CHECK a09 PASS the committed residual risks are documented
 CHECK a10 PASS focused execution-boundary suites pass
-RUN t28 fix 5 exit=0 dur=46s
+RUN t28 fix 5 exit=0 dur=39s
 VERDICT t28 PASS

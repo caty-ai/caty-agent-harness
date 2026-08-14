@@ -27,3 +27,17 @@ alternative block identifier can pass.
 | U10 | MECH | `tools/family_footer.py lint` passes. | `a10` (T3 command-exit: exact command named by the source criterion). |
 | U11 | MECH | The family-footer self-test passes. | `a11` (T3 command-exit: `python3 tools/selftest_family_footer.py`, the repository's existing self-test entry point). |
 | U12 | HUMAN | Member-repository footer behavior is unchanged. | Weakened (HUMAN→MECH extraction) to the change-sensitive, replica-solvable behavioral core: default rendering must still link the map row and render the host member bold and unlinked. `a12` (T5 behavior probe: render every footer-enabled member in all four registry languages through the default API and require those two canonical behaviors, which are documented and derivable in-replica). Lost: full diff/provenance judgment and byte-for-byte comparison with the pre-fix implementation, whose historical baseline is unavailable to an honest solver in the history-zero replica. |
+
+## Anonymization, needles, and timeout
+
+- Mapping: the source repository is called the map repository and related
+  repositories are called member repositories. Owner, session, branch, date,
+  issue/PR, and generator-attribution provenance are omitted. Repository paths
+  and tool commands remain because they are criterion-constitutive and
+  derivable from the pre-fix tree.
+- Longest T1/T4 needle: none. The gate uses structural, command-exit, and
+  behavior probes; identifiers such as `module_table` are derived from the
+  replica, and the added generated-block name is discovered dynamically.
+- Timeout remains the task's default 120 seconds. The repository checks and
+  bundled probes are local; the stale-block probe's temporary tree copy is the
+  heaviest operation and completes within the default.

@@ -6,6 +6,19 @@ export LC_ALL
 failures=0
 PROBE='.ev005-fixtures/t17_probe.sh'
 
+run_isolated() (
+  local env_root rc
+  env_root=$(mktemp -d "${TMPDIR:-/tmp}/ev005-t17-probe.XXXXXX") || return 1
+  trap 'rm -rf "$env_root"' EXIT HUP INT TERM
+  if ! mkdir -p "$env_root/home" "$env_root/tmp"; then
+    return 1
+  fi
+  HOME="$env_root/home" TMPDIR="$env_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
+    "$@"
+  rc=$?
+  return "$rc"
+)
+
 pass_check() {
   printf 'CHECK %s PASS %s\n' "$1" "$2"
 }
@@ -28,7 +41,7 @@ run_check() {
 }
 
 check_marker_contract() {
-  python3 - <<'PY'
+  run_isolated python3 - <<'PY'
 import pathlib
 import re
 
@@ -53,7 +66,7 @@ PY
 }
 
 check_marker_regression() {
-  python3 - <<'PY'
+  run_isolated python3 - <<'PY'
 import pathlib
 
 tests = []
@@ -84,19 +97,19 @@ check_timeout_default() {
 
 check_metrics_baseline() {
   [ -f "$PROBE" ] || return 1
-  bash "$PROBE" metrics
+  run_isolated bash "$PROBE" metrics
 }
 
 run_check a01 'failed pushes are recorded beside the report' \
-  'failed push evidence is missing' bash "$PROBE" push-record
+  'failed push evidence is missing' run_isolated bash "$PROBE" push-record
 run_check a02 'failed pushes are surfaced without changing the runner result' \
-  'failed push visibility or runner-result behavior is wrong' bash "$PROBE" push-visible
+  'failed push visibility or runner-result behavior is wrong' run_isolated bash "$PROBE" push-visible
 run_check a03 'scheduler marker guidance agrees with probe defaults' \
   'scheduler templates and probe defaults disagree' check_marker_contract
 run_check a04 'a regression test covers marker agreement' \
   'no marker-agreement regression test was found' check_marker_regression
 run_check a05 'the completion-gate timeout accepts an effective override' \
-  'the completion-gate timeout override is ineffective' bash "$PROBE" timeout
+  'the completion-gate timeout override is ineffective' run_isolated bash "$PROBE" timeout
 run_check a06 'the timeout default is 60 seconds and is integer-validated' \
   'the timeout default or validation is missing' check_timeout_default
 run_check a07 'generated metrics contain no fixed B0 estimate row' \

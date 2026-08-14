@@ -24,7 +24,7 @@ CHECK a09 FAIL the public counter-evidence procedure is incomplete
 CHECK a10 FAIL the handoff schema or stop rule is incomplete
 CHECK a11 FAIL the human handoff template or invitation is missing
 CHECK a12 FAIL the automatic-discovery warning is missing
-RUN t27 pre 2 exit=1 dur=1s
+RUN t27 pre 2 exit=1 dur=0s
 CHECK a01 FAIL the root English entry artifact is missing or has localized siblings
 CHECK a02 FAIL the entry artifact does not have exactly eight numbered sections
 CHECK a03 FAIL the opening is missing a required time-budget tour or visitor purpose
@@ -63,7 +63,7 @@ CHECK a09 FAIL the public counter-evidence procedure is incomplete
 CHECK a10 FAIL the handoff schema or stop rule is incomplete
 CHECK a11 FAIL the human handoff template or invitation is missing
 CHECK a12 FAIL the automatic-discovery warning is missing
-RUN t27 pre 5 exit=1 dur=0s
+RUN t27 pre 5 exit=1 dur=1s
 CHECK a01 PASS the root English entry artifact exists without localized siblings
 CHECK a02 PASS the entry artifact has numbered sections 1 through 8
 CHECK a03 PASS the opening offers both time-budget tours

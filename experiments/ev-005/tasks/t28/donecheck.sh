@@ -29,6 +29,19 @@ run_check() {
   fi
 }
 
+run_isolated() (
+  local env_root rc
+  env_root=$(mktemp -d "$TMP_ROOT/isolation.XXXXXX") || return 1
+  trap 'rm -rf "$env_root"' EXIT HUP INT TERM
+  if ! mkdir -p "$env_root/home" "$env_root/tmp"; then
+    return 1
+  fi
+  HOME="$env_root/home" TMPDIR="$env_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
+    "$@"
+  rc=$?
+  return "$rc"
+)
+
 check_design_boundary() {
   [ -f DESIGN-task-runner.md ] || return 1
   grep -Eiq 'trust|boundary|arbitrary.*shell' DESIGN-task-runner.md \
@@ -39,7 +52,7 @@ check_design_boundary() {
 check_quoted_hash_production() {
   workspace="$TMP_ROOT/workspace"
   task="$TMP_ROOT/quoted-hash.task.md"
-  "$ROOT/install.sh" --workspace "$workspace" >/dev/null 2>&1 || return 1
+  run_isolated "$ROOT/install.sh" --workspace "$workspace" >/dev/null 2>&1 || return 1
   cat >"$task" <<'EOF'
 ---
 id: quoted-hash
@@ -77,7 +90,7 @@ none
 
 none
 EOF
-  "$ROOT/scripts/tr-enqueue" "$task" "$workspace" >/dev/null 2>&1 || return 1
+  run_isolated "$ROOT/scripts/tr-enqueue" "$task" "$workspace" >/dev/null 2>&1 || return 1
   cmp -s "$task" "$workspace/loop/tasks/queue/quoted-hash.task.md"
 }
 
@@ -89,7 +102,7 @@ check_quoted_hash_test() {
       && grep -Fqi 'hash' "$test_path" \
       && grep -Fq 'tr-enqueue' "$test_path"; then
       found=$((found + 1))
-      bash "$test_path" >/dev/null 2>&1 || return 1
+      run_isolated bash "$test_path" >/dev/null 2>&1 || return 1
     fi
   done
   [ "$found" -ge 1 ]
@@ -149,8 +162,8 @@ check_focused_suites() {
   for suite in tests/donecheck-extract.test.sh tests/tr-enqueue.test.sh tests/task-runner.test.sh tests/spawn-step.test.sh; do
     [ -f "$suite" ] || return 1
   done
-  bash tests/donecheck-extract.test.sh >/dev/null 2>&1 || return 1
-  bash tests/tr-enqueue.test.sh >/dev/null 2>&1 || return 1
+  run_isolated bash tests/donecheck-extract.test.sh >/dev/null 2>&1 || return 1
+  run_isolated bash tests/tr-enqueue.test.sh >/dev/null 2>&1 || return 1
   sed -e '/^case_env_integer_validation$/,$d' \
     -e "s|^ROOT=.*|ROOT='$ROOT'|" \
     tests/task-runner.test.sh >"$TMP_ROOT/task-runner-focused.test.sh" || return 1
@@ -161,8 +174,8 @@ case_donecheck_uses_pinned_interpreters
 case_donecheck_timeout_is_tunable
 (( fail_count == 0 ))
 EOF
-  bash "$TMP_ROOT/task-runner-focused.test.sh" >/dev/null 2>&1 || return 1
-  bash tests/spawn-step.test.sh >/dev/null 2>&1
+  run_isolated bash "$TMP_ROOT/task-runner-focused.test.sh" >/dev/null 2>&1 || return 1
+  run_isolated bash tests/spawn-step.test.sh >/dev/null 2>&1
 }
 
 run_check a01 'the design note distinguishes mechanical and operator boundaries' 'the design trust boundary is not documented' check_design_boundary

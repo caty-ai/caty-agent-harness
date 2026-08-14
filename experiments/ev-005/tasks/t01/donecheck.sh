@@ -5,6 +5,19 @@ export LC_ALL
 
 status=0
 
+run_isolated() (
+  local env_root rc
+  env_root=$(mktemp -d "${TMPDIR:-/tmp}/ev005-t01-probe.XXXXXX") || return 1
+  trap 'rm -rf "$env_root"' EXIT HUP INT TERM
+  if ! mkdir -p "$env_root/home" "$env_root/tmp"; then
+    return 1
+  fi
+  HOME="$env_root/home" TMPDIR="$env_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
+    "$@"
+  rc=$?
+  return "$rc"
+)
+
 check_fixed() {
   local id="$1"
   local file="$2"
@@ -75,6 +88,6 @@ check_fixed "a22" "adapters/claude-code/INSTALL.md" 'The consumer itself touches
 check_fixed "a23" "adapters/claude-code/INSTALL.md" '`loop/pending/intake-runs.log` for content-level silence, dedup, deferral, eviction, and' "source install doc states the ledger claim"
 check_fixed "a24" "adapters/claude-code/INSTALL.md" '`loop/archive/` is append-only,' "source install doc states the archive semantics"
 
-check_cmd_if_clean "a25" "full repository test suite passes" make test
+check_cmd_if_clean "a25" "full repository test suite passes" run_isolated make test
 
 exit "$status"

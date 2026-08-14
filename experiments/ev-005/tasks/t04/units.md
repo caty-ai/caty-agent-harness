@@ -16,3 +16,19 @@ MOOT: 0
 | U7 | MECH | The T2 isolation string in `scripts/trial-enqueue.sh` stays unchanged. | `a07` (T6 structural: exact T2 string line hash in `scripts/trial-enqueue.sh`) |
 | U8 | MECH | The T2 row in the normative tier table in `docs/adoption-wiring.md` stays unchanged. | `a08` (T6 structural: exact T2 row line hash in `docs/adoption-wiring.md`) |
 | U9 | HUMAN | No other private-reference wording is introduced. | Weakened (HUMAN→MECH extraction): keep a narrow textual proxy by requiring `docs/trial-isolation.md` to contain no more `private` occurrences than the two pre-existing ones. Lost: semantic judgment about whether a newly introduced phrase is effectively a private-reference concern even without the literal word `private`, and diff/provenance judgment outside this file. Covered by `a09` (T4 content-absence proxy). |
+
+## Anonymization and needle record
+
+- Mapping: the source repository is rendered as “this repository”, the named
+  owner is rendered as “the owner” in the task sheet, and issue/tracker
+  provenance is omitted. `caty-ai/x-collector` and its public URL remain because
+  the source criterion names that exact dependency; the legacy `Sho` token
+  remains only inside the pre-fix-derived lines that U6–U8 require to stay
+  unchanged.
+- Longest structural needle: the complete 205-character T2 table row
+  in `docs/adoption-wiring.md`, checked by `a08` through its line hash. The row
+  exists verbatim in the pre-fix tree and U8 explicitly requires it to stay
+  unchanged, so it is replica-derivable rather than historical-fix prose.
+- Timeout remains the default 120 seconds. The gate performs only bounded local
+  file-presence, grep/count, and line-hash checks and executes no repository
+  code, so no escalation is needed.

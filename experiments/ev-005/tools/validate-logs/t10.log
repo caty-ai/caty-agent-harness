@@ -37,7 +37,7 @@ CHECK a09 PASS offline registry validation passes
 CHECK a10 PASS member footer lint passes
 CHECK a11 PASS family footer self-test passes
 CHECK a12 PASS default member footer keeps linked-map and unlinked-host behavior
-RUN t10 pre 3 exit=1 dur=1s
+RUN t10 pre 3 exit=1 dur=0s
 CHECK a01 FAIL English README has the generated family table near the bottom
 CHECK a02 FAIL Japanese README has the generated family table near the bottom
 CHECK a03 FAIL Chinese README has the generated family table near the bottom
@@ -63,7 +63,7 @@ CHECK a09 PASS offline registry validation passes
 CHECK a10 PASS member footer lint passes
 CHECK a11 PASS family footer self-test passes
 CHECK a12 PASS default member footer keeps linked-map and unlinked-host behavior
-RUN t10 pre 5 exit=1 dur=0s
+RUN t10 pre 5 exit=1 dur=1s
 CHECK a01 PASS English README has the generated family table near the bottom
 CHECK a02 PASS Japanese README has the generated family table near the bottom
 CHECK a03 PASS Chinese README has the generated family table near the bottom

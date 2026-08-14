@@ -5,6 +5,17 @@ export LC_ALL
 
 PROBE='.ev005-fixtures/workflow_probe.py'
 failures=0
+ACTIVE_PROBE_ROOT=''
+
+cleanup_active_probe() {
+  if [ -n "$ACTIVE_PROBE_ROOT" ]; then
+    rm -rf -- "$ACTIVE_PROBE_ROOT"
+    ACTIVE_PROBE_ROOT=''
+  fi
+}
+
+trap cleanup_active_probe EXIT
+trap 'cleanup_active_probe; exit 1' HUP INT TERM
 
 pass_check() {
   printf 'CHECK %s PASS %s\n' "$1" "$2"
@@ -15,12 +26,35 @@ fail_check() {
   failures=$((failures + 1))
 }
 
+run_isolated_command() {
+  local probe_root probe_home probe_tmp rc
+  ACTIVE_PROBE_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/ev005-t30-probe.XXXXXX") || {
+    ACTIVE_PROBE_ROOT=''
+    return 1
+  }
+  probe_root=$ACTIVE_PROBE_ROOT
+  probe_home="$probe_root/home"
+  probe_tmp="$probe_root/tmp"
+  if ! mkdir -p "$probe_home" "$probe_tmp"; then
+    cleanup_active_probe
+    return 1
+  fi
+  HOME="$probe_home" TMPDIR="$probe_tmp" PYTHONDONTWRITEBYTECODE=1 \
+    "$@" >/dev/null 2>&1
+  rc=$?
+  if ! rm -rf -- "$probe_root"; then
+    return 1
+  fi
+  ACTIVE_PROBE_ROOT=''
+  return "$rc"
+}
+
 run_check() {
   check_id=$1
   pass_msg=$2
   fail_msg=$3
   shift 3
-  if "$@" >/dev/null 2>&1; then
+  if run_isolated_command "$@"; then
     pass_check "$check_id" "$pass_msg"
   else
     fail_check "$check_id" "$fail_msg"

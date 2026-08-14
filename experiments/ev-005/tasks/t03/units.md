@@ -21,3 +21,16 @@ MOOT: 2
 Notes:
 - Fixture exemption: `fixtures/review-labels-template.yml` bundles the canonical workflow bytes as a criterion-constitutive in-replica fixture. The canonical source lives outside the replica, but the bundled content is the task's shipped spec per `translation-rules.md` §2 and §5 r2.
 - Blob-pin removal: the prior `EXPECT_WORKFLOW_BLOB` exact hash pin was removed because it depended on an out-of-replica source and made the task unsolvable in-replica (acceptance finding B1 / §5 r2).
+
+## Anonymization and needle record
+
+- Mapping: the public harness repository is rendered as “this repository.”
+  Issue, commit, person, date, live CI, label, and merge provenance is omitted;
+  the workflow path and bundled canonical fixture remain because U1 names the
+  comparison surface and the fixture ships in-replica.
+- Longest T1/T4 needle: `(^|/)[^/]*(auth|signin|token)[^/]*$|(^|/)auth/` (46
+  characters). This small path/category expression is derived from U3/U4; the
+  workflow equality itself is a T6 comparison against the bundled source.
+- Timeout remains the default 120 seconds because the gate performs bounded
+  file normalization, comparison, and tracked-path scans without executing
+  repository code.

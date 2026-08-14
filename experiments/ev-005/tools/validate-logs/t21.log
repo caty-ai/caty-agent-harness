@@ -5,14 +5,14 @@ CHECK a03 FAIL missing verification metadata does not emit both verified-skill w
 CHECK a04 PASS draft and complete verified skills avoid missing-field warnings
 CHECK a05 PASS verified-skill warnings leave the check exit status unchanged
 CHECK a06 FAIL targeted conditional-field regression test is missing or fails
-RUN t21 pre 1 exit=1 dur=2s
+RUN t21 pre 1 exit=1 dur=1s
 CHECK a01 FAIL design does not record the conditional six-field verified-skill contract
 CHECK a02 FAIL staging template does not record promotion-time verification fields
 CHECK a03 FAIL missing verification metadata does not emit both verified-skill warnings
 CHECK a04 PASS draft and complete verified skills avoid missing-field warnings
 CHECK a05 PASS verified-skill warnings leave the check exit status unchanged
 CHECK a06 FAIL targeted conditional-field regression test is missing or fails
-RUN t21 pre 2 exit=1 dur=2s
+RUN t21 pre 2 exit=1 dur=1s
 CHECK a01 FAIL design does not record the conditional six-field verified-skill contract
 CHECK a02 FAIL staging template does not record promotion-time verification fields
 CHECK a03 FAIL missing verification metadata does not emit both verified-skill warnings
@@ -40,7 +40,7 @@ CHECK a03 PASS a verified skill missing verification metadata emits both warning
 CHECK a04 PASS draft and complete verified skills avoid missing-field warnings
 CHECK a05 PASS verified-skill warnings leave the check exit status unchanged
 CHECK a06 PASS targeted conditional-field regression test passes
-RUN t21 fix 1 exit=0 dur=3s
+RUN t21 fix 1 exit=0 dur=2s
 CHECK a01 PASS design records the conditional six-field verified-skill contract
 CHECK a02 PASS staging template records promotion-time verification fields
 CHECK a03 PASS a verified skill missing verification metadata emits both warnings

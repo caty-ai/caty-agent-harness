@@ -6,6 +6,19 @@ export LC_ALL
 failures=0
 PROBE='.ev005-fixtures/input-validation-probe.sh'
 
+run_isolated() (
+  local env_root rc
+  env_root=$(mktemp -d "${TMPDIR:-/tmp}/ev005-t23-probe.XXXXXX") || return 1
+  trap 'rm -rf "$env_root"' EXIT HUP INT TERM
+  if ! mkdir -p "$env_root/home" "$env_root/tmp"; then
+    return 1
+  fi
+  HOME="$env_root/home" TMPDIR="$env_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
+    "$@"
+  rc=$?
+  return "$rc"
+)
+
 pass_check() {
   echo "CHECK $1 PASS $2"
 }
@@ -22,7 +35,7 @@ run_probe() {
   fail_msg=$4
   if [ ! -f "$PROBE" ]; then
     fail_check "$check_id" 'bundled input-validation probe is missing'
-  elif EV005_REPO_ROOT=$PWD bash "$PROBE" "$mode" >/dev/null 2>&1; then
+  elif run_isolated env EV005_REPO_ROOT="$PWD" bash "$PROBE" "$mode" >/dev/null 2>&1; then
     pass_check "$check_id" "$pass_msg"
   else
     fail_check "$check_id" "$fail_msg"

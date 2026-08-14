@@ -26,17 +26,133 @@ run_check() {
   fi
 }
 
-check_five_tools() {
+run_isolated() (
+  local root canonical_root base requested_rc cleanup_rc
+  root=""
+
+  cleanup_isolated() {
+    requested_rc=$1
+    trap - EXIT HUP INT TERM
+    cleanup_rc=0
+    if [ -n "$root" ] && [ -d "$root" ]; then
+      chmod -R u+rwx "$root" 2>/dev/null || true
+      rm -rf -- "$root" || cleanup_rc=$?
+    fi
+    if [ "$requested_rc" -ne 0 ]; then
+      exit "$requested_rc"
+    fi
+    exit "$cleanup_rc"
+  }
+
+  trap 'cleanup_isolated $?' EXIT
+  trap 'cleanup_isolated 129' HUP
+  trap 'cleanup_isolated 130' INT
+  trap 'cleanup_isolated 143' TERM
+
+  base=${TMPDIR:-/tmp}
+  case "$base" in
+    /) root=$(mktemp -d '/t22-probe.XXXXXX') || return 1 ;;
+    *) root=$(mktemp -d "${base%/}/t22-probe.XXXXXX") || return 1 ;;
+  esac
+  canonical_root=$(cd "$root" && pwd -P) || return 1
+  root=$canonical_root
+  mkdir -p "$root/home" "$root/tmp" || return 1
+
+  export HOME="$root/home"
+  export TMPDIR="$root/tmp"
+  "$@"
+)
+
+check_python_functions() {
+  python3 -B - "$@" <<'PY'
+import ast
+import sys
+
+path, *required = sys.argv[1:]
+with open(path, encoding="utf-8") as handle:
+    tree = ast.parse(handle.read(), filename=path)
+present = {
+    node.name
+    for node in ast.walk(tree)
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+}
+assert set(required).issubset(present)
+PY
+}
+
+check_lg() {
+  [ -x bin/lg ] || return 1
+  [ -x tests/test_lg.sh ] || return 1
+  run_isolated bash -n bin/lg || return 1
+  run_isolated bash tests/test_lg.sh >/dev/null 2>&1
+}
+
+check_scratch_persistence() {
+  [ -x hooks/scratch-persist.py ] || return 1
+  [ -x tests/test_scratch_persist.sh ] || return 1
+  run_isolated check_python_functions hooks/scratch-persist.py \
+    extract_output resolve_scratch_dir main || return 1
+  run_isolated bash tests/test_scratch_persist.sh >/dev/null 2>&1
+}
+
+check_brief_validator() {
+  [ -x hooks/validate-subagent-brief.py ] || return 1
+  [ -x tests/test_brief_validator.sh ] || return 1
+  run_isolated check_python_functions hooks/validate-subagent-brief.py \
+    required_sections_from_env render_skeleton main || return 1
+  run_isolated bash tests/test_brief_validator.sh >/dev/null 2>&1
+}
+
+check_safety_hooks() {
+  local path
   for path in \
-    bin/lg \
-    hooks/scratch-persist.py \
-    hooks/validate-subagent-brief.py \
     hooks/rm-enforcer.py \
     hooks/private-repo-enforcer.mjs \
     hooks/api-key-leak-detector.mjs \
-    bin/recall; do
-    [ -f "$path" ] || return 1
+    tests/test_safety_hooks.sh; do
+    [ -x "$path" ] || return 1
   done
+  run_isolated check_python_functions hooks/rm-enforcer.py \
+    find_risk main || return 1
+  run_isolated grep -Fq 'async function main()' \
+    hooks/private-repo-enforcer.mjs || return 1
+  run_isolated grep -Fq 'const API_KEY_PATTERNS' \
+    hooks/api-key-leak-detector.mjs || return 1
+  run_isolated grep -Fq 'async function main()' \
+    hooks/api-key-leak-detector.mjs || return 1
+  run_isolated bash tests/test_safety_hooks.sh >/dev/null 2>&1
+}
+
+check_recall() {
+  [ -x bin/recall ] || return 1
+  [ -x tests/test_recall.sh ] || return 1
+  run_isolated run_recall_targeted >/dev/null 2>&1
+}
+
+run_recall_targeted() {
+  local repo_root targeted
+  repo_root=$(pwd -P) || return 1
+  targeted="$TMPDIR/test_recall.targeted.sh"
+
+  awk '
+    index($0, "ROOT=$(cd ") == 1 {
+      print "ROOT=${EV005_RECALL_ROOT:?}"
+      root_replacements++
+      next
+    }
+    $0 == "case_colon_path_survives_rg_and_grep_fallback" {
+      excluded_invocations++
+      next
+    }
+    { print }
+    END {
+      if (root_replacements != 1 || excluded_invocations != 1) {
+        exit 1
+      }
+    }
+  ' tests/test_recall.sh >"$targeted" || return 1
+
+  EV005_RECALL_ROOT="$repo_root" bash "$targeted"
 }
 
 check_recall_relationship() {
@@ -71,7 +187,7 @@ check_setup_wiring() {
   grep -Fq 'examples/settings.json' README.md || return 1
   grep -Fq '<CONTEXT_KIT_DIR>' README.md || return 1
   grep -Fq 'tests/*.sh' README.md || return 1
-  python3 -B - examples/settings.json <<'PY'
+  run_isolated python3 -B - examples/settings.json <<'PY'
 import json, sys
 
 text = open(sys.argv[1], encoding="utf-8").read().replace("<CONTEXT_KIT_DIR>", "/tmp/workspace-toolkit")
@@ -101,12 +217,16 @@ check_mit_license() {
   grep -Fq 'MIT License' LICENSE
 }
 
-run_check a01 'all five generalized tool surfaces are present' 'one or more generalized tool surfaces are missing' check_five_tools
-run_check a02 'recall documents its individual/shared-memory relationship and local-only use' 'recall does not document its individual/shared-memory relationship and local-only use' check_recall_relationship
-run_check a03 'tracked text contains no literal personal-environment identifiers' 'tracked text contains a literal personal path, username, or private workspace identifier' check_no_personal_identifiers
-run_check a04 'clean-environment setup and hook wiring are locally reproducible' 'setup documentation or settings wiring is incomplete' check_setup_wiring
-run_check a05 'all four README files carry the required user-facing structure' 'four-language README structure is incomplete' check_readme_structure
-run_check a06 'the local hero/thumbnail asset exists and is nonempty' 'the local hero/thumbnail asset is missing or empty' check_hero_asset
-run_check a07 'the repository carries an MIT license' 'the MIT license is missing' check_mit_license
+run_check a01 'lg is executable, syntactically valid, and passes its full functional suite' 'lg is missing, invalid, or fails its functional suite' check_lg
+run_check a02 'scratch persistence is executable, structurally valid, and passes its full functional suite' 'scratch persistence is missing, invalid, or fails its functional suite' check_scratch_persistence
+run_check a03 'brief validation is executable, structurally valid, and passes its full functional suite' 'brief validation is missing, invalid, or fails its functional suite' check_brief_validator
+run_check a04 'the safety hooks are executable, structurally present, and pass their full functional suite' 'one or more safety hooks are missing, invalid, or fail their functional suite' check_safety_hooks
+run_check a05 'recall is executable and passes the 19-case targeted bundled functional suite' 'recall or its 19-case targeted bundled functional suite is missing or failing' check_recall
+run_check a06 'recall documents its individual/shared-memory relationship and local-only use' 'recall does not document its individual/shared-memory relationship and local-only use' check_recall_relationship
+run_check a07 'tracked text contains no literal personal-environment identifiers' 'tracked text contains a literal personal path, username, or private workspace identifier' check_no_personal_identifiers
+run_check a08 'clean-environment setup and hook wiring are locally reproducible' 'setup documentation or settings wiring is incomplete' check_setup_wiring
+run_check a09 'all four README files carry the required user-facing structure' 'four-language README structure is incomplete' check_readme_structure
+run_check a10 'the local hero/thumbnail asset exists and is nonempty' 'the local hero/thumbnail asset is missing or empty' check_hero_asset
+run_check a11 'the repository carries an MIT license' 'the MIT license is missing' check_mit_license
 
 [ "$failures" -eq 0 ]

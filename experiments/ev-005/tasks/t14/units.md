@@ -19,3 +19,15 @@ that are part of the completion criterion remain verbatim as described below.
 | U6 | MECH | The family-footer self-test passes. | `a06` (T3 command-exit: `python3 -B tools/selftest_family_footer.py`, the in-repo self-test named by the source criterion). |
 | U7 | MOOT | As a follow-up, family footers are synchronized across published sibling repositories according to `docs/family-footer-contract.md`. | Dropped (MOOT: the task is an offline, single-repository history-zero replica; sibling repositories and their synchronized working trees are absent, and the source explicitly classifies this work as a follow-up rather than part of the registry change). |
 | U8 | MOOT | Each sibling follow-up is a separate mechanical commit. | Dropped (MOOT: commit topology and sibling-repository process state do not exist in the history-zero replica). |
+
+## Anonymization, needles, and timeout
+
+- Mapping: the source repository is called the family map and the published
+  component is called the self-growth module. Public identifiers named by the
+  criterion remain verbatim; owner and process provenance are omitted.
+- Longest T1/T4 needle: none. Registry values are parsed structurally; the
+  longest fixed value, `caty-ai/self-growth-loop`, is explicitly named in the
+  criterion and task sheet rather than copied from historical fix prose.
+- Timeout remains the task's default 120 seconds. The two repository checks
+  and four local JSON-field probes complete well within the default; no full
+  suite or network check is run.

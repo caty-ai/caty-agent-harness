@@ -38,3 +38,16 @@ MOOT: 0
 - a01–a08: were full 4-language table-row pins (up to 372 chars of fix prose); relaxed to co-presence of two distinctive fragments per row (`check_pair`: OS status cell + Windows/WSL or Linux-expectation cell). Unit mapping unchanged.
 - a21: was a 107-char guide-prose pin; relaxed to the key phrase `run the bundled example`.
 - a09–a20 (badge alts) and a22–a25 (exact paths/commands) kept: functional payload strings, already fragment-level.
+
+## Anonymization and needle record
+
+- Mapping: the public harness repository is rendered as “this repository.”
+  Issue, commit, person, date, and publication provenance is omitted; public
+  README paths, tool names, and the bundled example path remain as criterion
+  targets.
+- Longest T1/T4 needle: `scripts/tr-enqueue
+  templates/examples/img-pilot.task.md "$WORKSPACE"` (68 characters). Its
+  command, bundled task path, and workspace placeholder are all exposed by
+  U22/U24 and the task sheet rather than hidden historical provenance.
+- Timeout remains the default 120 seconds because the gate performs bounded
+  fixed-string checks only and executes no repository code.

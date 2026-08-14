@@ -4,6 +4,12 @@ LC_ALL=C
 export LC_ALL
 
 failures=0
+ISOLATION_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/ev005-t13.XXXXXX" 2>/dev/null) || ISOLATION_ROOT=''
+
+cleanup() {
+  [ -z "$ISOLATION_ROOT" ] || rm -rf "$ISOLATION_ROOT"
+}
+trap cleanup EXIT HUP INT TERM
 
 pass_check() {
   echo "CHECK $1 PASS $2"
@@ -50,10 +56,18 @@ check_no_section_table() {
 }
 
 check_footer_hash() {
+  local path expected env_root rc
   path=$1
   expected=$2
   [ -f "$path" ] || return 1
-  python3 - "$path" "$expected" <<'PY'
+  [ -n "$ISOLATION_ROOT" ] || return 1
+  env_root=$(mktemp -d "$ISOLATION_ROOT/hash-probe.XXXXXX") || return 1
+  if ! mkdir -p "$env_root/home" "$env_root/tmp"; then
+    rm -rf "$env_root"
+    return 1
+  fi
+  HOME="$env_root/home" TMPDIR="$env_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
+    python3 - "$path" "$expected" <<'PY'
 import hashlib
 import pathlib
 import sys
@@ -73,6 +87,9 @@ finish = data.index(end, begin) + len(end)
 actual = hashlib.sha256(data[begin:finish]).hexdigest()
 raise SystemExit(0 if actual == expected else 1)
 PY
+  rc=$?
+  rm -rf "$env_root"
+  return "$rc"
 }
 
 check_single_module_table() {

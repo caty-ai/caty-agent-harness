@@ -6,6 +6,19 @@ export LC_ALL
 failures=0
 NOTE='docs/cli-conventions.md'
 
+run_isolated() (
+  local env_root rc
+  env_root=$(mktemp -d "${TMPDIR:-/tmp}/ev005-t26-probe.XXXXXX") || return 1
+  trap 'rm -rf "$env_root"' EXIT HUP INT TERM
+  if ! mkdir -p "$env_root/home" "$env_root/tmp"; then
+    return 1
+  fi
+  HOME="$env_root/home" TMPDIR="$env_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
+    "$@"
+  rc=$?
+  return "$rc"
+)
+
 pass_check() {
   printf 'CHECK %s PASS %s\n' "$1" "$2"
 }
@@ -50,7 +63,7 @@ check_exit_contract() {
 
 check_stream_contract() {
   [ -f "$NOTE" ] || return 1
-  python3 - "$NOTE" <<'PY'
+  run_isolated python3 - "$NOTE" <<'PY'
 import pathlib
 import sys
 
@@ -101,6 +114,6 @@ run_check a04 'listed surfaces and regression pins are inventoried' \
 run_check a05 'focused conventions test pins the usage exits and side-effect boundary' \
   'focused conventions test does not pin the required contracts' check_test_shape
 run_check a06 'focused CLI conventions regression passes' \
-  'focused CLI conventions regression fails' bash tests/cli-conventions.test.sh
+  'focused CLI conventions regression fails' run_isolated bash tests/cli-conventions.test.sh
 
 [ "$failures" -eq 0 ]

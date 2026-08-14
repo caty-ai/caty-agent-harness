@@ -68,7 +68,7 @@ OK — every module claim matches the registry.
 CHECK a05 PASS registry checker passes offline
 OK — family footer selftest passed.
 CHECK a06 PASS family-footer self-test passes
-RUN t14 pre 5 exit=1 dur=0s
+RUN t14 pre 5 exit=1 dur=1s
 CHECK a01 PASS self-growth repository target is current
 CHECK a02 PASS self-growth status is published
 CHECK a03 PASS self-growth license is MIT
@@ -96,7 +96,7 @@ OK — every module claim matches the registry.
 CHECK a05 PASS registry checker passes offline
 OK — family footer selftest passed.
 CHECK a06 PASS family-footer self-test passes
-RUN t14 fix 2 exit=0 dur=1s
+RUN t14 fix 2 exit=0 dur=0s
 CHECK a01 PASS self-growth repository target is current
 CHECK a02 PASS self-growth status is published
 CHECK a03 PASS self-growth license is MIT
@@ -110,7 +110,7 @@ OK — every module claim matches the registry.
 CHECK a05 PASS registry checker passes offline
 OK — family footer selftest passed.
 CHECK a06 PASS family-footer self-test passes
-RUN t14 fix 3 exit=0 dur=0s
+RUN t14 fix 3 exit=0 dur=1s
 CHECK a01 PASS self-growth repository target is current
 CHECK a02 PASS self-growth status is published
 CHECK a03 PASS self-growth license is MIT

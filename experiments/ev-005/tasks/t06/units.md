@@ -23,3 +23,18 @@ MOOT: 2
 | U14 | HUMAN | Every allowed exception line is recorded in owner-facing review material. | Dropped (HUMAN: the external review record is unavailable in the offline replica). Extracted behavioral core: the task ships `fixtures/release-model-allowlist.tsv` as the visible exact-line exception ledger (U9). |
 | U15 | MOOT | The serial blocked-by ordering across sibling tasks is respected. | Dropped (MOOT: the offline replica carries only the content state, not the live issue queue or serial execution context). |
 | U16 | MOOT | The adopted-scope review event itself exists as a linked process record. | Dropped (MOOT: the offline replica does not contain the live review thread; only the resulting content criterion is testable here). |
+
+## Anonymization and needle record
+
+- Mapping: the public harness repository is rendered as “this repository.”
+  Issue, commit, person, date, and live publication provenance is omitted.
+  Public project names and the four release-model exception lines remain only
+  where the criterion makes them the exact allowlist-backed scope boundary.
+- Longest T1/T4 needle: the 476-character English scope-boundary catalog line
+  in `.ev005-fixtures/release-model-allowlist.tsv`. Exactness is required by
+  U9/U10 and is derivable because the same line ships in the in-replica catalog
+  and exists in both pair legs; the longest ordinary non-catalog needle is the
+  59-character public clone command.
+- Timeout remains the default 120 seconds because the gate performs bounded
+  tracked-Markdown enumeration and exact-line/regex sweeps without executing
+  repository code.

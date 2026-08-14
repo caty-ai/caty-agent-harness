@@ -32,3 +32,18 @@ MOOT: 4
 | U23 | MOOT | Repository lint is green on the merged-mainline tree. | Dropped (MOOT: the offline replica has no live merged-mainline destination). |
 | U24 | MOOT | A new tag is published after merge for this cleanup. | Dropped (MOOT: post-merge tag publication does not exist inside the offline replica). |
 | U25 | MOOT | A release is published after merge for this cleanup. | Dropped (MOOT: post-merge release publication does not exist inside the offline replica). |
+
+## Anonymization and needle record
+
+- Mapping: the public harness repository is rendered as “this repository.”
+  Issue, commit, owner, date, merged-mainline, tag, and release provenance is
+  omitted from the task sheet. The public product name, retired-name removal
+  target, and frozen compatibility/model identifiers remain because U1–U21
+  require them.
+- Longest T1/T4 needle: ``| Synthesis R1–R15 | `SYNTHESIS.md` | fable-loop
+  v0.1→v0.2 design review resolutions (verifier, STATE.md, rubric discipline)
+  |`` (126 characters). It is a pre-fix-derived T4 baseline for U10, not fix
+  prose; the matching public row is the explicit replacement surface.
+- Timeout is 1800 seconds because U20/U21 require the full `make test` and
+  `make lint` suites, which exceeded the default admission timeout in isolated
+  history-zero replicas.

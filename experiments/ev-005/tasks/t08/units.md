@@ -50,3 +50,17 @@ MOOT: 0
 The frozen identifier list is preserved as source code identifiers. This ledger
 does not treat unrelated nominative model references or historical deployed-label
 examples as product identifiers; the source explicitly distinguishes those cases.
+
+## Anonymization and needle record
+
+- Mapping: the public harness repository is rendered as “this repository.”
+  Issue, commit, person, date, and publication provenance is omitted from the
+  task sheet. The public name, retired-name removal target, and frozen
+  compatibility identifiers remain because the criterion explicitly binds
+  them.
+- Longest T1/T4 needle: `You are a memory-flush extractor for a fable-loop
+  workspace about to lose its context window.` (93 characters). It is a
+  pre-fix-derived T4 baseline for the U9 rename, not newly prescribed prose;
+  the positive assertion uses only the shorter public-name fragment.
+- Timeout remains the default 120 seconds because all 77 assertions are
+  bounded fixed-string checks and the gate executes no repository code.

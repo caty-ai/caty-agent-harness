@@ -19,6 +19,8 @@ producers. In particular, warning-prefix outliers remain deferred,
 optional diagnostic `FAIL` rows remain compatible with exit `0`. Assertions
 must preserve these documented contracts rather than demand behavior changes.
 
+Seven-defect source split: normalized by this fix — none; frozen/documented without producer behavior changes — offending-path omission, reasonless `install.sh` argument usage, `task-runner` usage omitting mandatory `TR_SPAWN_STEP`, `tr-enqueue` usage exit `1`, three warning-prefix styles, `--check` failure rows on stdout while warnings use stderr, and optional `FAIL` rows with exit `0`; the actual pre/fix diff adds only the conventions note and its pinning test.
+
 | Unit | Class | Source unit (anonymized) | Mapping / disposition |
 | --- | --- | --- | --- |
 | U1 | MECH | A conventions note defines the warning prefix and records current outliers as frozen/deferred deviations. | `a01` (T1 content-presence with small semantic anchors: the output-prefix section, `warning:`, `WARN:`, `WARNING:`, `FROZEN`, and an outlier/defer/deviation term). The variant prefixes are source-listed behavior, not historical prose. |
@@ -31,3 +33,16 @@ Needle and solvability audit: all needles are short convention tokens, public
 paths, or exact exit codes stated in `task.md` and derivable from the replica.
 No full historical prose sentence or out-of-replica canonical blob is pinned.
 Default timeout remains 120 seconds.
+
+## Anonymization and needle record
+
+- Mapping: the public harness repository is rendered as “this repository.”
+  Issue, commit, person, date, and tracker provenance is omitted. Public CLI
+  names, paths, prefixes, and exit values remain because U1–U5 target them and
+  they are present in the pre-fix replica.
+- Longest T1/T4 needle: `tests/check-tickprobe.test.sh` (30 characters). It is
+  a tracked public regression path already present in the pre-fix replica;
+  convention prose is checked with shorter tokens.
+- Timeout remains the default 120 seconds because the gate runs one focused
+  conventions regression plus a bounded structural Python check, not the full
+  repository suite.
