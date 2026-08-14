@@ -14,8 +14,10 @@ caty_pause_value_is_record_safe() {
   local value=${1-}
 
   [[ -n "$value" ]] || return 1
+  # Bracket ranges are collation-dependent (fail-open on bash 3.2 under any non-C collation);
+  # [[:cntrl:]] classifies C0+DEL stably across locales.
   case "$value" in
-    *[$'\001'-$'\037'$'\177']*) return 1 ;;
+    *[[:cntrl:]]*) return 1 ;;
     *) return 0 ;;
   esac
 }
