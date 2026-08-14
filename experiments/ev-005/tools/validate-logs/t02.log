@@ -102,7 +102,7 @@ CHECK a22 FAIL agent guide points to the concrete bundled demo task
 CHECK a23 FAIL agent guide starts the demo walkthrough at workspace initialization
 CHECK a24 FAIL agent guide enqueues the bundled demo task
 CHECK a25 FAIL agent guide runs the bundled demo end to end
-RUN t02 pre 4 exit=1 dur=0s
+RUN t02 pre 4 exit=1 dur=1s
 CHECK a01 FAIL English support matrix records tested macOS and expected Linux text
 CHECK a02 FAIL English support matrix records Windows status
 CHECK a03 FAIL Japanese support matrix records tested macOS and expected Linux text
