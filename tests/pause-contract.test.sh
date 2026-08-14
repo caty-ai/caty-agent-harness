@@ -659,6 +659,47 @@ assert_paused_automation_capture "next invocation after mid-flight pause" "$boun
 assert_eq "next paused invocation makes zero additional provider calls" "1" "$(wc -l <"$boundary_calls" | tr -d ' ')"
 assert_eq "next paused invocation leaves exact workspace snapshot" "$boundary_before_next" "$(snapshot_workspace "$boundary")"
 
+# UTF-8 locale coverage exercises locale-stable control-character rejection.
+set +e
+available_locales=$(locale -a 2>/dev/null)
+locale_list_rc=$?
+set -e
+if (( locale_list_rc != 0 )); then
+  fail_case "locale availability can be queried" \
+    "locale -a exited $locale_list_rc"
+elif grep -Ei '^en_US\.(UTF-8|utf8)$' <<<"$available_locales" >/dev/null; then
+  set +e
+  # Pin Apple's bash 3.2 semantics even when a Homebrew bash shadows PATH.
+  env LC_ALL=en_US.UTF-8 /bin/bash -c \
+    'source "$1" || exit 99; caty_pause_value_is_record_safe "$2"' \
+    _ "$ROOT/scripts/lib-pause.sh" $'unsafe\nrecord'
+  locale_record_safe_rc=$?
+  set -e
+  assert_eq "en_US UTF-8 rejects newline record value" "1" "$locale_record_safe_rc"
+
+  locale_unsafe_parent="$TMP/"$'locale-unsafe\nphysical-parent'
+  mkdir -p "$locale_unsafe_parent/initialized"
+  "$ROOT/scripts/loop-init" --workspace "$locale_unsafe_parent/initialized" >/dev/null
+  ln -s "$locale_unsafe_parent" "$TMP/locale-safe-ancestor"
+  capture_run locale-unsafe-physical env LC_ALL=en_US.UTF-8 /bin/bash \
+    "$ROOT/install.sh" --disable --workspace "$TMP/locale-safe-ancestor/initialized"
+  assert_eq "en_US UTF-8 rejects safe alias to newline physical parent" "2" "$CAPTURE_RC"
+  assert_eq "en_US UTF-8 unsafe physical parent emits no stdout records" "" "$CAPTURE_OUT"
+  assert_eq "en_US UTF-8 unsafe physical parent stdout is empty at byte level" \
+    "0" "$(wc -c <"$CAPTURE_STDOUT" | tr -d ' ')"
+  assert_eq "en_US UTF-8 unsafe physical parent stderr is exact invalid workspace path" \
+    "invalid workspace path" "$CAPTURE_ERR"
+  assert_eq "en_US UTF-8 unsafe physical parent error remains one line" \
+    "1" "$(wc -l <"$CAPTURE_STDERR" | tr -d ' ')"
+else
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    fail_case "en_US.UTF-8 locale available on macOS" \
+      "locale -a lists no en_US.UTF-8/utf8"
+  else
+    pass "en_US UTF-8 locale unavailable # SKIP locale-sensitive path safety regressions"
+  fi
+fi
+
 # Unsafe logical and physical paths are rejected without multiline status records.
 unsafe_direct="$TMP/"$'unsafe\nworkspace'
 mkdir -p "$unsafe_direct"
