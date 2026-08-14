@@ -74,8 +74,8 @@ The rules there apply in addition to the Hermes-specific wiring below.
    `VERIFIER_CMD` must be exactly one absolute wrapper-script path. The adapter
    rejects legacy multi-token command strings and ships no provider default.
 
-   A reference Anthropic Messages implementation is available as three distinct,
-   directly inspectable files:
+   Two provider shapes share the same wrapper contract. The API-backed reference is
+   available as three distinct, directly inspectable files:
 
    - `adapters/hermes/examples/verifier-wrapper.sh` validates the argv bundle and
      rejects missing, malformed, or multiple verdicts.
@@ -85,9 +85,75 @@ The rules there apply in addition to the Hermes-specific wiring below.
    - `adapters/hermes/examples/verifier-probe.sh` relocates and genuinely calls the
      provider through the wrapper before reporting conformance.
 
-   Anthropic remains the default: set an Anthropic key in `VERIFIER_API_KEY`,
-   optionally set `VERIFIER_MODEL`, and leave `VERIFIER_API_BASE` unset to use
-   `https://api.anthropic.com`.
+   The CLI-backed shape uses the unchanged `verifier-wrapper.sh` with
+   `verifier-provider-cli.sh` and `verifier-probe-cli.sh`. Both shapes remain
+   supported. This Hermes family deploys the CLI-backed shape by owner decision on
+   2026-08-14; the API client remains available for other deployments.
+
+   **Claude Code CLI configuration (no API key).** Authenticate the CLI as the job
+   uid, then set the absolute binary path and optional model in the job environment:
+
+   ```sh
+   VERIFIER_CLI_BIN=$HOME/.local/bin/claude
+   VERIFIER_MODEL=claude-sonnet-5
+   ```
+
+   `VERIFIER_CLI_BIN` defaults to `$HOME/.local/bin/claude`; the provider never uses a
+   `PATH` lookup. It delivers the fenced bundle prompt on stdin from a private temporary
+   file and launches the CLI with print mode, no tools, no session persistence, strict
+   empty MCP configuration, and safe mode. Before launch it removes API key, endpoint,
+   Claude config/session, agent-process, Node preload, and TLS trust-override variables
+   from the child environment while retaining `HOME` for subscription credential
+   discovery. The CLI must therefore be authenticated through the login discovered via
+   `HOME`; token/config-directory overrides such as `CLAUDE_CODE_OAUTH_TOKEN` and
+   `CLAUDE_CONFIG_DIR` are deliberately stripped. This matters for both trust and
+   billing: if `ANTHROPIC_API_KEY` survives, the CLI authenticates with that key and
+   incurs metered API usage instead of using the logged-in subscription. The job
+   environment must not set `HTTPS_PROXY`, `HTTP_PROXY`, or `ALL_PROXY` unless the
+   operator intends verifier traffic to traverse that proxy; those variables are not
+   stripped because some deployment hosts require an explicit proxy. The provider also
+   starts the CLI in a fresh neutral temporary directory and removes it on exit.
+
+   This is a mandatory defense against the **checkpoint stop-hook final-message
+   replacement hazard**: in this family, a host checkpoint hook has replaced the final
+   `claude --print` response, destroying a 36-item translation batch and swallowing two
+   review-seat verdicts. Safe mode blocks custom hooks, while the neutral directory
+   prevents project discovery from reintroducing workspace-local interference. No
+   tools and strict empty MCP configuration close the remaining model access paths. A
+   swallowed, empty, or malformed response fails the provider and wrapper checks, so it
+   becomes gate noise/`needs-human`, never a false pass.
+
+   Safe mode is not an absolute sandbox: admin-managed policy settings still apply, and
+   built-in tools/permissions otherwise work normally. Tool denial here comes from
+   `--tools ""` and `--allowedTools ""`; the residual policy-setting boundary is
+   accepted, and every empty or malformed reply still fails closed. `--bare` is not a
+   substitute because it disables OAuth/keychain credential discovery and would force
+   API-key authentication, defeating this deployment's subscription-auth goal.
+
+   The CLI attestation boundary is narrower than the API-client file boundary:
+   `provider_sha256` pins only `verifier-provider-cli.sh`. It does not pin the Claude
+   CLI binary, CLI settings files, or login state. `provider_version` records the model
+   label plus the first 16 hex characters of the CLI binary hash that the probe
+   exercised. This is an honest identity record, not enforcement: the runtime gate does
+   not re-derive that value, so a later CLI auto-update does not invalidate existing
+   evidence. Re-attest after changing any of those inputs and at least every three days.
+   Login expiry makes the real probe fail; at runtime it fails closed to `needs-human`,
+   and the three-day re-attestation cadence surfaces it even if no verifier job has run.
+
+   Attest the CLI-backed shape with the authenticated job uid:
+
+   ```sh
+   HARNESS=/absolute/path/to/caty-agent-harness
+   VERIFIER_CLI_BIN="$HOME/.local/bin/claude" \
+     PROBE_PROVIDER_PATH="$HARNESS/adapters/hermes/examples/verifier-provider-cli.sh" \
+     "$HARNESS/scripts/attest-wrapper" --route verifier \
+       --wrapper "$HARNESS/adapters/hermes/examples/verifier-wrapper.sh" \
+       --probe "$HARNESS/adapters/hermes/examples/verifier-probe-cli.sh"
+   ```
+
+   For the API-backed shape, Anthropic remains the default: set an Anthropic key in
+   `VERIFIER_API_KEY`, optionally set `VERIFIER_MODEL`, and leave
+   `VERIFIER_API_BASE` unset to use `https://api.anthropic.com`.
 
    **Z.ai GLM 5.2 configuration.** Set these values through the job's protected
    `SECRETS_ENV`:
