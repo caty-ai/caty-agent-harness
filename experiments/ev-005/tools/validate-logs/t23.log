@@ -1,0 +1,82 @@
+== validate t23 pre=5ae06864018abf3c1aaa3e08ec72bfa4a47241cd fix=1aa6bdaa385458c78e6d0c06e84647a5f9359672 repo=/Users/shojikumaru/claude-workspace/caty-agent-harness ==
+CHECK a01 FAIL corrupt state crashes, is processed, or prevents healthy work
+CHECK a02 FAIL quoted identifier is rejected or produces inconsistent artifact identity
+CHECK a03 FAIL copy failure leaves partial state or blocks a clean retry
+CHECK a04 FAIL intake accepts or unclearly rejects an invalid created timestamp
+CHECK a05 FAIL legacy invalid created value silently runs before valid work
+CHECK a06 FAIL runner does not clearly reject bad timeout or grace values
+CHECK a07 FAIL repository test coverage is missing for one or more listed paths
+RUN t23 pre 1 exit=1 dur=7s
+CHECK a01 FAIL corrupt state crashes, is processed, or prevents healthy work
+CHECK a02 FAIL quoted identifier is rejected or produces inconsistent artifact identity
+CHECK a03 FAIL copy failure leaves partial state or blocks a clean retry
+CHECK a04 FAIL intake accepts or unclearly rejects an invalid created timestamp
+CHECK a05 FAIL legacy invalid created value silently runs before valid work
+CHECK a06 FAIL runner does not clearly reject bad timeout or grace values
+CHECK a07 FAIL repository test coverage is missing for one or more listed paths
+RUN t23 pre 2 exit=1 dur=7s
+CHECK a01 FAIL corrupt state crashes, is processed, or prevents healthy work
+CHECK a02 FAIL quoted identifier is rejected or produces inconsistent artifact identity
+CHECK a03 FAIL copy failure leaves partial state or blocks a clean retry
+CHECK a04 FAIL intake accepts or unclearly rejects an invalid created timestamp
+CHECK a05 FAIL legacy invalid created value silently runs before valid work
+CHECK a06 FAIL runner does not clearly reject bad timeout or grace values
+CHECK a07 FAIL repository test coverage is missing for one or more listed paths
+RUN t23 pre 3 exit=1 dur=7s
+CHECK a01 FAIL corrupt state crashes, is processed, or prevents healthy work
+CHECK a02 FAIL quoted identifier is rejected or produces inconsistent artifact identity
+CHECK a03 FAIL copy failure leaves partial state or blocks a clean retry
+CHECK a04 FAIL intake accepts or unclearly rejects an invalid created timestamp
+CHECK a05 FAIL legacy invalid created value silently runs before valid work
+CHECK a06 FAIL runner does not clearly reject bad timeout or grace values
+CHECK a07 FAIL repository test coverage is missing for one or more listed paths
+RUN t23 pre 4 exit=1 dur=7s
+CHECK a01 FAIL corrupt state crashes, is processed, or prevents healthy work
+CHECK a02 FAIL quoted identifier is rejected or produces inconsistent artifact identity
+CHECK a03 FAIL copy failure leaves partial state or blocks a clean retry
+CHECK a04 FAIL intake accepts or unclearly rejects an invalid created timestamp
+CHECK a05 FAIL legacy invalid created value silently runs before valid work
+CHECK a06 FAIL runner does not clearly reject bad timeout or grace values
+CHECK a07 FAIL repository test coverage is missing for one or more listed paths
+RUN t23 pre 5 exit=1 dur=8s
+CHECK a01 PASS corrupt state is diagnosed and isolated while healthy work progresses
+CHECK a02 PASS intake and runner agree on a quoted identifier
+CHECK a03 PASS copy failure leaves no duplicate blocker and retry succeeds
+CHECK a04 PASS intake clearly rejects missing and impossible created timestamps
+CHECK a05 PASS legacy invalid created values are warned and sorted after valid work
+CHECK a06 PASS runner clearly rejects bad timeout and grace values before mutation
+CHECK a07 PASS repository tests cover every listed validation and recovery path
+RUN t23 fix 1 exit=0 dur=13s
+CHECK a01 PASS corrupt state is diagnosed and isolated while healthy work progresses
+CHECK a02 PASS intake and runner agree on a quoted identifier
+CHECK a03 PASS copy failure leaves no duplicate blocker and retry succeeds
+CHECK a04 PASS intake clearly rejects missing and impossible created timestamps
+CHECK a05 PASS legacy invalid created values are warned and sorted after valid work
+CHECK a06 PASS runner clearly rejects bad timeout and grace values before mutation
+CHECK a07 PASS repository tests cover every listed validation and recovery path
+RUN t23 fix 2 exit=0 dur=13s
+CHECK a01 PASS corrupt state is diagnosed and isolated while healthy work progresses
+CHECK a02 PASS intake and runner agree on a quoted identifier
+CHECK a03 PASS copy failure leaves no duplicate blocker and retry succeeds
+CHECK a04 PASS intake clearly rejects missing and impossible created timestamps
+CHECK a05 PASS legacy invalid created values are warned and sorted after valid work
+CHECK a06 PASS runner clearly rejects bad timeout and grace values before mutation
+CHECK a07 PASS repository tests cover every listed validation and recovery path
+RUN t23 fix 3 exit=0 dur=13s
+CHECK a01 PASS corrupt state is diagnosed and isolated while healthy work progresses
+CHECK a02 PASS intake and runner agree on a quoted identifier
+CHECK a03 PASS copy failure leaves no duplicate blocker and retry succeeds
+CHECK a04 PASS intake clearly rejects missing and impossible created timestamps
+CHECK a05 PASS legacy invalid created values are warned and sorted after valid work
+CHECK a06 PASS runner clearly rejects bad timeout and grace values before mutation
+CHECK a07 PASS repository tests cover every listed validation and recovery path
+RUN t23 fix 4 exit=0 dur=13s
+CHECK a01 PASS corrupt state is diagnosed and isolated while healthy work progresses
+CHECK a02 PASS intake and runner agree on a quoted identifier
+CHECK a03 PASS copy failure leaves no duplicate blocker and retry succeeds
+CHECK a04 PASS intake clearly rejects missing and impossible created timestamps
+CHECK a05 PASS legacy invalid created values are warned and sorted after valid work
+CHECK a06 PASS runner clearly rejects bad timeout and grace values before mutation
+CHECK a07 PASS repository tests cover every listed validation and recovery path
+RUN t23 fix 5 exit=0 dur=13s
+VERDICT t23 PASS

@@ -1,0 +1,152 @@
+== validate t18 pre=c48913a0b31d554e84f31714c48f3ff58c160c5e fix=e830a0e26bae4b6ea35c658ce47dd0e00b4f0ca8 repo=/Users/shojikumaru/claude-workspace/family-os-caty ==
+CHECK a01 FAIL the registry lacks a unique context-kit entry
+CHECK a02 FAIL context-kit is not on the vertical axis
+CHECK a03 FAIL context-kit has the wrong foundation flag
+CHECK a04 FAIL context-kit has the wrong pre-flip status
+CHECK a05 PASS generated blocks are current
+CHECK a06 PASS registry validation passes offline
+CHECK a07 FAIL English vertical table row omits context-kit
+CHECK a08 FAIL Japanese vertical table row omits context-kit
+CHECK a09 FAIL Chinese vertical table row omits context-kit
+CHECK a10 FAIL Thai vertical table row omits context-kit
+CHECK a11 FAIL English equipment category lacks a context-kit bullet
+CHECK a12 FAIL Japanese equipment category lacks a context-kit bullet
+CHECK a13 FAIL Chinese equipment category lacks a context-kit bullet
+CHECK a14 FAIL Thai equipment category lacks a context-kit bullet
+RUN t18 pre 1 exit=1 dur=1s
+CHECK a01 FAIL the registry lacks a unique context-kit entry
+CHECK a02 FAIL context-kit is not on the vertical axis
+CHECK a03 FAIL context-kit has the wrong foundation flag
+CHECK a04 FAIL context-kit has the wrong pre-flip status
+CHECK a05 PASS generated blocks are current
+CHECK a06 PASS registry validation passes offline
+CHECK a07 FAIL English vertical table row omits context-kit
+CHECK a08 FAIL Japanese vertical table row omits context-kit
+CHECK a09 FAIL Chinese vertical table row omits context-kit
+CHECK a10 FAIL Thai vertical table row omits context-kit
+CHECK a11 FAIL English equipment category lacks a context-kit bullet
+CHECK a12 FAIL Japanese equipment category lacks a context-kit bullet
+CHECK a13 FAIL Chinese equipment category lacks a context-kit bullet
+CHECK a14 FAIL Thai equipment category lacks a context-kit bullet
+RUN t18 pre 2 exit=1 dur=1s
+CHECK a01 FAIL the registry lacks a unique context-kit entry
+CHECK a02 FAIL context-kit is not on the vertical axis
+CHECK a03 FAIL context-kit has the wrong foundation flag
+CHECK a04 FAIL context-kit has the wrong pre-flip status
+CHECK a05 PASS generated blocks are current
+CHECK a06 PASS registry validation passes offline
+CHECK a07 FAIL English vertical table row omits context-kit
+CHECK a08 FAIL Japanese vertical table row omits context-kit
+CHECK a09 FAIL Chinese vertical table row omits context-kit
+CHECK a10 FAIL Thai vertical table row omits context-kit
+CHECK a11 FAIL English equipment category lacks a context-kit bullet
+CHECK a12 FAIL Japanese equipment category lacks a context-kit bullet
+CHECK a13 FAIL Chinese equipment category lacks a context-kit bullet
+CHECK a14 FAIL Thai equipment category lacks a context-kit bullet
+RUN t18 pre 3 exit=1 dur=0s
+CHECK a01 FAIL the registry lacks a unique context-kit entry
+CHECK a02 FAIL context-kit is not on the vertical axis
+CHECK a03 FAIL context-kit has the wrong foundation flag
+CHECK a04 FAIL context-kit has the wrong pre-flip status
+CHECK a05 PASS generated blocks are current
+CHECK a06 PASS registry validation passes offline
+CHECK a07 FAIL English vertical table row omits context-kit
+CHECK a08 FAIL Japanese vertical table row omits context-kit
+CHECK a09 FAIL Chinese vertical table row omits context-kit
+CHECK a10 FAIL Thai vertical table row omits context-kit
+CHECK a11 FAIL English equipment category lacks a context-kit bullet
+CHECK a12 FAIL Japanese equipment category lacks a context-kit bullet
+CHECK a13 FAIL Chinese equipment category lacks a context-kit bullet
+CHECK a14 FAIL Thai equipment category lacks a context-kit bullet
+RUN t18 pre 4 exit=1 dur=0s
+CHECK a01 FAIL the registry lacks a unique context-kit entry
+CHECK a02 FAIL context-kit is not on the vertical axis
+CHECK a03 FAIL context-kit has the wrong foundation flag
+CHECK a04 FAIL context-kit has the wrong pre-flip status
+CHECK a05 PASS generated blocks are current
+CHECK a06 PASS registry validation passes offline
+CHECK a07 FAIL English vertical table row omits context-kit
+CHECK a08 FAIL Japanese vertical table row omits context-kit
+CHECK a09 FAIL Chinese vertical table row omits context-kit
+CHECK a10 FAIL Thai vertical table row omits context-kit
+CHECK a11 FAIL English equipment category lacks a context-kit bullet
+CHECK a12 FAIL Japanese equipment category lacks a context-kit bullet
+CHECK a13 FAIL Chinese equipment category lacks a context-kit bullet
+CHECK a14 FAIL Thai equipment category lacks a context-kit bullet
+RUN t18 pre 5 exit=1 dur=1s
+CHECK a01 PASS the registry has one context-kit entry
+CHECK a02 PASS context-kit is on the vertical axis
+CHECK a03 PASS context-kit is not a foundation module
+CHECK a04 PASS context-kit remains preparing before the public flip
+CHECK a05 PASS generated blocks are current
+CHECK a06 PASS registry validation passes offline
+CHECK a07 PASS English vertical table row mentions context-kit
+CHECK a08 PASS Japanese vertical table row mentions context-kit
+CHECK a09 PASS Chinese vertical table row mentions context-kit
+CHECK a10 PASS Thai vertical table row mentions context-kit
+CHECK a11 PASS English equipment category has a context-kit bullet
+CHECK a12 PASS Japanese equipment category has a context-kit bullet
+CHECK a13 PASS Chinese equipment category has a context-kit bullet
+CHECK a14 PASS Thai equipment category has a context-kit bullet
+RUN t18 fix 1 exit=0 dur=0s
+CHECK a01 PASS the registry has one context-kit entry
+CHECK a02 PASS context-kit is on the vertical axis
+CHECK a03 PASS context-kit is not a foundation module
+CHECK a04 PASS context-kit remains preparing before the public flip
+CHECK a05 PASS generated blocks are current
+CHECK a06 PASS registry validation passes offline
+CHECK a07 PASS English vertical table row mentions context-kit
+CHECK a08 PASS Japanese vertical table row mentions context-kit
+CHECK a09 PASS Chinese vertical table row mentions context-kit
+CHECK a10 PASS Thai vertical table row mentions context-kit
+CHECK a11 PASS English equipment category has a context-kit bullet
+CHECK a12 PASS Japanese equipment category has a context-kit bullet
+CHECK a13 PASS Chinese equipment category has a context-kit bullet
+CHECK a14 PASS Thai equipment category has a context-kit bullet
+RUN t18 fix 2 exit=0 dur=0s
+CHECK a01 PASS the registry has one context-kit entry
+CHECK a02 PASS context-kit is on the vertical axis
+CHECK a03 PASS context-kit is not a foundation module
+CHECK a04 PASS context-kit remains preparing before the public flip
+CHECK a05 PASS generated blocks are current
+CHECK a06 PASS registry validation passes offline
+CHECK a07 PASS English vertical table row mentions context-kit
+CHECK a08 PASS Japanese vertical table row mentions context-kit
+CHECK a09 PASS Chinese vertical table row mentions context-kit
+CHECK a10 PASS Thai vertical table row mentions context-kit
+CHECK a11 PASS English equipment category has a context-kit bullet
+CHECK a12 PASS Japanese equipment category has a context-kit bullet
+CHECK a13 PASS Chinese equipment category has a context-kit bullet
+CHECK a14 PASS Thai equipment category has a context-kit bullet
+RUN t18 fix 3 exit=0 dur=1s
+CHECK a01 PASS the registry has one context-kit entry
+CHECK a02 PASS context-kit is on the vertical axis
+CHECK a03 PASS context-kit is not a foundation module
+CHECK a04 PASS context-kit remains preparing before the public flip
+CHECK a05 PASS generated blocks are current
+CHECK a06 PASS registry validation passes offline
+CHECK a07 PASS English vertical table row mentions context-kit
+CHECK a08 PASS Japanese vertical table row mentions context-kit
+CHECK a09 PASS Chinese vertical table row mentions context-kit
+CHECK a10 PASS Thai vertical table row mentions context-kit
+CHECK a11 PASS English equipment category has a context-kit bullet
+CHECK a12 PASS Japanese equipment category has a context-kit bullet
+CHECK a13 PASS Chinese equipment category has a context-kit bullet
+CHECK a14 PASS Thai equipment category has a context-kit bullet
+RUN t18 fix 4 exit=0 dur=1s
+CHECK a01 PASS the registry has one context-kit entry
+CHECK a02 PASS context-kit is on the vertical axis
+CHECK a03 PASS context-kit is not a foundation module
+CHECK a04 PASS context-kit remains preparing before the public flip
+CHECK a05 PASS generated blocks are current
+CHECK a06 PASS registry validation passes offline
+CHECK a07 PASS English vertical table row mentions context-kit
+CHECK a08 PASS Japanese vertical table row mentions context-kit
+CHECK a09 PASS Chinese vertical table row mentions context-kit
+CHECK a10 PASS Thai vertical table row mentions context-kit
+CHECK a11 PASS English equipment category has a context-kit bullet
+CHECK a12 PASS Japanese equipment category has a context-kit bullet
+CHECK a13 PASS Chinese equipment category has a context-kit bullet
+CHECK a14 PASS Thai equipment category has a context-kit bullet
+RUN t18 fix 5 exit=0 dur=0s
+VERDICT t18 PASS

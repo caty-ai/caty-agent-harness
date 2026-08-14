@@ -1,0 +1,142 @@
+== validate t29 pre=d221bd8f46f241f66e26d9c7aa31a667aa17ec94 fix=d66aefee797423e438254a65b2cf58ccffbca0f5 repo=/Users/shojikumaru/claude-workspace/family-os-caty ==
+CHECK a01 FAIL canonical growth-model documents or five-stage tables are missing
+CHECK a02 FAIL the I/WE/THEY subject mapping is incomplete
+CHECK a03 FAIL the Relationship Readiness axis is incomplete
+CHECK a04 FAIL one or more localized README growth sections lack five-stage structure
+CHECK a05 FAIL implemented/unverified and planned claim strengths are not separated
+CHECK a06 FAIL the shared SVG is missing, invalid, localized, or lacks stage labels
+CHECK a07 FAIL the SVG style semantics or focus-not-state legend is incomplete
+CHECK a08 FAIL the SVG I-to-WE boundary is missing or misplaced
+CHECK a09 FAIL a localized figure/table placement or relationship column is wrong
+CHECK a10 FAIL stage 1 evidence is not an em dash in both canonical tables
+CHECK a11 PASS generated repository content is current
+CHECK a12 PASS publication label, denylist, and SVG scans pass
+CHECK a13 FAIL localized growth-section structure is inconsistent
+RUN t29 pre 1 exit=1 dur=1s
+CHECK a01 FAIL canonical growth-model documents or five-stage tables are missing
+CHECK a02 FAIL the I/WE/THEY subject mapping is incomplete
+CHECK a03 FAIL the Relationship Readiness axis is incomplete
+CHECK a04 FAIL one or more localized README growth sections lack five-stage structure
+CHECK a05 FAIL implemented/unverified and planned claim strengths are not separated
+CHECK a06 FAIL the shared SVG is missing, invalid, localized, or lacks stage labels
+CHECK a07 FAIL the SVG style semantics or focus-not-state legend is incomplete
+CHECK a08 FAIL the SVG I-to-WE boundary is missing or misplaced
+CHECK a09 FAIL a localized figure/table placement or relationship column is wrong
+CHECK a10 FAIL stage 1 evidence is not an em dash in both canonical tables
+CHECK a11 PASS generated repository content is current
+CHECK a12 PASS publication label, denylist, and SVG scans pass
+CHECK a13 FAIL localized growth-section structure is inconsistent
+RUN t29 pre 2 exit=1 dur=1s
+CHECK a01 FAIL canonical growth-model documents or five-stage tables are missing
+CHECK a02 FAIL the I/WE/THEY subject mapping is incomplete
+CHECK a03 FAIL the Relationship Readiness axis is incomplete
+CHECK a04 FAIL one or more localized README growth sections lack five-stage structure
+CHECK a05 FAIL implemented/unverified and planned claim strengths are not separated
+CHECK a06 FAIL the shared SVG is missing, invalid, localized, or lacks stage labels
+CHECK a07 FAIL the SVG style semantics or focus-not-state legend is incomplete
+CHECK a08 FAIL the SVG I-to-WE boundary is missing or misplaced
+CHECK a09 FAIL a localized figure/table placement or relationship column is wrong
+CHECK a10 FAIL stage 1 evidence is not an em dash in both canonical tables
+CHECK a11 PASS generated repository content is current
+CHECK a12 PASS publication label, denylist, and SVG scans pass
+CHECK a13 FAIL localized growth-section structure is inconsistent
+RUN t29 pre 3 exit=1 dur=0s
+CHECK a01 FAIL canonical growth-model documents or five-stage tables are missing
+CHECK a02 FAIL the I/WE/THEY subject mapping is incomplete
+CHECK a03 FAIL the Relationship Readiness axis is incomplete
+CHECK a04 FAIL one or more localized README growth sections lack five-stage structure
+CHECK a05 FAIL implemented/unverified and planned claim strengths are not separated
+CHECK a06 FAIL the shared SVG is missing, invalid, localized, or lacks stage labels
+CHECK a07 FAIL the SVG style semantics or focus-not-state legend is incomplete
+CHECK a08 FAIL the SVG I-to-WE boundary is missing or misplaced
+CHECK a09 FAIL a localized figure/table placement or relationship column is wrong
+CHECK a10 FAIL stage 1 evidence is not an em dash in both canonical tables
+CHECK a11 PASS generated repository content is current
+CHECK a12 PASS publication label, denylist, and SVG scans pass
+CHECK a13 FAIL localized growth-section structure is inconsistent
+RUN t29 pre 4 exit=1 dur=0s
+CHECK a01 FAIL canonical growth-model documents or five-stage tables are missing
+CHECK a02 FAIL the I/WE/THEY subject mapping is incomplete
+CHECK a03 FAIL the Relationship Readiness axis is incomplete
+CHECK a04 FAIL one or more localized README growth sections lack five-stage structure
+CHECK a05 FAIL implemented/unverified and planned claim strengths are not separated
+CHECK a06 FAIL the shared SVG is missing, invalid, localized, or lacks stage labels
+CHECK a07 FAIL the SVG style semantics or focus-not-state legend is incomplete
+CHECK a08 FAIL the SVG I-to-WE boundary is missing or misplaced
+CHECK a09 FAIL a localized figure/table placement or relationship column is wrong
+CHECK a10 FAIL stage 1 evidence is not an em dash in both canonical tables
+CHECK a11 PASS generated repository content is current
+CHECK a12 PASS publication label, denylist, and SVG scans pass
+CHECK a13 FAIL localized growth-section structure is inconsistent
+RUN t29 pre 5 exit=1 dur=1s
+CHECK a01 PASS both canonical documents contain operational five-stage tables
+CHECK a02 PASS I, WE, and outside-model THEY mappings are present
+CHECK a03 PASS Relationship Readiness is documented as the second axis
+CHECK a04 PASS all localized README growth sections have five stages
+CHECK a05 PASS stage 3 and stage 4 claim strengths are separated in all READMEs
+CHECK a06 PASS the shared SVG has accessible minimal English stage labels
+CHECK a07 PASS the SVG legend and styles separate implemented, planned, and focus
+CHECK a08 PASS the SVG marks the I-to-WE boundary between stages 4 and 5
+CHECK a09 PASS each README places a relationship table immediately after the figure
+CHECK a10 PASS stage 1 evidence is an em dash in both canonical tables
+CHECK a11 PASS generated repository content is current
+CHECK a12 PASS publication label, denylist, and SVG scans pass
+CHECK a13 PASS localized growth sections have structural parity
+RUN t29 fix 1 exit=0 dur=1s
+CHECK a01 PASS both canonical documents contain operational five-stage tables
+CHECK a02 PASS I, WE, and outside-model THEY mappings are present
+CHECK a03 PASS Relationship Readiness is documented as the second axis
+CHECK a04 PASS all localized README growth sections have five stages
+CHECK a05 PASS stage 3 and stage 4 claim strengths are separated in all READMEs
+CHECK a06 PASS the shared SVG has accessible minimal English stage labels
+CHECK a07 PASS the SVG legend and styles separate implemented, planned, and focus
+CHECK a08 PASS the SVG marks the I-to-WE boundary between stages 4 and 5
+CHECK a09 PASS each README places a relationship table immediately after the figure
+CHECK a10 PASS stage 1 evidence is an em dash in both canonical tables
+CHECK a11 PASS generated repository content is current
+CHECK a12 PASS publication label, denylist, and SVG scans pass
+CHECK a13 PASS localized growth sections have structural parity
+RUN t29 fix 2 exit=0 dur=1s
+CHECK a01 PASS both canonical documents contain operational five-stage tables
+CHECK a02 PASS I, WE, and outside-model THEY mappings are present
+CHECK a03 PASS Relationship Readiness is documented as the second axis
+CHECK a04 PASS all localized README growth sections have five stages
+CHECK a05 PASS stage 3 and stage 4 claim strengths are separated in all READMEs
+CHECK a06 PASS the shared SVG has accessible minimal English stage labels
+CHECK a07 PASS the SVG legend and styles separate implemented, planned, and focus
+CHECK a08 PASS the SVG marks the I-to-WE boundary between stages 4 and 5
+CHECK a09 PASS each README places a relationship table immediately after the figure
+CHECK a10 PASS stage 1 evidence is an em dash in both canonical tables
+CHECK a11 PASS generated repository content is current
+CHECK a12 PASS publication label, denylist, and SVG scans pass
+CHECK a13 PASS localized growth sections have structural parity
+RUN t29 fix 3 exit=0 dur=1s
+CHECK a01 PASS both canonical documents contain operational five-stage tables
+CHECK a02 PASS I, WE, and outside-model THEY mappings are present
+CHECK a03 PASS Relationship Readiness is documented as the second axis
+CHECK a04 PASS all localized README growth sections have five stages
+CHECK a05 PASS stage 3 and stage 4 claim strengths are separated in all READMEs
+CHECK a06 PASS the shared SVG has accessible minimal English stage labels
+CHECK a07 PASS the SVG legend and styles separate implemented, planned, and focus
+CHECK a08 PASS the SVG marks the I-to-WE boundary between stages 4 and 5
+CHECK a09 PASS each README places a relationship table immediately after the figure
+CHECK a10 PASS stage 1 evidence is an em dash in both canonical tables
+CHECK a11 PASS generated repository content is current
+CHECK a12 PASS publication label, denylist, and SVG scans pass
+CHECK a13 PASS localized growth sections have structural parity
+RUN t29 fix 4 exit=0 dur=1s
+CHECK a01 PASS both canonical documents contain operational five-stage tables
+CHECK a02 PASS I, WE, and outside-model THEY mappings are present
+CHECK a03 PASS Relationship Readiness is documented as the second axis
+CHECK a04 PASS all localized README growth sections have five stages
+CHECK a05 PASS stage 3 and stage 4 claim strengths are separated in all READMEs
+CHECK a06 PASS the shared SVG has accessible minimal English stage labels
+CHECK a07 PASS the SVG legend and styles separate implemented, planned, and focus
+CHECK a08 PASS the SVG marks the I-to-WE boundary between stages 4 and 5
+CHECK a09 PASS each README places a relationship table immediately after the figure
+CHECK a10 PASS stage 1 evidence is an em dash in both canonical tables
+CHECK a11 PASS generated repository content is current
+CHECK a12 PASS publication label, denylist, and SVG scans pass
+CHECK a13 PASS localized growth sections have structural parity
+RUN t29 fix 5 exit=0 dur=0s
+VERDICT t29 PASS

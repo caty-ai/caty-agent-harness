@@ -1,0 +1,82 @@
+== validate t22 pre=286c2a34ecfde934417f937f324272c7da154ca2 fix=90d5cfec89dd3107327418fb7030a4175358e27e repo=/Users/shojikumaru/claude-workspace/context-kit ==
+CHECK a01 FAIL one or more generalized tool surfaces are missing
+CHECK a02 FAIL recall does not document its individual/shared-memory relationship and local-only use
+CHECK a03 PASS tracked text contains no literal personal-environment identifiers
+CHECK a04 FAIL setup documentation or settings wiring is incomplete
+CHECK a05 FAIL four-language README structure is incomplete
+CHECK a06 FAIL the local hero/thumbnail asset is missing or empty
+CHECK a07 PASS the repository carries an MIT license
+RUN t22 pre 1 exit=1 dur=0s
+CHECK a01 FAIL one or more generalized tool surfaces are missing
+CHECK a02 FAIL recall does not document its individual/shared-memory relationship and local-only use
+CHECK a03 PASS tracked text contains no literal personal-environment identifiers
+CHECK a04 FAIL setup documentation or settings wiring is incomplete
+CHECK a05 FAIL four-language README structure is incomplete
+CHECK a06 FAIL the local hero/thumbnail asset is missing or empty
+CHECK a07 PASS the repository carries an MIT license
+RUN t22 pre 2 exit=1 dur=0s
+CHECK a01 FAIL one or more generalized tool surfaces are missing
+CHECK a02 FAIL recall does not document its individual/shared-memory relationship and local-only use
+CHECK a03 PASS tracked text contains no literal personal-environment identifiers
+CHECK a04 FAIL setup documentation or settings wiring is incomplete
+CHECK a05 FAIL four-language README structure is incomplete
+CHECK a06 FAIL the local hero/thumbnail asset is missing or empty
+CHECK a07 PASS the repository carries an MIT license
+RUN t22 pre 3 exit=1 dur=1s
+CHECK a01 FAIL one or more generalized tool surfaces are missing
+CHECK a02 FAIL recall does not document its individual/shared-memory relationship and local-only use
+CHECK a03 PASS tracked text contains no literal personal-environment identifiers
+CHECK a04 FAIL setup documentation or settings wiring is incomplete
+CHECK a05 FAIL four-language README structure is incomplete
+CHECK a06 FAIL the local hero/thumbnail asset is missing or empty
+CHECK a07 PASS the repository carries an MIT license
+RUN t22 pre 4 exit=1 dur=0s
+CHECK a01 FAIL one or more generalized tool surfaces are missing
+CHECK a02 FAIL recall does not document its individual/shared-memory relationship and local-only use
+CHECK a03 PASS tracked text contains no literal personal-environment identifiers
+CHECK a04 FAIL setup documentation or settings wiring is incomplete
+CHECK a05 FAIL four-language README structure is incomplete
+CHECK a06 FAIL the local hero/thumbnail asset is missing or empty
+CHECK a07 PASS the repository carries an MIT license
+RUN t22 pre 5 exit=1 dur=0s
+CHECK a01 PASS all five generalized tool surfaces are present
+CHECK a02 PASS recall documents its individual/shared-memory relationship and local-only use
+CHECK a03 PASS tracked text contains no literal personal-environment identifiers
+CHECK a04 PASS clean-environment setup and hook wiring are locally reproducible
+CHECK a05 PASS all four README files carry the required user-facing structure
+CHECK a06 PASS the local hero/thumbnail asset exists and is nonempty
+CHECK a07 PASS the repository carries an MIT license
+RUN t22 fix 1 exit=0 dur=1s
+CHECK a01 PASS all five generalized tool surfaces are present
+CHECK a02 PASS recall documents its individual/shared-memory relationship and local-only use
+CHECK a03 PASS tracked text contains no literal personal-environment identifiers
+CHECK a04 PASS clean-environment setup and hook wiring are locally reproducible
+CHECK a05 PASS all four README files carry the required user-facing structure
+CHECK a06 PASS the local hero/thumbnail asset exists and is nonempty
+CHECK a07 PASS the repository carries an MIT license
+RUN t22 fix 2 exit=0 dur=1s
+CHECK a01 PASS all five generalized tool surfaces are present
+CHECK a02 PASS recall documents its individual/shared-memory relationship and local-only use
+CHECK a03 PASS tracked text contains no literal personal-environment identifiers
+CHECK a04 PASS clean-environment setup and hook wiring are locally reproducible
+CHECK a05 PASS all four README files carry the required user-facing structure
+CHECK a06 PASS the local hero/thumbnail asset exists and is nonempty
+CHECK a07 PASS the repository carries an MIT license
+RUN t22 fix 3 exit=0 dur=1s
+CHECK a01 PASS all five generalized tool surfaces are present
+CHECK a02 PASS recall documents its individual/shared-memory relationship and local-only use
+CHECK a03 PASS tracked text contains no literal personal-environment identifiers
+CHECK a04 PASS clean-environment setup and hook wiring are locally reproducible
+CHECK a05 PASS all four README files carry the required user-facing structure
+CHECK a06 PASS the local hero/thumbnail asset exists and is nonempty
+CHECK a07 PASS the repository carries an MIT license
+RUN t22 fix 4 exit=0 dur=1s
+CHECK a01 PASS all five generalized tool surfaces are present
+CHECK a02 PASS recall documents its individual/shared-memory relationship and local-only use
+CHECK a03 PASS tracked text contains no literal personal-environment identifiers
+CHECK a04 PASS clean-environment setup and hook wiring are locally reproducible
+CHECK a05 PASS all four README files carry the required user-facing structure
+CHECK a06 PASS the local hero/thumbnail asset exists and is nonempty
+CHECK a07 PASS the repository carries an MIT license
+RUN t22 fix 5 exit=0 dur=1s
+VERDICT t22 PASS

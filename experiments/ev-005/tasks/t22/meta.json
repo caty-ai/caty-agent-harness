@@ -1,0 +1,9 @@
+{
+  "id": "t22",
+  "source_repo": "caty-ai/context-kit",
+  "source_issue": 1,
+  "pre_fix": "286c2a34ecfde934417f937f324272c7da154ca2",
+  "fix": "90d5cfec89dd3107327418fb7030a4175358e27e",
+  "synthetic": false,
+  "timeout_s": 120
+}

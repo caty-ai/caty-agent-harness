@@ -1,0 +1,9 @@
+{
+  "id": "t20",
+  "source_repo": "caty-ai/family-os",
+  "source_issue": 27,
+  "pre_fix": "e6e2fa76707c6a83252739e4eca4924d3c01534d",
+  "fix": "a7b0c20c6209f90caa1cdeefbef17ca9a50f6891",
+  "synthetic": false,
+  "timeout_s": 120
+}

@@ -1,0 +1,922 @@
+== validate t24 pre=f0ba28165f4c5cfb2133876d13dbac1199447926 fix=7478c355e8a31348aebd52abfd29dc8dd159b968 repo=/Users/shojikumaru/claude-workspace/family-os-caty ==
+CHECK a01 PASS English README matches the published self-growth registry state
+CHECK a02 PASS Japanese README matches the published self-growth registry state
+CHECK a03 PASS Chinese README matches the published self-growth registry state
+CHECK a04 PASS Thai README matches the published self-growth registry state
+CHECK a05 FAIL retired self-growth URL remains excluded from link checks
+CHECK a06 FAIL retired memory URL remains excluded from link checks
+CHECK a07 PASS preparing persona URL remains excluded from link checks
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 172, in main
+    check_retired_repo()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 58, in check_retired_repo
+    assert len(matches) == 1
+           ^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a08 FAIL retired self-growth repository is not registered exactly once
+CHECK a09 PASS English preparing module is plain text with its label
+CHECK a10 PASS Japanese preparing module is plain text with its label
+CHECK a11 PASS Chinese preparing module is plain text with its label
+CHECK a12 PASS Thai preparing module is plain text with its label
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a13 FAIL personal-name patterns are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a14 FAIL approval-record patterns are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a15 FAIL absolute personal paths are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a16 FAIL internal host addresses are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a17 FAIL personal email addresses are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a18 FAIL unlisted personal repository links are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a19 FAIL missing module labels are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a20 FAIL unsupported SVG state claims are not rejected
+CHECK a21 PASS all required source suffixes are scanned
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 176, in main
+    check_workflow_ci()
+    ~~~~~~~~~~~~~~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 159, in check_workflow_ci
+    assert "  publication-gate:" in text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a22 FAIL pull-request workflow does not enforce the publication gate completely
+OK — generated content is up to date.
+CHECK a23 PASS generated README blocks are current
+/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python: can't open file '/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/tools/check_publication_gate.py': [Errno 2] No such file or directory
+CHECK a24 FAIL publication gate fails on repository sources
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-1/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a25 FAIL clean bundled publication fixture does not pass
+RUN t24 pre 1 exit=1 dur=2s
+CHECK a01 PASS English README matches the published self-growth registry state
+CHECK a02 PASS Japanese README matches the published self-growth registry state
+CHECK a03 PASS Chinese README matches the published self-growth registry state
+CHECK a04 PASS Thai README matches the published self-growth registry state
+CHECK a05 FAIL retired self-growth URL remains excluded from link checks
+CHECK a06 FAIL retired memory URL remains excluded from link checks
+CHECK a07 PASS preparing persona URL remains excluded from link checks
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 172, in main
+    check_retired_repo()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 58, in check_retired_repo
+    assert len(matches) == 1
+           ^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a08 FAIL retired self-growth repository is not registered exactly once
+CHECK a09 PASS English preparing module is plain text with its label
+CHECK a10 PASS Japanese preparing module is plain text with its label
+CHECK a11 PASS Chinese preparing module is plain text with its label
+CHECK a12 PASS Thai preparing module is plain text with its label
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a13 FAIL personal-name patterns are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a14 FAIL approval-record patterns are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a15 FAIL absolute personal paths are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a16 FAIL internal host addresses are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a17 FAIL personal email addresses are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a18 FAIL unlisted personal repository links are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a19 FAIL missing module labels are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a20 FAIL unsupported SVG state claims are not rejected
+CHECK a21 PASS all required source suffixes are scanned
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 176, in main
+    check_workflow_ci()
+    ~~~~~~~~~~~~~~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 159, in check_workflow_ci
+    assert "  publication-gate:" in text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a22 FAIL pull-request workflow does not enforce the publication gate completely
+OK — generated content is up to date.
+CHECK a23 PASS generated README blocks are current
+/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python: can't open file '/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/tools/check_publication_gate.py': [Errno 2] No such file or directory
+CHECK a24 FAIL publication gate fails on repository sources
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-2/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a25 FAIL clean bundled publication fixture does not pass
+RUN t24 pre 2 exit=1 dur=1s
+CHECK a01 PASS English README matches the published self-growth registry state
+CHECK a02 PASS Japanese README matches the published self-growth registry state
+CHECK a03 PASS Chinese README matches the published self-growth registry state
+CHECK a04 PASS Thai README matches the published self-growth registry state
+CHECK a05 FAIL retired self-growth URL remains excluded from link checks
+CHECK a06 FAIL retired memory URL remains excluded from link checks
+CHECK a07 PASS preparing persona URL remains excluded from link checks
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 172, in main
+    check_retired_repo()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 58, in check_retired_repo
+    assert len(matches) == 1
+           ^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a08 FAIL retired self-growth repository is not registered exactly once
+CHECK a09 PASS English preparing module is plain text with its label
+CHECK a10 PASS Japanese preparing module is plain text with its label
+CHECK a11 PASS Chinese preparing module is plain text with its label
+CHECK a12 PASS Thai preparing module is plain text with its label
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a13 FAIL personal-name patterns are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a14 FAIL approval-record patterns are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a15 FAIL absolute personal paths are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a16 FAIL internal host addresses are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a17 FAIL personal email addresses are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a18 FAIL unlisted personal repository links are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a19 FAIL missing module labels are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a20 FAIL unsupported SVG state claims are not rejected
+CHECK a21 PASS all required source suffixes are scanned
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 176, in main
+    check_workflow_ci()
+    ~~~~~~~~~~~~~~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 159, in check_workflow_ci
+    assert "  publication-gate:" in text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a22 FAIL pull-request workflow does not enforce the publication gate completely
+OK — generated content is up to date.
+CHECK a23 PASS generated README blocks are current
+/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python: can't open file '/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/tools/check_publication_gate.py': [Errno 2] No such file or directory
+CHECK a24 FAIL publication gate fails on repository sources
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-3/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a25 FAIL clean bundled publication fixture does not pass
+RUN t24 pre 3 exit=1 dur=1s
+CHECK a01 PASS English README matches the published self-growth registry state
+CHECK a02 PASS Japanese README matches the published self-growth registry state
+CHECK a03 PASS Chinese README matches the published self-growth registry state
+CHECK a04 PASS Thai README matches the published self-growth registry state
+CHECK a05 FAIL retired self-growth URL remains excluded from link checks
+CHECK a06 FAIL retired memory URL remains excluded from link checks
+CHECK a07 PASS preparing persona URL remains excluded from link checks
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 172, in main
+    check_retired_repo()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 58, in check_retired_repo
+    assert len(matches) == 1
+           ^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a08 FAIL retired self-growth repository is not registered exactly once
+CHECK a09 PASS English preparing module is plain text with its label
+CHECK a10 PASS Japanese preparing module is plain text with its label
+CHECK a11 PASS Chinese preparing module is plain text with its label
+CHECK a12 PASS Thai preparing module is plain text with its label
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a13 FAIL personal-name patterns are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a14 FAIL approval-record patterns are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a15 FAIL absolute personal paths are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a16 FAIL internal host addresses are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a17 FAIL personal email addresses are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a18 FAIL unlisted personal repository links are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a19 FAIL missing module labels are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a20 FAIL unsupported SVG state claims are not rejected
+CHECK a21 PASS all required source suffixes are scanned
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 176, in main
+    check_workflow_ci()
+    ~~~~~~~~~~~~~~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 159, in check_workflow_ci
+    assert "  publication-gate:" in text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a22 FAIL pull-request workflow does not enforce the publication gate completely
+OK — generated content is up to date.
+CHECK a23 PASS generated README blocks are current
+/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python: can't open file '/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/tools/check_publication_gate.py': [Errno 2] No such file or directory
+CHECK a24 FAIL publication gate fails on repository sources
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-4/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a25 FAIL clean bundled publication fixture does not pass
+RUN t24 pre 4 exit=1 dur=2s
+CHECK a01 PASS English README matches the published self-growth registry state
+CHECK a02 PASS Japanese README matches the published self-growth registry state
+CHECK a03 PASS Chinese README matches the published self-growth registry state
+CHECK a04 PASS Thai README matches the published self-growth registry state
+CHECK a05 FAIL retired self-growth URL remains excluded from link checks
+CHECK a06 FAIL retired memory URL remains excluded from link checks
+CHECK a07 PASS preparing persona URL remains excluded from link checks
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 172, in main
+    check_retired_repo()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 58, in check_retired_repo
+    assert len(matches) == 1
+           ^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a08 FAIL retired self-growth repository is not registered exactly once
+CHECK a09 PASS English preparing module is plain text with its label
+CHECK a10 PASS Japanese preparing module is plain text with its label
+CHECK a11 PASS Chinese preparing module is plain text with its label
+CHECK a12 PASS Thai preparing module is plain text with its label
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a13 FAIL personal-name patterns are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a14 FAIL approval-record patterns are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a15 FAIL absolute personal paths are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a16 FAIL internal host addresses are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a17 FAIL personal email addresses are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a18 FAIL unlisted personal repository links are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a19 FAIL missing module labels are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a20 FAIL unsupported SVG state claims are not rejected
+CHECK a21 PASS all required source suffixes are scanned
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 176, in main
+    check_workflow_ci()
+    ~~~~~~~~~~~~~~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 159, in check_workflow_ci
+    assert "  publication-gate:" in text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a22 FAIL pull-request workflow does not enforce the publication gate completely
+OK — generated content is up to date.
+CHECK a23 PASS generated README blocks are current
+/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python: can't open file '/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/tools/check_publication_gate.py': [Errno 2] No such file or directory
+CHECK a24 FAIL publication gate fails on repository sources
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-validate-G3wgH8/pre-5/.ev005-fixtures/publication_gate_probe.py", line 130, in behavior
+    assert GATE.is_file()
+           ~~~~~~~~~~~~^^
+AssertionError
+CHECK a25 FAIL clean bundled publication fixture does not pass
+RUN t24 pre 5 exit=1 dur=1s
+CHECK a01 PASS English README matches the published self-growth registry state
+CHECK a02 PASS Japanese README matches the published self-growth registry state
+CHECK a03 PASS Chinese README matches the published self-growth registry state
+CHECK a04 PASS Thai README matches the published self-growth registry state
+CHECK a05 PASS retired self-growth URL is not excluded from link checks
+CHECK a06 PASS retired memory URL is not excluded from link checks
+CHECK a07 PASS preparing persona URL remains excluded from link checks
+CHECK a08 PASS retired self-growth repository is registered
+CHECK a09 PASS English preparing module is plain text with its label
+CHECK a10 PASS Japanese preparing module is plain text with its label
+CHECK a11 PASS Chinese preparing module is plain text with its label
+CHECK a12 PASS Thai preparing module is plain text with its label
+CHECK a13 PASS personal-name patterns are rejected
+CHECK a14 PASS approval-record patterns are rejected
+CHECK a15 PASS absolute personal paths are rejected
+CHECK a16 PASS internal host addresses are rejected
+CHECK a17 PASS personal email addresses are rejected
+CHECK a18 PASS unlisted personal repository links are rejected
+CHECK a19 PASS missing module labels are rejected
+CHECK a20 PASS unsupported SVG state claims are rejected
+CHECK a21 PASS all required source suffixes are scanned
+CHECK a22 PASS pull-request workflow enforces the publication gate
+OK — generated content is up to date.
+CHECK a23 PASS generated README blocks are current
+source files scanned : 26
+denylist matches     : 0
+personal URLs checked: 2
+module links checked : 118
+SVG names checked    : 0
+label whitelist      : 20
+
+OK — publication gate passed with 20 explicit label whitelist entries.
+CHECK a24 PASS publication gate passes on repository sources
+CHECK a25 PASS clean bundled publication fixture passes
+RUN t24 fix 1 exit=0 dur=2s
+CHECK a01 PASS English README matches the published self-growth registry state
+CHECK a02 PASS Japanese README matches the published self-growth registry state
+CHECK a03 PASS Chinese README matches the published self-growth registry state
+CHECK a04 PASS Thai README matches the published self-growth registry state
+CHECK a05 PASS retired self-growth URL is not excluded from link checks
+CHECK a06 PASS retired memory URL is not excluded from link checks
+CHECK a07 PASS preparing persona URL remains excluded from link checks
+CHECK a08 PASS retired self-growth repository is registered
+CHECK a09 PASS English preparing module is plain text with its label
+CHECK a10 PASS Japanese preparing module is plain text with its label
+CHECK a11 PASS Chinese preparing module is plain text with its label
+CHECK a12 PASS Thai preparing module is plain text with its label
+CHECK a13 PASS personal-name patterns are rejected
+CHECK a14 PASS approval-record patterns are rejected
+CHECK a15 PASS absolute personal paths are rejected
+CHECK a16 PASS internal host addresses are rejected
+CHECK a17 PASS personal email addresses are rejected
+CHECK a18 PASS unlisted personal repository links are rejected
+CHECK a19 PASS missing module labels are rejected
+CHECK a20 PASS unsupported SVG state claims are rejected
+CHECK a21 PASS all required source suffixes are scanned
+CHECK a22 PASS pull-request workflow enforces the publication gate
+OK — generated content is up to date.
+CHECK a23 PASS generated README blocks are current
+source files scanned : 26
+denylist matches     : 0
+personal URLs checked: 2
+module links checked : 118
+SVG names checked    : 0
+label whitelist      : 20
+
+OK — publication gate passed with 20 explicit label whitelist entries.
+CHECK a24 PASS publication gate passes on repository sources
+CHECK a25 PASS clean bundled publication fixture passes
+RUN t24 fix 2 exit=0 dur=3s
+CHECK a01 PASS English README matches the published self-growth registry state
+CHECK a02 PASS Japanese README matches the published self-growth registry state
+CHECK a03 PASS Chinese README matches the published self-growth registry state
+CHECK a04 PASS Thai README matches the published self-growth registry state
+CHECK a05 PASS retired self-growth URL is not excluded from link checks
+CHECK a06 PASS retired memory URL is not excluded from link checks
+CHECK a07 PASS preparing persona URL remains excluded from link checks
+CHECK a08 PASS retired self-growth repository is registered
+CHECK a09 PASS English preparing module is plain text with its label
+CHECK a10 PASS Japanese preparing module is plain text with its label
+CHECK a11 PASS Chinese preparing module is plain text with its label
+CHECK a12 PASS Thai preparing module is plain text with its label
+CHECK a13 PASS personal-name patterns are rejected
+CHECK a14 PASS approval-record patterns are rejected
+CHECK a15 PASS absolute personal paths are rejected
+CHECK a16 PASS internal host addresses are rejected
+CHECK a17 PASS personal email addresses are rejected
+CHECK a18 PASS unlisted personal repository links are rejected
+CHECK a19 PASS missing module labels are rejected
+CHECK a20 PASS unsupported SVG state claims are rejected
+CHECK a21 PASS all required source suffixes are scanned
+CHECK a22 PASS pull-request workflow enforces the publication gate
+OK — generated content is up to date.
+CHECK a23 PASS generated README blocks are current
+source files scanned : 26
+denylist matches     : 0
+personal URLs checked: 2
+module links checked : 118
+SVG names checked    : 0
+label whitelist      : 20
+
+OK — publication gate passed with 20 explicit label whitelist entries.
+CHECK a24 PASS publication gate passes on repository sources
+CHECK a25 PASS clean bundled publication fixture passes
+RUN t24 fix 3 exit=0 dur=3s
+CHECK a01 PASS English README matches the published self-growth registry state
+CHECK a02 PASS Japanese README matches the published self-growth registry state
+CHECK a03 PASS Chinese README matches the published self-growth registry state
+CHECK a04 PASS Thai README matches the published self-growth registry state
+CHECK a05 PASS retired self-growth URL is not excluded from link checks
+CHECK a06 PASS retired memory URL is not excluded from link checks
+CHECK a07 PASS preparing persona URL remains excluded from link checks
+CHECK a08 PASS retired self-growth repository is registered
+CHECK a09 PASS English preparing module is plain text with its label
+CHECK a10 PASS Japanese preparing module is plain text with its label
+CHECK a11 PASS Chinese preparing module is plain text with its label
+CHECK a12 PASS Thai preparing module is plain text with its label
+CHECK a13 PASS personal-name patterns are rejected
+CHECK a14 PASS approval-record patterns are rejected
+CHECK a15 PASS absolute personal paths are rejected
+CHECK a16 PASS internal host addresses are rejected
+CHECK a17 PASS personal email addresses are rejected
+CHECK a18 PASS unlisted personal repository links are rejected
+CHECK a19 PASS missing module labels are rejected
+CHECK a20 PASS unsupported SVG state claims are rejected
+CHECK a21 PASS all required source suffixes are scanned
+CHECK a22 PASS pull-request workflow enforces the publication gate
+OK — generated content is up to date.
+CHECK a23 PASS generated README blocks are current
+source files scanned : 26
+denylist matches     : 0
+personal URLs checked: 2
+module links checked : 118
+SVG names checked    : 0
+label whitelist      : 20
+
+OK — publication gate passed with 20 explicit label whitelist entries.
+CHECK a24 PASS publication gate passes on repository sources
+CHECK a25 PASS clean bundled publication fixture passes
+RUN t24 fix 4 exit=0 dur=3s
+CHECK a01 PASS English README matches the published self-growth registry state
+CHECK a02 PASS Japanese README matches the published self-growth registry state
+CHECK a03 PASS Chinese README matches the published self-growth registry state
+CHECK a04 PASS Thai README matches the published self-growth registry state
+CHECK a05 PASS retired self-growth URL is not excluded from link checks
+CHECK a06 PASS retired memory URL is not excluded from link checks
+CHECK a07 PASS preparing persona URL remains excluded from link checks
+CHECK a08 PASS retired self-growth repository is registered
+CHECK a09 PASS English preparing module is plain text with its label
+CHECK a10 PASS Japanese preparing module is plain text with its label
+CHECK a11 PASS Chinese preparing module is plain text with its label
+CHECK a12 PASS Thai preparing module is plain text with its label
+CHECK a13 PASS personal-name patterns are rejected
+CHECK a14 PASS approval-record patterns are rejected
+CHECK a15 PASS absolute personal paths are rejected
+CHECK a16 PASS internal host addresses are rejected
+CHECK a17 PASS personal email addresses are rejected
+CHECK a18 PASS unlisted personal repository links are rejected
+CHECK a19 PASS missing module labels are rejected
+CHECK a20 PASS unsupported SVG state claims are rejected
+CHECK a21 PASS all required source suffixes are scanned
+CHECK a22 PASS pull-request workflow enforces the publication gate
+OK — generated content is up to date.
+CHECK a23 PASS generated README blocks are current
+source files scanned : 26
+denylist matches     : 0
+personal URLs checked: 2
+module links checked : 118
+SVG names checked    : 0
+label whitelist      : 20
+
+OK — publication gate passed with 20 explicit label whitelist entries.
+CHECK a24 PASS publication gate passes on repository sources
+CHECK a25 PASS clean bundled publication fixture passes
+RUN t24 fix 5 exit=0 dur=3s
+VERDICT t24 PASS

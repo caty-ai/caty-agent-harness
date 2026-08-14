@@ -1,0 +1,92 @@
+== validate t30 pre=18e897513e06e9f2e93e08920f0cdd8314472c70 fix=d81202b14d253106795986763dbc47ce91af6a47 repo=/Users/shojikumaru/claude-workspace/caty-agent-harness ==
+CHECK a01 FAIL make test fails or is not configured
+CHECK a02 FAIL make lint fails or is not configured
+CHECK a03 FAIL one or more workflow files or required job names are missing or malformed
+CHECK a04 FAIL the test/lint workflow does not bind both Make targets fail-closed
+CHECK a05 FAIL the secret-scanning workflow lacks required fail-closed structure
+CHECK a06 FAIL the size workflow lacks limit or exemption enforcement
+CHECK a07 FAIL the history workflow lacks fail-closed common-ancestor checking
+CHECK a08 FAIL the risk workflow lacks roster, reapproval, or non-authoritative label structure
+RUN t30 pre 1 exit=1 dur=0s
+CHECK a01 FAIL make test fails or is not configured
+CHECK a02 FAIL make lint fails or is not configured
+CHECK a03 FAIL one or more workflow files or required job names are missing or malformed
+CHECK a04 FAIL the test/lint workflow does not bind both Make targets fail-closed
+CHECK a05 FAIL the secret-scanning workflow lacks required fail-closed structure
+CHECK a06 FAIL the size workflow lacks limit or exemption enforcement
+CHECK a07 FAIL the history workflow lacks fail-closed common-ancestor checking
+CHECK a08 FAIL the risk workflow lacks roster, reapproval, or non-authoritative label structure
+RUN t30 pre 2 exit=1 dur=1s
+CHECK a01 FAIL make test fails or is not configured
+CHECK a02 FAIL make lint fails or is not configured
+CHECK a03 FAIL one or more workflow files or required job names are missing or malformed
+CHECK a04 FAIL the test/lint workflow does not bind both Make targets fail-closed
+CHECK a05 FAIL the secret-scanning workflow lacks required fail-closed structure
+CHECK a06 FAIL the size workflow lacks limit or exemption enforcement
+CHECK a07 FAIL the history workflow lacks fail-closed common-ancestor checking
+CHECK a08 FAIL the risk workflow lacks roster, reapproval, or non-authoritative label structure
+RUN t30 pre 3 exit=1 dur=0s
+CHECK a01 FAIL make test fails or is not configured
+CHECK a02 FAIL make lint fails or is not configured
+CHECK a03 FAIL one or more workflow files or required job names are missing or malformed
+CHECK a04 FAIL the test/lint workflow does not bind both Make targets fail-closed
+CHECK a05 FAIL the secret-scanning workflow lacks required fail-closed structure
+CHECK a06 FAIL the size workflow lacks limit or exemption enforcement
+CHECK a07 FAIL the history workflow lacks fail-closed common-ancestor checking
+CHECK a08 FAIL the risk workflow lacks roster, reapproval, or non-authoritative label structure
+RUN t30 pre 4 exit=1 dur=0s
+CHECK a01 FAIL make test fails or is not configured
+CHECK a02 FAIL make lint fails or is not configured
+CHECK a03 FAIL one or more workflow files or required job names are missing or malformed
+CHECK a04 FAIL the test/lint workflow does not bind both Make targets fail-closed
+CHECK a05 FAIL the secret-scanning workflow lacks required fail-closed structure
+CHECK a06 FAIL the size workflow lacks limit or exemption enforcement
+CHECK a07 FAIL the history workflow lacks fail-closed common-ancestor checking
+CHECK a08 FAIL the risk workflow lacks roster, reapproval, or non-authoritative label structure
+RUN t30 pre 5 exit=1 dur=0s
+CHECK a01 PASS the complete repository shell suite passes
+CHECK a02 PASS all tracked shell files pass Bash syntax checking
+CHECK a03 PASS all five pull-request workflows have the required common structure
+CHECK a04 PASS the test/lint workflow binds both fail-closed Make targets
+CHECK a05 PASS the secret-scanning workflow is range-aware and fail-closed
+CHECK a06 PASS the size workflow enforces its limit and exemption path
+CHECK a07 PASS the history workflow fails closed on common-ancestor resolution
+CHECK a08 PASS the risk workflow separates gate authority from visibility labels
+RUN t30 fix 1 exit=0 dur=711s
+CHECK a01 PASS the complete repository shell suite passes
+CHECK a02 PASS all tracked shell files pass Bash syntax checking
+CHECK a03 PASS all five pull-request workflows have the required common structure
+CHECK a04 PASS the test/lint workflow binds both fail-closed Make targets
+CHECK a05 PASS the secret-scanning workflow is range-aware and fail-closed
+CHECK a06 PASS the size workflow enforces its limit and exemption path
+CHECK a07 PASS the history workflow fails closed on common-ancestor resolution
+CHECK a08 PASS the risk workflow separates gate authority from visibility labels
+RUN t30 fix 2 exit=0 dur=696s
+CHECK a01 PASS the complete repository shell suite passes
+CHECK a02 PASS all tracked shell files pass Bash syntax checking
+CHECK a03 PASS all five pull-request workflows have the required common structure
+CHECK a04 PASS the test/lint workflow binds both fail-closed Make targets
+CHECK a05 PASS the secret-scanning workflow is range-aware and fail-closed
+CHECK a06 PASS the size workflow enforces its limit and exemption path
+CHECK a07 PASS the history workflow fails closed on common-ancestor resolution
+CHECK a08 PASS the risk workflow separates gate authority from visibility labels
+RUN t30 fix 3 exit=0 dur=669s
+CHECK a01 PASS the complete repository shell suite passes
+CHECK a02 PASS all tracked shell files pass Bash syntax checking
+CHECK a03 PASS all five pull-request workflows have the required common structure
+CHECK a04 PASS the test/lint workflow binds both fail-closed Make targets
+CHECK a05 PASS the secret-scanning workflow is range-aware and fail-closed
+CHECK a06 PASS the size workflow enforces its limit and exemption path
+CHECK a07 PASS the history workflow fails closed on common-ancestor resolution
+CHECK a08 PASS the risk workflow separates gate authority from visibility labels
+RUN t30 fix 4 exit=0 dur=668s
+CHECK a01 PASS the complete repository shell suite passes
+CHECK a02 PASS all tracked shell files pass Bash syntax checking
+CHECK a03 PASS all five pull-request workflows have the required common structure
+CHECK a04 PASS the test/lint workflow binds both fail-closed Make targets
+CHECK a05 PASS the secret-scanning workflow is range-aware and fail-closed
+CHECK a06 PASS the size workflow enforces its limit and exemption path
+CHECK a07 PASS the history workflow fails closed on common-ancestor resolution
+CHECK a08 PASS the risk workflow separates gate authority from visibility labels
+RUN t30 fix 5 exit=0 dur=654s
+VERDICT t30 PASS

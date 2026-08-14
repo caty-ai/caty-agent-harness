@@ -1,0 +1,62 @@
+== validate t19 pre=2bbc00a4501c7c91af988b28daa524b41b2c8b47 fix=723acbd103be827ae7384fa1cf5aef5a880a159e repo=/Users/shojikumaru/claude-workspace/caty-agent-harness ==
+CHECK a01 FAIL valid KEY=VALUE input is not exported
+CHECK a02 FAIL SECRETS_ENV shell syntax executed or was not preserved as data
+CHECK a03 FAIL a SECRETS_ENV symlink was accepted or reached the target
+CHECK a04 FAIL no data-only loading regression test was found
+CHECK a05 FAIL no symlink-refusal regression test was found
+RUN t19 pre 1 exit=1 dur=2s
+CHECK a01 FAIL valid KEY=VALUE input is not exported
+CHECK a02 FAIL SECRETS_ENV shell syntax executed or was not preserved as data
+CHECK a03 FAIL a SECRETS_ENV symlink was accepted or reached the target
+CHECK a04 FAIL no data-only loading regression test was found
+CHECK a05 FAIL no symlink-refusal regression test was found
+RUN t19 pre 2 exit=1 dur=2s
+CHECK a01 FAIL valid KEY=VALUE input is not exported
+CHECK a02 FAIL SECRETS_ENV shell syntax executed or was not preserved as data
+CHECK a03 FAIL a SECRETS_ENV symlink was accepted or reached the target
+CHECK a04 FAIL no data-only loading regression test was found
+CHECK a05 FAIL no symlink-refusal regression test was found
+RUN t19 pre 3 exit=1 dur=2s
+CHECK a01 FAIL valid KEY=VALUE input is not exported
+CHECK a02 FAIL SECRETS_ENV shell syntax executed or was not preserved as data
+CHECK a03 FAIL a SECRETS_ENV symlink was accepted or reached the target
+CHECK a04 FAIL no data-only loading regression test was found
+CHECK a05 FAIL no symlink-refusal regression test was found
+RUN t19 pre 4 exit=1 dur=1s
+CHECK a01 FAIL valid KEY=VALUE input is not exported
+CHECK a02 FAIL SECRETS_ENV shell syntax executed or was not preserved as data
+CHECK a03 FAIL a SECRETS_ENV symlink was accepted or reached the target
+CHECK a04 FAIL no data-only loading regression test was found
+CHECK a05 FAIL no symlink-refusal regression test was found
+RUN t19 pre 5 exit=1 dur=2s
+CHECK a01 PASS valid assignments reach the scheduler target
+CHECK a02 PASS shell syntax remains inert data
+CHECK a03 PASS SECRETS_ENV symlinks are refused before target execution
+CHECK a04 PASS a local regression test covers data-only loading
+CHECK a05 PASS a local regression test covers symlink refusal
+RUN t19 fix 1 exit=0 dur=2s
+CHECK a01 PASS valid assignments reach the scheduler target
+CHECK a02 PASS shell syntax remains inert data
+CHECK a03 PASS SECRETS_ENV symlinks are refused before target execution
+CHECK a04 PASS a local regression test covers data-only loading
+CHECK a05 PASS a local regression test covers symlink refusal
+RUN t19 fix 2 exit=0 dur=3s
+CHECK a01 PASS valid assignments reach the scheduler target
+CHECK a02 PASS shell syntax remains inert data
+CHECK a03 PASS SECRETS_ENV symlinks are refused before target execution
+CHECK a04 PASS a local regression test covers data-only loading
+CHECK a05 PASS a local regression test covers symlink refusal
+RUN t19 fix 3 exit=0 dur=2s
+CHECK a01 PASS valid assignments reach the scheduler target
+CHECK a02 PASS shell syntax remains inert data
+CHECK a03 PASS SECRETS_ENV symlinks are refused before target execution
+CHECK a04 PASS a local regression test covers data-only loading
+CHECK a05 PASS a local regression test covers symlink refusal
+RUN t19 fix 4 exit=0 dur=3s
+CHECK a01 PASS valid assignments reach the scheduler target
+CHECK a02 PASS shell syntax remains inert data
+CHECK a03 PASS SECRETS_ENV symlinks are refused before target execution
+CHECK a04 PASS a local regression test covers data-only loading
+CHECK a05 PASS a local regression test covers symlink refusal
+RUN t19 fix 5 exit=0 dur=1s
+VERDICT t19 PASS

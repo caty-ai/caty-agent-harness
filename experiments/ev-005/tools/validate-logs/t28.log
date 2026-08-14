@@ -1,0 +1,112 @@
+== validate t28 pre=71555781a9f1e1625262f7fe7c442b9702e7636a fix=3a3e845edabbf8c80e50550ba32b4448c3a7aa2f repo=/Users/shojikumaru/claude-workspace/caty-agent-harness ==
+CHECK a01 FAIL the design trust boundary is not documented
+CHECK a02 FAIL quoted hash syntax is altered, rejected, or staged differently
+CHECK a03 FAIL a focused quoted-hash regression is missing or fails
+CHECK a04 FAIL raw staged donecheck validation contract is incomplete
+CHECK a05 FAIL donecheck environment or interpreter bounds are incomplete
+CHECK a06 FAIL donecheck resource bounds are incomplete
+CHECK a07 FAIL the resolved receipt boundary is incomplete
+CHECK a08 FAIL spawn-provider path/type/executable checks are incomplete
+CHECK a09 FAIL one or more committed residual risks are undocumented
+CHECK a10 FAIL a focused execution-boundary suite is missing or fails
+RUN t28 pre 1 exit=1 dur=1s
+CHECK a01 FAIL the design trust boundary is not documented
+CHECK a02 FAIL quoted hash syntax is altered, rejected, or staged differently
+CHECK a03 FAIL a focused quoted-hash regression is missing or fails
+CHECK a04 FAIL raw staged donecheck validation contract is incomplete
+CHECK a05 FAIL donecheck environment or interpreter bounds are incomplete
+CHECK a06 FAIL donecheck resource bounds are incomplete
+CHECK a07 FAIL the resolved receipt boundary is incomplete
+CHECK a08 FAIL spawn-provider path/type/executable checks are incomplete
+CHECK a09 FAIL one or more committed residual risks are undocumented
+CHECK a10 FAIL a focused execution-boundary suite is missing or fails
+RUN t28 pre 2 exit=1 dur=1s
+CHECK a01 FAIL the design trust boundary is not documented
+CHECK a02 FAIL quoted hash syntax is altered, rejected, or staged differently
+CHECK a03 FAIL a focused quoted-hash regression is missing or fails
+CHECK a04 FAIL raw staged donecheck validation contract is incomplete
+CHECK a05 FAIL donecheck environment or interpreter bounds are incomplete
+CHECK a06 FAIL donecheck resource bounds are incomplete
+CHECK a07 FAIL the resolved receipt boundary is incomplete
+CHECK a08 FAIL spawn-provider path/type/executable checks are incomplete
+CHECK a09 FAIL one or more committed residual risks are undocumented
+CHECK a10 FAIL a focused execution-boundary suite is missing or fails
+RUN t28 pre 3 exit=1 dur=1s
+CHECK a01 FAIL the design trust boundary is not documented
+CHECK a02 FAIL quoted hash syntax is altered, rejected, or staged differently
+CHECK a03 FAIL a focused quoted-hash regression is missing or fails
+CHECK a04 FAIL raw staged donecheck validation contract is incomplete
+CHECK a05 FAIL donecheck environment or interpreter bounds are incomplete
+CHECK a06 FAIL donecheck resource bounds are incomplete
+CHECK a07 FAIL the resolved receipt boundary is incomplete
+CHECK a08 FAIL spawn-provider path/type/executable checks are incomplete
+CHECK a09 FAIL one or more committed residual risks are undocumented
+CHECK a10 FAIL a focused execution-boundary suite is missing or fails
+RUN t28 pre 4 exit=1 dur=1s
+CHECK a01 FAIL the design trust boundary is not documented
+CHECK a02 FAIL quoted hash syntax is altered, rejected, or staged differently
+CHECK a03 FAIL a focused quoted-hash regression is missing or fails
+CHECK a04 FAIL raw staged donecheck validation contract is incomplete
+CHECK a05 FAIL donecheck environment or interpreter bounds are incomplete
+CHECK a06 FAIL donecheck resource bounds are incomplete
+CHECK a07 FAIL the resolved receipt boundary is incomplete
+CHECK a08 FAIL spawn-provider path/type/executable checks are incomplete
+CHECK a09 FAIL one or more committed residual risks are undocumented
+CHECK a10 FAIL a focused execution-boundary suite is missing or fails
+RUN t28 pre 5 exit=1 dur=1s
+CHECK a01 PASS the design note distinguishes mechanical and operator boundaries
+CHECK a02 PASS quoted hash syntax is accepted from the exact staged task
+CHECK a03 PASS a focused quoted-hash regression passes
+CHECK a04 PASS raw staged donecheck validation is fail-closed and pinned
+CHECK a05 PASS donecheck environment and interpreter bounds are implemented
+CHECK a06 PASS timeout, process-group, and resource bounds are implemented
+CHECK a07 PASS the resolved receipt boundary is enforced
+CHECK a08 PASS the configured spawn provider is shape-checked
+CHECK a09 PASS the committed residual risks are documented
+CHECK a10 PASS focused execution-boundary suites pass
+RUN t28 fix 1 exit=0 dur=48s
+CHECK a01 PASS the design note distinguishes mechanical and operator boundaries
+CHECK a02 PASS quoted hash syntax is accepted from the exact staged task
+CHECK a03 PASS a focused quoted-hash regression passes
+CHECK a04 PASS raw staged donecheck validation is fail-closed and pinned
+CHECK a05 PASS donecheck environment and interpreter bounds are implemented
+CHECK a06 PASS timeout, process-group, and resource bounds are implemented
+CHECK a07 PASS the resolved receipt boundary is enforced
+CHECK a08 PASS the configured spawn provider is shape-checked
+CHECK a09 PASS the committed residual risks are documented
+CHECK a10 PASS focused execution-boundary suites pass
+RUN t28 fix 2 exit=0 dur=47s
+CHECK a01 PASS the design note distinguishes mechanical and operator boundaries
+CHECK a02 PASS quoted hash syntax is accepted from the exact staged task
+CHECK a03 PASS a focused quoted-hash regression passes
+CHECK a04 PASS raw staged donecheck validation is fail-closed and pinned
+CHECK a05 PASS donecheck environment and interpreter bounds are implemented
+CHECK a06 PASS timeout, process-group, and resource bounds are implemented
+CHECK a07 PASS the resolved receipt boundary is enforced
+CHECK a08 PASS the configured spawn provider is shape-checked
+CHECK a09 PASS the committed residual risks are documented
+CHECK a10 PASS focused execution-boundary suites pass
+RUN t28 fix 3 exit=0 dur=47s
+CHECK a01 PASS the design note distinguishes mechanical and operator boundaries
+CHECK a02 PASS quoted hash syntax is accepted from the exact staged task
+CHECK a03 PASS a focused quoted-hash regression passes
+CHECK a04 PASS raw staged donecheck validation is fail-closed and pinned
+CHECK a05 PASS donecheck environment and interpreter bounds are implemented
+CHECK a06 PASS timeout, process-group, and resource bounds are implemented
+CHECK a07 PASS the resolved receipt boundary is enforced
+CHECK a08 PASS the configured spawn provider is shape-checked
+CHECK a09 PASS the committed residual risks are documented
+CHECK a10 PASS focused execution-boundary suites pass
+RUN t28 fix 4 exit=0 dur=45s
+CHECK a01 PASS the design note distinguishes mechanical and operator boundaries
+CHECK a02 PASS quoted hash syntax is accepted from the exact staged task
+CHECK a03 PASS a focused quoted-hash regression passes
+CHECK a04 PASS raw staged donecheck validation is fail-closed and pinned
+CHECK a05 PASS donecheck environment and interpreter bounds are implemented
+CHECK a06 PASS timeout, process-group, and resource bounds are implemented
+CHECK a07 PASS the resolved receipt boundary is enforced
+CHECK a08 PASS the configured spawn provider is shape-checked
+CHECK a09 PASS the committed residual risks are documented
+CHECK a10 PASS focused execution-boundary suites pass
+RUN t28 fix 5 exit=0 dur=46s
+VERDICT t28 PASS

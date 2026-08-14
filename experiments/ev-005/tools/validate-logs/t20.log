@@ -1,0 +1,102 @@
+== validate t20 pre=e6e2fa76707c6a83252739e4eca4924d3c01534d fix=a7b0c20c6209f90caa1cdeefbef17ca9a50f6891 repo=/Users/shojikumaru/claude-workspace/family-os-caty ==
+CHECK a01 FAIL docs/evidence.md is missing
+CHECK a02 FAIL claim schema, stable ids, dates, states, or links are incomplete
+CHECK a03 FAIL the silent-failure evidence entry is missing
+CHECK a04 FAIL the red/green gate evidence entry is missing
+CHECK a05 FAIL the weekly reality-check evidence entry is missing
+CHECK a06 FAIL the growth-cycle entry or its honest evidence state is missing
+CHECK a07 FAIL the 90-day expiry rule is missing
+CHECK a08 FAIL the scheduled freshness job lacks schema or age enforcement
+CHECK a09 FAIL stale evidence does not fail closed or automation rewrites the register
+RUN t20 pre 1 exit=1 dur=0s
+CHECK a01 FAIL docs/evidence.md is missing
+CHECK a02 FAIL claim schema, stable ids, dates, states, or links are incomplete
+CHECK a03 FAIL the silent-failure evidence entry is missing
+CHECK a04 FAIL the red/green gate evidence entry is missing
+CHECK a05 FAIL the weekly reality-check evidence entry is missing
+CHECK a06 FAIL the growth-cycle entry or its honest evidence state is missing
+CHECK a07 FAIL the 90-day expiry rule is missing
+CHECK a08 FAIL the scheduled freshness job lacks schema or age enforcement
+CHECK a09 FAIL stale evidence does not fail closed or automation rewrites the register
+RUN t20 pre 2 exit=1 dur=0s
+CHECK a01 FAIL docs/evidence.md is missing
+CHECK a02 FAIL claim schema, stable ids, dates, states, or links are incomplete
+CHECK a03 FAIL the silent-failure evidence entry is missing
+CHECK a04 FAIL the red/green gate evidence entry is missing
+CHECK a05 FAIL the weekly reality-check evidence entry is missing
+CHECK a06 FAIL the growth-cycle entry or its honest evidence state is missing
+CHECK a07 FAIL the 90-day expiry rule is missing
+CHECK a08 FAIL the scheduled freshness job lacks schema or age enforcement
+CHECK a09 FAIL stale evidence does not fail closed or automation rewrites the register
+RUN t20 pre 3 exit=1 dur=0s
+CHECK a01 FAIL docs/evidence.md is missing
+CHECK a02 FAIL claim schema, stable ids, dates, states, or links are incomplete
+CHECK a03 FAIL the silent-failure evidence entry is missing
+CHECK a04 FAIL the red/green gate evidence entry is missing
+CHECK a05 FAIL the weekly reality-check evidence entry is missing
+CHECK a06 FAIL the growth-cycle entry or its honest evidence state is missing
+CHECK a07 FAIL the 90-day expiry rule is missing
+CHECK a08 FAIL the scheduled freshness job lacks schema or age enforcement
+CHECK a09 FAIL stale evidence does not fail closed or automation rewrites the register
+RUN t20 pre 4 exit=1 dur=0s
+CHECK a01 FAIL docs/evidence.md is missing
+CHECK a02 FAIL claim schema, stable ids, dates, states, or links are incomplete
+CHECK a03 FAIL the silent-failure evidence entry is missing
+CHECK a04 FAIL the red/green gate evidence entry is missing
+CHECK a05 FAIL the weekly reality-check evidence entry is missing
+CHECK a06 FAIL the growth-cycle entry or its honest evidence state is missing
+CHECK a07 FAIL the 90-day expiry rule is missing
+CHECK a08 FAIL the scheduled freshness job lacks schema or age enforcement
+CHECK a09 FAIL stale evidence does not fail closed or automation rewrites the register
+RUN t20 pre 5 exit=1 dur=1s
+CHECK a01 PASS the evidence register exists
+CHECK a02 PASS every claim has the required complete schema
+CHECK a03 PASS the initial register covers silent-failure discovery and repair
+CHECK a04 PASS the initial register covers a deliberately broken gate
+CHECK a05 PASS the initial register covers an observed weekly run
+CHECK a06 PASS the governed growth sequence is recorded without overstating evidence
+CHECK a07 PASS the register states the 90-day unknown rule
+CHECK a08 PASS the weekly workflow enforces evidence freshness
+CHECK a09 PASS stale evidence fails closed without workflow edits to the register
+RUN t20 fix 1 exit=0 dur=0s
+CHECK a01 PASS the evidence register exists
+CHECK a02 PASS every claim has the required complete schema
+CHECK a03 PASS the initial register covers silent-failure discovery and repair
+CHECK a04 PASS the initial register covers a deliberately broken gate
+CHECK a05 PASS the initial register covers an observed weekly run
+CHECK a06 PASS the governed growth sequence is recorded without overstating evidence
+CHECK a07 PASS the register states the 90-day unknown rule
+CHECK a08 PASS the weekly workflow enforces evidence freshness
+CHECK a09 PASS stale evidence fails closed without workflow edits to the register
+RUN t20 fix 2 exit=0 dur=0s
+CHECK a01 PASS the evidence register exists
+CHECK a02 PASS every claim has the required complete schema
+CHECK a03 PASS the initial register covers silent-failure discovery and repair
+CHECK a04 PASS the initial register covers a deliberately broken gate
+CHECK a05 PASS the initial register covers an observed weekly run
+CHECK a06 PASS the governed growth sequence is recorded without overstating evidence
+CHECK a07 PASS the register states the 90-day unknown rule
+CHECK a08 PASS the weekly workflow enforces evidence freshness
+CHECK a09 PASS stale evidence fails closed without workflow edits to the register
+RUN t20 fix 3 exit=0 dur=0s
+CHECK a01 PASS the evidence register exists
+CHECK a02 PASS every claim has the required complete schema
+CHECK a03 PASS the initial register covers silent-failure discovery and repair
+CHECK a04 PASS the initial register covers a deliberately broken gate
+CHECK a05 PASS the initial register covers an observed weekly run
+CHECK a06 PASS the governed growth sequence is recorded without overstating evidence
+CHECK a07 PASS the register states the 90-day unknown rule
+CHECK a08 PASS the weekly workflow enforces evidence freshness
+CHECK a09 PASS stale evidence fails closed without workflow edits to the register
+RUN t20 fix 4 exit=0 dur=0s
+CHECK a01 PASS the evidence register exists
+CHECK a02 PASS every claim has the required complete schema
+CHECK a03 PASS the initial register covers silent-failure discovery and repair
+CHECK a04 PASS the initial register covers a deliberately broken gate
+CHECK a05 PASS the initial register covers an observed weekly run
+CHECK a06 PASS the governed growth sequence is recorded without overstating evidence
+CHECK a07 PASS the register states the 90-day unknown rule
+CHECK a08 PASS the weekly workflow enforces evidence freshness
+CHECK a09 PASS stale evidence fails closed without workflow edits to the register
+RUN t20 fix 5 exit=0 dur=1s
+VERDICT t20 PASS

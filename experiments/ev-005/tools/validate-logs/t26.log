@@ -1,0 +1,112 @@
+== validate t26 pre=18e897513e06e9f2e93e08920f0cdd8314472c70 fix=157855c35b7df443d2f00737f9b822cf0a1f23a7 repo=/Users/shojikumaru/claude-workspace/caty-agent-harness ==
+CHECK a01 FAIL warning prefix convention or deviations are not documented
+CHECK a02 FAIL exit meanings or deviations are not documented
+CHECK a03 FAIL stdout/stderr routing contract is incomplete
+CHECK a04 FAIL listed surfaces or regression pins are missing from the note
+CHECK a05 FAIL focused conventions test does not pin the required contracts
+bash: tests/cli-conventions.test.sh: No such file or directory
+CHECK a06 FAIL focused CLI conventions regression fails
+RUN t26 pre 1 exit=1 dur=0s
+CHECK a01 FAIL warning prefix convention or deviations are not documented
+CHECK a02 FAIL exit meanings or deviations are not documented
+CHECK a03 FAIL stdout/stderr routing contract is incomplete
+CHECK a04 FAIL listed surfaces or regression pins are missing from the note
+CHECK a05 FAIL focused conventions test does not pin the required contracts
+bash: tests/cli-conventions.test.sh: No such file or directory
+CHECK a06 FAIL focused CLI conventions regression fails
+RUN t26 pre 2 exit=1 dur=0s
+CHECK a01 FAIL warning prefix convention or deviations are not documented
+CHECK a02 FAIL exit meanings or deviations are not documented
+CHECK a03 FAIL stdout/stderr routing contract is incomplete
+CHECK a04 FAIL listed surfaces or regression pins are missing from the note
+CHECK a05 FAIL focused conventions test does not pin the required contracts
+bash: tests/cli-conventions.test.sh: No such file or directory
+CHECK a06 FAIL focused CLI conventions regression fails
+RUN t26 pre 3 exit=1 dur=0s
+CHECK a01 FAIL warning prefix convention or deviations are not documented
+CHECK a02 FAIL exit meanings or deviations are not documented
+CHECK a03 FAIL stdout/stderr routing contract is incomplete
+CHECK a04 FAIL listed surfaces or regression pins are missing from the note
+CHECK a05 FAIL focused conventions test does not pin the required contracts
+bash: tests/cli-conventions.test.sh: No such file or directory
+CHECK a06 FAIL focused CLI conventions regression fails
+RUN t26 pre 4 exit=1 dur=0s
+CHECK a01 FAIL warning prefix convention or deviations are not documented
+CHECK a02 FAIL exit meanings or deviations are not documented
+CHECK a03 FAIL stdout/stderr routing contract is incomplete
+CHECK a04 FAIL listed surfaces or regression pins are missing from the note
+CHECK a05 FAIL focused conventions test does not pin the required contracts
+bash: tests/cli-conventions.test.sh: No such file or directory
+CHECK a06 FAIL focused CLI conventions regression fails
+RUN t26 pre 5 exit=1 dur=0s
+CHECK a01 PASS warning house style and frozen prefix deviations are documented
+CHECK a02 PASS exit meanings and frozen exit deviations are documented
+CHECK a03 PASS machine and human output streams are documented
+CHECK a04 PASS listed surfaces and regression pins are inventoried
+CHECK a05 PASS focused conventions test pins the usage exits and side-effect boundary
+PASS task-runner-no-args
+PASS tr-metrics-bad-usage
+PASS deadman-probe-bad-usage
+PASS install-unknown-flag
+PASS tr-enqueue-usage-error
+PASS invocations-are-side-effect-free
+TOTAL pass=6 fail=0
+CHECK a06 PASS focused CLI conventions regression passes
+RUN t26 fix 1 exit=0 dur=3s
+CHECK a01 PASS warning house style and frozen prefix deviations are documented
+CHECK a02 PASS exit meanings and frozen exit deviations are documented
+CHECK a03 PASS machine and human output streams are documented
+CHECK a04 PASS listed surfaces and regression pins are inventoried
+CHECK a05 PASS focused conventions test pins the usage exits and side-effect boundary
+PASS task-runner-no-args
+PASS tr-metrics-bad-usage
+PASS deadman-probe-bad-usage
+PASS install-unknown-flag
+PASS tr-enqueue-usage-error
+PASS invocations-are-side-effect-free
+TOTAL pass=6 fail=0
+CHECK a06 PASS focused CLI conventions regression passes
+RUN t26 fix 2 exit=0 dur=1s
+CHECK a01 PASS warning house style and frozen prefix deviations are documented
+CHECK a02 PASS exit meanings and frozen exit deviations are documented
+CHECK a03 PASS machine and human output streams are documented
+CHECK a04 PASS listed surfaces and regression pins are inventoried
+CHECK a05 PASS focused conventions test pins the usage exits and side-effect boundary
+PASS task-runner-no-args
+PASS tr-metrics-bad-usage
+PASS deadman-probe-bad-usage
+PASS install-unknown-flag
+PASS tr-enqueue-usage-error
+PASS invocations-are-side-effect-free
+TOTAL pass=6 fail=0
+CHECK a06 PASS focused CLI conventions regression passes
+RUN t26 fix 3 exit=0 dur=1s
+CHECK a01 PASS warning house style and frozen prefix deviations are documented
+CHECK a02 PASS exit meanings and frozen exit deviations are documented
+CHECK a03 PASS machine and human output streams are documented
+CHECK a04 PASS listed surfaces and regression pins are inventoried
+CHECK a05 PASS focused conventions test pins the usage exits and side-effect boundary
+PASS task-runner-no-args
+PASS tr-metrics-bad-usage
+PASS deadman-probe-bad-usage
+PASS install-unknown-flag
+PASS tr-enqueue-usage-error
+PASS invocations-are-side-effect-free
+TOTAL pass=6 fail=0
+CHECK a06 PASS focused CLI conventions regression passes
+RUN t26 fix 4 exit=0 dur=2s
+CHECK a01 PASS warning house style and frozen prefix deviations are documented
+CHECK a02 PASS exit meanings and frozen exit deviations are documented
+CHECK a03 PASS machine and human output streams are documented
+CHECK a04 PASS listed surfaces and regression pins are inventoried
+CHECK a05 PASS focused conventions test pins the usage exits and side-effect boundary
+PASS task-runner-no-args
+PASS tr-metrics-bad-usage
+PASS deadman-probe-bad-usage
+PASS install-unknown-flag
+PASS tr-enqueue-usage-error
+PASS invocations-are-side-effect-free
+TOTAL pass=6 fail=0
+CHECK a06 PASS focused CLI conventions regression passes
+RUN t26 fix 5 exit=0 dur=1s
+VERDICT t26 PASS
