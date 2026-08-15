@@ -77,6 +77,14 @@ Absolute filesystem paths, `file:///absolute/path`, and
 their identity is the resolved physical path. Production must use a host-form
 endpoint.
 
+Host-form identity comparison is case-folded and `.git`-suffix-insensitive:
+`Org/Repo`, `org/repo`, and `Org/Repo.GIT` are one identity. This matches the
+hosts this updater supports and keeps a display-case clone URL from wedging a
+deployment permanently. It also means a host that serves distinct repositories
+whose paths differ only by letter case or by a `.git` suffix is **unsupported**:
+one directive would bind both. Path identities are not folded — they are the
+exact resolved physical path.
+
 IPv6 hosts, `git://`, non-default ports, relative paths, nested group paths such
 as `host/group/subgroup/repo`, query or fragment suffixes, multi-valued origin
 URLs, scp-like absolute paths such as `git@github.com:/abs/path/repo.git`, and
