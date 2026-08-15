@@ -1,9 +1,13 @@
 # EV-005 arm instruction texts (sealed treatment definition)
 
-- Status: sealed with the manifest (analysis-plan §2). These three texts ARE the experimental
-  manipulation; arms differ only in the runner's enforcement (W) and in the text below.
-  Every other part of the prompt (task sheet, file layout, budget lines) is byte-identical
-  across arms.
+- Status: **in the sealing scope (analysis-plan §2, §10); manifest pending.** This line changes
+  to "sealed" in the same commit that generates `MANIFEST.sha256`. These three texts ARE the
+  experimental manipulation; arms differ only in the runner's enforcement (W) and in the text
+  below. Every other part of the prompt — task sheet, budget block, and the **task file layout
+  including the readable, executable `donecheck.sh`** — is byte-identical across arms. The one
+  construction-level exception is W's `.ev005/` runner scaffolding (runner-spec §1.2): it is the
+  enforcement surface, not part of the task file layout, it exists only where enforcement
+  exists, and it is excluded from the adjudicated snapshot (runner-spec §2).
 - Prompt assembly (runner/wrapper spec): `<task.md> + <shared budget block> + <arm text>`.
   Nothing else is injected. The shared budget block is rendered from the sealed budget values
   (45 min wall-clock, max 5 declarations, ABANDON available) identically in all arms.
@@ -47,9 +51,11 @@ DONE-DECLARE
 ## Declaration matcher (sealed; analysis-plan §2)
 
 - **B/B+ DONE declaration** = an agent output line that is exactly `DONE-DECLARE`
-  (no leading/trailing characters on the line; case-sensitive). Occurrences inside fenced code
-  blocks the agent merely quotes do not count only when the runner can distinguish them;
-  otherwise every matching line counts (conservative toward more declarations, arm-symmetric).
+  (no leading/trailing characters on the line; case-sensitive). **Every matching line counts**,
+  including one the agent merely quotes: the runner does not attempt fenced-block
+  discrimination (runner-spec §2). The rule is stated flatly rather than conditioned on runner
+  capability, so this sealed artifact reads deterministically on its own; it is conservative
+  (toward counting more declarations) and arm-symmetric.
 - **ABANDON** = a line exactly `ABANDON-DECLARE` (same line rules), all arms.
 - **W delivery** = invocation of `.ev005/deliver.sh` (runner-observed; the marker lines above
   are ignored in W for outcome coding — W's declaration event is the deliver invocation itself,

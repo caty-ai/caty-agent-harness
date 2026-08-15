@@ -1,6 +1,10 @@
 # EV-005 runner/wrapper specification (sealed; analysis-plan §2, §8, §10)
 
-- Status: sealed with the manifest. This document specifies the run harness for all arms and
+- Status: **in the sealing scope (analysis-plan §10); manifest pending.** This line changes to
+  "sealed" in the same commit that generates `MANIFEST.sha256` — until that object exists, a
+  reader cannot distinguish "sealed" from "intended to be sealed", and claiming the former is
+  the apparent-rigor failure this pack is trying to avoid (delta-round finding, two seats).
+  This document specifies the run harness for all arms and
   cells: replica provisioning, prompt assembly, the declaration/delivery measurement layer, the
   W gate, budget enforcement, the audit log schema, and the environment digest. The pilot's
   §7 order-guarantee check is verified against the audit log this spec defines.
@@ -26,9 +30,26 @@
    `GIT_CONFIG_SYSTEM=/dev/null` for every git/donecheck/pipeline invocation — workstation hooks
    excluded by construction), and network/`gh`/web mechanically blocked.
 5. **Termination.** A run ends at: verified delivery (W, gate pass), wall-clock exhaustion
-   (45 min, wrapper-enforced: SIGTERM, 30 s grace, SIGKILL; coded per §3.1), `ABANDON-DECLARE`,
-   or operator abort (logged with reason). B/B+ runs never end at a DONE declaration — the agent
-   keeps its remaining budget (a declaration is a claim, not an exit).
+   (45 min of *agent* wall-clock as defined in §1.6, wrapper-enforced: SIGTERM, 30 s grace,
+   SIGKILL; coded per §3.1), `ABANDON-DECLARE`, or operator abort (logged with reason). B/B+
+   runs never end at a DONE declaration — the agent keeps its remaining budget (a declaration is
+   a claim, not an exit).
+
+6. **Attempt-budget accounting (the sealed carve-out, arm-symmetric).** Every task sheet states
+   that the donecheck timeout is "separate from and not part of the attempt budget", and
+   analysis-plan §2 repeats it. The wrapper implements that promise: **the 45-minute wall-clock
+   is paused for the full duration of every `donecheck_invocation`, whichever arm and whichever
+   invoker** (`agent` — the agent running `donecheck.sh` itself in any arm; `gate` — the runner
+   executing the sealed copy on a W delivery). The clock resumes when the invocation returns or
+   is killed at `timeout_s`. Rationale (acceptance-seat finding, round 4): three of the thirty
+   analysis-set tasks carry `timeout_s = 1800` with measured gate runs of 671–716 s, so an
+   unpaused clock would charge W — which must pass through the gate to end a run — up to ~35 of
+   its 45 minutes on three tasks, while charging B least. That cost is correlated with the
+   treatment and would confound the primary contrast. Each run's audit-log trailer publishes
+   `wallclock_s` (agent time, the budgeted quantity), `paused_s` (total verification time), and
+   their sum, so the accounting is auditable per run and per arm rather than asserted.
+   Verification time is **not** itself a budget: the per-invocation bound is the task's
+   `timeout_s`, fail-closed, and the 5-declaration limit bounds how often the gate can run.
 
 ## 2. Declaration measurement layer (all arms)
 
@@ -38,8 +59,16 @@
   attempt fenced-block discrimination (conservative branch of the sealed matcher: every
   matching line counts).
 - **On every declaration event** (B/B+ `DONE-DECLARE`; W `deliver.sh` invocation), the wrapper,
-  **before any adjudication or feedback**: (a) `git add -A` and commits the working tree in the
-  replica to the shadow ref `refs/ev005/decl-<seq>` (run-local repo, run-local identity),
+  **before any adjudication or feedback**: (a) commits the working tree in the replica to the
+  shadow ref `refs/ev005/decl-<seq>` (run-local repo, run-local identity) with
+  `git add -A -- . ':(exclude).ev005'` — **runner plumbing is excluded from the adjudicated
+  tree**. Rationale (acceptance-seat finding, round 4): `.ev005/` exists in W only, so an
+  all-inclusive snapshot would feed runner-owned bytes (including the IPC handshake) into the
+  sealed donecheck that §3/§4 execute against that snapshot, in one arm only — and six gates run
+  repo-wide sweeps (`git ls-files` / `git grep`) whose ev005 exclusions were written for the
+  validator's `.ev005-` *prefix*, which `.ev005/deliver.sh` does not match. No concrete failing
+  token was demonstrated; the exclusion closes the class rather than the instance, and makes W's
+  and B/B+'s snapshots semantically comparable (both are the agent's work, neither is plumbing),
   (b) appends the `declaration` audit event with the snapshot commit SHA and monotonic sequence
   number. This snapshot-before-adjudication order is structural (single code path) and is the
   property the pilot's §7 order-guarantee check verifies from audit-log timestamps.
@@ -93,7 +122,9 @@ Event records (`ts` monotonic + wall, `seq`):
 - `operator_intervention` — `reason`, free text, mandatory for `operator_abort` coding.
 - `canary_check` — sealed canary rule id, `hit` (bool), scope (context|output).
 - Trailer: `end_ts`, `end_reason` (`delivered`|`wallclock`|`abandon`|`operator`),
-  `declarations_scored`, `wallclock_s`.
+  `declarations_scored`, `wallclock_s` (agent time — the budgeted quantity), `paused_s` (total
+  verification time carved out per §1.6), `elapsed_s` (their sum). Publishing all three makes
+  the §1.6 carve-out auditable per run and per arm rather than asserted.
 
 ## 6. Environment digest
 
@@ -111,7 +142,8 @@ Event records (`ts` monotonic + wall, `seq`):
 - Per-run `HOME` is run-private and passwd-consistent by construction (this is the
   runner-layer guarantee referenced by the t12 REV4 isolation exemption). R11 validation of
   suite-invoking donechecks is executed in the same container class (validation-environment
-  fidelity).
+  fidelity), so the gate durations measured in `tools/validate-logs/` — 654–716 s for the three
+  `timeout_s = 1800` tasks — transfer to the pilot's budget arithmetic under §1.6.
 
 ## 7. Failure posture
 
