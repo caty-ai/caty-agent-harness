@@ -1,0 +1,17 @@
+== negprobe p03 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=ec846cdae1f5af4ddebac12449b120aa0e383402 timeout_s=180 ==
+EDIT Append verdict/NUL surface-token comments without parser changes.
+EXPECT_FAILS a05,a06
+CHECK a01 FAIL CLI provider prompt contract is missing or incomplete
+CHECK a02 FAIL Python provider contract is missing or incomplete
+CHECK a03 FAIL wrapper contract or exit-code table is missing or incomplete
+CHECK a04 PASS template and install notes describe the position-free unique-marker contract
+CHECK a05 FAIL CLI verifier regression behavior is wrong
+CHECK a06 FAIL example wrapper/provider regression behavior is wrong
+CHECK a07 PASS verify-job integration still passes with the unchanged wrapper contract
+CHECK a08 PASS wrapper-conformance integration still passes with the unchanged wrapper contract
+CHECK a09 FAIL stale first-line wording remains
+CHECK a10 FAIL wrapper NUL-byte rejection is missing
+CHECK a11 FAIL CLI provider NUL-byte rejection is missing
+CHECK a12 FAIL Python provider NUL-byte rejection is missing
+RUN p03 negprobe exit=1 dur=80s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

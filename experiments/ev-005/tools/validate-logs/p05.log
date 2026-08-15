@@ -1,0 +1,92 @@
+== validate p05 pre=92fc39c86422ddfe3654e4f4f38e6f6ff1fd0b39 fix=5c8b54af9386125695d0e87ab14c5d2c0fdf5973 repo=/Users/shojikumaru/claude-workspace/context-kit ==
+CHECK a01 FAIL validator hook files or canonical contract are missing
+CHECK a02 FAIL incomplete substantial prompts do not emit the expected block contract
+CHECK a03 FAIL canonical substantial prompts do not pass silently
+CHECK a04 FAIL default threshold, skip semantics, or tool routing drifted
+CHECK a05 FAIL environment override or fallback behavior drifted
+CHECK a06 FAIL launcher fail-open or shim-noise handling drifted
+CHECK a07 FAIL docs/example wiring or residue-free public text contract drifted
+CHECK a08 FAIL the regression suite or parse/syntax checks do not pass
+RUN p05 pre 1 exit=1 dur=0s
+CHECK a01 FAIL validator hook files or canonical contract are missing
+CHECK a02 FAIL incomplete substantial prompts do not emit the expected block contract
+CHECK a03 FAIL canonical substantial prompts do not pass silently
+CHECK a04 FAIL default threshold, skip semantics, or tool routing drifted
+CHECK a05 FAIL environment override or fallback behavior drifted
+CHECK a06 FAIL launcher fail-open or shim-noise handling drifted
+CHECK a07 FAIL docs/example wiring or residue-free public text contract drifted
+CHECK a08 FAIL the regression suite or parse/syntax checks do not pass
+RUN p05 pre 2 exit=1 dur=0s
+CHECK a01 FAIL validator hook files or canonical contract are missing
+CHECK a02 FAIL incomplete substantial prompts do not emit the expected block contract
+CHECK a03 FAIL canonical substantial prompts do not pass silently
+CHECK a04 FAIL default threshold, skip semantics, or tool routing drifted
+CHECK a05 FAIL environment override or fallback behavior drifted
+CHECK a06 FAIL launcher fail-open or shim-noise handling drifted
+CHECK a07 FAIL docs/example wiring or residue-free public text contract drifted
+CHECK a08 FAIL the regression suite or parse/syntax checks do not pass
+RUN p05 pre 3 exit=1 dur=0s
+CHECK a01 FAIL validator hook files or canonical contract are missing
+CHECK a02 FAIL incomplete substantial prompts do not emit the expected block contract
+CHECK a03 FAIL canonical substantial prompts do not pass silently
+CHECK a04 FAIL default threshold, skip semantics, or tool routing drifted
+CHECK a05 FAIL environment override or fallback behavior drifted
+CHECK a06 FAIL launcher fail-open or shim-noise handling drifted
+CHECK a07 FAIL docs/example wiring or residue-free public text contract drifted
+CHECK a08 FAIL the regression suite or parse/syntax checks do not pass
+RUN p05 pre 4 exit=1 dur=1s
+CHECK a01 FAIL validator hook files or canonical contract are missing
+CHECK a02 FAIL incomplete substantial prompts do not emit the expected block contract
+CHECK a03 FAIL canonical substantial prompts do not pass silently
+CHECK a04 FAIL default threshold, skip semantics, or tool routing drifted
+CHECK a05 FAIL environment override or fallback behavior drifted
+CHECK a06 FAIL launcher fail-open or shim-noise handling drifted
+CHECK a07 FAIL docs/example wiring or residue-free public text contract drifted
+CHECK a08 FAIL the regression suite or parse/syntax checks do not pass
+RUN p05 pre 5 exit=1 dur=0s
+CHECK a01 PASS validator hook, body, and canonical tool/section contract ship
+CHECK a02 PASS incomplete substantial prompts block with the corrective contract
+CHECK a03 PASS canonical substantial prompts pass silently
+CHECK a04 PASS default threshold, skip semantics, and tool routing hold
+CHECK a05 PASS environment overrides and fallback rules hold
+CHECK a06 PASS launcher fail-open and shim-noise handling hold
+CHECK a07 PASS docs and example wiring describe guarded setup, verification, and residue-free public text
+CHECK a08 PASS the regression suite, shell syntax, AST parse, and JSON parse all pass
+RUN p05 fix 1 exit=0 dur=5s
+CHECK a01 PASS validator hook, body, and canonical tool/section contract ship
+CHECK a02 PASS incomplete substantial prompts block with the corrective contract
+CHECK a03 PASS canonical substantial prompts pass silently
+CHECK a04 PASS default threshold, skip semantics, and tool routing hold
+CHECK a05 PASS environment overrides and fallback rules hold
+CHECK a06 PASS launcher fail-open and shim-noise handling hold
+CHECK a07 PASS docs and example wiring describe guarded setup, verification, and residue-free public text
+CHECK a08 PASS the regression suite, shell syntax, AST parse, and JSON parse all pass
+RUN p05 fix 2 exit=0 dur=5s
+CHECK a01 PASS validator hook, body, and canonical tool/section contract ship
+CHECK a02 PASS incomplete substantial prompts block with the corrective contract
+CHECK a03 PASS canonical substantial prompts pass silently
+CHECK a04 PASS default threshold, skip semantics, and tool routing hold
+CHECK a05 PASS environment overrides and fallback rules hold
+CHECK a06 PASS launcher fail-open and shim-noise handling hold
+CHECK a07 PASS docs and example wiring describe guarded setup, verification, and residue-free public text
+CHECK a08 PASS the regression suite, shell syntax, AST parse, and JSON parse all pass
+RUN p05 fix 3 exit=0 dur=5s
+CHECK a01 PASS validator hook, body, and canonical tool/section contract ship
+CHECK a02 PASS incomplete substantial prompts block with the corrective contract
+CHECK a03 PASS canonical substantial prompts pass silently
+CHECK a04 PASS default threshold, skip semantics, and tool routing hold
+CHECK a05 PASS environment overrides and fallback rules hold
+CHECK a06 PASS launcher fail-open and shim-noise handling hold
+CHECK a07 PASS docs and example wiring describe guarded setup, verification, and residue-free public text
+CHECK a08 PASS the regression suite, shell syntax, AST parse, and JSON parse all pass
+RUN p05 fix 4 exit=0 dur=4s
+CHECK a01 PASS validator hook, body, and canonical tool/section contract ship
+CHECK a02 PASS incomplete substantial prompts block with the corrective contract
+CHECK a03 PASS canonical substantial prompts pass silently
+CHECK a04 PASS default threshold, skip semantics, and tool routing hold
+CHECK a05 PASS environment overrides and fallback rules hold
+CHECK a06 PASS launcher fail-open and shim-noise handling hold
+CHECK a07 PASS docs and example wiring describe guarded setup, verification, and residue-free public text
+CHECK a08 PASS the regression suite, shell syntax, AST parse, and JSON parse all pass
+RUN p05 fix 5 exit=0 dur=5s
+VERDICT p05 PASS

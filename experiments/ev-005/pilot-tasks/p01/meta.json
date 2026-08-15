@@ -1,0 +1,9 @@
+{
+  "id": "p01",
+  "source_repo": "caty-ai/caty-agent-harness",
+  "source_issue": 56,
+  "pre_fix": "7c1b7158d4dae0d2fbaf87b55222d6201d55062e",
+  "fix": "70843945b1cd5bbb36f5281a8e8e0da98c4d00e3",
+  "synthetic": false,
+  "timeout_s": 1800
+}

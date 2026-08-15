@@ -1,0 +1,72 @@
+== validate p04 pre=70843945b1cd5bbb36f5281a8e8e0da98c4d00e3 fix=e07eac1dad578b5bc22b238a65c5c61d31f957b0 repo=/Users/shojikumaru/claude-workspace/caty-agent-harness ==
+CHECK a01 FAIL provider base selection or path normalization is wrong
+CHECK a02 FAIL provider accepts or misreports an invalid API base
+CHECK a03 FAIL provider no longer uses the Anthropic wire contract or caller key env
+CHECK a04 FAIL install guide is missing the default or alternate endpoint configuration
+CHECK a05 FAIL install guide is missing the configuration-change re-attest guidance
+CHECK a06 FAIL focused verifier example regression coverage is missing or failing
+RUN p04 pre 1 exit=1 dur=0s
+CHECK a01 FAIL provider base selection or path normalization is wrong
+CHECK a02 FAIL provider accepts or misreports an invalid API base
+CHECK a03 FAIL provider no longer uses the Anthropic wire contract or caller key env
+CHECK a04 FAIL install guide is missing the default or alternate endpoint configuration
+CHECK a05 FAIL install guide is missing the configuration-change re-attest guidance
+CHECK a06 FAIL focused verifier example regression coverage is missing or failing
+RUN p04 pre 2 exit=1 dur=1s
+CHECK a01 FAIL provider base selection or path normalization is wrong
+CHECK a02 FAIL provider accepts or misreports an invalid API base
+CHECK a03 FAIL provider no longer uses the Anthropic wire contract or caller key env
+CHECK a04 FAIL install guide is missing the default or alternate endpoint configuration
+CHECK a05 FAIL install guide is missing the configuration-change re-attest guidance
+CHECK a06 FAIL focused verifier example regression coverage is missing or failing
+RUN p04 pre 3 exit=1 dur=0s
+CHECK a01 FAIL provider base selection or path normalization is wrong
+CHECK a02 FAIL provider accepts or misreports an invalid API base
+CHECK a03 FAIL provider no longer uses the Anthropic wire contract or caller key env
+CHECK a04 FAIL install guide is missing the default or alternate endpoint configuration
+CHECK a05 FAIL install guide is missing the configuration-change re-attest guidance
+CHECK a06 FAIL focused verifier example regression coverage is missing or failing
+RUN p04 pre 4 exit=1 dur=1s
+CHECK a01 FAIL provider base selection or path normalization is wrong
+CHECK a02 FAIL provider accepts or misreports an invalid API base
+CHECK a03 FAIL provider no longer uses the Anthropic wire contract or caller key env
+CHECK a04 FAIL install guide is missing the default or alternate endpoint configuration
+CHECK a05 FAIL install guide is missing the configuration-change re-attest guidance
+CHECK a06 FAIL focused verifier example regression coverage is missing or failing
+RUN p04 pre 5 exit=1 dur=0s
+CHECK a01 PASS provider honors the configurable base and normalized messages path
+CHECK a02 PASS provider rejects malformed or unsafe API bases before I/O
+CHECK a03 PASS provider keeps the Anthropic wire contract unchanged
+CHECK a04 PASS install guide names the default and alternate verifier endpoints
+CHECK a05 PASS install guide records the re-attest rule for endpoint swaps
+CHECK a06 PASS focused verifier example regression coverage passes with the new endpoint cases
+RUN p04 fix 1 exit=0 dur=6s
+CHECK a01 PASS provider honors the configurable base and normalized messages path
+CHECK a02 PASS provider rejects malformed or unsafe API bases before I/O
+CHECK a03 PASS provider keeps the Anthropic wire contract unchanged
+CHECK a04 PASS install guide names the default and alternate verifier endpoints
+CHECK a05 PASS install guide records the re-attest rule for endpoint swaps
+CHECK a06 PASS focused verifier example regression coverage passes with the new endpoint cases
+RUN p04 fix 2 exit=0 dur=3s
+CHECK a01 PASS provider honors the configurable base and normalized messages path
+CHECK a02 PASS provider rejects malformed or unsafe API bases before I/O
+CHECK a03 PASS provider keeps the Anthropic wire contract unchanged
+CHECK a04 PASS install guide names the default and alternate verifier endpoints
+CHECK a05 PASS install guide records the re-attest rule for endpoint swaps
+CHECK a06 PASS focused verifier example regression coverage passes with the new endpoint cases
+RUN p04 fix 3 exit=0 dur=3s
+CHECK a01 PASS provider honors the configurable base and normalized messages path
+CHECK a02 PASS provider rejects malformed or unsafe API bases before I/O
+CHECK a03 PASS provider keeps the Anthropic wire contract unchanged
+CHECK a04 PASS install guide names the default and alternate verifier endpoints
+CHECK a05 PASS install guide records the re-attest rule for endpoint swaps
+CHECK a06 PASS focused verifier example regression coverage passes with the new endpoint cases
+RUN p04 fix 4 exit=0 dur=3s
+CHECK a01 PASS provider honors the configurable base and normalized messages path
+CHECK a02 PASS provider rejects malformed or unsafe API bases before I/O
+CHECK a03 PASS provider keeps the Anthropic wire contract unchanged
+CHECK a04 PASS install guide names the default and alternate verifier endpoints
+CHECK a05 PASS install guide records the re-attest rule for endpoint swaps
+CHECK a06 PASS focused verifier example regression coverage passes with the new endpoint cases
+RUN p04 fix 5 exit=0 dur=3s
+VERDICT p04 PASS

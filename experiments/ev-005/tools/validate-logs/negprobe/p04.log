@@ -1,0 +1,11 @@
+== negprobe p04 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=70843945b1cd5bbb36f5281a8e8e0da98c4d00e3 timeout_s=120 ==
+EDIT Append endpoint prose and pass-label echoes without provider changes.
+EXPECT_FAILS a01,a02,a03
+CHECK a01 FAIL provider base selection or path normalization is wrong
+CHECK a02 FAIL provider accepts or misreports an invalid API base
+CHECK a03 FAIL provider no longer uses the Anthropic wire contract or caller key env
+CHECK a04 PASS install guide names the default and alternate verifier endpoints
+CHECK a05 PASS install guide records the re-attest rule for endpoint swaps
+CHECK a06 FAIL focused verifier example regression coverage is missing or failing
+RUN p04 negprobe exit=1 dur=0s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

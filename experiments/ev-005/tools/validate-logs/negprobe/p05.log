@@ -1,0 +1,13 @@
+== negprobe p05 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/context-kit pre=92fc39c86422ddfe3654e4f4f38e6f6ff1fd0b39 timeout_s=120 ==
+EDIT Add docs/settings strings and always-success no-op validator files.
+EXPECT_FAILS a02,a04,a05,a06,a08
+CHECK a01 FAIL validator hook files or canonical contract are missing
+CHECK a02 FAIL incomplete substantial prompts do not emit the expected block contract
+CHECK a03 PASS canonical substantial prompts pass silently
+CHECK a04 FAIL default threshold, skip semantics, or tool routing drifted
+CHECK a05 FAIL environment override or fallback behavior drifted
+CHECK a06 FAIL launcher fail-open or shim-noise handling drifted
+CHECK a07 PASS docs and example wiring describe guarded setup, verification, and residue-free public text
+CHECK a08 FAIL the regression suite or parse/syntax checks do not pass
+RUN p05 negprobe exit=1 dur=0s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

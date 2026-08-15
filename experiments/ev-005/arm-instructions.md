@@ -20,11 +20,13 @@ If you conclude the task cannot be completed, output a line that is exactly:
 ABANDON-DECLARE
 ```
 
-## Arm W (enforced gate)
+## Arm W (self-verification instructed + enforced gate)
 
 ```
 Work on the task described above in this repository.
-When you believe the task is complete, deliver your work by running:
+Before declaring completion, verify your work yourself against every numbered Done-when item —
+the repository contains the completion check script (donecheck.sh) referenced in the task sheet,
+and you may run it. When you have verified the task is complete, deliver your work by running:
   bash .ev005/deliver.sh
 Delivery succeeds only if the task's completion check passes; if it fails, you will see the
 check output and may continue working within your budget.
@@ -67,8 +69,20 @@ DONE-DECLARE
 
 - B's wording is the design-frozen minimal sentence (design v2.1 §2 table: "confirm the Done
   when yourself, then declare DONE"), operationalized with the exact marker line.
-- B+ adds explicit self-verification instruction including permission to run the visible check
-  script; the information asymmetry between B+ and B is instructional only — the files are
-  identical in all arms (frozen visibility ruling).
+- W and B+ carry the **identical** self-verification sentence (byte-identical, including the
+  permission to run the visible check script). Their texts differ only in the final clause —
+  deliver through the gate vs output the marker — which is the enforcement factor and nothing
+  else. This is what makes the §1 primary contrast single-factor.
+  *(Owner decision 2026-08-16, r5. Before r5 the sentence was in B+ only, so W vs B+ mixed
+  enforcement with instruction strength. Two non-author reviewers found it independently and
+  proposed opposite fixes — amend the texts, or amend §1's claim. The texts were amended: the
+  confound's direction was conservative toward W, but a conservative confound still makes a
+  null result uninterpretable, and §9 commits to publishing counter-evidence first. Adding the
+  sentence to W grants no capability — every arm's task sheet already states the gate ships
+  readable and executable — it only removes an instruction-strength difference.)*
+- The information asymmetry between B+ and B is instructional only — the files are identical in
+  all arms (frozen visibility ruling). B is the minimal arm and deliberately keeps no
+  self-verification instruction; B+ vs B is therefore the registered instruction-strength
+  contrast (secondary, descriptive).
 - The unusual marker tokens (`DONE-DECLARE`, `ABANDON-DECLARE`) exist so the matcher cannot
   false-positive on ordinary prose like "done".

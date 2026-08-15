@@ -1,0 +1,9 @@
+== negprobe p02 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=948d1a9e93f0c1fb7ad9c989f27e516bb5e0b129 timeout_s=120 ==
+EDIT Add archive-and-marker intake stub without folding or shared helper.
+EXPECT_FAILS a01,a03,a04
+CHECK a01 FAIL flush intake does not fold lessons-only content or still refolds duplicates
+CHECK a02 FAIL flush intake does not archive consumed files or misses the distill marker
+CHECK a03 FAIL install docs do not describe the intake and deadman wiring
+CHECK a04 FAIL the state-fold implementation is not shared through the common helper
+RUN p02 negprobe exit=1 dur=1s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

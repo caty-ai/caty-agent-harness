@@ -1,0 +1,132 @@
+== validate p03 pre=ec846cdae1f5af4ddebac12449b120aa0e383402 fix=441607653dc1e59a1baac3f2bf9fbffaca0535c4 repo=/Users/shojikumaru/claude-workspace/caty-agent-harness ==
+CHECK a01 FAIL CLI provider prompt contract is missing or incomplete
+CHECK a02 FAIL Python provider contract is missing or incomplete
+CHECK a03 FAIL wrapper contract or exit-code table is missing or incomplete
+CHECK a04 FAIL template or install notes do not describe the updated contract
+CHECK a05 FAIL CLI verifier regression behavior is wrong
+CHECK a06 FAIL example wrapper/provider regression behavior is wrong
+CHECK a07 PASS verify-job integration still passes with the unchanged wrapper contract
+CHECK a08 PASS wrapper-conformance integration still passes with the unchanged wrapper contract
+CHECK a09 FAIL stale first-line wording remains
+CHECK a10 FAIL wrapper NUL-byte rejection is missing
+CHECK a11 FAIL CLI provider NUL-byte rejection is missing
+CHECK a12 FAIL Python provider NUL-byte rejection is missing
+RUN p03 pre 1 exit=1 dur=81s
+CHECK a01 FAIL CLI provider prompt contract is missing or incomplete
+CHECK a02 FAIL Python provider contract is missing or incomplete
+CHECK a03 FAIL wrapper contract or exit-code table is missing or incomplete
+CHECK a04 FAIL template or install notes do not describe the updated contract
+CHECK a05 FAIL CLI verifier regression behavior is wrong
+CHECK a06 FAIL example wrapper/provider regression behavior is wrong
+CHECK a07 PASS verify-job integration still passes with the unchanged wrapper contract
+CHECK a08 PASS wrapper-conformance integration still passes with the unchanged wrapper contract
+CHECK a09 FAIL stale first-line wording remains
+CHECK a10 FAIL wrapper NUL-byte rejection is missing
+CHECK a11 FAIL CLI provider NUL-byte rejection is missing
+CHECK a12 FAIL Python provider NUL-byte rejection is missing
+RUN p03 pre 2 exit=1 dur=84s
+CHECK a01 FAIL CLI provider prompt contract is missing or incomplete
+CHECK a02 FAIL Python provider contract is missing or incomplete
+CHECK a03 FAIL wrapper contract or exit-code table is missing or incomplete
+CHECK a04 FAIL template or install notes do not describe the updated contract
+CHECK a05 FAIL CLI verifier regression behavior is wrong
+CHECK a06 FAIL example wrapper/provider regression behavior is wrong
+CHECK a07 PASS verify-job integration still passes with the unchanged wrapper contract
+CHECK a08 PASS wrapper-conformance integration still passes with the unchanged wrapper contract
+CHECK a09 FAIL stale first-line wording remains
+CHECK a10 FAIL wrapper NUL-byte rejection is missing
+CHECK a11 FAIL CLI provider NUL-byte rejection is missing
+CHECK a12 FAIL Python provider NUL-byte rejection is missing
+RUN p03 pre 3 exit=1 dur=82s
+CHECK a01 FAIL CLI provider prompt contract is missing or incomplete
+CHECK a02 FAIL Python provider contract is missing or incomplete
+CHECK a03 FAIL wrapper contract or exit-code table is missing or incomplete
+CHECK a04 FAIL template or install notes do not describe the updated contract
+CHECK a05 FAIL CLI verifier regression behavior is wrong
+CHECK a06 FAIL example wrapper/provider regression behavior is wrong
+CHECK a07 PASS verify-job integration still passes with the unchanged wrapper contract
+CHECK a08 PASS wrapper-conformance integration still passes with the unchanged wrapper contract
+CHECK a09 FAIL stale first-line wording remains
+CHECK a10 FAIL wrapper NUL-byte rejection is missing
+CHECK a11 FAIL CLI provider NUL-byte rejection is missing
+CHECK a12 FAIL Python provider NUL-byte rejection is missing
+RUN p03 pre 4 exit=1 dur=90s
+CHECK a01 FAIL CLI provider prompt contract is missing or incomplete
+CHECK a02 FAIL Python provider contract is missing or incomplete
+CHECK a03 FAIL wrapper contract or exit-code table is missing or incomplete
+CHECK a04 FAIL template or install notes do not describe the updated contract
+CHECK a05 FAIL CLI verifier regression behavior is wrong
+CHECK a06 FAIL example wrapper/provider regression behavior is wrong
+CHECK a07 PASS verify-job integration still passes with the unchanged wrapper contract
+CHECK a08 PASS wrapper-conformance integration still passes with the unchanged wrapper contract
+CHECK a09 FAIL stale first-line wording remains
+CHECK a10 FAIL wrapper NUL-byte rejection is missing
+CHECK a11 FAIL CLI provider NUL-byte rejection is missing
+CHECK a12 FAIL Python provider NUL-byte rejection is missing
+RUN p03 pre 5 exit=1 dur=86s
+CHECK a01 PASS CLI provider uses the verdict-last unique-marker contract and two-line emit path
+CHECK a02 PASS Python provider prompt and parser use the position-free unique-marker contract
+CHECK a03 PASS wrapper uses the position-free anchored verdict parser and keeps exit-code semantics
+CHECK a04 PASS template and install notes describe the position-free unique-marker contract
+CHECK a05 PASS CLI verifier path accepts verdict-last and rejects malformed replies
+CHECK a06 PASS example wrapper/provider path accepts verdict-last and rejects malformed replies
+CHECK a07 PASS verify-job integration still passes with the unchanged wrapper contract
+CHECK a08 PASS wrapper-conformance integration still passes with the unchanged wrapper contract
+CHECK a09 PASS no touched example or install surface still describes the first-line contract
+CHECK a10 PASS wrapper rejects NUL bytes before parsing
+CHECK a11 PASS CLI provider rejects NUL bytes before normalization
+CHECK a12 PASS Python provider rejects NUL bytes before normalization
+RUN p03 fix 1 exit=0 dur=98s
+CHECK a01 PASS CLI provider uses the verdict-last unique-marker contract and two-line emit path
+CHECK a02 PASS Python provider prompt and parser use the position-free unique-marker contract
+CHECK a03 PASS wrapper uses the position-free anchored verdict parser and keeps exit-code semantics
+CHECK a04 PASS template and install notes describe the position-free unique-marker contract
+CHECK a05 PASS CLI verifier path accepts verdict-last and rejects malformed replies
+CHECK a06 PASS example wrapper/provider path accepts verdict-last and rejects malformed replies
+CHECK a07 PASS verify-job integration still passes with the unchanged wrapper contract
+CHECK a08 PASS wrapper-conformance integration still passes with the unchanged wrapper contract
+CHECK a09 PASS no touched example or install surface still describes the first-line contract
+CHECK a10 PASS wrapper rejects NUL bytes before parsing
+CHECK a11 PASS CLI provider rejects NUL bytes before normalization
+CHECK a12 PASS Python provider rejects NUL bytes before normalization
+RUN p03 fix 2 exit=0 dur=92s
+CHECK a01 PASS CLI provider uses the verdict-last unique-marker contract and two-line emit path
+CHECK a02 PASS Python provider prompt and parser use the position-free unique-marker contract
+CHECK a03 PASS wrapper uses the position-free anchored verdict parser and keeps exit-code semantics
+CHECK a04 PASS template and install notes describe the position-free unique-marker contract
+CHECK a05 PASS CLI verifier path accepts verdict-last and rejects malformed replies
+CHECK a06 PASS example wrapper/provider path accepts verdict-last and rejects malformed replies
+CHECK a07 PASS verify-job integration still passes with the unchanged wrapper contract
+CHECK a08 PASS wrapper-conformance integration still passes with the unchanged wrapper contract
+CHECK a09 PASS no touched example or install surface still describes the first-line contract
+CHECK a10 PASS wrapper rejects NUL bytes before parsing
+CHECK a11 PASS CLI provider rejects NUL bytes before normalization
+CHECK a12 PASS Python provider rejects NUL bytes before normalization
+RUN p03 fix 3 exit=0 dur=95s
+CHECK a01 PASS CLI provider uses the verdict-last unique-marker contract and two-line emit path
+CHECK a02 PASS Python provider prompt and parser use the position-free unique-marker contract
+CHECK a03 PASS wrapper uses the position-free anchored verdict parser and keeps exit-code semantics
+CHECK a04 PASS template and install notes describe the position-free unique-marker contract
+CHECK a05 PASS CLI verifier path accepts verdict-last and rejects malformed replies
+CHECK a06 PASS example wrapper/provider path accepts verdict-last and rejects malformed replies
+CHECK a07 PASS verify-job integration still passes with the unchanged wrapper contract
+CHECK a08 PASS wrapper-conformance integration still passes with the unchanged wrapper contract
+CHECK a09 PASS no touched example or install surface still describes the first-line contract
+CHECK a10 PASS wrapper rejects NUL bytes before parsing
+CHECK a11 PASS CLI provider rejects NUL bytes before normalization
+CHECK a12 PASS Python provider rejects NUL bytes before normalization
+RUN p03 fix 4 exit=0 dur=94s
+CHECK a01 PASS CLI provider uses the verdict-last unique-marker contract and two-line emit path
+CHECK a02 PASS Python provider prompt and parser use the position-free unique-marker contract
+CHECK a03 PASS wrapper uses the position-free anchored verdict parser and keeps exit-code semantics
+CHECK a04 PASS template and install notes describe the position-free unique-marker contract
+CHECK a05 PASS CLI verifier path accepts verdict-last and rejects malformed replies
+CHECK a06 PASS example wrapper/provider path accepts verdict-last and rejects malformed replies
+CHECK a07 PASS verify-job integration still passes with the unchanged wrapper contract
+CHECK a08 PASS wrapper-conformance integration still passes with the unchanged wrapper contract
+CHECK a09 PASS no touched example or install surface still describes the first-line contract
+CHECK a10 PASS wrapper rejects NUL bytes before parsing
+CHECK a11 PASS CLI provider rejects NUL bytes before normalization
+CHECK a12 PASS Python provider rejects NUL bytes before normalization
+RUN p03 fix 5 exit=0 dur=94s
+VERDICT p03 PASS

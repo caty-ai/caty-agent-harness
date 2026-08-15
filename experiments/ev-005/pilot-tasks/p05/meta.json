@@ -1,0 +1,9 @@
+{
+  "id": "p05",
+  "source_repo": "caty-ai/context-kit",
+  "source_issue": 4,
+  "pre_fix": "92fc39c86422ddfe3654e4f4f38e6f6ff1fd0b39",
+  "fix": "5c8b54af9386125695d0e87ab14c5d2c0fdf5973",
+  "synthetic": false,
+  "timeout_s": 120
+}
