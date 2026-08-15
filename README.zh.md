@@ -13,6 +13,8 @@
 ![platform: macOS | Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
 ![status: public preview](https://img.shields.io/badge/status-public--preview-blue)
 
+<sub>CI 证据（2026-08-15 UTC）：[矩阵 7/7 通过](https://github.com/caty-ai/caty-agent-harness/actions/runs/31858953187) ・ [同一 SHA 的 60 次独立运行、0 次失败](https://github.com/caty-ai/caty-agent-harness/actions/runs/31859000233)。每周运行 — 仓库 60 天无活动时 GitHub 会自动暂停计划任务，请留意运行日期。</sub>
+
 一遍遍重复的背景说明。莫名消失的上下文。没有任何凭证的「完成了！」。<br>
 Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决掉。<br>
 不是魔法：记住、推进、核查都交给机械来做，AI 只管专心思考——<br>

@@ -13,6 +13,8 @@
 ![platform: macOS | Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
 ![status: public preview](https://img.shields.io/badge/status-public--preview-blue)
 
+<sub>หลักฐาน CI (2026-08-15 UTC): [เมทริกซ์ผ่าน 7/7](https://github.com/caty-ai/caty-agent-harness/actions/runs/31858953187) ・ [รัน 60 ครั้งอย่างอิสระบน SHA เดียว ไม่มี flake](https://github.com/caty-ai/caty-agent-harness/actions/runs/31859000233) รันรายสัปดาห์ — หาก repo ไม่มีความเคลื่อนไหว 60 วัน GitHub จะหยุด schedule อัตโนมัติ โปรดดูวันที่ของ run ด้วย</sub>
+
 การอธิบายซ้ำแล้วซ้ำอีก บริบทที่หายไป และ "เสร็จแล้ว!" ที่ไม่มีหลักฐาน<br>
 Caty Agent Harness แก้ทั้งหมดนี้ด้วยไฟล์ข้อความธรรมดาและการตรวจสอบจริง<br>
 ไม่ใช่เวทมนตร์ — กลไกรับหน้าที่จดจำ เดินงาน และตรวจสอบ เพื่อให้ AI โฟกัสกับการคิด<br>
