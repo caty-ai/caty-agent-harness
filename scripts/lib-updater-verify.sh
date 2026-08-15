@@ -686,7 +686,7 @@ updater_sync_remote_tags() {
   local repo=$1
   local ineligible_path=$2
   local dry_run=${3:-0}
-  local origin_url=$4
+  local origin_url=${4:-}
   local output line oid ref name extra local_oid mark_rc reason record_name
   local names= records= candidates=
   local -a refspecs
@@ -785,7 +785,7 @@ updater_sync_remote_tags() {
 
 updater_fetch_release_refs() {
   local repo=$1
-  local origin_url=$2
+  local origin_url=${2:-}
 
   if [[ -z "$origin_url" ]]; then
     UPDATER_VERIFY_REASON="captured origin URL is unavailable"
@@ -807,7 +807,7 @@ updater_assert_commit_on_release_ref() {
   local branch=${CATY_UPDATER_RELEASE_BRANCH:-main}
   local release_ref release_tip rc ref_rc
 
-  if ! git check-ref-format --branch "$branch" >/dev/null 2>&1; then
+  if ! git -C "$repo" check-ref-format --branch "$branch" >/dev/null 2>&1; then
     UPDATER_VERIFY_REASON="invalid release branch name configured"
     return 1
   fi

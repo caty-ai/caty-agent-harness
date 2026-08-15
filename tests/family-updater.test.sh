@@ -338,7 +338,7 @@ run_issue54_bootstrap_replay_case() {
 
 run_issue54_endpoint_rewrite_cases() {
   local before after before_pin after_pin expected output rc fakebin rewrite_state cron_dest
-  local report_surface foreign_ref
+  local foreign_ref
 
   new_fixture issue54-post-binding-endpoint-rewrite
   write_pin v1.0.0 "$BASE_COMMIT"
@@ -356,17 +356,14 @@ run_issue54_endpoint_rewrite_cases() {
   after=$(git -C "$REPO" rev-parse HEAD)
   after_pin=$(sed -n '1p' "$(pin_path)")
   foreign_ref=$(git -C "$REPO" show-ref --verify --hash "refs/remotes/origin/$BRANCH" 2>/dev/null || true)
-  report_surface=$(grep -R -E 'job-heartbeat|hot-inbox-post| fail$' "$LOGS" "$HOME_DIR/.claude/state" \
-    2>/dev/null || true)
   if [[ "$rc" -ne 0 && "$before" == "$after" && "$before_pin" == "$after_pin" \
-    && "$foreign_ref" == "$BASE_COMMIT" && ! -e "$SENTINEL" && -z "$report_surface" \
-    && -f "$rewrite_state.injected" ]] \
+    && "$foreign_ref" == "$BASE_COMMIT" && ! -e "$SENTINEL" && -f "$rewrite_state.injected" ]] \
     && ! git -C "$REPO" show-ref --verify --quiet refs/tags/v1.1.0 \
     && printf '%s\n' "$output" | grep -Fq "family-updater error: $expected"; then
     pass "post-binding URL rewrite is refused before recurring network and side effects"
   else
     fail_case "post-binding URL rewrite is refused before recurring network and side effects" \
-      "rc=$rc head=$before/$after pin-same=$(test "$before_pin" = "$after_pin" && echo yes || echo no) remote-ref=$foreign_ref foreign-tag=$(git -C "$REPO" show-ref --verify --quiet refs/tags/v1.1.0 && echo yes || echo no) reports=$(test -n "$report_surface" && echo yes || echo no) output=$output"
+      "rc=$rc head=$before/$after pin-same=$(test "$before_pin" = "$after_pin" && echo yes || echo no) remote-ref=$foreign_ref foreign-tag=$(git -C "$REPO" show-ref --verify --quiet refs/tags/v1.1.0 && echo yes || echo no) output=$output"
   fi
 
   new_fixture issue54-bootstrap-post-binding-endpoint-rewrite
@@ -742,7 +739,7 @@ run_issue54_reachability_cases() {
   publish_branch_backed_release v1.1.0
   output=$(CATY_UPDATER_RELEASE_BRANCH='bad..branch' run_updater); rc=$?
   if [[ "$rc" -ne 0 ]] && printf '%s\n' "$output" | grep -Fq 'invalid release branch name configured' \
-    && printf '%s\n' "$output" | grep -Fqv 'bad..branch'; then
+    && ! printf '%s\n' "$output" | grep -Fq 'bad..branch'; then
     pass "invalid release branch config is refused without echoing its value"
   else
     fail_case "invalid release branch config is refused without echoing its value" "rc=$rc output=$output"

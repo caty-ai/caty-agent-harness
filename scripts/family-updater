@@ -67,7 +67,18 @@ cleanup_lock() {
     rm -rf "$lock_dir"
   fi
 }
-trap 'cleanup_lock' EXIT HUP INT TERM
+
+family_updater_signal_exit() {
+  local status=$1
+
+  trap - HUP INT TERM
+  exit "$status"
+}
+
+trap 'cleanup_lock' EXIT
+trap 'family_updater_signal_exit 129' HUP
+trap 'family_updater_signal_exit 130' INT
+trap 'family_updater_signal_exit 143' TERM
 
 is_live_pid() {
   local pid=$1
