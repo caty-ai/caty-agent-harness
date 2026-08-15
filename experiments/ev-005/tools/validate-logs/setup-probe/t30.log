@@ -1,0 +1,14 @@
+== setup-probe t30 repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=18e897513e06e9f2e93e08920f0cdd8314472c70 timeout_s=1800 fixtures=omitted ==
+CHECK a01 FAIL make test fails or is not configured
+CHECK a02 FAIL make lint fails or is not configured
+CHECK a03 FAIL missing bundled workflow probe .ev005-fixtures/workflow_probe.py
+CHECK a04 FAIL missing bundled workflow probe .ev005-fixtures/workflow_probe.py
+CHECK a05 FAIL missing bundled workflow probe .ev005-fixtures/workflow_probe.py
+CHECK a06 FAIL missing bundled workflow probe .ev005-fixtures/workflow_probe.py
+CHECK a07 FAIL missing bundled workflow probe .ev005-fixtures/workflow_probe.py
+CHECK a08 FAIL missing bundled workflow probe .ev005-fixtures/workflow_probe.py
+RUN t30 setup-probe exit=1 dur=2s timeout=false
+DIRTY_TREE clean
+CHECK_COVERAGE expected=a01,a02,a03,a04,a05,a06,a07,a08 observed=a01,a02,a03,a04,a05,a06,a07,a08 missing=none duplicate=none unexpected=none verdict=PASS
+DEPENDENT_FAILS expected=a03,a04,a05,a06,a07,a08 verdict=PASS
+SETUP_PROBE_RESULT PASS

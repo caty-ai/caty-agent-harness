@@ -1,0 +1,17 @@
+== setup-probe t11 repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=3441b8ef5ab3f8e2345b02d2d6503c8421cc0fae timeout_s=120 fixtures=omitted ==
+CHECK a01 FAIL targeted reject/accept regression test is missing or fails
+CHECK a02 PASS symlink refusal is predicted with an advisory
+CHECK a03 FAIL missing bundled fixture valid.env
+CHECK a04 FAIL missing bundled fixture malformed.env
+CHECK a05 FAIL missing bundled fixture multiline.env
+CHECK a06 FAIL embedded NUL is not rejected and predicted
+CHECK a07 FAIL missing bundled fixture refused.env
+CHECK a08 PASS acceptance grammar and refusal list have one source or an aligned generated copy
+CHECK a09 PASS focused checker output-contract regression suite passes
+CHECK a10 PASS missing prefix remains on stdout
+CHECK a11 PASS documented machine-row shapes remain on stdout
+RUN t11 setup-probe exit=1 dur=7s timeout=false
+DIRTY_TREE clean
+CHECK_COVERAGE expected=a01,a02,a03,a04,a05,a06,a07,a08,a09,a10,a11 observed=a01,a02,a03,a04,a05,a06,a07,a08,a09,a10,a11 missing=none duplicate=none unexpected=none verdict=PASS
+DEPENDENT_FAILS expected=a03,a04,a05,a07 verdict=PASS
+SETUP_PROBE_RESULT PASS

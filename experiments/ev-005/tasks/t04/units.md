@@ -33,13 +33,19 @@ MOOT: 0
   file-presence, grep/count, and line-hash checks and executes no repository
   code, so no escalation is needed.
 
+## REV6 validation evidence (r3-4)
+
+- Fresh 5+5 history-zero validation: pre exit/duration pairs were `1/0s` five times; fix pairs were `0/0s`, `0/1s`, `0/0s`, `0/1s`, `0/0s`. `VERDICT PASS`, no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/t04.log`.
+
 ## Negative validity probe (r5-1)
 
 - Minimal non-solution edit: Append one HTML comment containing `caty-ai/x-collector`, its GitHub URL, `through that pipeline`, and `inherit collection controls` to `docs/trial-isolation.md`, without changing the live wiring or isolation behavior.
-- Route: `a (UNEXPECTED_PASS blocker)`
-- Expected result: No trustworthy failing IDs to cite: the strongest surface cheat is expected to `UNEXPECTED_PASS`.
-- Evidence status: `UNEXPECTED_PASS_CONFIRMED`; failing CHECK IDs: none; `RUN t04 negprobe exit=0 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t04.log`.
-- Rationale: The current assertions appear satisfiable by one comment-only stuffing attack in the asserted doc, so a claimed FAIL would overstate the evidence.
+- Route: `a`.
+- Expected and measured result after REV6: `a01`–`a03` FAIL because the injected repository, URL, and routing strings occur only inside the HTML comment.
+- Evidence status: REV5 recorded `UNEXPECTED_PASS_CONFIRMED` (`exit=0`, `dur=0s`); the fresh REV6 run records `EXPECTED_FAIL_CONFIRMED` with `a01`–`a03` (`exit=1`, `dur=0s`, no `DIRTY_TREE`) in `experiments/ev-005/tools/validate-logs/negprobe/t04.log`.
+- REV6 r4-1-style tightening: fixed, regex, co-presence, line-hash, and count surfaces now consume visible content after non-greedy, multiline HTML-comment stripping, with hashes, patterns, counts, and IDs unchanged.
+- Route-b visible-prose record: Visibly inserting the asserted public-pipeline documentation is indistinguishable from doing the documentation work itself, so there is no honest superficial-edit FAIL claim and no separate visible-prose run.
+- Rationale: REV6 closes the demonstrated comment-only surface without changing the documented public-pipeline criterion.
 
 ## Constant-true declaration (r5-2)
 

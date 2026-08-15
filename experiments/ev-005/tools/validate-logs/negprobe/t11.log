@@ -12,5 +12,5 @@ CHECK a08 PASS acceptance grammar and refusal list have one source or an aligned
 CHECK a09 PASS focused checker output-contract regression suite passes
 CHECK a10 PASS missing prefix remains on stdout
 CHECK a11 PASS documented machine-row shapes remain on stdout
-RUN t11 negprobe exit=1 dur=10s
+RUN t11 negprobe exit=1 dur=11s
 NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

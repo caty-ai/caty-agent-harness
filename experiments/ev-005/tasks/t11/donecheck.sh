@@ -30,6 +30,29 @@ run_check() {
   fi
 }
 
+run_fixture_prediction() {
+  local check_id=$1
+  local pass_msg=$2
+  local fail_msg=$3
+  local fixture=$4
+  local name=$5
+  local expected=$6
+  local fragment=$7
+  local source="$FIXTURES/$fixture"
+  local prepared="$TMP_ROOT/$fixture"
+
+  if [ ! -f "$source" ]; then
+    fail_check "$check_id" "missing bundled fixture $fixture"
+    return
+  fi
+  if ! cp "$source" "$prepared" || ! chmod 600 "$prepared"; then
+    fail_check "$check_id" "could not prepare bundled fixture $fixture"
+    return
+  fi
+  run_check "$check_id" "$pass_msg" "$fail_msg" \
+    run_prediction "$name" "$prepared" "$expected" "$fragment"
+}
+
 run_isolated() (
   local env_root rc
   env_root=$(mktemp -d "$TMP_ROOT/isolation.XXXXXX") || return 1
@@ -225,34 +248,16 @@ check_stdout_rows() {
       "$TMP_ROOT/stdout-rows.err"
 }
 
-[ -d "$FIXTURES" ] || {
-  fail_check a01 'bundled fixtures are missing'
-  exit 1
-}
-
-for fixture in valid.env malformed.env multiline.env refused.env; do
-  [ -f "$FIXTURES/$fixture" ] || {
-    fail_check a01 "bundled fixture $fixture is missing"
-    exit 1
-  }
-done
-
 cat >"$TMP_ROOT/recorder" <<'EOF'
 #!/bin/bash
 printf 'ran\n'
 EOF
 chmod +x "$TMP_ROOT/recorder"
 
-cp "$FIXTURES/valid.env" "$TMP_ROOT/valid.env"
-cp "$FIXTURES/malformed.env" "$TMP_ROOT/malformed.env"
-cp "$FIXTURES/multiline.env" "$TMP_ROOT/multiline.env"
-cp "$FIXTURES/refused.env" "$TMP_ROOT/refused.env"
 printf 'GOOD=left\nBROKEN=right\0tail\n' >"$TMP_ROOT/nul.env"
 printf 'GOOD=value\n' >"$TMP_ROOT/symlink-target.env"
 ln -s "$TMP_ROOT/symlink-target.env" "$TMP_ROOT/symlink.env"
-chmod 600 "$TMP_ROOT/valid.env" "$TMP_ROOT/malformed.env" \
-  "$TMP_ROOT/multiline.env" "$TMP_ROOT/refused.env" "$TMP_ROOT/nul.env" \
-  "$TMP_ROOT/symlink-target.env"
+chmod 600 "$TMP_ROOT/nul.env" "$TMP_ROOT/symlink-target.env"
 
 run_check a01 'targeted reject/accept regression test passes' \
   'targeted reject/accept regression test is missing or fails' \
@@ -260,21 +265,21 @@ run_check a01 'targeted reject/accept regression test passes' \
 run_check a02 'symlink refusal is predicted with an advisory' \
   'symlink refusal is not predicted with an advisory' \
   run_prediction symlink "$TMP_ROOT/symlink.env" reject 'symlink'
-run_check a03 'indented assignment is accepted and stays clean' \
+run_fixture_prediction a03 'indented assignment is accepted and stays clean' \
   'indented assignment is rejected or diagnosed' \
-  run_prediction valid "$TMP_ROOT/valid.env" accept ''
-run_check a04 'malformed assignment is rejected and predicted' \
+  valid.env valid accept ''
+run_fixture_prediction a04 'malformed assignment is rejected and predicted' \
   'malformed assignment is not rejected and predicted' \
-  run_prediction malformed "$TMP_ROOT/malformed.env" reject 'KEY=VALUE assignment'
-run_check a05 'multi-line value is rejected and predicted' \
+  malformed.env malformed reject 'KEY=VALUE assignment'
+run_fixture_prediction a05 'multi-line value is rejected and predicted' \
   'multi-line value is not rejected and predicted' \
-  run_prediction multiline "$TMP_ROOT/multiline.env" reject 'KEY=VALUE assignment'
+  multiline.env multiline reject 'KEY=VALUE assignment'
 run_check a06 'embedded NUL is rejected and predicted' \
   'embedded NUL is not rejected and predicted' \
   run_prediction nul "$TMP_ROOT/nul.env" reject 'embedded NUL byte'
-run_check a07 'interpreter-control name is rejected and predicted' \
+run_fixture_prediction a07 'interpreter-control name is rejected and predicted' \
   'interpreter-control name is not rejected and predicted' \
-  run_prediction refused "$TMP_ROOT/refused.env" reject 'interpreter-control name BASH_ENV'
+  refused.env refused reject 'interpreter-control name BASH_ENV'
 run_check a08 'acceptance grammar and refusal list have one source or an aligned generated copy' \
   'acceptance grammar and refusal list can drift across production files' \
   check_single_source

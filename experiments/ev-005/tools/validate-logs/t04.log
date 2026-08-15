@@ -68,7 +68,7 @@ CHECK a06 PASS condition 2 line remains unchanged
 CHECK a07 PASS trial-enqueue T2 isolation string remains unchanged
 CHECK a08 PASS adoption-wiring T2 row remains unchanged
 CHECK a09 PASS no additional private-reference wording was introduced
-RUN t04 fix 2 exit=0 dur=0s
+RUN t04 fix 2 exit=0 dur=1s
 CHECK a01 PASS public pipeline introduction is present
 CHECK a02 PASS linked public repository line matches the required target
 CHECK a03 PASS qualifying trials are routed through that pipeline
@@ -88,7 +88,7 @@ CHECK a06 PASS condition 2 line remains unchanged
 CHECK a07 PASS trial-enqueue T2 isolation string remains unchanged
 CHECK a08 PASS adoption-wiring T2 row remains unchanged
 CHECK a09 PASS no additional private-reference wording was introduced
-RUN t04 fix 4 exit=0 dur=0s
+RUN t04 fix 4 exit=0 dur=1s
 CHECK a01 PASS public pipeline introduction is present
 CHECK a02 PASS linked public repository line matches the required target
 CHECK a03 PASS qualifying trials are routed through that pipeline

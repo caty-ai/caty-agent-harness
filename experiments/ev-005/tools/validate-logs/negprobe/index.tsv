@@ -1,8 +1,8 @@
 task	route	expected_result	log_path	summary	expected_fails
-t01	a	unexpected-pass	tools/validate-logs/negprobe/t01.log	Append missing needles as HTML comments to four docs; make test still passes on pre tree.	
-t02	a	unexpected-pass	tools/validate-logs/negprobe/t02.log	Append README/agent-guide surface strings as comments without changing behavior.	
+t01	a	expected-fail	tools/validate-logs/negprobe/t01.log	Append missing needles as HTML comments to four docs; make test still passes on pre tree.	a01,a02,a03,a04,a05,a06,a07,a08,a09,a10,a11,a12,a13,a14,a16,a17
+t02	a	expected-fail	tools/validate-logs/negprobe/t02.log	Append README/agent-guide surface strings as comments without changing behavior.	a01,a02,a03,a04,a05,a06,a07,a08,a09,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23,a24,a25
 t03	a	expected-fail	tools/validate-logs/negprobe/t03.log	Append AUTH none declaration comment to review-labels workflow.	a01
-t04	a	unexpected-pass	tools/validate-logs/negprobe/t04.log	Append x-collector/pipeline HTML comment to docs/trial-isolation.md.	
+t04	a	expected-fail	tools/validate-logs/negprobe/t04.log	Append x-collector/pipeline HTML comment to docs/trial-isolation.md.	a01,a02,a03
 t05	a	expected-fail	tools/validate-logs/negprobe/t05.log	Append positive-only needles across example/docs/install files while forbidden legacy strings remain.	a06,a07,a08,a09,a18,a19,a22,a23,a27,a30,a31,a33,a37
 t06	a	expected-fail	tools/validate-logs/negprobe/t06.log	Append public-flow and historical-record needles while forbidden private wording remains.	a03,a04,a07,a08,a11,a12,a15,a27,a28,a29
 t07	a	expected-fail	tools/validate-logs/negprobe/t07.log	Append public-name strings as comments while retired strings remain in place.	a02,a04,a06,a08,a10,a12,a14,a16,a18,a20,a22,a24,a26,a28,a30,a32,a34,a36,a37

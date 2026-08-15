@@ -1,0 +1,19 @@
+== setup-probe t29 repo=/Users/shojikumaru/claude-workspace/family-os-caty pre=d221bd8f46f241f66e26d9c7aa31a667aa17ec94 timeout_s=120 fixtures=omitted ==
+CHECK a01 FAIL missing bundled structural probe .ev005-fixtures/growth_model_probe.py
+CHECK a02 FAIL missing bundled structural probe .ev005-fixtures/growth_model_probe.py
+CHECK a03 FAIL missing bundled structural probe .ev005-fixtures/growth_model_probe.py
+CHECK a04 FAIL missing bundled structural probe .ev005-fixtures/growth_model_probe.py
+CHECK a05 FAIL missing bundled structural probe .ev005-fixtures/growth_model_probe.py
+CHECK a06 FAIL missing bundled structural probe .ev005-fixtures/growth_model_probe.py
+CHECK a07 FAIL missing bundled structural probe .ev005-fixtures/growth_model_probe.py
+CHECK a08 FAIL missing bundled structural probe .ev005-fixtures/growth_model_probe.py
+CHECK a09 FAIL missing bundled structural probe .ev005-fixtures/growth_model_probe.py
+CHECK a10 FAIL missing bundled structural probe .ev005-fixtures/growth_model_probe.py
+CHECK a11 PASS generated repository content is current
+CHECK a12 PASS publication label, denylist, and SVG scans pass
+CHECK a13 FAIL missing bundled structural probe .ev005-fixtures/growth_model_probe.py
+RUN t29 setup-probe exit=1 dur=0s timeout=false
+DIRTY_TREE clean
+CHECK_COVERAGE expected=a01,a02,a03,a04,a05,a06,a07,a08,a09,a10,a11,a12,a13 observed=a01,a02,a03,a04,a05,a06,a07,a08,a09,a10,a11,a12,a13 missing=none duplicate=none unexpected=none verdict=PASS
+DEPENDENT_FAILS expected=a01,a02,a03,a04,a05,a06,a07,a08,a09,a10,a13 verdict=PASS
+SETUP_PROBE_RESULT PASS

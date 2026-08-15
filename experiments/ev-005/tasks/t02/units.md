@@ -52,13 +52,19 @@ MOOT: 0
 - Timeout remains the default 120 seconds because the gate performs bounded
   fixed-string checks only and executes no repository code.
 
+## REV6 validation evidence (r3-4)
+
+- Fresh 5+5 history-zero validation: pre exit/duration pairs were `1/1s` five times; fix pairs were `0/1s`, `0/0s`, `0/1s`, `0/1s`, `0/1s`. `VERDICT PASS`, no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/t02.log`.
+
 ## Negative validity probe (r5-1)
 
 - Minimal non-solution edit: Append HTML comments containing the asserted platform, badge, and demo-command strings to `README.md`, `README.ja.md`, `README.zh.md`, `README.th.md`, and `docs/agent-guide.md`, without changing rendered text or behavior.
-- Route: `a (UNEXPECTED_PASS blocker)`
-- Expected result: No trustworthy failing IDs to cite: the strongest surface cheat is expected to `UNEXPECTED_PASS`.
-- Evidence status: `UNEXPECTED_PASS_CONFIRMED`; failing CHECK IDs: none; `RUN t02 negprobe exit=0 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t02.log`.
-- Rationale: A gamer would try comment-only prose stuffing first, and the present gate appears unable to reject it cleanly. This is an honest r5-1 blocker, not a route-(a) FAIL record.
+- Route: `a`.
+- Expected and measured result after REV6: `a01`–`a25` FAIL because the injected strings occur only inside HTML comments.
+- Evidence status: REV5 recorded `UNEXPECTED_PASS_CONFIRMED` (`exit=0`, `dur=0s`); the fresh REV6 run records `EXPECTED_FAIL_CONFIRMED` with all 25 IDs (`exit=1`, `dur=0s`, no `DIRTY_TREE`) in `experiments/ev-005/tools/validate-logs/negprobe/t02.log`.
+- REV6 r4-1-style tightening: every fixed-string and co-presence assertion now matches visible content after non-greedy, multiline HTML-comment stripping, with all needles and IDs unchanged.
+- Route-b visible-prose record: Visibly inserting the asserted support, badge, and walkthrough content is indistinguishable from doing the documentation work itself, so there is no honest superficial-edit FAIL claim and no separate visible-prose run.
+- Rationale: REV6 rejects comment-only stuffing while preserving visible documentation as the intended completion surface.
 
 ## Constant-true declaration (r5-2)
 

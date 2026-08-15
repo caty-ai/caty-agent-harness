@@ -46,13 +46,19 @@ MOOT: 3
 - Timeout is 1800 seconds because the source-required full `make test` suite
   exceeded 120, 300, and 600 seconds in history-zero admission replicas.
 
+## REV6 validation evidence (r3-4)
+
+- Fresh 5+5 history-zero validation: pre exit/duration pairs were `1/684s`, `1/682s`, `1/695s`, `1/689s`, `1/684s`; fix pairs were `0/678s`, `0/689s`, `0/694s`, `0/716s`, `0/691s`. `VERDICT PASS`, no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/t01.log`.
+
 ## Negative validity probe (r5-1)
 
 - Minimal non-solution edit: Append one HTML comment containing each missing assertion needle to `docs/engineering.md`, `docs/reference.md`, `docs/engineering.ja.md`, and `docs/reference.ja.md`, leaving the rendered prose and normative source unchanged.
-- Route: `a (UNEXPECTED_PASS blocker)`
-- Expected result: No trustworthy failing IDs to cite: the strongest surface cheat is expected, and may already be observed, to produce `UNEXPECTED_PASS`.
-- Evidence status: `UNEXPECTED_PASS_CONFIRMED`; failing CHECK IDs: none; `RUN t01 negprobe exit=0 dur=668s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t01.log`.
-- Rationale: The current gate is vulnerable to comment-only needle injection across all four asserted docs, so recording a FAIL without fresh contrary evidence would be dishonest.
+- Route: `a`.
+- Expected and measured result after REV6: `a01`–`a14`, `a16`, and `a17` FAIL because the injected needles occur only inside HTML comments.
+- Evidence status: REV5 recorded `UNEXPECTED_PASS_CONFIRMED` (`exit=0`, `dur=668s`); the fresh REV6 run records `EXPECTED_FAIL_CONFIRMED` with the expected IDs (`exit=1`, `dur=687s`, no `DIRTY_TREE`) in `experiments/ev-005/tools/validate-logs/negprobe/t01.log`.
+- REV6 r4-1-style tightening: every documentation needle is now matched against visible content after non-greedy, multiline HTML-comment stripping, with the needles and assertion set unchanged.
+- Route-b visible-prose record: Visibly inserting the asserted documentation content is indistinguishable from doing the documentation work itself, so there is no honest superficial-edit FAIL claim and no separate visible-prose run.
+- Rationale: REV6 closes the demonstrated comment-only surface while retaining visible documentation prose as the intended satisfaction path.
 
 ## Constant-true declaration (r5-2)
 

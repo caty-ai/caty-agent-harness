@@ -43,13 +43,21 @@ Needle calibration and solvability:
 - Timeout remains the default 120 seconds; both named repository checks are
   local and the structural probe is read-only.
 
+## REV6 validation evidence (r3-4)
+
+- Fresh 5+5 history-zero validation: pre exit/duration pairs were `1/1s`, `1/0s`, `1/0s`, `1/0s`, `1/1s`; fix pairs were `0/1s`, `0/1s`, `0/1s`, `0/0s`, `0/0s`. `VERDICT PASS`, no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/t29.log`.
+
 ## Negative validity probe (r5-1)
 
 - Minimal non-solution edit: Replace the shared growth SVG with exactly `<svg role="img"></svg>`.
 - Route: `a`
 - Expected result: `a01`-`a10` and `a13` should still FAIL.
-- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a01`, `a02`, `a03`, `a04`, `a05`, `a06`, `a07`, `a08`, `a09`, `a10`, `a13`; `RUN t29 negprobe exit=1 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t29.log`.
+- Evidence status: REV5 recorded `EXPECTED_FAIL_CONFIRMED` for `a01`–`a10` and `a13` (`exit=1`, `dur=0s`); the fresh REV6 run confirms the same failing IDs after the setup-accounting edit (`exit=1`, `dur=0s`, no `DIRTY_TREE`) in `experiments/ev-005/tools/validate-logs/negprobe/t29.log`.
 - Rationale: A tiny accessible SVG still fails the structural legend, boundary, placement, and renderer-backed checks.
+
+## Setup accounting (REV6 r5-3)
+
+- Structural-probe setup is accounted per assertion: if `growth_model_probe.py` is missing, each dependent ID (`a01`–`a10`, `a13`) emits its own explicit FAIL while independent renderer/publication checks `a11` and `a12` still run; every ID emits exactly one CHECK. A history-zero, fixtures-omitted setup probe emitted `a01`–`a13` exactly once, exited 1 in 0s, left a clean tree, and recorded `SETUP_PROBE_RESULT PASS` in `experiments/ev-005/tools/validate-logs/setup-probe/t29.log`.
 
 ## Constant-true declaration (r5-2)
 

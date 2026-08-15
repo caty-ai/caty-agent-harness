@@ -49,16 +49,24 @@ Needle calibration and solvability:
   explicitly requires the complete shell suite and a local fix-snapshot sanity
   run exceeded the default budget; that local run was then terminated to avoid
   resource contention once the escalation evidence was established. The
-  syntax sweep passed separately in under one second. The serialized admission
-  validator will provide the authoritative full-suite duration.
+  syntax sweep passed separately in under one second. The fresh serialized
+  REV6 validation below provides the authoritative full-suite durations.
+
+## REV6 validation evidence (r3-4)
+
+- Fresh 5+5 history-zero validation: pre exit/duration pairs were `1/2s`, `1/2s`, `1/2s`, `1/1s`, `1/2s`; fix pairs were `0/671s`, `0/667s`, `0/664s`, `0/666s`, `0/664s`. `VERDICT PASS`, no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/t30.log`.
 
 ## Negative validity probe (r5-1)
 
 - Minimal non-solution edit: Add a fake `Makefile` with no-op `test` and `lint` targets while leaving the workflow definitions unchanged.
 - Route: `a`
 - Expected result: `a03`-`a08` should still FAIL.
-- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a03`, `a04`, `a05`, `a06`, `a07`, `a08`; `RUN t30 negprobe exit=1 dur=2s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t30.log`.
+- Evidence status: REV5 recorded `EXPECTED_FAIL_CONFIRMED` for `a03`–`a08` (`exit=1`, `dur=2s`); the fresh REV6 run confirms the same failing IDs after the setup-accounting edit (`exit=1`, `dur=2s`, no `DIRTY_TREE`) in `experiments/ev-005/tools/validate-logs/negprobe/t30.log`.
 - Rationale: Stub targets do not satisfy the workflow-shape and gate-authority checks behind the remaining assertions.
+
+## Setup accounting (REV6 r5-3)
+
+- Workflow-probe setup is accounted per assertion: if `workflow_probe.py` is missing, each dependent ID (`a03`–`a08`) emits its own explicit FAIL while independent `make test`/`make lint` checks `a01` and `a02` still run; every ID emits exactly one CHECK. A history-zero, fixtures-omitted setup probe emitted `a01`–`a08` exactly once, exited 1 in 2s, left a clean tree, and recorded `SETUP_PROBE_RESULT PASS` in `experiments/ev-005/tools/validate-logs/setup-probe/t30.log`.
 
 ## Constant-true declaration (r5-2)
 

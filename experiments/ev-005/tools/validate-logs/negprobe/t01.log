@@ -1,23 +1,23 @@
-== negprobe t01 route=a expected=unexpected-pass repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=e36b3f9070a89bc1cb622dcb45d7c1a012b98386 timeout_s=1800 ==
+== negprobe t01 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=e36b3f9070a89bc1cb622dcb45d7c1a012b98386 timeout_s=1800 ==
 EDIT Append missing needles as HTML comments to four docs; make test still passes on pre tree.
-EXPECT_FAILS none-recorded
-CHECK a01 PASS engineering doc says the hook outputs are producers only
-CHECK a02 PASS engineering doc says the consumer must be scheduled
-CHECK a03 PASS engineering doc records the schedule window
-CHECK a04 PASS engineering doc records the LaunchAgent scheduler surface
-CHECK a05 PASS engineering doc records the self-marking caveat
-CHECK a06 PASS engineering doc points to the normative setup procedure
-CHECK a07 PASS reference doc names the intake ledger
-CHECK a08 PASS reference doc states the archive semantics
-CHECK a09 PASS reference doc points to the normative setup procedure
-CHECK a10 PASS Japanese engineering doc says the hook outputs are producers only
-CHECK a11 PASS Japanese engineering doc says the consumer must be scheduled
-CHECK a12 PASS Japanese engineering doc records the schedule window
-CHECK a13 PASS Japanese engineering doc records the LaunchAgent scheduler surface
-CHECK a14 PASS Japanese engineering doc records the self-marking caveat
+EXPECT_FAILS a01,a02,a03,a04,a05,a06,a07,a08,a09,a10,a11,a12,a13,a14,a16,a17
+CHECK a01 FAIL engineering doc says the hook outputs are producers only
+CHECK a02 FAIL engineering doc says the consumer must be scheduled
+CHECK a03 FAIL engineering doc records the schedule window
+CHECK a04 FAIL engineering doc records the LaunchAgent scheduler surface
+CHECK a05 FAIL engineering doc records the self-marking caveat
+CHECK a06 FAIL engineering doc points to the normative setup procedure
+CHECK a07 FAIL reference doc names the intake ledger
+CHECK a08 FAIL reference doc states the archive semantics
+CHECK a09 FAIL reference doc points to the normative setup procedure
+CHECK a10 FAIL Japanese engineering doc says the hook outputs are producers only
+CHECK a11 FAIL Japanese engineering doc says the consumer must be scheduled
+CHECK a12 FAIL Japanese engineering doc records the schedule window
+CHECK a13 FAIL Japanese engineering doc records the LaunchAgent scheduler surface
+CHECK a14 FAIL Japanese engineering doc records the self-marking caveat
 CHECK a15 PASS Japanese engineering doc points to the normative setup procedure
-CHECK a16 PASS Japanese reference doc names the intake ledger
-CHECK a17 PASS Japanese reference doc states the archive semantics
+CHECK a16 FAIL Japanese reference doc names the intake ledger
+CHECK a17 FAIL Japanese reference doc states the archive semantics
 CHECK a18 PASS Japanese reference doc points to the normative setup procedure
 CHECK a19 PASS source install doc states the consumer requirement
 CHECK a20 PASS source install doc states the schedule window
@@ -26,5 +26,5 @@ CHECK a22 PASS source install doc states the self-marking caveat
 CHECK a23 PASS source install doc states the ledger claim
 CHECK a24 PASS source install doc states the archive semantics
 CHECK a25 PASS full repository test suite passes
-RUN t01 negprobe exit=0 dur=668s
-NEGPROBE_RESULT UNEXPECTED_PASS_CONFIRMED
+RUN t01 negprobe exit=1 dur=687s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

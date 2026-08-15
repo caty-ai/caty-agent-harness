@@ -141,15 +141,15 @@ def task_paths(root: pathlib.Path, *parts: str) -> pathlib.Path:
 TASK_METADATA = {
     "t01": {
         "route": "a",
-        "expected_result": "unexpected-pass",
+        "expected_result": "expected-fail",
         "summary": "Append missing needles as HTML comments to four docs; make test still passes on pre tree.",
-        "expected_fails": "",
+        "expected_fails": "a01,a02,a03,a04,a05,a06,a07,a08,a09,a10,a11,a12,a13,a14,a16,a17",
     },
     "t02": {
         "route": "a",
-        "expected_result": "unexpected-pass",
+        "expected_result": "expected-fail",
         "summary": "Append README/agent-guide surface strings as comments without changing behavior.",
-        "expected_fails": "",
+        "expected_fails": "a01,a02,a03,a04,a05,a06,a07,a08,a09,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23,a24,a25",
     },
     "t03": {
         "route": "a",
@@ -159,9 +159,9 @@ TASK_METADATA = {
     },
     "t04": {
         "route": "a",
-        "expected_result": "unexpected-pass",
+        "expected_result": "expected-fail",
         "summary": "Append x-collector/pipeline HTML comment to docs/trial-isolation.md.",
-        "expected_fails": "",
+        "expected_fails": "a01,a02,a03",
     },
     "t05": {
         "route": "a",

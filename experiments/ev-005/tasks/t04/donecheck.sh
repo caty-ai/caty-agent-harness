@@ -11,6 +11,31 @@ EXPECT_ENQUEUE_T2_LINE='626dd187bc9aa985cc034b8762a7a4307cfdca46'
 EXPECT_ADOPTION_T2_ROW='613a8d4dd851868aafafb5709d777ac30d07aebf'
 failures=0
 
+run_isolated() (
+  local env_root rc
+  env_root=$(mktemp -d "${TMPDIR:-/tmp}/ev005-t04-probe.XXXXXX") || return 1
+  trap 'rm -rf "$env_root"' EXIT HUP INT TERM
+  if ! mkdir -p "$env_root/home" "$env_root/tmp"; then
+    return 1
+  fi
+  HOME="$env_root/home" TMPDIR="$env_root/tmp" PYTHONDONTWRITEBYTECODE=1 \
+    "$@"
+  rc=$?
+  return "$rc"
+)
+
+visible_content() {
+  local file="$1"
+  run_isolated python3 -B - "$file" <<'PY'
+import re
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    text = handle.read()
+sys.stdout.write(re.sub(r'<!--.*?-->', '', text, flags=re.S))
+PY
+}
+
 pass_check() {
   echo "CHECK $1 PASS $2"
 }
@@ -37,35 +62,35 @@ line_hash_matches() {
   pattern=$2
   expected=$3
   [ -f "$path" ] || return 1
-  line=$(grep -F "$pattern" "$path" 2>/dev/null | head -n 1) || return 1
+  line=$(visible_content "$path" | grep -F "$pattern" 2>/dev/null | sed -n '1p') || return 1
   [ -n "$line" ] || return 1
   [ "$(printf '%s\n' "$line" | git hash-object --stdin 2>/dev/null)" = "$expected" ]
 }
 
 check_public_intro() {
   [ -f "$DOC_PATH" ] || return 1
-  grep -Fq "caty-ai/x-collector" "$DOC_PATH"
+  visible_content "$DOC_PATH" | grep -F "caty-ai/x-collector" >/dev/null 2>&1
 }
 
 check_link_line() {
   [ -f "$DOC_PATH" ] || return 1
-  grep -Fq "https://github.com/caty-ai/x-collector" "$DOC_PATH"
+  visible_content "$DOC_PATH" | grep -F "https://github.com/caty-ai/x-collector" >/dev/null 2>&1
 }
 
 check_go_through_pipeline() {
   [ -f "$DOC_PATH" ] || return 1
-  grep -Eiq "(through|via) (that|the|this) (collection )?pipeline" "$DOC_PATH"
+  visible_content "$DOC_PATH" | grep -Ei "(through|via) (that|the|this) (collection )?pipeline" >/dev/null 2>&1
 }
 
 check_inherit_controls() {
   [ -f "$DOC_PATH" ] || return 1
-  grep -Fq "inherit" "$DOC_PATH" &&
-  grep -Fq "collection controls" "$DOC_PATH"
+  visible_content "$DOC_PATH" | grep -F "inherit" >/dev/null 2>&1 &&
+  visible_content "$DOC_PATH" | grep -F "collection controls" >/dev/null 2>&1
 }
 
 check_condition1_still_closed() {
   [ -f "$DOC_PATH" ] || return 1
-  grep -Fq "The collection-controls prerequisite (tracked on the operator's private tracker) is closed, providing the required collection controls." "$DOC_PATH"
+  visible_content "$DOC_PATH" | grep -F "The collection-controls prerequisite (tracked on the operator's private tracker) is closed, providing the required collection controls." >/dev/null 2>&1
 }
 
 check_condition2_line() {
@@ -82,7 +107,7 @@ check_adoption_t2_row() {
 
 check_private_count() {
   [ -f "$DOC_PATH" ] || return 1
-  [ "$(grep -o 'private' "$DOC_PATH" | wc -l | tr -d ' ')" = "2" ]
+  [ "$(visible_content "$DOC_PATH" | grep -o 'private' | wc -l | tr -d ' ')" = "2" ]
 }
 
 run_check "a01" "public pipeline introduction is present" "public pipeline introduction is missing" check_public_intro

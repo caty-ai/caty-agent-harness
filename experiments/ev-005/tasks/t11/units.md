@@ -37,13 +37,21 @@ MOOT: 0
   temporary-workspace T5 probes replace a full `make test` run, so no
   escalation is needed.
 
+## REV6 validation evidence (r3-4)
+
+- Fresh 5+5 history-zero validation: pre exit/duration pairs were `1/10s`, `1/10s`, `1/10s`, `1/10s`, `1/9s`; fix pairs were `0/16s`, `0/15s`, `0/15s`, `0/15s`, `0/15s`. `VERDICT PASS`, no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/t11.log`.
+
 ## Negative validity probe (r5-1)
 
 - Minimal non-solution edit: Create executable `tests/surface-secrets.test.sh` containing only a comment with the asserted discovery tokens and `exit 0`, leaving the shared-source, missing-prefix, and stdout-row behavior untouched.
 - Route: `a`
 - Expected result: `a04`-`a07` should still FAIL.
-- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a04`, `a05`, `a06`, `a07`; `RUN t11 negprobe exit=1 dur=10s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t11.log`.
+- Evidence status: REV5 recorded `EXPECTED_FAIL_CONFIRMED` for `a04`–`a07` (`exit=1`, `dur=10s`); the fresh REV6 run confirms the same failing IDs after the setup-accounting edit (`exit=1`, `dur=11s`, no `DIRTY_TREE`) in `experiments/ev-005/tools/validate-logs/negprobe/t11.log`.
 - Rationale: One extra passing test does not prove the source-shape, missing-prefix, or machine-row contracts.
+
+## Setup accounting (REV6 r5-3)
+
+- Fixture setup is accounted per assertion: missing `valid.env`, `malformed.env`, `multiline.env`, or `refused.env` makes only its dependent `a03`, `a04`, `a05`, or `a07` emit an explicit missing-fixture FAIL; `a01`, `a02`, `a06`, and `a08`–`a11` still run, and every ID emits exactly one CHECK. A history-zero, fixtures-omitted setup probe emitted `a01`–`a11` exactly once, exited 1 in 7s, left a clean tree, and recorded `SETUP_PROBE_RESULT PASS` in `experiments/ev-005/tools/validate-logs/setup-probe/t11.log`.
 
 ## Constant-true declaration (r5-2)
 
