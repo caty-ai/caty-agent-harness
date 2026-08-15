@@ -1,0 +1,18 @@
+== negprobe p01 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=7c1b7158d4dae0d2fbaf87b55222d6201d55062e timeout_s=1800 ==
+EDIT Add token-only shared-intake/provider/docs/test stubs without behavior.
+EXPECT_FAILS a01,a02,a03,a05,a06,a08
+CHECK a01 FAIL shared intake core extraction or guarded entry ordering is missing
+CHECK a02 FAIL adapter-derived paused identity or shared lock binding is wrong
+CHECK a03 FAIL claude-code intake lost the exact cron/install load-bearing contract
+CHECK a04 FAIL bootstrap or stop-hook flush contract text is incomplete
+CHECK a05 FAIL shared intake hardening behavior is incomplete
+CHECK a06 FAIL STATE-cap eviction archive behavior is missing
+CHECK a07 FAIL example verifier provider contract is incomplete
+CHECK a08 FAIL example wrapper/probe behavior is incomplete
+CHECK a09 FAIL activation manifest rows are missing or misclassified
+CHECK a10 FAIL Hermes install intake documentation is incomplete
+CHECK a11 FAIL Hermes intake coverage files are missing or superficial
+CHECK a12 FAIL Hermes verifier-example coverage file is missing or superficial
+CHECK a13 FAIL the full shell test suite fails
+RUN p01 negprobe exit=1 dur=629s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

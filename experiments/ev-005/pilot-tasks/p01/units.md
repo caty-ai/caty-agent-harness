@@ -47,14 +47,21 @@ MOOT: 0
   behavior or the wrapper/provider/probe contract.
 - Route: `a`
 - Expected result: `a01`, `a02`, `a03`, `a05`, `a06`, and `a08` should still FAIL.
-- Evidence status: `PENDING`
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; `a01`-`a13` all failed,
+  `RUN p01 negprobe exit=1 dur=629s`, no `DIRTY-TREE`; log:
+  `experiments/ev-005/tools/validate-logs/negprobe/p01.log`.
 - Rationale: Surface-text stubs can satisfy names and prose, but they cannot make
   the guarded-entry fold, hardening behavior, wrapper/provider relocation probe,
   or full suite succeed.
 
 ## Constant-true declaration (r5-2)
 
-- Source log: pending first validation run.
+- Source log: `experiments/ev-005/tools/validate-logs/p01.log`.
+- `a13` is constant-true (PASS on all five pre runs): it is an intentional
+  invariance guard requiring the complete pre-existing shell suite to remain
+  green, not evidence of the shared-intake/provider delta.
+- All delta-bearing assertions (`a01`-`a12`) FAIL on every pre run and PASS on
+  every fix run.
 
 ## Setup accounting (REV6 r5-3)
 

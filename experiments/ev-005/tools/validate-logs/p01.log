@@ -67,3 +67,76 @@ CHECK a09 FAIL activation manifest rows are missing or misclassified
 CHECK a10 FAIL Hermes install intake documentation is incomplete
 CHECK a11 FAIL Hermes intake coverage files are missing or superficial
 CHECK a12 FAIL Hermes verifier-example coverage file is missing or superficial
+CHECK a13 PASS the full shell test suite passes
+RUN p01 pre 5 exit=1 dur=556s
+CHECK a01 PASS shared intake core and guarded adapter handoff are present
+CHECK a02 PASS paused entries preserve adapter-derived identity and zero mutation
+CHECK a03 PASS claude-code intake remains the load-bearing scheduler target
+CHECK a04 PASS bootstrap and stop-hook flush texts encode the shared lessons-only contract
+CHECK a05 PASS shared intake hardening drops oversize bullets and strips control characters
+CHECK a06 PASS STATE-cap evictions are archived and surfaced in receipts
+CHECK a07 PASS example verifier provider keeps the env-based stateless prompt contract
+CHECK a08 PASS example wrapper and probe enforce the staged-provider contract
+CHECK a09 PASS activation manifest registers the shared core and Hermes paths correctly
+CHECK a10 PASS Hermes install docs explain the flush-intake LaunchAgent wiring
+CHECK a11 PASS Hermes intake coverage is substantive and wired into pause coverage
+CHECK a12 PASS Hermes verifier example coverage is substantive
+CHECK a13 PASS the full shell test suite passes
+RUN p01 fix 1 exit=0 dur=653s
+CHECK a01 PASS shared intake core and guarded adapter handoff are present
+CHECK a02 PASS paused entries preserve adapter-derived identity and zero mutation
+CHECK a03 PASS claude-code intake remains the load-bearing scheduler target
+CHECK a04 PASS bootstrap and stop-hook flush texts encode the shared lessons-only contract
+CHECK a05 PASS shared intake hardening drops oversize bullets and strips control characters
+CHECK a06 PASS STATE-cap evictions are archived and surfaced in receipts
+CHECK a07 PASS example verifier provider keeps the env-based stateless prompt contract
+CHECK a08 PASS example wrapper and probe enforce the staged-provider contract
+CHECK a09 PASS activation manifest registers the shared core and Hermes paths correctly
+CHECK a10 PASS Hermes install docs explain the flush-intake LaunchAgent wiring
+CHECK a11 PASS Hermes intake coverage is substantive and wired into pause coverage
+CHECK a12 PASS Hermes verifier example coverage is substantive
+CHECK a13 PASS the full shell test suite passes
+RUN p01 fix 2 exit=0 dur=640s
+CHECK a01 PASS shared intake core and guarded adapter handoff are present
+CHECK a02 PASS paused entries preserve adapter-derived identity and zero mutation
+CHECK a03 PASS claude-code intake remains the load-bearing scheduler target
+CHECK a04 PASS bootstrap and stop-hook flush texts encode the shared lessons-only contract
+CHECK a05 PASS shared intake hardening drops oversize bullets and strips control characters
+CHECK a06 PASS STATE-cap evictions are archived and surfaced in receipts
+CHECK a07 PASS example verifier provider keeps the env-based stateless prompt contract
+CHECK a08 PASS example wrapper and probe enforce the staged-provider contract
+CHECK a09 PASS activation manifest registers the shared core and Hermes paths correctly
+CHECK a10 PASS Hermes install docs explain the flush-intake LaunchAgent wiring
+CHECK a11 PASS Hermes intake coverage is substantive and wired into pause coverage
+CHECK a12 PASS Hermes verifier example coverage is substantive
+CHECK a13 PASS the full shell test suite passes
+RUN p01 fix 3 exit=0 dur=653s
+CHECK a01 PASS shared intake core and guarded adapter handoff are present
+CHECK a02 PASS paused entries preserve adapter-derived identity and zero mutation
+CHECK a03 PASS claude-code intake remains the load-bearing scheduler target
+CHECK a04 PASS bootstrap and stop-hook flush texts encode the shared lessons-only contract
+CHECK a05 PASS shared intake hardening drops oversize bullets and strips control characters
+CHECK a06 PASS STATE-cap evictions are archived and surfaced in receipts
+CHECK a07 PASS example verifier provider keeps the env-based stateless prompt contract
+CHECK a08 PASS example wrapper and probe enforce the staged-provider contract
+CHECK a09 PASS activation manifest registers the shared core and Hermes paths correctly
+CHECK a10 PASS Hermes install docs explain the flush-intake LaunchAgent wiring
+CHECK a11 PASS Hermes intake coverage is substantive and wired into pause coverage
+CHECK a12 PASS Hermes verifier example coverage is substantive
+CHECK a13 PASS the full shell test suite passes
+RUN p01 fix 4 exit=0 dur=655s
+CHECK a01 PASS shared intake core and guarded adapter handoff are present
+CHECK a02 PASS paused entries preserve adapter-derived identity and zero mutation
+CHECK a03 PASS claude-code intake remains the load-bearing scheduler target
+CHECK a04 PASS bootstrap and stop-hook flush texts encode the shared lessons-only contract
+CHECK a05 PASS shared intake hardening drops oversize bullets and strips control characters
+CHECK a06 PASS STATE-cap evictions are archived and surfaced in receipts
+CHECK a07 PASS example verifier provider keeps the env-based stateless prompt contract
+CHECK a08 PASS example wrapper and probe enforce the staged-provider contract
+CHECK a09 PASS activation manifest registers the shared core and Hermes paths correctly
+CHECK a10 PASS Hermes install docs explain the flush-intake LaunchAgent wiring
+CHECK a11 PASS Hermes intake coverage is substantive and wired into pause coverage
+CHECK a12 PASS Hermes verifier example coverage is substantive
+CHECK a13 PASS the full shell test suite passes
+RUN p01 fix 5 exit=0 dur=633s
+VERDICT p01 PASS
