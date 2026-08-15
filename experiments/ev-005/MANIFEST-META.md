@@ -13,3 +13,20 @@
 Exit 0 means every sealed file matches its recorded digest and no file was added to
 or removed from the sealed scope. Any post-sealing change requires the §10
 amendment procedure; the amendment note records the new manifest digest.
+
+## Seal history
+
+Each seal keeps its own timestamp proof; superseded seals are not deleted, because the point of
+timestamping is to preserve what was committed to *before* a change.
+
+| seal | tag | commit | manifest digest | proof |
+| --- | --- | --- | --- | --- |
+| v1 (original) | `ev-005-sealed-v1` | `53d2795` | `c6a16e89…` | `seals/MANIFEST-v1.sha256.ots` over `seals/MANIFEST-v1.sha256` — confirmed in the Bitcoin blockchain (tx `ace1195d…`, awaiting depth) |
+| v2 (after amendment A-1) | `ev-005-sealed-v2` | `fb15eb4` | `46ae2491…` | `MANIFEST.sha256.ots` over the current `MANIFEST.sha256` |
+
+Verify either one:
+
+    ots verify experiments/ev-005/MANIFEST.sha256.ots
+    ots verify experiments/ev-005/seals/MANIFEST-v1.sha256.ots -f experiments/ev-005/seals/MANIFEST-v1.sha256
+
+Upgrade a proof once its calendars attest: `ots upgrade <proof>`.
