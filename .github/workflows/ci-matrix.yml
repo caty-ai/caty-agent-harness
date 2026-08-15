@@ -220,8 +220,6 @@ jobs:
           set -euo pipefail
           useradd --create-home --shell /bin/bash ciuser
           chown -R ciuser:ciuser "$GITHUB_WORKSPACE"
-          touch "$GITHUB_STEP_SUMMARY"
-          chown ciuser:ciuser "$GITHUB_STEP_SUMMARY"
 
       - name: Assert axes and run tests
         shell: bash
@@ -360,6 +358,9 @@ jobs:
             make lint
           fi
 
+          # GITHUB_STEP_SUMMARY is a fresh root-owned file per step, so the (possibly
+          # non-root) cell script writes the fingerprint to a temp file and the step
+          # shell appends it afterwards (dry-run r6: ciuser append = Permission denied).
           {
             echo "### Axis fingerprint: $CELL_ID"
             echo
@@ -372,7 +373,7 @@ jobs:
             echo "| git | \`$git_version\` |"
             echo "| suites | \`$n / $expected\` |"
             echo "| PASS/ok lines | \`$pass_count\` |"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } > /tmp/caty-fingerprint-"$CELL_ID".md
           BASH
           chmod 755 "$cell_script"
 
@@ -382,3 +383,4 @@ jobs:
           else
             bash "$cell_script"
           fi
+          cat /tmp/caty-fingerprint-"$CELL_ID".md >> "$GITHUB_STEP_SUMMARY"
