@@ -165,19 +165,39 @@ jobs:
           fi
           echo "$(brew --prefix bash)/bin" >> "$GITHUB_PATH"
 
-      # Semantic cell: disable globasciiranges in every non-interactive bash via BASH_ENV.
-      # A PATH shim exec'ing `bash +O globasciiranges` breaks GHA step shells — bash requires
-      # GNU long options BEFORE short options, so `+O ... --noprofile` is rejected with
-      # "--: invalid option" (observed in dry-run 31836960133). BASH_ENV reaches the PATH
-      # bash AND every child bash the suites spawn; the bracket probe (expected: match)
-      # fail-closed-verifies that the shopt actually flipped.
-      - name: Enable bash-3.2 range semantics via BASH_ENV
+      # Semantic cell: two propagation channels for bash-3.2 range semantics, because the
+      # suites cross env-sanitization boundaries — task-runner donechecks run under `env -i`
+      # with a pinned ABSOLUTE interpreter path resolved from PATH at workspace init
+      # (scripts/task-runner.sh:950-965, scripts/lib-donecheck.sh caty_load_interpreters):
+      #  1) PATH shim: captured by that PATH resolution, so it survives `env -i` re-exec by
+      #     absolute path. The shim reorders GNU long options BEFORE +O — bash rejects
+      #     `+O ... --noprofile` with "--: invalid option" (dry-run r1, run 31836960133).
+      #  2) BASH_ENV: reaches env-inheriting bash children invoked by absolute path.
+      # The bracket probes (ordinary + env -i boundary, expected: match) fail closed if
+      # either channel stops working.
+      - name: Enable bash-3.2 range semantics (PATH shim + BASH_ENV)
         if: matrix.setup == 'globascii-shim'
         shell: bash
         run: |
           set -euo pipefail
+          shim_dir="$RUNNER_TEMP/globascii-shim"
+          mkdir -p "$shim_dir"
+          cat > "$shim_dir/bash" <<'SHIM'
+          #!/bin/sh
+          longs=
+          while [ $# -gt 0 ]; do
+            case "$1" in
+              --noprofile|--norc|--posix|--version|--help|--login|--noediting|--verbose)
+                longs="$longs $1"; shift ;;
+              *) break ;;
+            esac
+          done
+          exec /usr/bin/bash $longs +O globasciiranges "$@"
+          SHIM
+          chmod 755 "$shim_dir/bash"
           printf '%s\n' 'shopt -u globasciiranges' > "$RUNNER_TEMP/disable-globasciiranges.sh"
           echo "BASH_ENV=$RUNNER_TEMP/disable-globasciiranges.sh" >> "$GITHUB_ENV"
+          echo "$shim_dir" >> "$GITHUB_PATH"
 
       - name: Preflight git-2.34 dependencies
         if: matrix.run_as_nonroot
@@ -267,6 +287,13 @@ jobs:
           if [ "$bracket_probe" != "$GLOB_EXPECT" ]; then
             fail "bracket probe=$bracket_probe, expected $GLOB_EXPECT"
           fi
+          # Mirror the donecheck sanitization boundary: env -i, hardcoded PATH, LC_ALL
+          # forwarded, interpreter re-exec'd by the ABSOLUTE path PATH resolution yields
+          # (task-runner.sh:950-965). Expected value equals GLOB_EXPECT in every cell.
+          envi_bracket_probe=$(env -i PATH=/usr/bin:/bin LC_ALL="$LC_ALL" "$(command -v bash)" -c 'case B in [a-z]) echo match;; *) echo nomatch;; esac')
+          if [ "$envi_bracket_probe" != "$GLOB_EXPECT" ]; then
+            fail "env -i boundary bracket probe=$envi_bracket_probe, expected $GLOB_EXPECT (donecheck sanitization path)"
+          fi
 
           if [ "${SKIP_DELTA2_CASES:-0}" != 0 ]; then
             fail "SKIP_DELTA2_CASES must be unset or 0"
@@ -289,6 +316,12 @@ jobs:
             fi
           fi
 
+          # Drift tripwire: the counted loop below intentionally mirrors the Makefile's
+          # `test` recipe verbatim. If the recipe ever changes, fail loudly instead of
+          # letting the two executable contracts diverge silently.
+          if ! grep -qF 'for test_file in tests/*.test.sh; do bash "$$test_file"; done' Makefile; then
+            fail "Makefile test recipe drifted from the CI inline loop - resync both"
+          fi
           # shellcheck disable=SC2012 # Exact Makefile/CONTRIBUTING glob accounting contract.
           expected=$(ls tests/*.test.sh | wc -l | tr -d '[:space:]')
           test_log=/tmp/caty-test-"$CELL_ID".log

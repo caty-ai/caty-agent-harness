@@ -4,6 +4,8 @@
 # GitHub はリポジトリが 60 日間 inactive だと schedule を自動停止する（push で再有効化）。
 # この workflow は required check ではなく、今後も required check にしない。
 # ci-matrix.yml と検査ロジックを inline で重複させる。workflow 外スクリプトを増やさないための意図的な重複。
+# 軸プローブ（sort/bracket/env -i 境界）は各ジョブのステップ内で fail-closed に検証してから
+# レシートを書く。レシートは同一性と集計の台帳であり、プローブ結果は載せない（意図的）。
 
 name: Flake Evidence
 
@@ -85,10 +87,18 @@ jobs:
           if [ "$bracket_probe" != nomatch ]; then
             fail "bracket probe=$bracket_probe, expected nomatch"
           fi
+          envi_bracket_probe=$(env -i PATH=/usr/bin:/bin LC_ALL="$LC_ALL" "$(command -v bash)" -c 'case B in [a-z]) echo match;; *) echo nomatch;; esac')
+          if [ "$envi_bracket_probe" != nomatch ]; then
+            fail "env -i boundary bracket probe=$envi_bracket_probe, expected nomatch"
+          fi
           if [ "${SKIP_DELTA2_CASES:-0}" != 0 ]; then
             fail "SKIP_DELTA2_CASES must be unset or 0"
           fi
 
+          # shellcheck disable=SC2016 # Literal Makefile recipe text; $$ is make escaping, not expansion.
+          if ! grep -qF 'for test_file in tests/*.test.sh; do bash "$$test_file"; done' Makefile; then
+            fail "Makefile test recipe drifted from the CI inline loop - resync both"
+          fi
           # shellcheck disable=SC2012 # Exact Makefile/CONTRIBUTING glob accounting contract.
           expected=$(ls tests/*.test.sh | wc -l | tr -d '[:space:]')
           test_log=/tmp/caty-flake-ubuntu-test.log
@@ -219,10 +229,18 @@ jobs:
           if [ "$bracket_probe" != match ]; then
             fail "bracket probe=$bracket_probe, expected match"
           fi
+          envi_bracket_probe=$(env -i PATH=/usr/bin:/bin LC_ALL="$LC_ALL" "$(command -v bash)" -c 'case B in [a-z]) echo match;; *) echo nomatch;; esac')
+          if [ "$envi_bracket_probe" != match ]; then
+            fail "env -i boundary bracket probe=$envi_bracket_probe, expected match"
+          fi
           if [ "${SKIP_DELTA2_CASES:-0}" != 0 ]; then
             fail "SKIP_DELTA2_CASES must be unset or 0"
           fi
 
+          # shellcheck disable=SC2016 # Literal Makefile recipe text; $$ is make escaping, not expansion.
+          if ! grep -qF 'for test_file in tests/*.test.sh; do bash "$$test_file"; done' Makefile; then
+            fail "Makefile test recipe drifted from the CI inline loop - resync both"
+          fi
           # shellcheck disable=SC2012 # Exact Makefile/CONTRIBUTING glob accounting contract.
           expected=$(ls tests/*.test.sh | wc -l | tr -d '[:space:]')
           test_log=/tmp/caty-flake-macos-test.log
