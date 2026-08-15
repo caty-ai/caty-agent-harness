@@ -47,3 +47,17 @@ MOOT: 4
 - Timeout is 1800 seconds because U20/U21 require the full `make test` and
   `make lint` suites, which exceeded the default admission timeout in isolated
   history-zero replicas.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Append public-name assertion needles as comments to `DESIGN.md`, `DESIGN-task-runner.md`, `SYNTHESIS.md`, `SYNTHESIS-task-runner.md`, `docs/governance-rules.md`, `docs/updater-rollout.md`, `scripts/lib-wrapper-conformance.sh`, and `scripts/attest-wrapper`, leaving all retired live strings in place.
+- Route: `a`
+- Expected result: The content-absence set `a02`-`a36` plus `a37` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a02`, `a04`, `a06`, `a08`, `a10`, `a12`, `a14`, `a16`, `a18`, `a20`, `a22`, `a24`, `a26`, `a28`, `a30`, `a32`, `a34`, `a36`, `a37`; `RUN t07 negprobe exit=1 dur=664s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t07.log`.
+- Rationale: Comment-only additions do not remove the retired live strings.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t07.log`; fresh revalidation records `a38` and `a39` as constant-true, with pre FAIL x5 and fix PASS x5.
+- a38 — invariance guard: The full repository test suite already passes on the pre tree and must remain passing during this rename-only cleanup; fresh first-pre-leg evidence records `CHECK a38 PASS` with `RUN pre1 exit=1 dur=668s`.
+- a39 — invariance guard: The tracked-shell syntax / repository lint already passes on the pre tree and must remain passing during this rename-only cleanup; fresh first-pre-leg evidence records `CHECK a39 PASS` on the same `RUN pre1`.

@@ -1,0 +1,25 @@
+== negprobe t13 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/fma-public pre=8676d8385bc08e1a3e2604fe1ff24b3fa35ba1f4 timeout_s=120 ==
+EDIT Replace leading pipe on English duplicated family-table rows only.
+EXPECT_FAILS a10,a11,a12,a18,a19,a20
+CHECK a01 PASS English family-section prose remains
+CHECK a02 PASS Japanese family-section prose remains
+CHECK a03 PASS Chinese family-section prose remains
+CHECK a04 PASS Thai family-section prose remains
+CHECK a05 PASS English authority note remains
+CHECK a06 PASS Japanese authority note remains
+CHECK a07 PASS Chinese authority note remains
+CHECK a08 PASS Thai authority note remains
+CHECK a09 PASS English hand-written module table is absent
+CHECK a10 FAIL Japanese hand-written family section still has a table
+CHECK a11 FAIL Chinese hand-written family section still has a table
+CHECK a12 FAIL Thai hand-written family section still has a table
+CHECK a13 PASS English generated footer is unchanged
+CHECK a14 PASS Japanese generated footer is unchanged
+CHECK a15 PASS Chinese generated footer is unchanged
+CHECK a16 PASS Thai generated footer is unchanged
+CHECK a17 PASS English README has one family module table
+CHECK a18 FAIL Japanese README does not have exactly one family module table
+CHECK a19 FAIL Chinese README does not have exactly one family module table
+CHECK a20 FAIL Thai README does not have exactly one family module table
+RUN t13 negprobe exit=1 dur=0s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

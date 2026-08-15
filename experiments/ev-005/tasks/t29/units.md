@@ -42,3 +42,17 @@ Needle calibration and solvability:
   claim-id is pinned.
 - Timeout remains the default 120 seconds; both named repository checks are
   local and the structural probe is read-only.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Replace the shared growth SVG with exactly `<svg role="img"></svg>`.
+- Route: `a`
+- Expected result: `a01`-`a10` and `a13` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a01`, `a02`, `a03`, `a04`, `a05`, `a06`, `a07`, `a08`, `a09`, `a10`, `a13`; `RUN t29 negprobe exit=1 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t29.log`.
+- Rationale: A tiny accessible SVG still fails the structural legend, boundary, placement, and renderer-backed checks.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t29.log` (current pre-leg record).
+- a11 — invariance guard: The first renderer/publication-gate check already passes on the pre tree and intentionally guards that invariant.
+- a12 — invariance guard: The second renderer/publication-gate check already passes pre-fix and is an intentional guard.

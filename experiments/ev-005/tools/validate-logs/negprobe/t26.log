@@ -1,0 +1,12 @@
+== negprobe t26 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=18e897513e06e9f2e93e08920f0cdd8314472c70 timeout_s=120 ==
+EDIT Create token-only cli-conventions note.
+EXPECT_FAILS a05,a06
+CHECK a01 PASS warning house style and frozen prefix deviations are documented
+CHECK a02 PASS exit meanings and frozen exit deviations are documented
+CHECK a03 PASS machine and human output streams are documented
+CHECK a04 PASS listed surfaces and regression pins are inventoried
+CHECK a05 FAIL focused conventions test does not pin the required contracts
+bash: tests/cli-conventions.test.sh: No such file or directory
+CHECK a06 FAIL focused CLI conventions regression fails
+RUN t26 negprobe exit=1 dur=0s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

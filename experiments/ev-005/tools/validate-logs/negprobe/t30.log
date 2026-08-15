@@ -1,0 +1,13 @@
+== negprobe t30 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=18e897513e06e9f2e93e08920f0cdd8314472c70 timeout_s=1800 ==
+EDIT Create no-op Makefile test/lint targets only.
+EXPECT_FAILS a03,a04,a05,a06,a07,a08
+CHECK a01 PASS the complete repository shell suite passes
+CHECK a02 PASS all tracked shell files pass Bash syntax checking
+CHECK a03 FAIL one or more workflow files or required job names are missing or malformed
+CHECK a04 FAIL the test/lint workflow does not bind both Make targets fail-closed
+CHECK a05 FAIL the secret-scanning workflow lacks required fail-closed structure
+CHECK a06 FAIL the size workflow lacks limit or exemption enforcement
+CHECK a07 FAIL the history workflow lacks fail-closed common-ancestor checking
+CHECK a08 FAIL the risk workflow lacks roster, reapproval, or non-authoritative label structure
+RUN t30 negprobe exit=1 dur=2s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

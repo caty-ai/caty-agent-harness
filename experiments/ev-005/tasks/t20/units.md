@@ -44,3 +44,15 @@ MOOT: 0
   URL, claim title, or exact claim id.
 - Timeout remains the default 120 seconds. All checks are local structural
   parses; no links or GitHub Actions jobs are executed.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Create an empty `docs/evidence.md` while leaving the real evidence content and workflow changes absent.
+- Route: `a`
+- Expected result: `a02`-`a09` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a02`, `a03`, `a04`, `a05`, `a06`, `a07`, `a08`, `a09`; `RUN t20 negprobe exit=1 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t20.log`.
+- Rationale: Mere file existence does not satisfy the required evidence content or workflow structure.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t20.log` shows no constant-true assertions.

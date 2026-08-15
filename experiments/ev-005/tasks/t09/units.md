@@ -25,3 +25,17 @@ MOOT: 0
 - Timeout remains the default 120 seconds. The gate runs three bounded behavior
   probes and one local AST probe; every invocation receives a separate fresh
   `HOME` and `TMPDIR` and is cleaned up immediately after it completes.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Append two no-op test functions whose docstrings carry the asserted permission-probe AST tokens to `scripts/tests/test_family_hot_generate.py`, without changing the real permission logic.
+- Route: `a`
+- Expected result: `a01` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a01`; `RUN t09 negprobe exit=1 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t09.log`.
+- Rationale: AST-visible dead code cannot satisfy the live UID/GID mismatch invariant that the real probe enforces.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t09.log` (current pre-leg record).
+- a02 — invariance guard: The pre-fix permission probe already preserves the pinned UID invariant, so this PASS is a non-regression guard.
+- a03 — invariance guard: The pre-fix permission probe already preserves the pinned GID invariant, so this PASS is another deliberate guard.

@@ -36,9 +36,9 @@ CHECK a34 FAIL attest wrapper drops the retired stdout prefix
 CHECK a35 FAIL attest wrapper uses the public stderr prefix
 CHECK a36 FAIL attest wrapper drops the retired stderr prefix
 CHECK a37 FAIL no case-insensitive fable occurrence exists outside the explicit allowlist
-CHECK a38 FAIL earlier required assertions failed; command not run
-CHECK a39 FAIL earlier required assertions failed; command not run
-RUN t07 pre 1 exit=1 dur=1s
+CHECK a38 PASS full repository test suite passes on the branch-equivalent tree
+CHECK a39 PASS repository lint passes on the branch-equivalent tree
+RUN t07 pre 1 exit=1 dur=668s
 CHECK a01 FAIL design title uses the public product name
 CHECK a02 FAIL design title drops the retired working name
 CHECK a03 FAIL task-runner companion note uses the public product name
@@ -76,9 +76,9 @@ CHECK a34 FAIL attest wrapper drops the retired stdout prefix
 CHECK a35 FAIL attest wrapper uses the public stderr prefix
 CHECK a36 FAIL attest wrapper drops the retired stderr prefix
 CHECK a37 FAIL no case-insensitive fable occurrence exists outside the explicit allowlist
-CHECK a38 FAIL earlier required assertions failed; command not run
-CHECK a39 FAIL earlier required assertions failed; command not run
-RUN t07 pre 2 exit=1 dur=0s
+CHECK a38 PASS full repository test suite passes on the branch-equivalent tree
+CHECK a39 PASS repository lint passes on the branch-equivalent tree
+RUN t07 pre 2 exit=1 dur=668s
 CHECK a01 FAIL design title uses the public product name
 CHECK a02 FAIL design title drops the retired working name
 CHECK a03 FAIL task-runner companion note uses the public product name
@@ -116,9 +116,9 @@ CHECK a34 FAIL attest wrapper drops the retired stdout prefix
 CHECK a35 FAIL attest wrapper uses the public stderr prefix
 CHECK a36 FAIL attest wrapper drops the retired stderr prefix
 CHECK a37 FAIL no case-insensitive fable occurrence exists outside the explicit allowlist
-CHECK a38 FAIL earlier required assertions failed; command not run
-CHECK a39 FAIL earlier required assertions failed; command not run
-RUN t07 pre 3 exit=1 dur=0s
+CHECK a38 PASS full repository test suite passes on the branch-equivalent tree
+CHECK a39 PASS repository lint passes on the branch-equivalent tree
+RUN t07 pre 3 exit=1 dur=678s
 CHECK a01 FAIL design title uses the public product name
 CHECK a02 FAIL design title drops the retired working name
 CHECK a03 FAIL task-runner companion note uses the public product name
@@ -156,9 +156,9 @@ CHECK a34 FAIL attest wrapper drops the retired stdout prefix
 CHECK a35 FAIL attest wrapper uses the public stderr prefix
 CHECK a36 FAIL attest wrapper drops the retired stderr prefix
 CHECK a37 FAIL no case-insensitive fable occurrence exists outside the explicit allowlist
-CHECK a38 FAIL earlier required assertions failed; command not run
-CHECK a39 FAIL earlier required assertions failed; command not run
-RUN t07 pre 4 exit=1 dur=0s
+CHECK a38 PASS full repository test suite passes on the branch-equivalent tree
+CHECK a39 PASS repository lint passes on the branch-equivalent tree
+RUN t07 pre 4 exit=1 dur=663s
 CHECK a01 FAIL design title uses the public product name
 CHECK a02 FAIL design title drops the retired working name
 CHECK a03 FAIL task-runner companion note uses the public product name
@@ -196,9 +196,9 @@ CHECK a34 FAIL attest wrapper drops the retired stdout prefix
 CHECK a35 FAIL attest wrapper uses the public stderr prefix
 CHECK a36 FAIL attest wrapper drops the retired stderr prefix
 CHECK a37 FAIL no case-insensitive fable occurrence exists outside the explicit allowlist
-CHECK a38 FAIL earlier required assertions failed; command not run
-CHECK a39 FAIL earlier required assertions failed; command not run
-RUN t07 pre 5 exit=1 dur=0s
+CHECK a38 PASS full repository test suite passes on the branch-equivalent tree
+CHECK a39 PASS repository lint passes on the branch-equivalent tree
+RUN t07 pre 5 exit=1 dur=664s
 CHECK a01 PASS design title uses the public product name
 CHECK a02 PASS design title drops the retired working name
 CHECK a03 PASS task-runner companion note uses the public product name
@@ -238,7 +238,7 @@ CHECK a36 PASS attest wrapper drops the retired stderr prefix
 CHECK a37 PASS no case-insensitive fable occurrence exists outside the explicit allowlist
 CHECK a38 PASS full repository test suite passes on the branch-equivalent tree
 CHECK a39 PASS repository lint passes on the branch-equivalent tree
-RUN t07 fix 1 exit=0 dur=684s
+RUN t07 fix 1 exit=0 dur=673s
 CHECK a01 PASS design title uses the public product name
 CHECK a02 PASS design title drops the retired working name
 CHECK a03 PASS task-runner companion note uses the public product name
@@ -278,7 +278,7 @@ CHECK a36 PASS attest wrapper drops the retired stderr prefix
 CHECK a37 PASS no case-insensitive fable occurrence exists outside the explicit allowlist
 CHECK a38 PASS full repository test suite passes on the branch-equivalent tree
 CHECK a39 PASS repository lint passes on the branch-equivalent tree
-RUN t07 fix 2 exit=0 dur=692s
+RUN t07 fix 2 exit=0 dur=669s
 CHECK a01 PASS design title uses the public product name
 CHECK a02 PASS design title drops the retired working name
 CHECK a03 PASS task-runner companion note uses the public product name
@@ -318,7 +318,7 @@ CHECK a36 PASS attest wrapper drops the retired stderr prefix
 CHECK a37 PASS no case-insensitive fable occurrence exists outside the explicit allowlist
 CHECK a38 PASS full repository test suite passes on the branch-equivalent tree
 CHECK a39 PASS repository lint passes on the branch-equivalent tree
-RUN t07 fix 3 exit=0 dur=689s
+RUN t07 fix 3 exit=0 dur=668s
 CHECK a01 PASS design title uses the public product name
 CHECK a02 PASS design title drops the retired working name
 CHECK a03 PASS task-runner companion note uses the public product name
@@ -358,7 +358,7 @@ CHECK a36 PASS attest wrapper drops the retired stderr prefix
 CHECK a37 PASS no case-insensitive fable occurrence exists outside the explicit allowlist
 CHECK a38 PASS full repository test suite passes on the branch-equivalent tree
 CHECK a39 PASS repository lint passes on the branch-equivalent tree
-RUN t07 fix 4 exit=0 dur=739s
+RUN t07 fix 4 exit=0 dur=665s
 CHECK a01 PASS design title uses the public product name
 CHECK a02 PASS design title drops the retired working name
 CHECK a03 PASS task-runner companion note uses the public product name
@@ -398,5 +398,5 @@ CHECK a36 PASS attest wrapper drops the retired stderr prefix
 CHECK a37 PASS no case-insensitive fable occurrence exists outside the explicit allowlist
 CHECK a38 PASS full repository test suite passes on the branch-equivalent tree
 CHECK a39 PASS repository lint passes on the branch-equivalent tree
-RUN t07 fix 5 exit=0 dur=694s
+RUN t07 fix 5 exit=0 dur=687s
 VERDICT t07 PASS

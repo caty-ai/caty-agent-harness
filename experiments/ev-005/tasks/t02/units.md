@@ -51,3 +51,15 @@ MOOT: 0
   U22/U24 and the task sheet rather than hidden historical provenance.
 - Timeout remains the default 120 seconds because the gate performs bounded
   fixed-string checks only and executes no repository code.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Append HTML comments containing the asserted platform, badge, and demo-command strings to `README.md`, `README.ja.md`, `README.zh.md`, `README.th.md`, and `docs/agent-guide.md`, without changing rendered text or behavior.
+- Route: `a (UNEXPECTED_PASS blocker)`
+- Expected result: No trustworthy failing IDs to cite: the strongest surface cheat is expected to `UNEXPECTED_PASS`.
+- Evidence status: `UNEXPECTED_PASS_CONFIRMED`; failing CHECK IDs: none; `RUN t02 negprobe exit=0 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t02.log`.
+- Rationale: A gamer would try comment-only prose stuffing first, and the present gate appears unable to reject it cleanly. This is an honest r5-1 blocker, not a route-(a) FAIL record.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t02.log` shows no constant-true assertions.

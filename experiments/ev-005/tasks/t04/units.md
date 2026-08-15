@@ -32,3 +32,21 @@ MOOT: 0
 - Timeout remains the default 120 seconds. The gate performs only bounded local
   file-presence, grep/count, and line-hash checks and executes no repository
   code, so no escalation is needed.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Append one HTML comment containing `caty-ai/x-collector`, its GitHub URL, `through that pipeline`, and `inherit collection controls` to `docs/trial-isolation.md`, without changing the live wiring or isolation behavior.
+- Route: `a (UNEXPECTED_PASS blocker)`
+- Expected result: No trustworthy failing IDs to cite: the strongest surface cheat is expected to `UNEXPECTED_PASS`.
+- Evidence status: `UNEXPECTED_PASS_CONFIRMED`; failing CHECK IDs: none; `RUN t04 negprobe exit=0 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t04.log`.
+- Rationale: The current assertions appear satisfiable by one comment-only stuffing attack in the asserted doc, so a claimed FAIL would overstate the evidence.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t04.log` (current pre-leg record).
+- a04 — oversight: File-wide inherited/collection-controls wording elsewhere in the asserted doc lets this PASS without proving the specific wiring fix.
+- a05 — invariance guard: The pre-fix tree already keeps the closed prerequisite wording, so the PASS guards against reopening it.
+- a06 — invariance guard: The owner-preapproval SHA requirement already holds on the pre tree, so the PASS is a deliberate guard.
+- a07 — invariance guard: The T2 isolation wording already exists pre-fix, so the PASS protects that invariant.
+- a08 — invariance guard: The row-level constraint already holds pre-fix, so the PASS is guarding against regression.
+- a09 — invariance guard: The private-count constraint already holds on the pre tree and is intentionally constant-true.

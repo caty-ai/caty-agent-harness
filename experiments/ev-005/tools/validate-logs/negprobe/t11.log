@@ -1,0 +1,16 @@
+== negprobe t11 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=3441b8ef5ab3f8e2345b02d2d6503c8421cc0fae timeout_s=120 ==
+EDIT Add executable fake secrets regression script with discovery markers.
+EXPECT_FAILS a04,a05,a06,a07
+CHECK a01 PASS targeted reject/accept regression test passes
+CHECK a02 PASS symlink refusal is predicted with an advisory
+CHECK a03 PASS indented assignment is accepted and stays clean
+CHECK a04 FAIL malformed assignment is not rejected and predicted
+CHECK a05 FAIL multi-line value is not rejected and predicted
+CHECK a06 FAIL embedded NUL is not rejected and predicted
+CHECK a07 FAIL interpreter-control name is not rejected and predicted
+CHECK a08 PASS acceptance grammar and refusal list have one source or an aligned generated copy
+CHECK a09 PASS focused checker output-contract regression suite passes
+CHECK a10 PASS missing prefix remains on stdout
+CHECK a11 PASS documented machine-row shapes remain on stdout
+RUN t11 negprobe exit=1 dur=10s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

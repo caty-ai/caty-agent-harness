@@ -1,0 +1,15 @@
+== negprobe t28 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=71555781a9f1e1625262f7fe7c442b9702e7636a timeout_s=120 ==
+EDIT Append trust-boundary sentence only.
+EXPECT_FAILS a02,a03,a04,a05,a06,a07,a08,a10
+CHECK a01 PASS the design note distinguishes mechanical and operator boundaries
+CHECK a02 FAIL quoted hash syntax is altered, rejected, or staged differently
+CHECK a03 FAIL a focused quoted-hash regression is missing or fails
+CHECK a04 FAIL raw staged donecheck validation contract is incomplete
+CHECK a05 FAIL donecheck environment or interpreter bounds are incomplete
+CHECK a06 FAIL donecheck resource bounds are incomplete
+CHECK a07 FAIL the resolved receipt boundary is incomplete
+CHECK a08 FAIL spawn-provider path/type/executable checks are incomplete
+CHECK a09 PASS the committed residual risks are documented
+CHECK a10 FAIL a focused execution-boundary suite is missing or fails
+RUN t28 negprobe exit=1 dur=1s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

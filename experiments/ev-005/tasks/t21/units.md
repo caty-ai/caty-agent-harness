@@ -23,3 +23,17 @@ MOOT: 0
 - Mapping: the source harness repository is rendered as “this repository,” matching the established harness stand-in. Paths and field names remain because they are criterion targets or are derivable from the pre-fix tree.
 - Longest fixed T1/T4 needle: `skills/_staging/SKILL.tmpl.md` (31 characters, a criterion target path). No T1/T4 assertion pins a sentence of historical fix prose.
 - Timeout remains the default 120 seconds; only one focused repository test and temporary-workspace probes run.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Replace the first `verifier_id` in `DESIGN.md` with `verifier_id for verified skills` and append the shell comment `verified_at: verifier_id: promotion` to `skills/_staging/SKILL.tmpl.md`, without fixing the verifier contract.
+- Route: `a`
+- Expected result: `a03` and `a06` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a03`, `a06`; `RUN t21 negprobe exit=1 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t21.log`.
+- Rationale: Surface wording alone does not satisfy the clean conditional-warning path or the required nonfatal exit behavior.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t21.log` (current pre-leg record).
+- a04 — invariance guard: The pre-fix tree already keeps the warning path clean, so this PASS protects the nonfatal warning contract.
+- a05 — invariance guard: The pre-fix tree already exits non-fatally on the expected path, so this PASS is a deliberate guard.

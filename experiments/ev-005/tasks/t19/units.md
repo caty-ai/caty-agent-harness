@@ -25,3 +25,15 @@ MOOT: 0
   `symlink`, and `touch`) rather than historical test names or prose.
 - Timeout remains the default 120 seconds. The direct wrapper probes are local
   and isolated; the repository's broader deadman suite is not run.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Append one shell comment containing `cron-wrapper.tmpl.sh SECRETS_ENV touch KEY=VALUE chmod 600 ln -s symlink` to `tests/deadman-probe.test.sh`, without restoring the actual wrapper structure.
+- Route: `a`
+- Expected result: `a01`-`a03` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a01`, `a02`, `a03`; `RUN t19 negprobe exit=1 dur=1s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t19.log`.
+- Rationale: Template comments cannot satisfy the live wrapper-shape checks in the probe.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t19.log` shows no constant-true assertions.

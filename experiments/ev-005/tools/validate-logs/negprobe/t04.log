@@ -1,0 +1,14 @@
+== negprobe t04 route=a expected=unexpected-pass repo=/Users/shojikumaru/claude-workspace/self-growth-loop-catyai pre=fd0b3897191e9ab908f530f2a644b663c7ec3f51 timeout_s=120 ==
+EDIT Append x-collector/pipeline HTML comment to docs/trial-isolation.md.
+EXPECT_FAILS none-recorded
+CHECK a01 PASS public pipeline introduction is present
+CHECK a02 PASS linked public repository line matches the required target
+CHECK a03 PASS qualifying trials are routed through that pipeline
+CHECK a04 PASS pipeline control inheritance is stated
+CHECK a05 PASS condition 1 still requires the closed prerequisite
+CHECK a06 PASS condition 2 line remains unchanged
+CHECK a07 PASS trial-enqueue T2 isolation string remains unchanged
+CHECK a08 PASS adoption-wiring T2 row remains unchanged
+CHECK a09 PASS no additional private-reference wording was introduced
+RUN t04 negprobe exit=0 dur=0s
+NEGPROBE_RESULT UNEXPECTED_PASS_CONFIRMED

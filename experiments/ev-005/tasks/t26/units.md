@@ -46,3 +46,15 @@ Default timeout remains 120 seconds.
 - Timeout remains the default 120 seconds because the gate runs one focused
   conventions regression plus a bounded structural Python check, not the full
   repository suite.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Replace `docs/cli-conventions.md` with a token-only conventions stub while leaving the runner and tests unchanged.
+- Route: `a`
+- Expected result: `a05` and `a06` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a05`, `a06`; `RUN t26 negprobe exit=1 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t26.log`.
+- Rationale: A token-only doc cannot satisfy the live CLI convention checks exercised by the runner/tests.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t26.log` shows no constant-true assertions.

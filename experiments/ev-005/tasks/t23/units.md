@@ -26,3 +26,15 @@ broad full-suite T3 is unnecessary.
 - Mapping: the source harness repository is rendered as “this repository,” matching the established harness stand-in. Script paths, frontmatter key, and environment-variable names remain because the criterion names or relies on them.
 - Longest T1/T4-style structural needle: `TR_STEP_TIMEOUT_S` (17 characters, criterion-constitutive). No assertion pins a historical fix-prose sentence.
 - Timeout remains the default 120 seconds. The gate uses six narrow temporary-workspace T5 probes and does not run the broad task-runner suite.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Append token-only shell comments for `TR_STEP_TIMEOUT_S`, `TR_GRACE_S`, corrupt state, quoted/invalid IDs, and copy failure to `tests/task-runner.test.sh` and `tests/tr-enqueue.test.sh`, without changing live input-validation logic.
+- Route: `a`
+- Expected result: `a01`-`a06` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a01`, `a02`, `a03`, `a04`, `a05`, `a06`; `RUN t23 negprobe exit=1 dur=6s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t23.log`.
+- Rationale: Token comments cannot satisfy the real validation paths those tests exercise.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t23.log` shows no constant-true assertions.

@@ -1,0 +1,82 @@
+== negprobe t08 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=63de4f391a3a062cda07ae52d08957b4cea88e97 timeout_s=120 ==
+EDIT Append public-name strings as comments while retired strings remain in place.
+EXPECT_FAILS a02,a04,a06,a08,a10,a12,a14,a16,a18,a20,a22,a24,a26,a28,a30,a32,a34,a36,a38,a40,a42,a44,a46,a48,a50,a52,a54,a56,a58,a60,a62
+CHECK a01 PASS Claude install stop-hook description uses the public product name
+CHECK a02 FAIL Claude install stop-hook description drops the retired product name
+CHECK a03 PASS Claude install precompact section matches the renamed prose block
+CHECK a04 FAIL Claude install drops the pre-rename precompact block wording
+CHECK a05 PASS Claude stop hook banner uses the public product name
+CHECK a06 FAIL Claude stop hook banner drops the retired product name
+CHECK a07 PASS Claude stop hook workspace comment uses the public product name
+CHECK a08 FAIL Claude stop hook workspace comment drops the retired product name
+CHECK a09 PASS Claude stop hook uses the public guard-directory prefix
+CHECK a10 FAIL Claude stop hook drops the retired guard-directory prefix
+CHECK a11 PASS Claude stop hook reminder uses the public CHECKPOINT prefix
+CHECK a12 FAIL Claude stop hook reminder drops the retired CHECKPOINT prefix
+CHECK a13 PASS Claude precompact banner uses the public product name
+CHECK a14 FAIL Claude precompact banner drops the retired product name
+CHECK a15 PASS Claude precompact hook uses the public guard-directory prefix
+CHECK a16 FAIL Claude precompact hook drops the retired guard-directory prefix
+CHECK a17 PASS Claude precompact prompt uses the public product name
+CHECK a18 FAIL Claude precompact prompt drops the retired product name
+CHECK a19 PASS Codex install intro uses the public product name
+CHECK a20 FAIL Codex install intro drops the retired product name
+CHECK a21 PASS Codex install stop-hook description uses the public product name
+CHECK a22 FAIL Codex install stop-hook description drops the retired product name
+CHECK a23 PASS Codex stop hook banner uses the public product name
+CHECK a24 FAIL Codex stop hook banner drops the retired product name
+CHECK a25 PASS Codex stop hook workspace comment uses the public product name
+CHECK a26 FAIL Codex stop hook workspace comment drops the retired product name
+CHECK a27 PASS Codex stop hook uses the public guard-directory prefix
+CHECK a28 FAIL Codex stop hook drops the retired guard-directory prefix
+CHECK a29 PASS Codex stop hook reminder uses the public CHECKPOINT prefix
+CHECK a30 FAIL Codex stop hook reminder drops the retired CHECKPOINT prefix
+CHECK a31 PASS Kimi install intro uses the public product name
+CHECK a32 PASS Kimi install intro drops the retired product name
+CHECK a33 PASS Kimi install stop-hook description uses the public product name
+CHECK a34 FAIL Kimi install stop-hook description drops the retired product name
+CHECK a35 PASS Kimi stop hook banner uses the public product name
+CHECK a36 FAIL Kimi stop hook banner drops the retired product name
+CHECK a37 PASS Kimi stop hook workspace comment uses the public product name
+CHECK a38 FAIL Kimi stop hook workspace comment drops the retired product name
+CHECK a39 PASS Kimi stop hook uses the public guard-directory prefix
+CHECK a40 FAIL Kimi stop hook drops the retired guard-directory prefix
+CHECK a41 PASS Kimi stop hook reminder uses the public CHECKPOINT prefix
+CHECK a42 FAIL Kimi stop hook reminder drops the retired CHECKPOINT prefix
+CHECK a43 PASS plugin convention uses the public product name
+CHECK a44 FAIL plugin convention drops the retired product name
+CHECK a45 PASS cron-wrapper template uses the public target-path example
+CHECK a46 FAIL cron-wrapper template drops the retired target-path example
+CHECK a47 PASS launchd template banner uses the public product name
+CHECK a48 FAIL launchd template banner drops the retired product name
+CHECK a49 PASS launchd template uses the public label example
+CHECK a50 FAIL launchd template drops the retired label example
+CHECK a51 PASS launchd template uses the public target-path example
+CHECK a52 FAIL launchd template drops the retired target-path example
+CHECK a53 PASS updater-cron template banner uses the public product name
+CHECK a54 FAIL updater-cron template banner drops the retired product name
+CHECK a55 PASS updater-cron template uses the public repository-path example
+CHECK a56 FAIL updater-cron template drops the retired repository-path example
+CHECK a57 PASS pause-contract enabled-hook assertion uses the public CHECKPOINT prefix
+CHECK a58 FAIL pause-contract enabled-hook assertion drops the retired CHECKPOINT prefix
+CHECK a59 PASS pause-contract Codex JSON assertion uses the public CHECKPOINT prefix
+CHECK a60 FAIL pause-contract Codex JSON assertion drops the retired CHECKPOINT prefix
+CHECK a61 PASS pause-contract multiworkspace assertion uses the public CHECKPOINT prefix
+CHECK a62 FAIL pause-contract multiworkspace assertion drops the retired CHECKPOINT prefix
+CHECK a63 PASS frozen cron-wrapper marker remains unchanged
+CHECK a64 PASS frozen bootstrap marker remains unchanged
+CHECK a65 PASS frozen sentinel-notice marker remains unchanged
+CHECK a66 PASS frozen wrapper schema remains in the adapter contract
+CHECK a67 PASS frozen wrapper schema remains in the attestation command
+CHECK a68 PASS frozen wrapper schema remains in the conformance library
+CHECK a69 PASS frozen provider-path variable remains in the adapter contract
+CHECK a70 PASS frozen provider-path variable remains in the Hermes adapter documentation
+CHECK a71 PASS frozen provider-path variable remains in the Hermes implementation
+CHECK a72 PASS frozen provider-path variable remains in the OpenClaw adapter documentation
+CHECK a73 PASS frozen provider-path variable remains in the OpenClaw implementation
+CHECK a74 PASS frozen provider-path variable remains in the contract test
+CHECK a75 PASS frozen wrapper-route variable remains unchanged
+CHECK a76 PASS frozen wrapper-path variable remains unchanged
+CHECK a77 PASS frozen attestation-scratch variable remains unchanged
+RUN t08 negprobe exit=1 dur=0s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

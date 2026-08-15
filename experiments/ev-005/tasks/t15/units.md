@@ -27,3 +27,15 @@ MOOT: 0
 - Timeout remains the default 120 seconds. The gate executes only three
   deterministic fixture-tree searches and bounded validator attempts, each
   under a fresh `HOME` and `TMPDIR`, so no escalation is needed.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Append exactly ``Validator smoke fixture: `docs/`.`` to the root `README.md` only, leaving the real repository-map fix absent.
+- Route: `a`
+- Expected result: `a01`-`a03` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a01`, `a02`, `a03`; `RUN t15 negprobe exit=1 dur=1s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t15.log`.
+- Rationale: A single copied line does not restore the cross-file repository-map guidance that the gate requires.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t15.log` shows no constant-true assertions.

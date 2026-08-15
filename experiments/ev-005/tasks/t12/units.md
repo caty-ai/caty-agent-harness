@@ -55,3 +55,17 @@ MOOT: 0
   private `HOME` and keep a fresh suite `TMPDIR`; probes `a01`-`a11` remain
   on invocation-specific fresh `HOME`/`TMPDIR`. The suite runs completed in
   23–25 seconds.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Replace `import yaml` with a dynamic import inside `scripts/content-lint` while leaving the rest of the linter and document corpus unchanged.
+- Route: `a`
+- Expected result: `a02`-`a11` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a02`, `a03`, `a04`, `a05`, `a06`, `a07`, `a08`, `a09`, `a10`, `a11`; `RUN t12 negprobe exit=1 dur=22s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t12.log`.
+- Rationale: A dynamic import shim does not make the suite exercise the localized docs family that the gate still checks.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t12.log` (current pre-leg record).
+- a12 — invariance guard: The pre-fix suite already passes in the current replica, so this PASS protects that local invariant.
+- a13 — invariance guard: The pre-fix suite already reports zero skipped tests, so this PASS is another deliberate guard.

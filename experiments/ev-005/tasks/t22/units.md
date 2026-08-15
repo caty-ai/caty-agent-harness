@@ -29,3 +29,21 @@ MOOT: 1
 - T4 guard detail: `tests/test_recall.sh` intentionally stores its own forbidden tokens in bracket-escaped form. `a07` searches literal fixed strings, so `[s]hojikumaru`, `[a]lpha-wiki`, `[c]laude-workspace`, and `/[U]sers` do not false-positive. Validator-injected tracked paths beginning `.ev005-` are skipped so the visible gate does not inspect its own literal pattern table.
 - Longest T1/T4 needle: `examples/settings.json` (22 characters, a source-named setup target). No T1/T4 assertion pins historical fix prose.
 - Timeout remains the default 120 seconds. The gate runs four complete focused tool suites plus the recorded 19-case targeted recall suite, not the repository's broader aggregate test target; local validation keeps each donecheck run within this bound.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Replace `assets/readme/hero.png` with a one-byte placeholder while leaving the README/docs/test corpus untouched.
+- Route: `a`
+- Expected result: `a05`, `a06`, `a08`, and `a09` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a05`, `a06`, `a08`, `a09`; `RUN t22 negprobe exit=1 dur=7s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t22.log`.
+- Rationale: The hero asset guard still enforces real image validity and the surrounding test/docs evidence.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t22.log` (current pre-leg record).
+- a01 — invariance guard: The existing tool suite already passes on the pre tree, so this PASS deliberately protects it.
+- a02 — invariance guard: The paired tool suite already passes pre-fix and is intentionally constant-true.
+- a03 — invariance guard: The third existing tool suite already passes pre-fix and is intentionally guarded.
+- a04 — invariance guard: The fourth existing tool suite already passes pre-fix and is intentionally guarded.
+- a07 — invariance guard: The pre-fix docs already avoid personal IDs, so this PASS is a deliberate guard.
+- a11 — invariance guard: The pre-fix tree already preserves the MIT declaration, so this PASS intentionally protects it.

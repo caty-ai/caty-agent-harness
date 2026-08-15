@@ -44,3 +44,33 @@ MOOT: 0
   text checks plus four structural Python hash probes; every Python invocation
   receives a separate fresh `HOME` and `TMPDIR` and is cleaned up immediately
   after it completes.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Replace the leading `|` with `¦` on the eleven duplicate family-table rows so they still read similarly but no longer parse as Markdown table rows.
+- Route: `a`
+- Expected result: `a10`-`a12` and `a18`-`a20` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a10`, `a11`, `a12`, `a18`, `a19`, `a20`; `RUN t13 negprobe exit=1 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t13.log`.
+- Rationale: The duplicate-table removal and single-footer-table checks remain structural; visually similar fake rows do not satisfy them.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t13.log` (current pre-leg record).
+- a01 — invariance guard: The English hand-written family-section prose anchors already exist in the pre tree, so this PASS protects them.
+- a02 — invariance guard: The Japanese hand-written family-section prose anchors already exist pre-fix.
+- a03 — invariance guard: The Chinese hand-written family-section prose anchors already exist pre-fix.
+- a04 — invariance guard: The Thai hand-written family-section prose anchors already exist pre-fix.
+- a05 — invariance guard: The English authority note already exists pre-fix and is intentionally guarded.
+- a06 — invariance guard: The Japanese authority note already exists pre-fix and is intentionally guarded.
+- a07 — invariance guard: The Chinese authority note already exists pre-fix and is intentionally guarded.
+- a08 — invariance guard: The Thai authority note already exists pre-fix and is intentionally guarded.
+- a13 — invariance guard: The English generated footer block already matches the pinned SHA-256 on the pre tree.
+- a14 — invariance guard: The Japanese generated footer block already matches the pinned SHA-256 on the pre tree.
+- a15 — invariance guard: The Chinese generated footer block already matches the pinned SHA-256 on the pre tree.
+- a16 — invariance guard: The Thai generated footer block already matches the pinned SHA-256 on the pre tree.
+
+## r4-2 waiver record
+
+- The broad suite `python3 scripts/tests/run_tests.py` exercises unrelated script subsystems, not the README footer-block criterion units for this task.
+- The byte-exact SHA-256 plus marker-structure probes in `a13`-`a20` are stronger than the broad suite for this criterion because they prove exact correspondence of the generated footer blocks.
+- The same suite also carries the FMA#18 coupling risk: `scripts/tests/test_recall.py` clears environment state and can diverge between passwd-home resolution and restored caller `HOME`, so using it here would add unrelated noise instead of stronger evidence.

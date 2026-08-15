@@ -1,0 +1,19 @@
+== negprobe t18 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/family-os-caty pre=c48913a0b31d554e84f31714c48f3ff58c160c5e timeout_s=120 ==
+EDIT Rename existing self-growth-loop id to context-kit in registry/modules.json.
+EXPECT_FAILS a07,a08,a09,a10,a11,a12,a13,a14
+CHECK a01 PASS the registry has one context-kit entry
+CHECK a02 PASS context-kit is on the vertical axis
+CHECK a03 PASS context-kit is not a foundation module
+CHECK a04 PASS context-kit remains preparing before the public flip
+CHECK a05 PASS generated blocks are current
+CHECK a06 PASS registry validation passes offline
+CHECK a07 FAIL English vertical table row omits context-kit
+CHECK a08 FAIL Japanese vertical table row omits context-kit
+CHECK a09 FAIL Chinese vertical table row omits context-kit
+CHECK a10 FAIL Thai vertical table row omits context-kit
+CHECK a11 FAIL English equipment category lacks a context-kit bullet
+CHECK a12 FAIL Japanese equipment category lacks a context-kit bullet
+CHECK a13 FAIL Chinese equipment category lacks a context-kit bullet
+CHECK a14 FAIL Thai equipment category lacks a context-kit bullet
+RUN t18 negprobe exit=1 dur=0s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

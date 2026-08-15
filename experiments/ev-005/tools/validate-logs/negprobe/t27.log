@@ -1,0 +1,17 @@
+== negprobe t27 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/family-os-caty pre=5938d52d32f078f644f8e45bd6d64d5b65e2b3b9 timeout_s=120 ==
+EDIT Create 8-section FOR-AGENTS skeleton with bogus repo tour row.
+EXPECT_FAILS a08
+CHECK a01 PASS the root English entry artifact exists without localized siblings
+CHECK a02 PASS the entry artifact has numbered sections 1 through 8
+CHECK a03 PASS the opening offers both time-budget tours
+CHECK a04 PASS the authority sources appear in the required order
+CHECK a05 PASS the four-axis state vocabulary is present
+CHECK a06 PASS the four-part evaluation frame is present
+CHECK a07 PASS the repository tour has role and verification columns
+CHECK a08 FAIL tour rows do not exactly match published registry modules
+CHECK a09 PASS the counter-evidence procedure is public-only
+CHECK a10 PASS the handoff schema and stop rule are present
+CHECK a11 PASS the human handoff template and invitation are present
+CHECK a12 PASS automatic discovery is explicitly not guaranteed
+RUN t27 negprobe exit=1 dur=0s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

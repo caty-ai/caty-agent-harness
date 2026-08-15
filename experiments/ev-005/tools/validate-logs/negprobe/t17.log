@@ -1,0 +1,12 @@
+== negprobe t17 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=19032f7067be1e96b00974d74c185fc46e5a9ee0 timeout_s=120 ==
+EDIT Append deadman probe token comment to tests/deadman-probe.test.sh.
+EXPECT_FAILS a01,a02,a03,a05,a06,a07
+CHECK a01 FAIL failed push evidence is missing
+CHECK a02 FAIL failed push visibility or runner-result behavior is wrong
+CHECK a03 FAIL scheduler templates and probe defaults disagree
+CHECK a04 PASS a regression test covers marker agreement
+CHECK a05 FAIL the completion-gate timeout override is ineffective
+CHECK a06 FAIL the timeout default or validation is missing
+CHECK a07 FAIL the fixed B0 estimate remains in generated metrics
+RUN t17 negprobe exit=1 dur=9s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

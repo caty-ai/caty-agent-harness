@@ -30,3 +30,17 @@ MOOT: 0
   Python startup hook changes only the current user's passwd-home fallback to
   the same fresh home, preventing an environment-clearing test from
   reintroducing the ambient account home.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Append two unreachable `if False:` test functions to `scripts/tests/test_recall.py`, one carrying the `chmod(..., 0o600)`/parse/accept tokens and one carrying the `chmod(..., 0o644)`/parse/`assertRaisesRegex(..., "0600")` tokens.
+- Route: `a`
+- Expected result: `a02` and `a06` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a02`, `a06`; `RUN t16 negprobe exit=1 dur=2s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t16.log`.
+- Rationale: Dead test code cannot satisfy the live 0600 and broader recall-environment behavior checks.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t16.log` (current pre-leg record).
+- a01 — invariance guard: The pre-fix tree already preserves the valid `0600` mode, so this PASS protects the permission invariant.
+- a05 — invariance guard: The broader recall-environment behavior already holds pre-fix, so this PASS is a deliberate non-regression guard.

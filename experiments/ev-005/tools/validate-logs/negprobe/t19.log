@@ -1,0 +1,10 @@
+== negprobe t19 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=2bbc00a4501c7c91af988b28daa524b41b2c8b47 timeout_s=120 ==
+EDIT Append secrets-env token comment to tests/deadman-probe.test.sh.
+EXPECT_FAILS a01,a02,a03
+CHECK a01 FAIL valid KEY=VALUE input is not exported
+CHECK a02 FAIL SECRETS_ENV shell syntax executed or was not preserved as data
+CHECK a03 FAIL a SECRETS_ENV symlink was accepted or reached the target
+CHECK a04 PASS a local regression test covers data-only loading
+CHECK a05 PASS a local regression test covers symlink refusal
+RUN t19 negprobe exit=1 dur=1s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

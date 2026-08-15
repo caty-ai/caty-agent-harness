@@ -1,0 +1,11 @@
+== negprobe t25 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=dfbc09466930d6e073b19faa4e203560bec39d9d timeout_s=120 ==
+EDIT Append one allowed_signers documentation line only.
+EXPECT_FAILS a02,a04,a05,a06
+CHECK a01 PASS signed-tag trust mechanism and signer pin are documented
+CHECK a02 FAIL candidate code can be checked out or run before verification
+CHECK a03 PASS focused family-updater regression module passes
+CHECK a04 FAIL regressions do not prove unsigned substituted release refusal
+CHECK a05 FAIL regressions do not prove tampered tag refusal before install
+CHECK a06 FAIL regressions do not prove clear fail-closed verification messages
+RUN t25 negprobe exit=1 dur=14s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

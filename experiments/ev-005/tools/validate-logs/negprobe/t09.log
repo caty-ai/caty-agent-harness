@@ -1,0 +1,9 @@
+== negprobe t09 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/fma-public pre=45b29ee31479bcca8db40d88b3a9a0bc8594b51e timeout_s=120 ==
+EDIT Append two no-op test functions carrying AST coverage tokens.
+EXPECT_FAILS a01
+CHECK a01 FAIL default permission policy accepts a gid mismatch at uid ownership and mode 0600
+CHECK a02 PASS pinned owner policy rejects a uid mismatch
+CHECK a03 PASS pinned owner policy rejects a gid mismatch
+CHECK a04 PASS repository tests exercise both permission-policy paths
+RUN t09 negprobe exit=1 dur=0s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

@@ -1,0 +1,17 @@
+== negprobe t10 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/family-os-caty pre=c9b1f07d1457afe3425a7ea5d29fead905bfb385 timeout_s=120 ==
+EDIT Insert empty generated block before README license anchor.
+EXPECT_FAILS a02,a03,a04,a05,a06,a08
+CHECK a01 PASS English README has the generated family table near the bottom
+CHECK a02 FAIL Japanese README has the generated family table near the bottom
+CHECK a03 FAIL Chinese README has the generated family table near the bottom
+CHECK a04 FAIL Thai README has the generated family table near the bottom
+CHECK a05 FAIL all localized blocks match registry-backed existing-builder output
+CHECK a06 FAIL all generated map rows are bold and unlinked
+CHECK a07 PASS render check rejects a stale generated family table
+CHECK a08 FAIL rendered blocks are current
+CHECK a09 PASS offline registry validation passes
+CHECK a10 PASS member footer lint passes
+CHECK a11 PASS family footer self-test passes
+CHECK a12 PASS default member footer keeps linked-map and unlinked-host behavior
+RUN t10 negprobe exit=1 dur=0s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

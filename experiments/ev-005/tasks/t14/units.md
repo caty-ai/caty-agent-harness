@@ -31,3 +31,17 @@ that are part of the completion criterion remain verbatim as described below.
 - Timeout remains the task's default 120 seconds. The two repository checks
   and four local JSON-field probes complete well within the default; no full
   suite or network check is run.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: No honest route-(a) surface cheat exists short of writing the real singleton JSON object with the correct typed fields and passing both named repository checks.
+- Route: `b`
+- Expected result: Impossibility class: strict JSON singleton and typed-equality probes leave no superficial text-only substitute.
+- Evidence status: Route (b) record only; no negprobe log is required by the brief for impossibility cases.
+- Rationale: The gate parses `registry/modules.json` structurally, requires exactly one `self-growth-loop` object, and then couples it to `tools/check_registry.py --offline` plus `tools/selftest_family_footer.py`; a non-solution cannot satisfy that surface without becoming the real solution.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t14.log` (current pre-leg record).
+- a05 — invariance guard: The named offline registry check already passes on the pre tree, so the PASS guards against regressing it.
+- a06 — invariance guard: The named family-footer self-test already passes pre-fix, so the PASS is an intentional guard.

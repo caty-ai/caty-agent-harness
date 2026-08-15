@@ -36,3 +36,21 @@ MOOT: 0
 - Timeout remains the default 120 seconds. The two focused T3 suites and the
   temporary-workspace T5 probes replace a full `make test` run, so no
   escalation is needed.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Create executable `tests/surface-secrets.test.sh` containing only a comment with the asserted discovery tokens and `exit 0`, leaving the shared-source, missing-prefix, and stdout-row behavior untouched.
+- Route: `a`
+- Expected result: `a04`-`a07` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a04`, `a05`, `a06`, `a07`; `RUN t11 negprobe exit=1 dur=10s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t11.log`.
+- Rationale: One extra passing test does not prove the source-shape, missing-prefix, or machine-row contracts.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t11.log` (current pre-leg record).
+- a02 — invariance guard: The pre-fix suite already refuses the existing symlink case, so this PASS protects fail-closed behavior.
+- a03 — invariance guard: The pre-fix suite already accepts the required indented case, so this PASS is a deliberate guard.
+- a08 — invariance guard: The shared-source shape already holds pre-fix and is being protected rather than discriminated.
+- a09 — invariance guard: The output-suite behavior already holds on the pre tree, so this PASS is intentional.
+- a10 — invariance guard: The missing-prefix contract already holds pre-fix, making this an explicit regression guard.
+- a11 — invariance guard: The machine-row/stdout contract already holds on the pre tree and intentionally stays constant-true.

@@ -1,0 +1,30 @@
+== negprobe t02 route=a expected=unexpected-pass repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=8983415fce0b427f33ed64f0588a62f129b8fae0 timeout_s=120 ==
+EDIT Append README/agent-guide surface strings as comments without changing behavior.
+EXPECT_FAILS none-recorded
+CHECK a01 PASS English support matrix records tested macOS and expected Linux text
+CHECK a02 PASS English support matrix records Windows status
+CHECK a03 PASS Japanese support matrix records tested macOS and expected Linux text
+CHECK a04 PASS Japanese support matrix records Windows status
+CHECK a05 PASS Chinese support matrix records tested macOS and expected Linux text
+CHECK a06 PASS Chinese support matrix records Windows status
+CHECK a07 PASS Thai support matrix records tested macOS and expected Linux text
+CHECK a08 PASS Thai support matrix records Windows status
+CHECK a09 PASS English runtime badge alt carries payload
+CHECK a10 PASS English platform badge alt carries payload
+CHECK a11 PASS English status badge alt carries payload
+CHECK a12 PASS Japanese runtime badge alt carries payload
+CHECK a13 PASS Japanese platform badge alt carries payload
+CHECK a14 PASS Japanese status badge alt carries payload
+CHECK a15 PASS Chinese runtime badge alt carries payload
+CHECK a16 PASS Chinese platform badge alt carries payload
+CHECK a17 PASS Chinese status badge alt carries payload
+CHECK a18 PASS Thai runtime badge alt carries payload
+CHECK a19 PASS Thai platform badge alt carries payload
+CHECK a20 PASS Thai status badge alt carries payload
+CHECK a21 PASS agent guide names the bundled example
+CHECK a22 PASS agent guide points to the concrete bundled demo task
+CHECK a23 PASS agent guide starts the demo walkthrough at workspace initialization
+CHECK a24 PASS agent guide enqueues the bundled demo task
+CHECK a25 PASS agent guide runs the bundled demo end to end
+RUN t02 negprobe exit=0 dur=0s
+NEGPROBE_RESULT UNEXPECTED_PASS_CONFIRMED

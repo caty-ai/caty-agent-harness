@@ -30,3 +30,15 @@ Needle calibration and solvability:
 - The quoted-hash check is behavioral. Other needles are functional boundary
   tokens stated in task.md or derivable from pre-fix design/runner sources.
 - Timeout remains 120 seconds; only focused local suites are run.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Append `Trust boundary: mechanical enforcement is delegated to the operator; residual risks include arbitrary shell as the runner user, privilege, sandbox, post-enqueue mutation, setsid, and inability to attest provider contents.` to `DESIGN-task-runner.md`, without updating the runner, receipts, or tests.
+- Route: `a`
+- Expected result: `a02`-`a08` and `a10` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a02`, `a03`, `a04`, `a05`, `a06`, `a07`, `a08`, `a10`; `RUN t28 negprobe exit=1 dur=1s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t28.log`.
+- Rationale: One prose sentence does not satisfy the behavioral trust-boundary and receipt checks.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t28.log` shows no constant-true assertions.

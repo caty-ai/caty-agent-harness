@@ -34,3 +34,20 @@ Notes:
 - Timeout remains the default 120 seconds because the gate performs bounded
   file normalization, comparison, and tracked-path scans without executing
   repository code.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Append the shell-comment text `RISK_PATHS_AUTH='none'` to `.github/workflows/review-labels.yml`, leaving the operative auth-path logic untouched.
+- Route: `a`
+- Expected result: `a01` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a01`; `RUN t03 negprobe exit=1 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t03.log`.
+- Rationale: A commented token does not create the required live auth-path handling or filename evidence.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t03.log` (current pre-leg record).
+- a03 — invariance guard: The pre-fix tree already has no auth-path filenames in the prohibited location, so the gate protects against introducing them.
+- a04 — invariance guard: The pre-fix tree already preserves the first `none` risk-path variable; this PASS is a deliberate no-auth-path guard.
+- a05 — invariance guard: The pre-fix tree already preserves the second `none` risk-path variable, so the assertion guards non-regression.
+- a06 — invariance guard: The pre-fix tree already preserves the third `none` risk-path variable, making this an intentional invariant.
+- a07 — invariance guard: The pre-fix tree already avoids the retired auth-path/filename combination, so the PASS is a regression guard.

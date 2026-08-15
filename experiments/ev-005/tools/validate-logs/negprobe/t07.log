@@ -1,0 +1,44 @@
+== negprobe t07 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=19032f7067be1e96b00974d74c185fc46e5a9ee0 timeout_s=1800 ==
+EDIT Append public-name strings as comments while retired strings remain in place.
+EXPECT_FAILS a02,a04,a06,a08,a10,a12,a14,a16,a18,a20,a22,a24,a26,a28,a30,a32,a34,a36,a37
+CHECK a01 PASS design title uses the public product name
+CHECK a02 FAIL design title drops the retired working name
+CHECK a03 PASS task-runner companion note uses the public product name
+CHECK a04 FAIL task-runner companion note drops the retired working name
+CHECK a05 PASS task-runner loop description uses the public product name
+CHECK a06 FAIL task-runner loop description drops the retired working name
+CHECK a07 PASS task-runner verification sentence uses the public product name
+CHECK a08 FAIL task-runner verification sentence drops the retired working name
+CHECK a09 PASS synthesis title uses the public product name
+CHECK a10 FAIL synthesis title drops the retired working name
+CHECK a11 PASS synthesis namespace note uses the public product name
+CHECK a12 FAIL synthesis namespace note drops the retired working name
+CHECK a13 PASS task-runner synthesis verification sentence uses the public product name
+CHECK a14 FAIL task-runner synthesis verification sentence drops the retired working name
+CHECK a15 PASS task-runner synthesis retry wording uses the public product name
+CHECK a16 FAIL task-runner synthesis retry wording drops the retired working name
+CHECK a17 PASS governance historical-source prose uses the neutral tracker wording
+CHECK a18 FAIL governance historical-source prose drops the retired tracker name
+CHECK a19 PASS governance synthesis-scope row uses the public product name
+CHECK a20 FAIL governance synthesis-scope row drops the retired working name
+CHECK a21 PASS governance v1.0 source row uses the neutral tracker wording
+CHECK a22 FAIL governance v1.0 source row drops the retired tracker name
+CHECK a23 PASS governance amendment row uses the neutral tracker wording
+CHECK a24 FAIL governance amendment row drops the retired tracker name
+CHECK a25 PASS updater rollout source-of-truth line uses the neutral tracker wording
+CHECK a26 FAIL updater rollout source-of-truth line drops the retired tracker name
+CHECK a27 PASS updater rollout path-correction note uses the neutral tracker wording
+CHECK a28 FAIL updater rollout path-correction note drops the retired tracker name
+CHECK a29 PASS wrapper conformance uses the public stage prefix
+CHECK a30 FAIL wrapper conformance drops the retired stage prefix
+CHECK a31 PASS attest wrapper uses the public scratch prefix
+CHECK a32 FAIL attest wrapper drops the retired scratch prefix
+CHECK a33 PASS attest wrapper uses the public stdout prefix
+CHECK a34 FAIL attest wrapper drops the retired stdout prefix
+CHECK a35 PASS attest wrapper uses the public stderr prefix
+CHECK a36 FAIL attest wrapper drops the retired stderr prefix
+CHECK a37 FAIL no case-insensitive fable occurrence exists outside the explicit allowlist
+CHECK a38 PASS full repository test suite passes on the branch-equivalent tree
+CHECK a39 PASS repository lint passes on the branch-equivalent tree
+RUN t07 negprobe exit=1 dur=664s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

@@ -38,3 +38,22 @@ MOOT: 2
 - Timeout remains the default 120 seconds because the gate performs bounded
   tracked-Markdown enumeration and exact-line/regex sweeps without executing
   repository code.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Add positive-needle HTML comments to `docs/agent-guide.md` and the Hermes/OpenClaw/Claude INSTALL files; wrap the existing `Clone fails with auth error` symptom in backticks; append `Historical design record.` comments to `DESIGN.md`, `DESIGN-task-runner.md`, `docs/governance-rules.md`, and `docs/updater-rollout.md`; and append a `## Deployment inventory` section containing `historical record` to `docs/updater-rollout.md`, without removing private-era wording.
+- Route: `a`
+- Expected result: `a03`, `a04`, `a07`, `a08`, `a11`, `a12`, `a15`, and `a27`-`a29` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a03`, `a04`, `a07`, `a08`, `a11`, `a12`, `a15`, `a27`, `a28`, `a29`; `RUN t06 negprobe exit=1 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t06.log`.
+- Rationale: The guard set still checks live explanation parity, allowlist counts, and status-line behavior that comments do not repair.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t06.log` (current pre-leg record).
+- a13 — invariance guard: The pre-fix tree already contains the existing Keychain/LaunchAgent explanation, so the PASS protects source parity.
+- a21 — invariance guard: The policy-sweep inclusion already holds on the pre tree, so the PASS guards against removing it.
+- a22 — invariance guard: The allowlist-count expectation already holds pre-fix and intentionally stays constant-true.
+- a23 — invariance guard: The documentation parity around the allowlist count already holds before the fix, so this PASS is a deliberate guard.
+- a24 — invariance guard: The status-line wording already exists on the pre tree and is being protected, not discriminated.
+- a25 — invariance guard: The paired status-line wording already holds on the pre tree, so the PASS is another source-parity guard.
+- a26 — invariance guard: The final status-line/document parity already holds pre-fix; this PASS intentionally prevents regression.

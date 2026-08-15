@@ -48,17 +48,6 @@ check_cmd() {
   fi
 }
 
-check_cmd_if_clean() {
-  local id="$1"
-  local reason="$2"
-  shift 2
-  if [ "$status" -ne 0 ]; then
-    echo "CHECK $id FAIL earlier required assertions failed; command not run"
-    return
-  fi
-  check_cmd "$id" "$reason" "$@"
-}
-
 check_fixed "a01" "docs/engineering.md" 'producers only' "engineering doc says the hook outputs are producers only"
 check_fixed "a02" "docs/engineering.md" 'must also schedule the consumer, `adapters/claude-code/flush-intake.sh`' "engineering doc says the consumer must be scheduled"
 check_fixed "a03" "docs/engineering.md" 'two to four times per day' "engineering doc records the schedule window"
@@ -88,6 +77,6 @@ check_fixed "a22" "adapters/claude-code/INSTALL.md" 'The consumer itself touches
 check_fixed "a23" "adapters/claude-code/INSTALL.md" '`loop/pending/intake-runs.log` for content-level silence, dedup, deferral, eviction, and' "source install doc states the ledger claim"
 check_fixed "a24" "adapters/claude-code/INSTALL.md" '`loop/archive/` is append-only,' "source install doc states the archive semantics"
 
-check_cmd_if_clean "a25" "full repository test suite passes" run_isolated make test
+check_cmd "a25" "full repository test suite passes" run_isolated make test
 
 exit "$status"

@@ -1,0 +1,35 @@
+== negprobe t06 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=f6c98ff0a82c2b79b267cdf2ac95ab770d3f14c6 timeout_s=120 ==
+EDIT Append public-flow and historical-record needles while forbidden private wording remains.
+EXPECT_FAILS a03,a04,a07,a08,a11,a12,a15,a27,a28,a29
+CHECK a01 PASS agent guide states that the repository is public with the public repo identifier
+CHECK a02 PASS agent guide states that no invitation is needed
+CHECK a03 FAIL forbidden pattern [private repo or a network problem] present in docs/agent-guide.md
+CHECK a04 FAIL forbidden pattern [public home will be] present in docs/agent-guide.md
+CHECK a05 PASS hermes install uses the public clone flow
+CHECK a06 PASS hermes install includes the public clone command
+CHECK a07 FAIL forbidden pattern [private repository] present in adapters/hermes/INSTALL.md
+CHECK a08 FAIL forbidden pattern [repo invite or deploy key] present in adapters/hermes/INSTALL.md
+CHECK a09 PASS openclaw install uses the public clone flow
+CHECK a10 PASS openclaw install includes the public clone command
+CHECK a11 FAIL forbidden pattern [private repository] present in adapters/openclaw/INSTALL.md
+CHECK a12 FAIL forbidden pattern [repo invite or deploy key] present in adapters/openclaw/INSTALL.md
+CHECK a13 PASS claude adapter explains the macOS scheduler constraint with small behavioral fragments
+CHECK a14 PASS claude adapter explains the hook-isolation failure mode with small behavioral fragments
+CHECK a15 FAIL forbidden regex [#[[:digit:]]+] matched in adapters/claude-code/INSTALL.md
+CHECK a16 PASS design document is explicitly labeled historical
+CHECK a17 PASS task-runner design document is explicitly labeled historical
+CHECK a18 PASS governance rules are explicitly labeled historical
+CHECK a19 PASS updater rollout is explicitly labeled historical
+CHECK a20 PASS updater rollout satisfies the genericized-or-dated inventory disjunction
+CHECK a21 PASS plugin convention is included in the repo-wide public policy sweep
+CHECK a22 PASS allowlist contains exactly four recorded exception lines
+CHECK a23 PASS allowlist records the english scope-boundary exception exactly
+CHECK a24 PASS allowlist records the japanese scope-boundary exception exactly
+CHECK a25 PASS allowlist records the english release-status exception exactly
+CHECK a26 PASS allowlist records the japanese release-status exception exactly
+CHECK a27 FAIL no private-access wording remains outside the recorded allowlist
+CHECK a28 FAIL no invite-or-deploy-key onboarding wording remains outside the recorded allowlist
+CHECK a29 FAIL no private citation framing or forthcoming-home note remains outside the recorded allowlist
+CHECK a30 PASS agent-guide troubleshooting rows with non-dash meanings carry observed-literal symptom cells
+RUN t06 negprobe exit=1 dur=0s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

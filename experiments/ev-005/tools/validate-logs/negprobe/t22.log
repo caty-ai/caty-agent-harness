@@ -1,0 +1,16 @@
+== negprobe t22 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/context-kit pre=286c2a34ecfde934417f937f324272c7da154ca2 timeout_s=120 ==
+EDIT Create one-byte hero asset only.
+EXPECT_FAILS a05,a06,a08,a09
+CHECK a01 PASS lg is executable, syntactically valid, and passes its full functional suite
+CHECK a02 PASS scratch persistence is executable, structurally valid, and passes its full functional suite
+CHECK a03 PASS brief validation is executable, structurally valid, and passes its full functional suite
+CHECK a04 PASS the safety hooks are executable, structurally present, and pass their full functional suite
+CHECK a05 FAIL recall or its 19-case targeted bundled functional suite is missing or failing
+CHECK a06 FAIL recall does not document its individual/shared-memory relationship and local-only use
+CHECK a07 PASS tracked text contains no literal personal-environment identifiers
+CHECK a08 FAIL setup documentation or settings wiring is incomplete
+CHECK a09 FAIL four-language README structure is incomplete
+CHECK a10 PASS the local hero/thumbnail asset exists and is nonempty
+CHECK a11 PASS the repository carries an MIT license
+RUN t22 negprobe exit=1 dur=7s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

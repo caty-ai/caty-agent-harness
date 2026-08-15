@@ -60,3 +60,18 @@ MOOT: 0
   replacement prose; the a40/a41 equality pins are T6 invariance checks.
 - Timeout remains the default 120 seconds because the gate performs bounded
   content checks and Git blob comparisons and executes no repository code.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Append only the missing positive needles as comments to `templates/examples/img-pilot.task.md`, `adapters/codex/INSTALL.md`, `adapters/kimi/INSTALL.md`, `adapters/hermes/INSTALL.md`, `templates/TASK.tmpl.md`, `scripts/family-updater`, `templates/updater-cron.tmpl.sh`, and `install.sh`, leaving all operative legacy content unchanged.
+- Route: `a`
+- Expected result: `a06`-`a09`, `a18`, `a19`, `a22`, `a23`, `a27`, `a30`, `a31`, `a33`, and `a37` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a06`, `a07`, `a08`, `a09`, `a18`, `a19`, `a22`, `a23`, `a27`, `a30`, `a31`, `a33`, `a37`; `RUN t05 negprobe exit=1 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t05.log`.
+- Rationale: Comment-only needles cannot satisfy the non-mutation and untouched-hash checks that bind the real behavior.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t05.log` (current pre-leg record).
+- a36 — invariance guard: The pre-fix gate already proves the non-mutation claim, guarding against accidental edits outside the target surface.
+- a40 — invariance guard: The untouched-file hash for the first protected file already matches pre-fix, so the PASS is deliberate.
+- a41 — invariance guard: The untouched-file hash for the second protected file already matches pre-fix, giving another intentional non-regression guard.

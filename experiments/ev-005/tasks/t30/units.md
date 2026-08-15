@@ -51,3 +51,15 @@ Needle calibration and solvability:
   resource contention once the escalation evidence was established. The
   syntax sweep passed separately in under one second. The serialized admission
   validator will provide the authoritative full-suite duration.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Add a fake `Makefile` with no-op `test` and `lint` targets while leaving the workflow definitions unchanged.
+- Route: `a`
+- Expected result: `a03`-`a08` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a03`, `a04`, `a05`, `a06`, `a07`, `a08`; `RUN t30 negprobe exit=1 dur=2s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t30.log`.
+- Rationale: Stub targets do not satisfy the workflow-shape and gate-authority checks behind the remaining assertions.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t30.log` shows no constant-true assertions.

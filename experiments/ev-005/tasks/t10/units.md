@@ -41,3 +41,20 @@ alternative block identifier can pass.
 - Timeout remains the task's default 120 seconds. The repository checks and
   bundled probes are local; the stale-block probe's temporary tree copy is the
   heaviest operation and completes within the default.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Insert an empty `family:generated:unknown` start/end comment block plus separator in `README.md` immediately before `<a id="license"></a>`, leaving every localized README untouched.
+- Route: `a`
+- Expected result: `a02`-`a06` and `a08` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a02`, `a03`, `a04`, `a05`, `a06`, `a08`; `RUN t10 negprobe exit=1 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t10.log`.
+- Rationale: An empty extra block does not satisfy the current generated-content, offline-registry, or footer-placement invariants.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t10.log` (current pre-leg record).
+- a08 — invariance guard: The generated-content freshness guard already holds pre-fix and intentionally stays constant-true.
+- a09 — invariance guard: The offline-registry guard already holds on the pre tree and is deliberate.
+- a10 — invariance guard: The first footer/lint rendering invariant already holds pre-fix and guards against regression.
+- a11 — invariance guard: The second footer/lint rendering invariant already holds on the pre tree.
+- a12 — invariance guard: The default-member rendering invariant already holds pre-fix and intentionally remains constant-true.

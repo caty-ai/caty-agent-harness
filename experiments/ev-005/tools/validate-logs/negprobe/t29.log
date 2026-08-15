@@ -1,0 +1,18 @@
+== negprobe t29 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/family-os-caty pre=d221bd8f46f241f66e26d9c7aa31a667aa17ec94 timeout_s=120 ==
+EDIT Create minimal SVG shell only.
+EXPECT_FAILS a01,a02,a03,a04,a05,a06,a07,a08,a09,a10,a13
+CHECK a01 FAIL canonical growth-model documents or five-stage tables are missing
+CHECK a02 FAIL the I/WE/THEY subject mapping is incomplete
+CHECK a03 FAIL the Relationship Readiness axis is incomplete
+CHECK a04 FAIL one or more localized README growth sections lack five-stage structure
+CHECK a05 FAIL implemented/unverified and planned claim strengths are not separated
+CHECK a06 FAIL the shared SVG is missing, invalid, localized, or lacks stage labels
+CHECK a07 FAIL the SVG style semantics or focus-not-state legend is incomplete
+CHECK a08 FAIL the SVG I-to-WE boundary is missing or misplaced
+CHECK a09 FAIL a localized figure/table placement or relationship column is wrong
+CHECK a10 FAIL stage 1 evidence is not an em dash in both canonical tables
+CHECK a11 PASS generated repository content is current
+CHECK a12 PASS publication label, denylist, and SVG scans pass
+CHECK a13 FAIL localized growth-section structure is inconsistent
+RUN t29 negprobe exit=1 dur=0s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

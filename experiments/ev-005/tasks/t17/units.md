@@ -29,3 +29,15 @@ MOOT: 0
   `| B0 | estimate |`, comes directly from the pre-fix tree.
 - Timeout remains the default 120 seconds. Each T5 probe is narrow and runs
   against an isolated temporary workspace; no full repository suite is used.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Append one shell comment containing `deadman-probe.sh cron-wrapper.tmpl.sh launchd.tmpl.plist DEADMAN_CHECKS .marker exit 1` to `tests/deadman-probe.test.sh`, without wiring the real deadman behavior.
+- Route: `a`
+- Expected result: `a01`-`a03` and `a05`-`a07` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a01`, `a02`, `a03`, `a05`, `a06`, `a07`; `RUN t17 negprobe exit=1 dur=9s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t17.log`.
+- Rationale: Comment tokens do not create the live script/template behavior the probe suite exercises.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t17.log` shows no constant-true assertions.

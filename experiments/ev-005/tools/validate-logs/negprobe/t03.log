@@ -1,0 +1,12 @@
+== negprobe t03 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=46c2318aa6d52bc8209b54e89fcc58e41d515994 timeout_s=120 ==
+EDIT Append AUTH none declaration comment to review-labels workflow.
+EXPECT_FAILS a01
+CHECK a01 FAIL workflow does not match the bundled template after declaration normalization
+CHECK a02 PASS AUTH none declaration is present
+CHECK a03 PASS no tracked auth directory paths exist
+CHECK a04 PASS no non-test auth/signin/token filenames exist
+CHECK a05 PASS billing none declaration is present
+CHECK a06 PASS outbound none declaration is present
+CHECK a07 PASS gates none declaration is present
+RUN t03 negprobe exit=1 dur=0s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

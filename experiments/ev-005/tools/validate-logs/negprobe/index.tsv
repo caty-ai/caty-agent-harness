@@ -1,0 +1,31 @@
+task	route	expected_result	log_path	summary	expected_fails
+t01	a	unexpected-pass	tools/validate-logs/negprobe/t01.log	Append missing needles as HTML comments to four docs; make test still passes on pre tree.	
+t02	a	unexpected-pass	tools/validate-logs/negprobe/t02.log	Append README/agent-guide surface strings as comments without changing behavior.	
+t03	a	expected-fail	tools/validate-logs/negprobe/t03.log	Append AUTH none declaration comment to review-labels workflow.	a01
+t04	a	unexpected-pass	tools/validate-logs/negprobe/t04.log	Append x-collector/pipeline HTML comment to docs/trial-isolation.md.	
+t05	a	expected-fail	tools/validate-logs/negprobe/t05.log	Append positive-only needles across example/docs/install files while forbidden legacy strings remain.	a06,a07,a08,a09,a18,a19,a22,a23,a27,a30,a31,a33,a37
+t06	a	expected-fail	tools/validate-logs/negprobe/t06.log	Append public-flow and historical-record needles while forbidden private wording remains.	a03,a04,a07,a08,a11,a12,a15,a27,a28,a29
+t07	a	expected-fail	tools/validate-logs/negprobe/t07.log	Append public-name strings as comments while retired strings remain in place.	a02,a04,a06,a08,a10,a12,a14,a16,a18,a20,a22,a24,a26,a28,a30,a32,a34,a36,a37
+t08	a	expected-fail	tools/validate-logs/negprobe/t08.log	Append public-name strings as comments while retired strings remain in place.	a02,a04,a06,a08,a10,a12,a14,a16,a18,a20,a22,a24,a26,a28,a30,a34,a36,a38,a40,a42,a44,a46,a48,a50,a52,a54,a56,a58,a60,a62
+t09	a	expected-fail	tools/validate-logs/negprobe/t09.log	Append two no-op test functions carrying AST coverage tokens.	a01
+t10	a	expected-fail	tools/validate-logs/negprobe/t10.log	Insert empty generated block before README license anchor.	a02,a03,a04,a05,a06,a08
+t11	a	expected-fail	tools/validate-logs/negprobe/t11.log	Add executable fake secrets regression script with discovery markers.	a04,a05,a06,a07
+t12	a	expected-fail	tools/validate-logs/negprobe/t12.log	Swap yaml import for __import__ indirection only.	a02,a03,a04,a05,a06,a07,a08,a09,a10,a11
+t13	a	expected-fail	tools/validate-logs/negprobe/t13.log	Replace leading pipe on English duplicated family-table rows only.	a10,a11,a12,a18,a19,a20
+t14	b	impossibility-record		Route-b only; strict JSON singleton/typed-field equality leaves no superficial satisfaction path.	
+t15	a	expected-fail	tools/validate-logs/negprobe/t15.log	Append README smoke-fixture line only.	a01,a02,a03
+t16	a	expected-fail	tools/validate-logs/negprobe/t16.log	Append unreachable mode-check test functions carrying AST tokens.	a02,a06
+t17	a	expected-fail	tools/validate-logs/negprobe/t17.log	Append deadman probe token comment to tests/deadman-probe.test.sh.	a01,a02,a03,a05,a06,a07
+t18	a	expected-fail	tools/validate-logs/negprobe/t18.log	Rename existing self-growth-loop id to context-kit in registry/modules.json.	a07,a08,a09,a10,a11,a12,a13,a14
+t19	a	expected-fail	tools/validate-logs/negprobe/t19.log	Append secrets-env token comment to tests/deadman-probe.test.sh.	a01,a02,a03
+t20	a	expected-fail	tools/validate-logs/negprobe/t20.log	Create empty docs/evidence.md.	a02,a03,a04,a05,a06,a07,a08,a09
+t21	a	expected-fail	tools/validate-logs/negprobe/t21.log	Append verified-skills wording and template comment only.	a03,a06
+t22	a	expected-fail	tools/validate-logs/negprobe/t22.log	Create one-byte hero asset only.	a05,a06,a08,a09
+t23	a	expected-fail	tools/validate-logs/negprobe/t23.log	Append regression-token comments to task-runner and enqueue tests.	a01,a02,a03,a04,a05,a06
+t24	a	expected-fail	tools/validate-logs/negprobe/t24.log	Create zero-byte publication gate file only.	a05,a06,a08,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22
+t25	a	expected-fail	tools/validate-logs/negprobe/t25.log	Append one allowed_signers documentation line only.	a02,a04,a05,a06
+t26	a	expected-fail	tools/validate-logs/negprobe/t26.log	Create token-only cli-conventions note.	a05,a06
+t27	a	expected-fail	tools/validate-logs/negprobe/t27.log	Create 8-section FOR-AGENTS skeleton with bogus repo tour row.	a08
+t28	a	expected-fail	tools/validate-logs/negprobe/t28.log	Append trust-boundary sentence only.	a02,a03,a04,a05,a06,a07,a08,a10
+t29	a	expected-fail	tools/validate-logs/negprobe/t29.log	Create minimal SVG shell only.	a01,a02,a03,a04,a05,a06,a07,a08,a09,a10,a13
+t30	a	expected-fail	tools/validate-logs/negprobe/t30.log	Create no-op Makefile test/lint targets only.	a03,a04,a05,a06,a07,a08

@@ -23,8 +23,8 @@ CHECK a21 PASS source install doc states the LaunchAgent guidance
 CHECK a22 PASS source install doc states the self-marking caveat
 CHECK a23 PASS source install doc states the ledger claim
 CHECK a24 PASS source install doc states the archive semantics
-CHECK a25 FAIL earlier required assertions failed; command not run
-RUN t01 pre 1 exit=1 dur=0s
+CHECK a25 PASS full repository test suite passes
+RUN t01 pre 1 exit=1 dur=678s
 CHECK a01 FAIL engineering doc says the hook outputs are producers only
 CHECK a02 FAIL engineering doc says the consumer must be scheduled
 CHECK a03 FAIL engineering doc records the schedule window
@@ -49,8 +49,8 @@ CHECK a21 PASS source install doc states the LaunchAgent guidance
 CHECK a22 PASS source install doc states the self-marking caveat
 CHECK a23 PASS source install doc states the ledger claim
 CHECK a24 PASS source install doc states the archive semantics
-CHECK a25 FAIL earlier required assertions failed; command not run
-RUN t01 pre 2 exit=1 dur=0s
+CHECK a25 PASS full repository test suite passes
+RUN t01 pre 2 exit=1 dur=662s
 CHECK a01 FAIL engineering doc says the hook outputs are producers only
 CHECK a02 FAIL engineering doc says the consumer must be scheduled
 CHECK a03 FAIL engineering doc records the schedule window
@@ -75,8 +75,8 @@ CHECK a21 PASS source install doc states the LaunchAgent guidance
 CHECK a22 PASS source install doc states the self-marking caveat
 CHECK a23 PASS source install doc states the ledger claim
 CHECK a24 PASS source install doc states the archive semantics
-CHECK a25 FAIL earlier required assertions failed; command not run
-RUN t01 pre 3 exit=1 dur=0s
+CHECK a25 PASS full repository test suite passes
+RUN t01 pre 3 exit=1 dur=658s
 CHECK a01 FAIL engineering doc says the hook outputs are producers only
 CHECK a02 FAIL engineering doc says the consumer must be scheduled
 CHECK a03 FAIL engineering doc records the schedule window
@@ -101,8 +101,8 @@ CHECK a21 PASS source install doc states the LaunchAgent guidance
 CHECK a22 PASS source install doc states the self-marking caveat
 CHECK a23 PASS source install doc states the ledger claim
 CHECK a24 PASS source install doc states the archive semantics
-CHECK a25 FAIL earlier required assertions failed; command not run
-RUN t01 pre 4 exit=1 dur=0s
+CHECK a25 PASS full repository test suite passes
+RUN t01 pre 4 exit=1 dur=672s
 CHECK a01 FAIL engineering doc says the hook outputs are producers only
 CHECK a02 FAIL engineering doc says the consumer must be scheduled
 CHECK a03 FAIL engineering doc records the schedule window
@@ -127,8 +127,8 @@ CHECK a21 PASS source install doc states the LaunchAgent guidance
 CHECK a22 PASS source install doc states the self-marking caveat
 CHECK a23 PASS source install doc states the ledger claim
 CHECK a24 PASS source install doc states the archive semantics
-CHECK a25 FAIL earlier required assertions failed; command not run
-RUN t01 pre 5 exit=1 dur=0s
+CHECK a25 PASS full repository test suite passes
+RUN t01 pre 5 exit=1 dur=670s
 CHECK a01 PASS engineering doc says the hook outputs are producers only
 CHECK a02 PASS engineering doc says the consumer must be scheduled
 CHECK a03 PASS engineering doc records the schedule window
@@ -154,7 +154,7 @@ CHECK a22 PASS source install doc states the self-marking caveat
 CHECK a23 PASS source install doc states the ledger claim
 CHECK a24 PASS source install doc states the archive semantics
 CHECK a25 PASS full repository test suite passes
-RUN t01 fix 1 exit=0 dur=705s
+RUN t01 fix 1 exit=0 dur=663s
 CHECK a01 PASS engineering doc says the hook outputs are producers only
 CHECK a02 PASS engineering doc says the consumer must be scheduled
 CHECK a03 PASS engineering doc records the schedule window
@@ -180,7 +180,7 @@ CHECK a22 PASS source install doc states the self-marking caveat
 CHECK a23 PASS source install doc states the ledger claim
 CHECK a24 PASS source install doc states the archive semantics
 CHECK a25 PASS full repository test suite passes
-RUN t01 fix 2 exit=0 dur=685s
+RUN t01 fix 2 exit=0 dur=666s
 CHECK a01 PASS engineering doc says the hook outputs are producers only
 CHECK a02 PASS engineering doc says the consumer must be scheduled
 CHECK a03 PASS engineering doc records the schedule window
@@ -206,7 +206,7 @@ CHECK a22 PASS source install doc states the self-marking caveat
 CHECK a23 PASS source install doc states the ledger claim
 CHECK a24 PASS source install doc states the archive semantics
 CHECK a25 PASS full repository test suite passes
-RUN t01 fix 3 exit=0 dur=681s
+RUN t01 fix 3 exit=0 dur=654s
 CHECK a01 PASS engineering doc says the hook outputs are producers only
 CHECK a02 PASS engineering doc says the consumer must be scheduled
 CHECK a03 PASS engineering doc records the schedule window
@@ -232,7 +232,7 @@ CHECK a22 PASS source install doc states the self-marking caveat
 CHECK a23 PASS source install doc states the ledger claim
 CHECK a24 PASS source install doc states the archive semantics
 CHECK a25 PASS full repository test suite passes
-RUN t01 fix 4 exit=0 dur=677s
+RUN t01 fix 4 exit=0 dur=660s
 CHECK a01 PASS engineering doc says the hook outputs are producers only
 CHECK a02 PASS engineering doc says the consumer must be scheduled
 CHECK a03 PASS engineering doc records the schedule window
@@ -258,5 +258,5 @@ CHECK a22 PASS source install doc states the self-marking caveat
 CHECK a23 PASS source install doc states the ledger claim
 CHECK a24 PASS source install doc states the archive semantics
 CHECK a25 PASS full repository test suite passes
-RUN t01 fix 5 exit=0 dur=687s
+RUN t01 fix 5 exit=0 dur=670s
 VERDICT t01 PASS

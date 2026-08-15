@@ -64,3 +64,32 @@ examples as product identifiers; the source explicitly distinguishes those cases
   the positive assertion uses only the shorter public-name fragment.
 - Timeout remains the default 120 seconds because all 77 assertions are
   bounded fixed-string checks and the gate executes no repository code.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Append public-name assertion needles only as comments to the Claude/Codex/Kimi INSTALL and hook files, `docs/plugin-convention.md`, `templates/cron-wrapper.tmpl.sh`, `templates/launchd.tmpl.plist`, `templates/updater-cron.tmpl.sh`, and `tests/pause-contract.test.sh`, leaving retired live strings and behavior intact.
+- Route: `a`
+- Expected result: `a02`, `a04`, `a06`, `a08`, `a10`, `a12`, `a14`, `a16`, `a18`, `a20`, `a22`, `a24`, `a26`, `a28`, `a30`, `a34`, `a36`, `a38`, `a40`, `a42`, `a44`, `a46`, `a48`, `a50`, `a52`, `a54`, `a56`, `a58`, `a60`, and `a62` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a02`, `a04`, `a06`, `a08`, `a10`, `a12`, `a14`, `a16`, `a18`, `a20`, `a22`, `a24`, `a26`, `a28`, `a30`, `a34`, `a36`, `a38`, `a40`, `a42`, `a44`, `a46`, `a48`, `a50`, `a52`, `a54`, `a56`, `a58`, `a60`, `a62`; `RUN t08 negprobe exit=1 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t08.log`.
+- Rationale: The non-solution keeps the retired live strings in place, so the broad T4 absence set should remain fail-closed.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t08.log` (current pre-leg record).
+- a03 — oversight: A generic phrase already present in the pre tree satisfies the check without proving the targeted contract change.
+- a32 — oversight: A newline-split retired phrase evades the fixed-string absence probe, so the pre leg passes vacuously.
+- a63 — invariance guard: The frozen marker check already holds in the pre tree and intentionally protects it.
+- a64 — invariance guard: The paired frozen marker already holds pre-fix, so the PASS is deliberate.
+- a65 — invariance guard: The schema guard already holds on the pre tree and intentionally stays constant-true.
+- a66 — invariance guard: The paired schema guard already holds on the pre tree.
+- a67 — invariance guard: The provider environment-variable guard already holds pre-fix, protecting against regressions.
+- a68 — invariance guard: The paired provider environment-variable guard already holds pre-fix.
+- a69 — invariance guard: The next frozen marker/schema invariant already holds on the pre tree.
+- a70 — invariance guard: The paired frozen marker/schema invariant already holds pre-fix.
+- a71 — invariance guard: The next provider-env invariant already holds before the fix.
+- a72 — invariance guard: The paired provider-env invariant already holds before the fix.
+- a73 — invariance guard: The final frozen marker invariant already holds pre-fix and is intentionally guarded.
+- a74 — invariance guard: The paired frozen marker invariant already holds pre-fix.
+- a75 — invariance guard: The final schema/provider invariant already holds on the pre tree.
+- a76 — invariance guard: The paired final schema/provider invariant already holds on the pre tree.
+- a77 — invariance guard: The closing frozen-provider invariant already holds pre-fix and intentionally remains constant-true.

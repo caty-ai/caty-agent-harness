@@ -82,6 +82,7 @@ what the probe actually inspects.
 
 ## Budget
 
-- Attempt budget: `{{BUDGET}}`
-- Per-run timeout: `120 s`
+- Attempt budget: `45 minutes wall-clock per run / at most 5 completion declarations per run`
+- Donecheck timeout: `120 s` per `donecheck.sh` invocation — a verification-time
+  bound on the machine gate, separate from and not part of the attempt budget.
 - A machine gate `donecheck.sh` ships with this task; it is readable and executable.

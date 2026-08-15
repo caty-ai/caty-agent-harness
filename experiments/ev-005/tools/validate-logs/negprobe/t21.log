@@ -1,0 +1,11 @@
+== negprobe t21 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=06b763ab6d2ac0d946ac5220a16b5e210a1251e3 timeout_s=120 ==
+EDIT Append verified-skills wording and template comment only.
+EXPECT_FAILS a03,a06
+CHECK a01 PASS design records the conditional six-field verified-skill contract
+CHECK a02 PASS staging template records promotion-time verification fields
+CHECK a03 FAIL missing verification metadata does not emit both verified-skill warnings
+CHECK a04 PASS draft and complete verified skills avoid missing-field warnings
+CHECK a05 PASS verified-skill warnings leave the check exit status unchanged
+CHECK a06 FAIL targeted conditional-field regression test is missing or fails
+RUN t21 negprobe exit=1 dur=0s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

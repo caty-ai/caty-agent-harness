@@ -27,7 +27,7 @@ MOOT: 3
 | U18 | MECH | `docs/reference.ja.md` points to `adapters/claude-code/INSTALL.md` as the normative setup procedure. | `a18` (T1 content-presence in `docs/reference.ja.md`) |
 | U19 | HUMAN | The engineering-layer additions do not make claims beyond the repository's existing source documentation for this feature. | Weakened (HUMAN→MECH extraction): keep source-backed coverage for the engineering additions by requiring the normative source document `adapters/claude-code/INSTALL.md` to contain the same consumer requirement, schedule window, LaunchAgent guidance, and self-marking statement. Lost: human judgment about whether the wording is broader in tone or emphasis. Covered by `a19`–`a22` (T1 content-presence in `adapters/claude-code/INSTALL.md`). |
 | U20 | HUMAN | The reference-layer additions do not make claims beyond the repository's existing source documentation for this feature. | Weakened (HUMAN→MECH extraction): keep source-backed coverage for the reference additions by requiring the normative source document `adapters/claude-code/INSTALL.md` to contain the same ledger and archive statements. Lost: human judgment about whether the wording is broader in tone or emphasis. Covered by `a23`–`a24` (T1 content-presence in `adapters/claude-code/INSTALL.md`). |
-| U21 | MECH | The full repository test suite is green on the branch-equivalent tree. | `a25` (T3 command-exit: `make test`). `timeout_s` is raised to `1800` because the source-required fix-tree suite exceeded `120 s`, `300 s`, and `600 s` in history-zero replicas during admission. When any earlier content assertion already failed, `a25` emits `FAIL` without running the suite so the pre arm remains fail-closed and bounded. |
+| U21 | MECH | The full repository test suite is green on the branch-equivalent tree. | `a25` (T3 command-exit: `make test`). `timeout_s` is raised to `1800` because the source-required fix-tree suite exceeded `120 s`, `300 s`, and `600 s` in history-zero replicas during admission. REV5 removes the earlier status gate, so `a25` now runs and reports its own CHECK line unconditionally. |
 | U22 | MOOT | The full repository test suite is green on the post-merge mainline state. | Dropped (MOOT: the offline replica has no live merged-mainline destination). |
 | U23 | HUMAN | Owner confirmation is obtained before publication. | Dropped (HUMAN: requires an external owner decision outside the offline replica). |
 | U24 | MOOT | A tag is published for this documentation update. | Dropped (MOOT: tag-publication state is not represented inside the history-zero replica). |
@@ -45,3 +45,24 @@ MOOT: 3
   extraction; the ledger path itself is also named by U7.
 - Timeout is 1800 seconds because the source-required full `make test` suite
   exceeded 120, 300, and 600 seconds in history-zero admission replicas.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Append one HTML comment containing each missing assertion needle to `docs/engineering.md`, `docs/reference.md`, `docs/engineering.ja.md`, and `docs/reference.ja.md`, leaving the rendered prose and normative source unchanged.
+- Route: `a (UNEXPECTED_PASS blocker)`
+- Expected result: No trustworthy failing IDs to cite: the strongest surface cheat is expected, and may already be observed, to produce `UNEXPECTED_PASS`.
+- Evidence status: `UNEXPECTED_PASS_CONFIRMED`; failing CHECK IDs: none; `RUN t01 negprobe exit=0 dur=668s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t01.log`.
+- Rationale: The current gate is vulnerable to comment-only needle injection across all four asserted docs, so recording a FAIL without fresh contrary evidence would be dishonest.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t01.log` (current pre-leg record).
+- a15 — oversight: The generic INSTALL link already present in `docs/engineering.ja.md` does not prove the new normative setup pointer, so the pre leg still passes.
+- a18 — oversight: The generic INSTALL link already present in `docs/reference.ja.md` does not prove the new normative setup pointer, so the pre leg still passes.
+- a19 — invariance guard: The pre-fix `adapters/claude-code/INSTALL.md` already contains the consumer requirement, guarding against a regression that would remove it.
+- a20 — invariance guard: The pre-fix normative install doc already carries the schedule-window statement, so this PASS is deliberate parity protection.
+- a21 — invariance guard: The pre-fix normative install doc already carries the LaunchAgent guidance; the assertion guards source parity rather than discriminating the fix.
+- a22 — invariance guard: The pre-fix normative install doc already carries the deadman marker caveat; this PASS intentionally prevents regression.
+- a23 — invariance guard: The pre-fix normative install doc already names `loop/pending/intake-runs.log`, so the reference-layer source-parity check is intentionally constant-true.
+- a24 — invariance guard: The pre-fix normative install doc already describes the append-only archive semantics, so this PASS is an intentional guard.
+- a25 — invariance guard: The full repository suite already passes on the pre tree and must remain passing after this docs-only change; fresh terminal evidence in `experiments/ev-005/tools/validate-logs/t01.log` shows pre runs 1-5 exiting `1` at the gate level while `a25` itself remains a pre-leg PASS, and fix runs 1-5 exit `0` with no `DIRTY-TREE`.

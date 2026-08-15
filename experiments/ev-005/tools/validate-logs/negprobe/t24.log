@@ -1,0 +1,152 @@
+== negprobe t24 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/family-os-caty pre=f0ba28165f4c5cfb2133876d13dbac1199447926 timeout_s=120 ==
+EDIT Create zero-byte publication gate file only.
+EXPECT_FAILS a05,a06,a08,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22
+CHECK a01 PASS English README matches the published self-growth registry state
+CHECK a02 PASS Japanese README matches the published self-growth registry state
+CHECK a03 PASS Chinese README matches the published self-growth registry state
+CHECK a04 PASS Thai README matches the published self-growth registry state
+CHECK a05 FAIL retired self-growth URL remains excluded from link checks
+CHECK a06 FAIL retired memory URL remains excluded from link checks
+CHECK a07 PASS preparing persona URL remains excluded from link checks
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 172, in main
+    check_retired_repo()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 58, in check_retired_repo
+    assert len(matches) == 1
+           ^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a08 FAIL retired self-growth repository is not registered exactly once
+CHECK a09 PASS English preparing module is plain text with its label
+CHECK a10 PASS Japanese preparing module is plain text with its label
+CHECK a11 PASS Chinese preparing module is plain text with its label
+CHECK a12 PASS Thai preparing module is plain text with its label
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 140, in behavior
+    assert result.returncode != 0, result.stdout
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a13 FAIL personal-name patterns are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 140, in behavior
+    assert result.returncode != 0, result.stdout
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a14 FAIL approval-record patterns are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 140, in behavior
+    assert result.returncode != 0, result.stdout
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a15 FAIL absolute personal paths are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 140, in behavior
+    assert result.returncode != 0, result.stdout
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a16 FAIL internal host addresses are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 140, in behavior
+    assert result.returncode != 0, result.stdout
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a17 FAIL personal email addresses are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 140, in behavior
+    assert result.returncode != 0, result.stdout
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a18 FAIL unlisted personal repository links are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 140, in behavior
+    assert result.returncode != 0, result.stdout
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a19 FAIL missing module labels are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 178, in main
+    behavior(mode)
+    ~~~~~~~~^^^^^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 140, in behavior
+    assert result.returncode != 0, result.stdout
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a20 FAIL unsupported SVG state claims are not rejected
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 174, in main
+    check_suffixes()
+    ~~~~~~~~~~~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 154, in check_suffixes
+    assert result.returncode != 0, suffix + " escaped publication scan"
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: md escaped publication scan
+CHECK a21 FAIL one or more required source suffixes escape the gate
+Traceback (most recent call last):
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 182, in <module>
+    main()
+    ~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 176, in main
+    check_workflow_ci()
+    ~~~~~~~~~~~~~~~~~^^
+  File "/private/var/folders/z8/3ywxs9k51dz5c7qmphdwb_kh0000gn/T/ev005-negprobe-t24-jyv0v7xg/repo/.ev005-fixtures/publication_gate_probe.py", line 159, in check_workflow_ci
+    assert "  publication-gate:" in text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+CHECK a22 FAIL pull-request workflow does not enforce the publication gate completely
+OK — generated content is up to date.
+CHECK a23 PASS generated README blocks are current
+CHECK a24 PASS publication gate passes on repository sources
+CHECK a25 PASS clean bundled publication fixture passes
+RUN t24 negprobe exit=1 dur=1s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

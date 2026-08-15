@@ -65,3 +65,26 @@ link-check exclusions that live solely in workflow configuration.
 - Timeout remains the task's default 120 seconds. The gate and bundled fixture
   use only local source scans and temporary repositories, and do not mutate
   tracked task content.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Create an empty `tools/check_publication_gate.py` while leaving the real gate implementation and renderer behavior absent.
+- Route: `a`
+- Expected result: `a05`, `a06`, `a08`, and `a13`-`a22` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a05`, `a06`, `a08`, `a13`, `a14`, `a15`, `a16`, `a17`, `a18`, `a19`, `a20`, `a21`, `a22`; `RUN t24 negprobe exit=1 dur=1s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t24.log`.
+- Rationale: An empty checker file cannot satisfy the executable publication gate or the renderer-backed checks.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t24.log` (current pre-leg record).
+- a01 — oversight: An unrelated generated row already present in the pre tree masks the stale Growth row, so the check passes without proving the fix.
+- a02 — oversight: A second unrelated generated row already masks the stale Growth row, so the pre leg passes vacuously.
+- a03 — oversight: A third unrelated generated row already masks the stale Growth row, making this an oversight PASS.
+- a04 — oversight: A fourth unrelated generated row already masks the stale Growth row, so the check does not discriminate the fix.
+- a07 — invariance guard: The guard assertion already holds on the pre tree and intentionally protects that invariant.
+- a09 — oversight: An unrelated existing occurrence already masks the stale Growth link, so this PASS does not discriminate the fix.
+- a10 — oversight: A second unrelated existing occurrence already masks the stale Growth link, making this an oversight PASS.
+- a11 — oversight: A third unrelated existing occurrence already masks the stale Growth link, so the check passes vacuously.
+- a12 — oversight: A fourth unrelated existing occurrence already masks the stale Growth link, so the PASS is non-discriminating.
+- a21 — oversight: The missing-gate nonzero path is accepted vacuously on the pre tree, so this PASS lacks guarding value.
+- a23 — invariance guard: The final guard assertion already holds on the pre tree and deliberately prevents regression.

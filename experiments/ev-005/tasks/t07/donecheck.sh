@@ -58,10 +58,6 @@ check_cmd() {
   local id="$1"
   local reason="$2"
   shift 2
-  if [ "$status" -ne 0 ]; then
-    echo "CHECK $id FAIL earlier required assertions failed; command not run"
-    return
-  fi
   if "$@" >/dev/null 2>&1; then
     echo "CHECK $id PASS $reason"
   else

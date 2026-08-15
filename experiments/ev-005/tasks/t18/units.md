@@ -40,3 +40,17 @@ criterion and is therefore criterion-constitutive.
   and Markdown structure are all derivable from the task sheet and replica.
 - Timeout remains the default 120 seconds. The two repository tools and local
   structural checks complete well within the default; no full suite is run.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Relabel the `self-growth-loop` registry entry so the identifier becomes `context-kit`, keeping the surrounding published metadata superficially similar.
+- Route: `a`
+- Expected result: `a07`-`a14` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a07`, `a08`, `a09`, `a10`, `a11`, `a12`, `a13`, `a14`; `RUN t18 negprobe exit=1 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t18.log`.
+- Rationale: The guard set still requires the exact published module identity and renderer/offline-registry behavior.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t18.log` (current pre-leg record).
+- a05 — invariance guard: The renderer check already passes on the pre tree, so this PASS intentionally guards it.
+- a06 — invariance guard: The offline registry check already passes pre-fix, so this PASS is another deliberate guard.

@@ -36,3 +36,15 @@ Needle calibration and solvability:
   named in task.md. State values and the published-module set are derived from
   replica-local canonical sources.
 - Timeout remains the default 120 seconds; all checks are local parsing only.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Create only an eight-section `FOR-AGENTS.md` skeleton and give it a bogus `caty-ai/not-real` tour row, without changing any registry or growth-model source.
+- Route: `a`
+- Expected result: `a08` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a08`; `RUN t27 negprobe exit=1 dur=0s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t27.log`.
+- Rationale: The bogus repository target leaves the criterion-defining registry linkage unsatisfied.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t27.log` shows no constant-true assertions.

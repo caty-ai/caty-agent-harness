@@ -1,0 +1,18 @@
+== negprobe t12 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/fma-public pre=25b426bbe34c28ce0e18a3db84f557e18350b793 timeout_s=120 ==
+EDIT Swap yaml import for __import__ indirection only.
+EXPECT_FAILS a02,a03,a04,a05,a06,a07,a08,a09,a10,a11
+CHECK a01 PASS content-lint has no yaml import
+CHECK a02 FAIL injection-lint imports yaml or cannot be parsed
+CHECK a03 FAIL README.md retains PyYAML guidance or is missing
+CHECK a04 FAIL README.ja.md retains PyYAML guidance or is missing
+CHECK a05 FAIL README.th.md retains PyYAML guidance or is missing
+CHECK a06 FAIL README.zh.md retains PyYAML guidance or is missing
+CHECK a07 FAIL repository map retains PyYAML guidance or is missing
+CHECK a08 FAIL getting started retains PyYAML guidance or is missing
+CHECK a09 FAIL agent guide retains PyYAML guidance or is missing
+CHECK a10 FAIL contributing guide retains PyYAML guidance or is missing
+CHECK a11 FAIL security guide retains PyYAML guidance or is missing
+CHECK a12 PASS full repository suite passes
+CHECK a13 PASS full repository suite reports no skips
+RUN t12 negprobe exit=1 dur=22s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

@@ -1,0 +1,14 @@
+== negprobe t20 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/family-os-caty pre=e6e2fa76707c6a83252739e4eca4924d3c01534d timeout_s=120 ==
+EDIT Create empty docs/evidence.md.
+EXPECT_FAILS a02,a03,a04,a05,a06,a07,a08,a09
+CHECK a01 PASS the evidence register exists
+CHECK a02 FAIL claim schema, stable ids, dates, states, or links are incomplete
+CHECK a03 FAIL the silent-failure evidence entry is missing
+CHECK a04 FAIL the red/green gate evidence entry is missing
+CHECK a05 FAIL the weekly reality-check evidence entry is missing
+CHECK a06 FAIL the growth-cycle entry or its honest evidence state is missing
+CHECK a07 FAIL the 90-day expiry rule is missing
+CHECK a08 FAIL the scheduled freshness job lacks schema or age enforcement
+CHECK a09 FAIL stale evidence does not fail closed or automation rewrites the register
+RUN t20 negprobe exit=1 dur=0s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

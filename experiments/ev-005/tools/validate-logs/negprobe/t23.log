@@ -1,0 +1,12 @@
+== negprobe t23 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/caty-agent-harness pre=5ae06864018abf3c1aaa3e08ec72bfa4a47241cd timeout_s=120 ==
+EDIT Append regression-token comments to task-runner and enqueue tests.
+EXPECT_FAILS a01,a02,a03,a04,a05,a06
+CHECK a01 FAIL corrupt state crashes, is processed, or prevents healthy work
+CHECK a02 FAIL quoted identifier is rejected or produces inconsistent artifact identity
+CHECK a03 FAIL copy failure leaves partial state or blocks a clean retry
+CHECK a04 FAIL intake accepts or unclearly rejects an invalid created timestamp
+CHECK a05 FAIL legacy invalid created value silently runs before valid work
+CHECK a06 FAIL runner does not clearly reject bad timeout or grace values
+CHECK a07 PASS repository tests cover every listed validation and recovery path
+RUN t23 negprobe exit=1 dur=6s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED

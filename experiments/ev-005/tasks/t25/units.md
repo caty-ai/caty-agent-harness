@@ -41,3 +41,16 @@ out-of-replica content is pinned. Default timeout remains 120 seconds.
 - Timeout remains the default 120 seconds because the gate runs one focused
   updater regression module plus a bounded structural Python check, rather
   than the full repository suite.
+
+## Negative validity probe (r5-1)
+
+- Minimal non-solution edit: Append exactly `SSH signing uses allowed_signers outside the repository.` to `docs/updater-rollout.md`, without changing `scripts/lib-updater-verify.sh` or `tests/family-updater.test.sh`.
+- Route: `a`
+- Expected result: `a02` and `a04`-`a06` should still FAIL.
+- Evidence status: `EXPECTED_FAIL_CONFIRMED`; failing CHECK IDs: `a02`, `a04`, `a05`, `a06`; `RUN t25 negprobe exit=1 dur=14s`; no `DIRTY-TREE`; log: `experiments/ev-005/tools/validate-logs/negprobe/t25.log`.
+- Rationale: Documentation-only token stuffing does not satisfy the real verifier/test behavior.
+
+## Constant-true declaration (r5-2)
+
+- Source log: `experiments/ev-005/tools/validate-logs/t25.log` (current pre-leg record).
+- a03 — invariance guard: The guarded updater-verifier behavior already holds on the pre tree, so this PASS is deliberate.

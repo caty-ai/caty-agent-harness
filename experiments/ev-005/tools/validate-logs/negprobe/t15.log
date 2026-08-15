@@ -1,0 +1,9 @@
+== negprobe t15 route=a expected=expected-fail repo=/Users/shojikumaru/claude-workspace/fma-public pre=7ca137241bda11caaa8130123c5fb1e23eeeeeab timeout_s=120 ==
+EDIT Append README smoke-fixture line only.
+EXPECT_FAILS a01,a02,a03
+CHECK a01 FAIL injection-budget-check documented bundled input is missing or does not exit 0
+CHECK a02 FAIL injection-lint documented bundled input is missing or does not exit 0
+CHECK a03 FAIL watchdog documented bundled input is missing or does not exit 0
+CHECK a04 PASS one README or repository-map line resolves the fixture path or flag
+RUN t15 negprobe exit=1 dur=1s
+NEGPROBE_RESULT EXPECTED_FAIL_CONFIRMED
