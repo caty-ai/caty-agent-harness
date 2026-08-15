@@ -1,0 +1,33 @@
+name: ev005-seal
+
+# Fail-closed guard for the EV-005 sealed pre-registration (experiments/ev-005).
+# Once sealed, the pack may only change through the analysis-plan §10 amendment procedure,
+# which regenerates MANIFEST.sha256. Any other change to a sealed file breaks this check.
+
+on:
+  push:
+    paths:
+      - 'experiments/ev-005/**'
+  pull_request:
+    paths:
+      - 'experiments/ev-005/**'
+  workflow_dispatch:
+
+jobs:
+  verify-seal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify the sealed manifest
+        run: |
+          python3 experiments/ev-005/tools/seal-manifest.py experiments/ev-005 --check
+
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::error::EV-005 seal broken. A file inside the sealed scope was added, removed,"
+          echo "::error::or modified without regenerating MANIFEST.sha256."
+          echo "::error::If this is an intended amendment (analysis-plan §10): publish the"
+          echo "::error::amendment note first, regenerate the manifest, record the new digest,"
+          echo "::error::and re-timestamp. If it is not, revert the change."
