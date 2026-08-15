@@ -6,6 +6,12 @@ set -euo pipefail
 # Copy this file next to a checked-out harness clone, set REPO_DIR to the
 # absolute clone path, and run it from cron. It validates wrapper-level
 # assumptions before execing the clone's scripts/family-updater.
+#
+# CATY_UPDATER_RELEASE_BRANCH selects the branch every update must be reachable
+# from (default: main). It is not validated here; it passes through exec to
+# family-updater. Set it in the crontab environment when this deployment's
+# release branch is not main, or every tick refuses with an unavailable
+# release ref.
 
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 export PATH
