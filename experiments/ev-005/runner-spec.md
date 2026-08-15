@@ -13,9 +13,17 @@
 
 1. **Replica provisioning.** History-zero export of the task's `pre_fix` tree (same construction
    as `tools/validate-task.sh` `build_replica`: `git archive` of the sealed SHA, fresh `git init`
-   + single snapshot commit with the run-local identity `ev005 <ev005@local>`). The task sheet
-   (`task.md`) and the task's `donecheck.sh` are placed per the sealed task directory layout —
+   + single snapshot commit with the run-local identity `ev005 <ev005@local>`). The task sheet is
+   placed as `task.md`; **the sealed gate is materialized exactly as `tools/validate-task.sh`
+   materializes it — the script as `.ev005-donecheck.sh` at the replica root and its fixtures, if
+   any, as `.ev005-fixtures/` — and no other copy of the gate is placed.** All of this is
    **byte-identical in all three arms** (frozen visibility ruling).
+   *Rationale (amendment A-1): every R11 admission result in `tools/validate-logs/` was produced
+   under that layout, 17 of the 35 sealed gates hardcode `.ev005-fixtures/` paths, and six
+   exclude `.ev005-*` from repo-wide sweeps. Prescribing any other layout would run gates in a
+   configuration that was never validated — measured on p02's fix tree: exit 0 under this layout,
+   exit 1 under a root-`donecheck.sh` layout. Making the validated layout normative is what lets
+   the admission evidence transfer to the runs.*
 2. **Runner scaffolding (arm W only).** A `.ev005/` directory containing `deliver.sh` (§4) is
    injected into the replica. This is the enforcement surface — the manipulated variable — not
    part of the task file layout; arms B/B+ receive no `.ev005/`. Rationale: the treatment is

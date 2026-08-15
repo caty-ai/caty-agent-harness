@@ -1,8 +1,8 @@
 # EV-005 sealed manifest — metadata
 
 - Files sealed: **264**
-- Manifest digest (SHA-256 of `MANIFEST.sha256`): `c6a16e8981f16121174baf112c0cb88abb27fa2bd470e25cce77869cc1899ee6`
-- Git commit at generation: `186bcb7a8c794d6ff36fa3915525cac5c2467286`
+- Manifest digest (SHA-256 of `MANIFEST.sha256`): `46ae2491a97f85e29a3512b4236a8934955e8256e5ae218db9749572c70f3a77`
+- Git commit at generation: `0a5b57d6cc47be9a2ec6e028c8cdb5d3457e9e5c`
 - Generator: `tools/seal-manifest.py` (stdlib only, deterministic, fail-closed on
   a missing scope entry or a symlink inside the scope).
 
@@ -13,16 +13,3 @@
 Exit 0 means every sealed file matches its recorded digest and no file was added to
 or removed from the sealed scope. Any post-sealing change requires the §10
 amendment procedure; the amendment note records the new manifest digest.
-
-## Third-party timestamp
-
-- `MANIFEST.sha256.ots` — OpenTimestamps proof over this manifest, created 2026-08-16 and
-  submitted to four independent calendars (`a.pool.opentimestamps.org`,
-  `b.pool.opentimestamps.org`, `a.pool.eternitywall.com`, `ots.btc.catallaxy.com`).
-  It commits the manifest digest `c6a16e8981f16121174baf112c0cb88abb27fa2bd470e25cce77869cc1899ee6`
-  to the Bitcoin blockchain, so the seal date is verifiable by anyone without trusting this
-  repository or its owner.
-- Upgrade the proof once the calendars have attested (typically hours):
-  `ots upgrade experiments/ev-005/MANIFEST.sha256.ots`
-- Verify: `ots verify experiments/ev-005/MANIFEST.sha256.ots`
-- Git anchors for the same state: commit `53d2795`, tag `ev-005-sealed-v1`.

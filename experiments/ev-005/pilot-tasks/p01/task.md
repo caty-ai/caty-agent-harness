@@ -60,6 +60,7 @@ and preserve the existing claude-code scheduler contract.
 ## Budget
 
 - Attempt budget: `45 minutes wall-clock per run / at most 5 completion declarations per run`
-- Donecheck timeout: `1800 s` per `donecheck.sh` invocation — a verification-time
+- Donecheck timeout: `1800 s` per `.ev005-donecheck.sh` invocation — a verification-time
   bound on the machine gate, separate from and not part of the attempt budget.
-- A machine gate `donecheck.sh` ships with this task; it is readable and executable.
+- A machine gate `.ev005-donecheck.sh` ships with this task at the repository root; it is
+  readable and executable.
