@@ -40,6 +40,10 @@ Flags:
   --fma-scripts-dir <dir> Directory containing job-heartbeat and hot-inbox-post.
                            When omitted, reporting is disabled with a warning.
   -h, --help              Show this help.
+
+Environment:
+  CATY_UPDATER_RELEASE_BRANCH  Release branch required to contain every update
+                               commit. Defaults to main.
 USAGE
 }
 
@@ -58,11 +62,23 @@ die() {
 
 # shellcheck disable=SC2329
 cleanup_lock() {
+  updater_cleanup_allowed_signers_snapshot
   if [[ "$lock_acquired" -eq 1 && -n "$lock_dir" ]]; then
     rm -rf "$lock_dir"
   fi
 }
-trap 'cleanup_lock' EXIT HUP INT TERM
+
+family_updater_signal_exit() {
+  local status=$1
+
+  trap - HUP INT TERM
+  exit "$status"
+}
+
+trap 'cleanup_lock' EXIT
+trap 'family_updater_signal_exit 129' HUP
+trap 'family_updater_signal_exit 130' INT
+trap 'family_updater_signal_exit 143' TERM
 
 is_live_pid() {
   local pid=$1
@@ -397,6 +413,7 @@ if ! updater_validate_allowed_signers "$repo_dir" "$allowed_signers"; then
   report_startup_failure "signers-failed" "$UPDATER_VERIFY_REASON"
   exit 1
 fi
+printf 'family-updater: repository binding verified: %s\n' "$UPDATER_REPOSITORY_IDENTITY"
 if ! clear_startup_failure "signers-failed"; then
   exit 1
 fi
@@ -417,7 +434,7 @@ if ! clear_startup_failure "pin-failed"; then
   exit 1
 fi
 
-if ! updater_sync_remote_tags "$repo_dir" "$ineligible_path" "$dry_run"; then
+if ! updater_sync_remote_tags "$repo_dir" "$ineligible_path" "$dry_run" "$UPDATER_ORIGIN_URL"; then
   if [[ "$UPDATER_SYNC_FAILURE_HANDLED" -eq 0 ]]; then
     report_failure "fetch-failed" "$UPDATER_VERIFY_REASON" "" "$UPDATER_VERIFY_REASON"
   fi
@@ -459,7 +476,16 @@ while IFS= read -r candidate; do
 
   # B-ALG steps 2-4: capture once, verify T with forced config, parse only T's
   # header block, and bind its embedded tag name exactly to the candidate name.
-  if ! updater_capture_verify_and_bind "$repo_dir" "$candidate" "$allowed_signers"; then
+  if ! updater_capture_verify_and_bind "$repo_dir" "$candidate" "$UPDATER_ALLOWED_SIGNERS_SNAPSHOT"; then
+    reason=$UPDATER_VERIFY_REASON
+    if ! record_candidate_verification_failure "$candidate" "$reason"; then
+      report_failure "$candidate" "$UPDATER_VERIFY_REASON" "" "$UPDATER_VERIFY_REASON"
+      exit 1
+    fi
+    continue
+  fi
+
+  if ! updater_assert_commit_on_release_ref "$repo_dir" "$UPDATER_CAPTURED_COMMIT"; then
     reason=$UPDATER_VERIFY_REASON
     if ! record_candidate_verification_failure "$candidate" "$reason"; then
       report_failure "$candidate" "$UPDATER_VERIFY_REASON" "" "$UPDATER_VERIFY_REASON"

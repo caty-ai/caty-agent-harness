@@ -19,8 +19,9 @@ Usage:
                             [--cron-wrapper-dest <absolute-path>]
 
 The owner supplies the exact initial tag and allowed_signers out of band. This
-command verifies that one named tag only, checks it out by captured commit OID,
-records the per-repository floor, and only then may copy the cron wrapper.
+online command fetches branches, verifies that one named tag only, requires its
+commit on CATY_UPDATER_RELEASE_BRANCH (default main), checks it out by captured
+commit OID, records the floor, and only then may copy the cron wrapper.
 USAGE
 }
 
@@ -28,6 +29,19 @@ fail() {
   printf 'updater-bootstrap error: %s\n' "$1" >&2
   exit 1
 }
+
+updater_bootstrap_signal_exit() {
+  local status=$1
+
+  trap - HUP INT TERM
+  updater_cleanup_allowed_signers_snapshot
+  exit "$status"
+}
+
+trap 'updater_cleanup_allowed_signers_snapshot' EXIT
+trap 'updater_bootstrap_signal_exit 129' HUP
+trap 'updater_bootstrap_signal_exit 130' INT
+trap 'updater_bootstrap_signal_exit 143' TERM
 
 while (($# > 0)); do
   case "$1" in
@@ -80,9 +94,16 @@ fi
 
 pin_path=$(updater_default_pin_path "$repo_dir")
 
+if ! updater_fetch_release_refs "$repo_dir" "$UPDATER_ORIGIN_URL"; then
+  fail "$UPDATER_VERIFY_REASON"
+fi
+
 # B-BOOT uses the same B-ALG steps 2-4 as the recurring updater and operates on
 # exactly the owner-named ref. It performs no remote enumeration or selection.
-if ! updater_capture_verify_and_bind "$repo_dir" "$initial_tag" "$allowed_signers"; then
+if ! updater_capture_verify_and_bind "$repo_dir" "$initial_tag" "$UPDATER_ALLOWED_SIGNERS_SNAPSHOT"; then
+  fail "$UPDATER_VERIFY_REASON"
+fi
+if ! updater_assert_commit_on_release_ref "$repo_dir" "$UPDATER_CAPTURED_COMMIT"; then
   fail "$UPDATER_VERIFY_REASON"
 fi
 

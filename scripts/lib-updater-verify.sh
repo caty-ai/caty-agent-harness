@@ -13,6 +13,10 @@ UPDATER_FLOOR_COMMIT=
 UPDATER_REMOTE_TAGS=
 UPDATER_MOVED_TAGS=
 UPDATER_SYNC_FAILURE_HANDLED=0
+UPDATER_ALLOWED_SIGNERS_SNAPSHOT=
+UPDATER_ALLOWED_SIGNERS_SNAPSHOT_DIR=
+UPDATER_ORIGIN_URL=
+UPDATER_REPOSITORY_IDENTITY=
 
 updater_is_semver() {
   [[ "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
@@ -129,6 +133,140 @@ updater_path_is_outside_repo() {
   [[ "$signers_real" != "$repo_real" && "$signers_real" != "$repo_real/"* ]]
 }
 
+updater_cleanup_allowed_signers_snapshot() {
+  if [[ -n "${UPDATER_ALLOWED_SIGNERS_SNAPSHOT:-}" ]]; then
+    rm -f "$UPDATER_ALLOWED_SIGNERS_SNAPSHOT"
+    UPDATER_ALLOWED_SIGNERS_SNAPSHOT=
+  fi
+  if [[ -n "${UPDATER_ALLOWED_SIGNERS_SNAPSHOT_DIR:-}" ]]; then
+    rmdir "$UPDATER_ALLOWED_SIGNERS_SNAPSHOT_DIR" 2>/dev/null || true
+    UPDATER_ALLOWED_SIGNERS_SNAPSHOT_DIR=
+  fi
+}
+
+updater_strip_host_repo_suffix() {
+  local value=$1
+  local output_var=$2
+  local previous=
+
+  while [[ "$value" != "$previous" ]]; do
+    previous=$value
+    while [[ "$value" == */ ]]; do value=${value%/}; done
+    [[ "$value" != *.git ]] || value=${value%.git}
+  done
+  printf -v "$output_var" '%s' "$value"
+}
+
+updater_normalize_host_identity() {
+  local host=$1
+  local path=$2
+  local output_var=$3
+  local normalized_host normalized_path normalized_identity
+
+  printf -v "$output_var" '%s' ''
+  normalized_host=$(printf '%s' "$host" | tr '[:upper:]' '[:lower:]') || return 1
+  normalized_path=$(printf '%s' "$path" | tr '[:upper:]' '[:lower:]') || return 1
+  updater_strip_host_repo_suffix "$normalized_path" normalized_path
+  if [[ -z "$normalized_host" || "$normalized_host" == *[[:space:]]* \
+    || "$normalized_host" == *:* || "$normalized_host" == */* \
+    || "$normalized_host" == *'['* || "$normalized_host" == *']'* \
+    || "$normalized_path" == *[[:space:]]* || "$normalized_path" == /* \
+    || "$normalized_path" == */*/* || "$normalized_path" != */* \
+    || "$normalized_path" == */ || "$normalized_path" == *//* ]]; then
+    return 1
+  fi
+  normalized_identity=$normalized_host/$normalized_path
+  printf -v "$output_var" '%s' "$normalized_identity"
+}
+
+updater_normalize_repo_url() {
+  local value=$1
+  local output_var=$2
+  local rest authority host_port host path port normalized_url scheme scp_value userinfo
+
+  printf -v "$output_var" '%s' ''
+  normalized_url=
+  if [[ "$value" == /* ]]; then
+    [[ "$value" != *'?'* && "$value" != *'#'* ]] || return 1
+    while [[ "$value" == //* ]]; do value=${value#/}; done
+    normalized_url=$(cd "$value" 2>/dev/null && pwd -P) || return 1
+  elif [[ "$value" == *://* ]]; then
+    [[ "$value" != *'?'* && "$value" != *'#'* ]] || return 1
+    scheme=${value%%://*}
+    scheme=$(printf '%s' "$scheme" | tr '[:upper:]' '[:lower:]') || return 1
+    rest=${value#*://}
+    case "$scheme" in
+      file)
+        if [[ "$rest" == /* ]]; then
+          path=$rest
+        elif [[ "$rest" == */* ]]; then
+          authority=${rest%%/*}
+          authority=$(printf '%s' "$authority" | tr '[:upper:]' '[:lower:]') || return 1
+          [[ "$authority" == localhost ]] || return 1
+          path=/${rest#*/}
+        else
+          return 1
+        fi
+        while [[ "$path" == //* ]]; do path=${path#/}; done
+        normalized_url=$(cd "$path" 2>/dev/null && pwd -P) || return 1
+        ;;
+      ssh|https)
+        if [[ "$scheme" == ssh ]]; then
+          port=22
+        else
+          port=443
+        fi
+        [[ "$rest" == */* ]] || return 1
+        authority=${rest%%/*}
+        path=${rest#*/}
+        host_port=${authority##*@}
+        [[ -n "$host_port" && "$host_port" != *'['* && "$host_port" != *']'* ]] || return 1
+        if [[ "$host_port" == *:* ]]; then
+          host=${host_port%:*}
+          [[ "${host_port##*:}" == "$port" ]] || return 1
+        else
+          host=$host_port
+        fi
+        updater_normalize_host_identity "$host" "$path" normalized_url || return 1
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  else
+    [[ "$value" == *:* ]] || return 1
+    [[ "$value" != *'?'* && "$value" != *'#'* && "$value" != *[[:space:]]* ]] || return 1
+    scp_value=$value
+    if [[ "$scp_value" == *@* ]]; then
+      userinfo=${scp_value%%@*}
+      [[ -n "$userinfo" && "$userinfo" != *:* ]] || return 1
+      scp_value=${scp_value#*@}
+      [[ "$scp_value" != *@* ]] || return 1
+    fi
+    authority=${scp_value%%:*}
+    path=${scp_value#*:}
+    [[ "$authority" != "$scp_value" ]] || return 1
+    host=$authority
+    updater_normalize_host_identity "$host" "$path" normalized_url || return 1
+  fi
+  printf -v "$output_var" '%s' "$normalized_url"
+}
+
+updater_assert_endpoint_unrewritten() {
+  local repo=$1
+  local url=$2
+  local resolved
+
+  if ! resolved=$(git -C "$repo" ls-remote --get-url "$url" 2>/dev/null); then
+    UPDATER_VERIFY_REASON="cannot resolve the effective origin endpoint: $repo"
+    return 1
+  fi
+  if [[ "$resolved" != "$url" ]]; then
+    UPDATER_VERIFY_REASON="origin endpoint is rewritten by git URL configuration: $repo"
+    return 1
+  fi
+}
+
 updater_check_capabilities() {
   local repo=$1
   local version_text major minor probe_output ssh_probe
@@ -168,7 +306,17 @@ updater_check_capabilities() {
 updater_validate_allowed_signers() {
   local repo=$1
   local path=$2
+  local snapshot_dir snapshot directive_count directive declared
+  local origin_output origin_count actual
 
+  updater_cleanup_allowed_signers_snapshot
+  UPDATER_ORIGIN_URL=
+  UPDATER_REPOSITORY_IDENTITY=
+
+  if [[ "$path" != /* ]]; then
+    UPDATER_VERIFY_REASON="allowed_signers path must be absolute: $path"
+    return 1
+  fi
   if [[ ! -f "$path" || ! -r "$path" || ! -s "$path" ]]; then
     UPDATER_VERIFY_REASON="allowed_signers file is absent, unreadable, or empty: $path"
     return 1
@@ -181,6 +329,72 @@ updater_validate_allowed_signers() {
     UPDATER_VERIFY_REASON="allowed_signers must live outside the repository: $path"
     return 1
   fi
+
+  snapshot_dir="$HOME/.claude/state/updater-signers-snapshot"
+  updater_prepare_private_dir "$snapshot_dir" || return 1
+  snapshot=$(mktemp "$snapshot_dir/allowed-signers.XXXXXX") || {
+    UPDATER_VERIFY_REASON="cannot create allowed_signers snapshot"
+    rmdir "$snapshot_dir" 2>/dev/null || true
+    return 1
+  }
+  UPDATER_ALLOWED_SIGNERS_SNAPSHOT_DIR=$snapshot_dir
+  UPDATER_ALLOWED_SIGNERS_SNAPSHOT=$snapshot
+  if ! chmod 600 "$snapshot" || ! cp "$path" "$snapshot" || ! chmod 600 "$snapshot"; then
+    UPDATER_VERIFY_REASON="cannot snapshot allowed_signers file: $path"
+    updater_cleanup_allowed_signers_snapshot
+    return 1
+  fi
+
+  directive_count=$(grep -c '^# updater-repo: ' "$snapshot" 2>/dev/null || true)
+  if [[ "$directive_count" -eq 0 ]]; then
+    UPDATER_VERIFY_REASON="allowed_signers has no repository binding directive (expected '# updater-repo: <identity>'): $path"
+    updater_cleanup_allowed_signers_snapshot
+    return 1
+  fi
+  if [[ "$directive_count" -ne 1 ]]; then
+    UPDATER_VERIFY_REASON="allowed_signers has multiple repository binding directives: $path"
+    updater_cleanup_allowed_signers_snapshot
+    return 1
+  fi
+  directive=$(grep '^# updater-repo: ' "$snapshot")
+  if [[ "$directive" == *$'\r' || "$directive" == *[[:blank:]] ]]; then
+    UPDATER_VERIFY_REASON="repository binding directive has trailing whitespace or a CRLF line ending: $path"
+    updater_cleanup_allowed_signers_snapshot
+    return 1
+  fi
+  declared=${directive#'# updater-repo: '}
+  if [[ -z "$declared" || "$declared" == "$directive" ]]; then
+    UPDATER_VERIFY_REASON="allowed_signers has no repository binding directive (expected '# updater-repo: <identity>'): $path"
+    updater_cleanup_allowed_signers_snapshot
+    return 1
+  fi
+
+  if ! origin_output=$(git -C "$repo" remote get-url --all origin 2>/dev/null); then
+    UPDATER_VERIFY_REASON="cannot determine origin URL for repository binding: $repo"
+    updater_cleanup_allowed_signers_snapshot
+    return 1
+  fi
+  origin_count=$(printf '%s\n' "$origin_output" | awk 'NF {count++} END {print count+0}')
+  if [[ "$origin_count" -ne 1 ]]; then
+    UPDATER_VERIFY_REASON="cannot determine origin URL for repository binding: $repo"
+    updater_cleanup_allowed_signers_snapshot
+    return 1
+  fi
+  UPDATER_ORIGIN_URL=$origin_output
+  if ! updater_normalize_repo_url "$UPDATER_ORIGIN_URL" actual; then
+    UPDATER_VERIFY_REASON="cannot normalize origin URL for repository binding: $repo"
+    updater_cleanup_allowed_signers_snapshot
+    UPDATER_ORIGIN_URL=
+    return 1
+  fi
+  if [[ "$declared" != "$actual" ]]; then
+    UPDATER_VERIFY_REASON="allowed_signers repository binding mismatch: file declares '$declared', origin normalizes to '$actual'"
+    updater_cleanup_allowed_signers_snapshot
+    UPDATER_ORIGIN_URL=
+    return 1
+  fi
+  # shellcheck disable=SC2034  # Public result consumed by sourcing callers.
+  UPDATER_REPOSITORY_IDENTITY=$actual
 }
 
 updater_prepare_private_dir() {
@@ -472,6 +686,7 @@ updater_sync_remote_tags() {
   local repo=$1
   local ineligible_path=$2
   local dry_run=${3:-0}
+  local origin_url=${4:-}
   local output line oid ref name extra local_oid mark_rc reason record_name
   local names= records= candidates=
   local -a refspecs
@@ -479,12 +694,23 @@ updater_sync_remote_tags() {
   UPDATER_MOVED_TAGS=
   UPDATER_SYNC_FAILURE_HANDLED=0
 
-  if ! git -C "$repo" fetch --no-tags --prune origin '+refs/heads/*:refs/remotes/origin/*'; then
-    UPDATER_VERIFY_REASON="branch fetch failed"
+  if [[ -z "$origin_url" ]]; then
+    UPDATER_VERIFY_REASON="captured origin URL is unavailable"
     return 1
   fi
-  if ! output=$(git -C "$repo" ls-remote --refs --tags origin); then
-    UPDATER_VERIFY_REASON="git ls-remote --refs --tags origin failed"
+  if ! updater_assert_endpoint_unrewritten "$repo" "$origin_url"; then
+    return 1
+  fi
+  if ! git -C "$repo" fetch --no-tags --prune "$origin_url" \
+    '+refs/heads/*:refs/remotes/origin/*' >/dev/null 2>&1; then
+    UPDATER_VERIFY_REASON="branch fetch failed against captured endpoint"
+    return 1
+  fi
+  if ! updater_assert_endpoint_unrewritten "$repo" "$origin_url"; then
+    return 1
+  fi
+  if ! output=$(git -C "$repo" ls-remote --refs --tags "$origin_url" 2>/dev/null); then
+    UPDATER_VERIFY_REASON="git ls-remote --refs --tags against captured endpoint failed"
     return 1
   fi
 
@@ -544,13 +770,72 @@ updater_sync_remote_tags() {
     refspecs+=("refs/tags/$name:refs/tags/$name")
   done <<<"$candidates"
   if (( ${#refspecs[@]} > 0 )); then
-    if ! git -C "$repo" fetch --atomic --no-tags origin "${refspecs[@]}"; then
-      UPDATER_VERIFY_REASON="atomic candidate tag fetch failed; no new tag refs were installed"
+    if ! updater_assert_endpoint_unrewritten "$repo" "$origin_url"; then
+      return 1
+    fi
+    if ! git -C "$repo" fetch --atomic --no-tags "$origin_url" "${refspecs[@]}" \
+      >/dev/null 2>&1; then
+      UPDATER_VERIFY_REASON="atomic candidate tag fetch failed against captured endpoint; no new tag refs were installed"
       return 1
     fi
   fi
 
   UPDATER_REMOTE_TAGS=$records
+}
+
+updater_fetch_release_refs() {
+  local repo=$1
+  local origin_url=${2:-}
+
+  if [[ -z "$origin_url" ]]; then
+    UPDATER_VERIFY_REASON="captured origin URL is unavailable"
+    return 1
+  fi
+  if ! updater_assert_endpoint_unrewritten "$repo" "$origin_url"; then
+    return 1
+  fi
+  if ! git -C "$repo" fetch --no-tags --prune "$origin_url" \
+    '+refs/heads/*:refs/remotes/origin/*' >/dev/null 2>&1; then
+    UPDATER_VERIFY_REASON="branch fetch failed against captured endpoint"
+    return 1
+  fi
+}
+
+updater_assert_commit_on_release_ref() {
+  local repo=$1
+  local commit=$2
+  local branch=${CATY_UPDATER_RELEASE_BRANCH:-main}
+  local release_ref release_tip rc ref_rc
+
+  if ! git -C "$repo" check-ref-format --branch "$branch" >/dev/null 2>&1; then
+    UPDATER_VERIFY_REASON="invalid release branch name configured"
+    return 1
+  fi
+  release_ref="refs/remotes/origin/$branch"
+  if ! release_tip=$(git -C "$repo" rev-parse --verify "$release_ref" 2>/dev/null); then
+    if git -C "$repo" show-ref --verify --quiet "$release_ref"; then
+      ref_rc=0
+    else
+      ref_rc=$?
+    fi
+    if [[ "$ref_rc" -eq 1 ]]; then
+      UPDATER_VERIFY_REASON="release ref $release_ref is unavailable: $repo"
+    else
+      UPDATER_VERIFY_REASON="reachability check failed (git error) for $commit against origin/$branch"
+    fi
+    return 1
+  fi
+  if git -C "$repo" merge-base --is-ancestor "$commit" "$release_tip" >/dev/null 2>&1; then
+    return 0
+  else
+    rc=$?
+  fi
+  if [[ "$rc" -eq 1 ]]; then
+    UPDATER_VERIFY_REASON="captured commit $commit is not on release branch origin/$branch"
+  else
+    UPDATER_VERIFY_REASON="reachability check failed (git error) for $commit against origin/$branch"
+  fi
+  return 1
 }
 
 updater_header_from_object() {

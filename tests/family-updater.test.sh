@@ -39,6 +39,12 @@ INSTALL
   fi
 }
 
+write_allowed_signers_for_key() {
+  local public_key=$1
+  printf '# updater-repo: %s\n' "$(cd "$ORIGIN" && pwd -P)" >"$ALLOWED"
+  printf 'fixture@example.invalid %s\n' "$(sed -n '1p' "$public_key")" >>"$ALLOWED"
+}
+
 new_fixture() {
   local name=$1
   name=${name// /-}
@@ -58,9 +64,9 @@ new_fixture() {
   mkdir -p "$BASE" "$HOME_DIR/.claude/state" "$FMA" "$LOGS" "$WS"
   ssh-keygen -q -t ed25519 -N '' -f "$KEY"
   ssh-keygen -q -t ed25519 -N '' -f "$OTHER_KEY"
-  printf 'fixture@example.invalid %s\n' "$(sed -n '1p' "$KEY.pub")" >"$ALLOWED"
 
   git init -q --bare "$ORIGIN"
+  write_allowed_signers_for_key "$KEY.pub"
   git init -q "$SRC"
   git -C "$SRC" config user.name Fixture
   git -C "$SRC" config user.email fixture@example.invalid
@@ -73,6 +79,7 @@ new_fixture() {
     git -C "$SRC" commit -qm base
   BASE_COMMIT=$(git -C "$SRC" rev-parse HEAD)
   BRANCH=$(git -C "$SRC" rev-parse --abbrev-ref HEAD)
+  export CATY_UPDATER_RELEASE_BRANCH=$BRANCH
   git -C "$SRC" remote add origin "$ORIGIN"
   git -C "$SRC" push -q origin "$BRANCH"
   git clone -q --no-tags "$ORIGIN" "$REPO"
@@ -126,7 +133,11 @@ tag_release() {
   esac
 }
 
-push_tag() { git -C "$SRC" push -q "$ORIGIN" "refs/tags/$1:refs/tags/$1"; }
+push_tag_only() { git -C "$SRC" push -q "$ORIGIN" "refs/tags/$1:refs/tags/$1"; }
+publish_branch_backed_release() {
+  git -C "$SRC" push -q "$ORIGIN" "$BRANCH"
+  push_tag_only "$1"
+}
 force_push_tag() { git -C "$SRC" push -q --force "$ORIGIN" "refs/tags/$1:refs/tags/$1"; }
 fetch_local_tag() { git -C "$REPO" fetch -q --no-tags "$ORIGIN" "refs/tags/$1:refs/tags/$1"; }
 
@@ -167,9 +178,766 @@ run_updater() {
   fi
 }
 
+make_foreign_release() {
+  local label=$1 tag=$2
+  local foreign_src=$BASE/foreign-src
+
+  FOREIGN_SRC=$foreign_src
+  git init -q "$FOREIGN_SRC"
+  git -C "$FOREIGN_SRC" config user.name 'Foreign Fixture'
+  git -C "$FOREIGN_SRC" config user.email fixture@example.invalid
+  git -C "$FOREIGN_SRC" config gpg.format ssh
+  git -C "$FOREIGN_SRC" config user.signingkey "$KEY"
+  write_fake_install "$FOREIGN_SRC" pass
+  mkdir -p "$FOREIGN_SRC/templates"
+  cat >"$FOREIGN_SRC/templates/updater-cron.tmpl.sh" <<'FOREIGN_CRON_WRAPPER'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'foreign fixture updater cron wrapper\n'
+FOREIGN_CRON_WRAPPER
+  printf '%s\n' "$label" >"$FOREIGN_SRC/VERSION.fixture"
+  git -C "$FOREIGN_SRC" add -A
+  GIT_AUTHOR_DATE=2020-03-01T00:00:00Z GIT_COMMITTER_DATE=2020-03-01T00:00:00Z \
+    git -C "$FOREIGN_SRC" commit -qm "$label"
+  FOREIGN_COMMIT=$(git -C "$FOREIGN_SRC" rev-parse HEAD)
+  GIT_COMMITTER_DATE=2020-03-01T00:00:00Z \
+    git -C "$FOREIGN_SRC" tag -s "$tag" "$FOREIGN_COMMIT" -m "$tag"
+  git -C "$FOREIGN_SRC" push -q "$ORIGIN" "refs/tags/$tag:refs/tags/$tag"
+}
+
+make_endpoint_rewrite_foreign_release() {
+  local label=$1 tag=$2
+
+  FOREIGN_ORIGIN=$BASE/rewrite-foreign-origin.git
+  FOREIGN_SRC=$BASE/rewrite-foreign-src
+  git init -q --bare "$FOREIGN_ORIGIN"
+  git init -q "$FOREIGN_SRC"
+  git -C "$FOREIGN_SRC" config user.name 'Rewrite Foreign Fixture'
+  git -C "$FOREIGN_SRC" config user.email fixture@example.invalid
+  git -C "$FOREIGN_SRC" config gpg.format ssh
+  git -C "$FOREIGN_SRC" config user.signingkey "$KEY"
+  write_fake_install "$FOREIGN_SRC" pass
+  mkdir -p "$FOREIGN_SRC/templates"
+  cat >"$FOREIGN_SRC/templates/updater-cron.tmpl.sh" <<'FOREIGN_CRON_WRAPPER'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'rewrite foreign fixture updater cron wrapper\n'
+FOREIGN_CRON_WRAPPER
+  printf '%s\n' "$label" >"$FOREIGN_SRC/VERSION.fixture"
+  git -C "$FOREIGN_SRC" add -A
+  GIT_AUTHOR_DATE=2020-04-01T00:00:00Z GIT_COMMITTER_DATE=2020-04-01T00:00:00Z \
+    git -C "$FOREIGN_SRC" commit -qm "$label"
+  FOREIGN_COMMIT=$(git -C "$FOREIGN_SRC" rev-parse HEAD)
+  FOREIGN_BRANCH=$(git -C "$FOREIGN_SRC" rev-parse --abbrev-ref HEAD)
+  GIT_COMMITTER_DATE=2020-04-01T00:00:00Z \
+    git -C "$FOREIGN_SRC" tag -s "$tag" "$FOREIGN_COMMIT" -m "$tag"
+  git -C "$FOREIGN_SRC" push -q "$FOREIGN_ORIGIN" \
+    "refs/heads/$FOREIGN_BRANCH:refs/heads/$BRANCH" \
+    "refs/tags/$tag:refs/tags/$tag"
+}
+
+write_post_binding_rewrite_shim() {
+  local fakebin=$1
+
+  mkdir -p "$fakebin"
+  cat >"$fakebin/git" <<'POST_BINDING_REWRITE_GIT_SHIM'
+#!/usr/bin/env bash
+set -u
+if [[ "$*" == "-C $BIND_REPO remote get-url --all origin" ]]; then
+  output=$($REAL_GIT "$@") || exit $?
+  printf 'armed\n' >"$REWRITE_STATE"
+  printf '%s\n' "$output"
+  exit 0
+fi
+if [[ -f "$REWRITE_STATE" ]]; then
+  mv "$REWRITE_STATE" "$REWRITE_STATE.injected"
+  "$REAL_GIT" -C "$BIND_REPO" config --local \
+    "url.$FOREIGN_ORIGIN.insteadOf" "$CAPTURED_ORIGIN" || exit $?
+fi
+exec "$REAL_GIT" "$@"
+POST_BINDING_REWRITE_GIT_SHIM
+  chmod +x "$fakebin/git"
+}
+
+run_issue54_updater_replay_case() {
+  local legitimate_commit foreign_commit expected_reason output rc
+  local verification_records moved_records install_failure_records
+  local failure_reports failure_heartbeats success_heartbeats binding_lines sentinel_lines
+
+  new_fixture issue54-updater-cross-repo-replay
+  write_pin v1.0.0 "$BASE_COMMIT"
+
+  commit_release legitimate-sibling pass
+  legitimate_commit=$RELEASE_COMMIT
+  tag_release signed v1.1.0 "$legitimate_commit"
+  publish_branch_backed_release v1.1.0
+
+  make_foreign_release foreign-replay v9.9.9
+  foreign_commit=$FOREIGN_COMMIT
+  expected_reason="captured commit $foreign_commit is not on release branch origin/$BRANCH"
+
+  output=$(CATY_UPDATER_RELEASE_BRANCH="$BRANCH" run_updater); rc=$?
+  verification_records=$(grep -F 'v9.9.9 ' "$(ineligible_path)" 2>/dev/null \
+    | grep -Fc " verification-failure $expected_reason" || true)
+  moved_records=$(grep -F 'v9.9.9 ' "$(ineligible_path)" 2>/dev/null \
+    | grep -Fc ' moved-tag' || true)
+  install_failure_records=$(grep -F 'v9.9.9 ' "$(ineligible_path)" 2>/dev/null \
+    | grep -Fc ' install-failure ' || true)
+  failure_reports=$(grep -Fc 'updater failed: claire repo v9.9.9' \
+    "$LOGS/hot-inbox.log" 2>/dev/null || true)
+  failure_heartbeats=$(grep -Fc "job-heartbeat updater-claire fail --reason $expected_reason" \
+    "$LOGS/heartbeats.log" 2>/dev/null || true)
+  success_heartbeats=$(grep -Fc 'job-heartbeat updater-claire ok --reason v1.1.0' \
+    "$LOGS/heartbeats.log" 2>/dev/null || true)
+  binding_lines=$(printf '%s\n' "$output" \
+    | grep -Fc "family-updater: repository binding verified: $(cd "$ORIGIN" && pwd -P)" || true)
+  sentinel_lines=0
+  [[ ! -f "$SENTINEL" ]] || sentinel_lines=$(wc -l <"$SENTINEL")
+
+  if [[ "$rc" -eq 0 && $(git -C "$REPO" rev-parse HEAD) == "$legitimate_commit" \
+    && "$foreign_commit" != "$legitimate_commit" && "$sentinel_lines" -eq 1 ]] \
+    && grep -Fxq legitimate-sibling "$SENTINEL" \
+    && grep -Fq '"version":"v1.1.0"' "$(pin_path)" \
+    && grep -Fq "\"commit\":\"$legitimate_commit\"" "$(pin_path)" \
+    && [[ "$verification_records" -eq 1 && "$moved_records" -eq 0 \
+      && "$install_failure_records" -eq 0 && "$failure_reports" -eq 1 \
+      && "$failure_heartbeats" -eq 1 && "$success_heartbeats" -eq 1 \
+      && "$binding_lines" -eq 1 \
+      && ! -e "$HOME_DIR/.claude/state/updater-signers-snapshot" ]]; then
+    pass "cross-repo replay is refused while a release-branch sibling installs"
+  else
+    fail_case "cross-repo replay is refused while a release-branch sibling installs" \
+      "foreign replay was accepted or sibling did not install: rc=$rc head=$(git -C "$REPO" rev-parse HEAD) expected-head=$legitimate_commit records=$verification_records/$moved_records/$install_failure_records reports=$failure_reports heartbeats=$failure_heartbeats/$success_heartbeats binding-lines=$binding_lines snapshot-dir=$(test -e "$HOME_DIR/.claude/state/updater-signers-snapshot" && echo yes || echo no) installs=$sentinel_lines output=$output"
+  fi
+}
+
+run_issue54_bootstrap_replay_case() {
+  local before after foreign_commit expected_reason cron_dest output rc
+
+  new_fixture issue54-bootstrap-cross-repo-replay
+  make_foreign_release foreign-bootstrap-replay v1.0.0
+  foreign_commit=$FOREIGN_COMMIT
+  fetch_local_tag v1.0.0
+  before=$(git -C "$REPO" rev-parse HEAD)
+  cron_dest=$BASE/cron/family-updater
+  expected_reason="captured commit $foreign_commit is not on release branch origin/$BRANCH"
+
+  output=$(HOME="$HOME_DIR" CATY_UPDATER_RELEASE_BRANCH="$BRANCH" "$BOOTSTRAP" \
+    --repo-dir "$REPO" --allowed-signers "$ALLOWED" --initial-tag v1.0.0 \
+    --cron-wrapper-dest "$cron_dest" 2>&1); rc=$?
+  after=$(git -C "$REPO" rev-parse HEAD)
+  if [[ "$rc" -ne 0 && "$before" == "$after" && ! -e "$(pin_path)" \
+    && ! -e "$cron_dest" ]] \
+    && printf '%s\n' "$output" | grep -Fq "updater-bootstrap error: $expected_reason"; then
+    pass "bootstrap refuses a foreign owner-named tag without checkout, pin, or wrapper"
+  else
+    fail_case "bootstrap refuses a foreign owner-named tag without checkout, pin, or wrapper" \
+      "foreign replay was accepted: rc=$rc before=$before after=$after pin=$(test -e "$(pin_path)" && echo yes || echo no) wrapper=$(test -e "$cron_dest" && echo yes || echo no) output=$output"
+  fi
+}
+
+run_issue54_endpoint_rewrite_cases() {
+  local before after before_pin after_pin expected output rc fakebin rewrite_state cron_dest
+  local foreign_ref
+
+  new_fixture issue54-post-binding-endpoint-rewrite
+  write_pin v1.0.0 "$BASE_COMMIT"
+  before=$(git -C "$REPO" rev-parse HEAD)
+  before_pin=$(sed -n '1p' "$(pin_path)")
+  make_endpoint_rewrite_foreign_release rewrite-foreign-release v1.1.0
+  fakebin=$BASE/rewrite-fakebin
+  rewrite_state=$BASE/rewrite-state
+  write_post_binding_rewrite_shim "$fakebin"
+  expected="origin endpoint is rewritten by git URL configuration: $REPO"
+
+  output=$(PATH="$fakebin:$PATH" REAL_GIT="$REAL_GIT" BIND_REPO="$REPO" \
+    CAPTURED_ORIGIN="$ORIGIN" FOREIGN_ORIGIN="$FOREIGN_ORIGIN" \
+    REWRITE_STATE="$rewrite_state" run_updater --dry-run); rc=$?
+  after=$(git -C "$REPO" rev-parse HEAD)
+  after_pin=$(sed -n '1p' "$(pin_path)")
+  foreign_ref=$(git -C "$REPO" show-ref --verify --hash "refs/remotes/origin/$BRANCH" 2>/dev/null || true)
+  if [[ "$rc" -ne 0 && "$before" == "$after" && "$before_pin" == "$after_pin" \
+    && "$foreign_ref" == "$BASE_COMMIT" && ! -e "$SENTINEL" && -f "$rewrite_state.injected" ]] \
+    && ! git -C "$REPO" show-ref --verify --quiet refs/tags/v1.1.0 \
+    && printf '%s\n' "$output" | grep -Fq "family-updater error: $expected"; then
+    pass "post-binding URL rewrite is refused before recurring network and side effects"
+  else
+    fail_case "post-binding URL rewrite is refused before recurring network and side effects" \
+      "rc=$rc head=$before/$after pin-same=$(test "$before_pin" = "$after_pin" && echo yes || echo no) remote-ref=$foreign_ref foreign-tag=$(git -C "$REPO" show-ref --verify --quiet refs/tags/v1.1.0 && echo yes || echo no) output=$output"
+  fi
+
+  new_fixture issue54-bootstrap-post-binding-endpoint-rewrite
+  before=$(git -C "$REPO" rev-parse HEAD)
+  make_endpoint_rewrite_foreign_release rewrite-foreign-bootstrap v1.1.0
+  "$REAL_GIT" -C "$REPO" fetch -q --no-tags "$FOREIGN_ORIGIN" \
+    refs/tags/v1.1.0:refs/tags/v1.1.0
+  fakebin=$BASE/rewrite-fakebin
+  rewrite_state=$BASE/rewrite-state
+  write_post_binding_rewrite_shim "$fakebin"
+  cron_dest=$BASE/cron/family-updater
+  expected="origin endpoint is rewritten by git URL configuration: $REPO"
+
+  output=$(HOME="$HOME_DIR" PATH="$fakebin:$PATH" REAL_GIT="$REAL_GIT" \
+    BIND_REPO="$REPO" CAPTURED_ORIGIN="$ORIGIN" FOREIGN_ORIGIN="$FOREIGN_ORIGIN" \
+    REWRITE_STATE="$rewrite_state" CATY_UPDATER_RELEASE_BRANCH="$BRANCH" "$BOOTSTRAP" \
+    --repo-dir "$REPO" --allowed-signers "$ALLOWED" --initial-tag v1.1.0 \
+    --cron-wrapper-dest "$cron_dest" 2>&1); rc=$?
+  after=$(git -C "$REPO" rev-parse HEAD)
+  foreign_ref=$(git -C "$REPO" show-ref --verify --hash "refs/remotes/origin/$BRANCH" 2>/dev/null || true)
+  if [[ "$rc" -ne 0 && "$before" == "$after" && "$foreign_ref" == "$BASE_COMMIT" \
+    && ! -e "$(pin_path)" && ! -e "$cron_dest" && -f "$rewrite_state.injected" ]] \
+    && printf '%s\n' "$output" | grep -Fq "updater-bootstrap error: $expected"; then
+    pass "post-binding URL rewrite is refused before bootstrap network and side effects"
+  else
+    fail_case "post-binding URL rewrite is refused before bootstrap network and side effects" \
+      "rc=$rc head=$before/$after remote-ref=$foreign_ref pin=$(test -e "$(pin_path)" && echo yes || echo no) wrapper=$(test -e "$cron_dest" && echo yes || echo no) output=$output"
+  fi
+}
+
+run_issue54_endpoint_resolution_failure_case() {
+  local output rc fakebin expected
+
+  new_fixture issue54-endpoint-resolution-failure
+  fakebin=$BASE/resolve-fakebin
+  mkdir -p "$fakebin"
+  cat >"$fakebin/git" <<'ENDPOINT_RESOLVE_GIT_SHIM'
+#!/usr/bin/env bash
+set -u
+if [[ "$*" == "-C $RESOLVE_REPO ls-remote --get-url $RESOLVE_URL" ]]; then
+  exit 71
+fi
+exec "$REAL_GIT" "$@"
+ENDPOINT_RESOLVE_GIT_SHIM
+  chmod +x "$fakebin/git"
+  expected="cannot resolve the effective origin endpoint: $REPO"
+  output=$(HOME="$HOME_DIR" PATH="$fakebin:$PATH" REAL_GIT="$REAL_GIT" \
+    RESOLVE_REPO="$REPO" RESOLVE_URL="$ORIGIN" bash -c '
+      source "$1"
+      updater_assert_endpoint_unrewritten "$2" "$3" || {
+        printf "%s\n" "$UPDATER_VERIFY_REASON"
+        exit 1
+      }
+    ' _ "$ROOT/scripts/lib-updater-verify.sh" "$REPO" "$ORIGIN" 2>&1); rc=$?
+  if [[ "$rc" -ne 0 && "$output" == "$expected" ]]; then
+    pass "endpoint resolution failure is refused without exposing the endpoint"
+  else
+    fail_case "endpoint resolution failure is refused without exposing the endpoint" \
+      "rc=$rc output=$output"
+  fi
+}
+
+validate_fixture_binding() {
+  HOME="$HOME_DIR" bash -c '
+    source "$1"
+    trap updater_cleanup_allowed_signers_snapshot EXIT
+    if updater_validate_allowed_signers "$2" "$3"; then
+      printf "binding-ok:%s\n" "$UPDATER_REPOSITORY_IDENTITY"
+    else
+      printf "%s\n" "$UPDATER_VERIFY_REASON"
+      exit 1
+    fi
+  ' _ "$ROOT/scripts/lib-updater-verify.sh" "$REPO" "$1" 2>&1
+}
+
+normalize_fixture_url() {
+  HOME="$HOME_DIR" bash -c '
+    source "$1"
+    if updater_normalize_repo_url "$2" normalized; then
+      printf "%s\n" "$normalized"
+    else
+      printf "refused\n"
+      exit 1
+    fi
+  ' _ "$ROOT/scripts/lib-updater-verify.sh" "$1" 2>&1
+}
+
+run_issue54_binding_cases() {
+  local identity output rc replacement snapshot_output snapshot_rc
+
+  new_fixture issue54-binding-directive
+  identity=$(cd "$ORIGIN" && pwd -P)
+  output=$(validate_fixture_binding "$ALLOWED"); rc=$?
+  if [[ "$rc" -eq 0 && "$output" == "binding-ok:$identity" ]]; then
+    pass "matching repository directive binds the signer snapshot"
+  else
+    fail_case "matching repository directive binds the signer snapshot" "rc=$rc output=$output"
+  fi
+
+  printf 'fixture@example.invalid %s\n' "$(sed -n '1p' "$KEY.pub")" >"$ALLOWED"
+  output=$(validate_fixture_binding "$ALLOWED"); rc=$?
+  if [[ "$rc" -ne 0 && "$output" == "allowed_signers has no repository binding directive (expected '# updater-repo: <identity>'): $ALLOWED" ]]; then
+    pass "signer file without a repository directive is refused"
+  else
+    fail_case "signer file without a repository directive is refused" "rc=$rc output=$output"
+  fi
+
+  write_allowed_signers_for_key "$KEY.pub"
+  printf '# updater-repo: %s\n' "$identity" >>"$ALLOWED"
+  output=$(validate_fixture_binding "$ALLOWED"); rc=$?
+  if [[ "$rc" -ne 0 && "$output" == "allowed_signers has multiple repository binding directives: $ALLOWED" ]]; then
+    pass "multiple repository directives are refused"
+  else
+    fail_case "multiple repository directives are refused" "rc=$rc output=$output"
+  fi
+
+  printf '# updater-repo: %s/other\n' "$identity" >"$ALLOWED"
+  printf 'fixture@example.invalid %s\n' "$(sed -n '1p' "$KEY.pub")" >>"$ALLOWED"
+  output=$(validate_fixture_binding "$ALLOWED"); rc=$?
+  if [[ "$rc" -ne 0 && "$output" == "allowed_signers repository binding mismatch: file declares '$identity/other', origin normalizes to '$identity'" ]]; then
+    pass "mismatched repository directive is refused"
+  else
+    fail_case "mismatched repository directive is refused" "rc=$rc output=$output"
+  fi
+
+  printf '# updater-repo: %s\r\n' "$identity" >"$ALLOWED"
+  printf 'fixture@example.invalid %s\n' "$(sed -n '1p' "$KEY.pub")" >>"$ALLOWED"
+  output=$(validate_fixture_binding "$ALLOWED"); rc=$?
+  if [[ "$rc" -ne 0 && "$output" == "repository binding directive has trailing whitespace or a CRLF line ending: $ALLOWED" ]]; then
+    pass "CRLF repository directive is refused with the explicit reason"
+  else
+    fail_case "CRLF repository directive is refused with the explicit reason" "rc=$rc output=$output"
+  fi
+
+  printf '# updater-repo: %s \n' "$identity" >"$ALLOWED"
+  printf 'fixture@example.invalid %s\n' "$(sed -n '1p' "$KEY.pub")" >>"$ALLOWED"
+  output=$(validate_fixture_binding "$ALLOWED"); rc=$?
+  if [[ "$rc" -ne 0 && "$output" == "repository binding directive has trailing whitespace or a CRLF line ending: $ALLOWED" ]]; then
+    pass "trailing-space repository directive is refused"
+  else
+    fail_case "trailing-space repository directive is refused" "rc=$rc output=$output"
+  fi
+
+  output=$(validate_fixture_binding relative-allowed-signers); rc=$?
+  if [[ "$rc" -ne 0 && "$output" == 'allowed_signers path must be absolute: relative-allowed-signers' ]]; then
+    pass "relative allowed_signers path is refused before filesystem lookup"
+  else
+    fail_case "relative allowed_signers path is refused before filesystem lookup" "rc=$rc output=$output"
+  fi
+
+  new_fixture issue54-signer-snapshot
+  commit_release snapshot-release pass
+  tag_release signed v1.0.0 "$RELEASE_COMMIT"
+  publish_branch_backed_release v1.0.0
+  fetch_local_tag v1.0.0
+  replacement=$BASE/replacement-allowed-signers
+  printf '# updater-repo: %s\n' "$(cd "$ORIGIN" && pwd -P)" >"$replacement"
+  printf 'fixture@example.invalid %s\n' "$(sed -n '1p' "$OTHER_KEY.pub")" >>"$replacement"
+  snapshot_output=$(HOME="$HOME_DIR" bash -c '
+    source "$1"
+    trap updater_cleanup_allowed_signers_snapshot EXIT
+    updater_validate_allowed_signers "$2" "$3" || { printf "%s\n" "$UPDATER_VERIFY_REASON"; exit 1; }
+    cp "$4" "$3"
+    updater_capture_verify_and_bind "$2" v1.0.0 "$UPDATER_ALLOWED_SIGNERS_SNAPSHOT" \
+      || { printf "%s\n" "$UPDATER_VERIFY_REASON"; exit 1; }
+    printf "%s\n" "$UPDATER_CAPTURED_COMMIT"
+  ' _ "$ROOT/scripts/lib-updater-verify.sh" "$REPO" "$ALLOWED" "$replacement" 2>&1); snapshot_rc=$?
+  if [[ "$snapshot_rc" -eq 0 && "$snapshot_output" == "$RELEASE_COMMIT" \
+    && ! -e "$HOME_DIR/.claude/state/updater-signers-snapshot" ]]; then
+    pass "verification consumes the validated signer snapshot after source replacement"
+  else
+    fail_case "verification consumes the validated signer snapshot after source replacement" \
+      "rc=$snapshot_rc snapshot-dir=$(test -e "$HOME_DIR/.claude/state/updater-signers-snapshot" && echo yes || echo no) output=$snapshot_output"
+  fi
+}
+
+run_issue54_normalization_cases() {
+  local identity output rc probe_cred token_surface multi_url token_fakebin duplicate_path
+
+  new_fixture issue54-normalization
+  identity=$(cd "$ORIGIN" && pwd -P)
+  for accepted in \
+    'git@GitHub.COM:Org/Repo.git/' \
+    'ssh://git@GitHub.COM:22/Org/Repo.git/' \
+    'https://user:token-value@GitHub.COM:443/Org/Repo.git/'; do
+    output=$(normalize_fixture_url "$accepted"); rc=$?
+    if [[ "$rc" -eq 0 && "$output" == github.com/org/repo && "$output" != *token-value* ]]; then
+      pass "accepted host origin normalizes without userinfo: ${accepted%%:*}"
+    else
+      fail_case "accepted host origin normalizes without userinfo: ${accepted%%:*}" "rc=$rc output=$output"
+    fi
+  done
+  for accepted in \
+    'git@GitHub.COM:MixedOrg/MixedRepo.git' \
+    'git@GitHub.COM:MixedOrg/MixedRepo.GIT' \
+    'git@GitHub.COM:MixedOrg/MixedRepo.Git'; do
+    output=$(normalize_fixture_url "$accepted"); rc=$?
+    if [[ "$rc" -eq 0 && "$output" == github.com/mixedorg/mixedrepo ]]; then
+      pass "host suffix spelling and mixed-case identity normalize consistently"
+    else
+      fail_case "host suffix spelling and mixed-case identity normalize consistently" \
+        "origin=$accepted rc=$rc output=$output"
+    fi
+  done
+  for accepted in \
+    'SSH://git@GitHub.COM:22/Org/Repo.git' \
+    'Https://GitHub.COM:443/Org/Repo.git'; do
+    output=$(normalize_fixture_url "$accepted"); rc=$?
+    if [[ "$rc" -eq 0 && "$output" == github.com/org/repo ]]; then
+      pass "mixed-case URL scheme normalizes case-insensitively"
+    else
+      fail_case "mixed-case URL scheme normalizes case-insensitively" \
+        "origin=$accepted rc=$rc output=$output"
+    fi
+  done
+  for accepted in "$ORIGIN" "file://$ORIGIN" "file://localhost$ORIGIN"; do
+    output=$(normalize_fixture_url "$accepted"); rc=$?
+    if [[ "$rc" -eq 0 && "$output" == "$identity" ]]; then
+      pass "accepted local origin resolves to its physical path"
+    else
+      fail_case "accepted local origin resolves to its physical path" "rc=$rc output=$output"
+    fi
+  done
+  output=$(normalize_fixture_url "FILE://$ORIGIN"); rc=$?
+  if [[ "$rc" -eq 0 && "$output" == "$identity" ]]; then
+    pass "uppercase file URL scheme preserves the case-exact path identity"
+  else
+    fail_case "uppercase file URL scheme preserves the case-exact path identity" "rc=$rc output=$output"
+  fi
+  duplicate_path=//${ORIGIN#/}
+  output=$(normalize_fixture_url "$duplicate_path"); rc=$?
+  if [[ "$rc" -eq 0 && "$output" == "$identity" ]]; then
+    pass "duplicate leading slashes collapse to one physical path identity"
+  else
+    fail_case "duplicate leading slashes collapse to one physical path identity" \
+      "origin=$duplicate_path rc=$rc output=$output expected=$identity"
+  fi
+  for refused in \
+    'ssh://git@example.invalid:2222/org/repo.git' \
+    'https://example.invalid:444/org/repo.git' \
+    'ssh://git@[2001:db8::1]:22/org/repo.git' \
+    'git://example.invalid/org/repo.git' \
+    'relative/repo.git' \
+    'file://remotehost/absolute/repo.git' \
+    'https://example.invalid/org/repo.git?mirror=1'; do
+    output=$(normalize_fixture_url "$refused"); rc=$?
+    if [[ "$rc" -ne 0 && "$output" == refused ]]; then
+      pass "unsupported origin shape is refused"
+    else
+      fail_case "unsupported origin shape is refused" "rc=$rc output=$output"
+    fi
+  done
+
+  new_fixture issue54-token-origin
+  probe_cred='issue54-well-formed-token'
+  git -C "$REPO" remote set-url origin "https://user:$probe_cred@example.invalid/org/repo.git"
+  printf '# updater-repo: example.invalid/org/repo\n' >"$ALLOWED"
+  printf 'fixture@example.invalid %s\n' "$(sed -n '1p' "$KEY.pub")" >>"$ALLOWED"
+  write_pin v0.0.0 "$BASE_COMMIT"
+  token_fakebin=$BASE/token-fakebin
+  mkdir -p "$token_fakebin"
+  cat >"$token_fakebin/git" <<'TOKEN_GIT_SHIM'
+#!/usr/bin/env bash
+set -u
+if [[ "$*" == *" fetch "* ]]; then
+  printf 'simulated transport failure for %s\n' "$*" >&2
+  exit 71
+fi
+exec "$REAL_GIT" "$@"
+TOKEN_GIT_SHIM
+  chmod +x "$token_fakebin/git"
+  output=$(PATH="$token_fakebin:$PATH" REAL_GIT="$REAL_GIT" run_updater); rc=$?
+  token_surface=$(grep -R -F "$probe_cred" "$HOME_DIR/.claude/state" "$LOGS" 2>/dev/null || true)
+  if [[ "$rc" -ne 0 && "$output" != *"$probe_cred"* && -z "$token_surface" ]] \
+    && printf '%s\n' "$output" | grep -Fq 'branch fetch failed'; then
+    pass "well-formed credential origin is accepted without exposing its token on transport failure"
+  else
+    fail_case "well-formed credential origin is accepted without exposing its token on transport failure" \
+      "rc=$rc output-token=$(case $output in *$probe_cred*) echo yes;; *) echo no;; esac) state-token=$(test -n "$token_surface" && echo yes || echo no)"
+  fi
+
+  new_fixture issue54-malformed-token-origin
+  probe_cred='issue54-secret-token'
+  git -C "$REPO" remote set-url origin "https://user:$probe_cred@[broken/origin.git"
+  write_pin v0.0.0 "$BASE_COMMIT"
+  output=$(run_updater); rc=$?
+  token_surface=$(grep -R -F "$probe_cred" "$HOME_DIR/.claude/state" "$LOGS" 2>/dev/null || true)
+  if [[ "$rc" -ne 0 && "$output" != *"$probe_cred"* && -z "$token_surface" ]] \
+    && printf '%s\n' "$output" | grep -Fq "cannot normalize origin URL for repository binding: $REPO"; then
+    pass "malformed credential origin is refused without exposing its token"
+  else
+    fail_case "malformed credential origin is refused without exposing its token" \
+      "rc=$rc output-token=$(case $output in *$probe_cred*) echo yes;; *) echo no;; esac) state-token=$(test -n "$token_surface" && echo yes || echo no)"
+  fi
+
+  new_fixture issue54-malformed-scp-credential-origin
+  probe_cred='issue54-scp-secret'
+  git -C "$REPO" remote set-url origin "user:$probe_cred@host:org/repo.git"
+  write_pin v0.0.0 "$BASE_COMMIT"
+  output=$(run_updater); rc=$?
+  token_surface=$(grep -R -F "$probe_cred" "$HOME_DIR/.claude/state" "$LOGS" 2>/dev/null || true)
+  if [[ "$rc" -ne 0 && "$output" != *"$probe_cred"* && -z "$token_surface" ]] \
+    && printf '%s\n' "$output" | grep -Fq "cannot normalize origin URL for repository binding: $REPO"; then
+    pass "malformed scp credential origin is refused without exposing its secret"
+  else
+    fail_case "malformed scp credential origin is refused without exposing its secret" \
+      "rc=$rc output-token=$(case $output in *$probe_cred*) echo yes;; *) echo no;; esac) surface-token=$(test -n "$token_surface" && echo yes || echo no) output=$output"
+  fi
+
+  output=$(normalize_fixture_url 'git@GitHub.COM:Org/Repo.git'); rc=$?
+  if [[ "$rc" -eq 0 && "$output" == github.com/org/repo ]]; then
+    pass "well-formed scp origin still normalizes correctly"
+  else
+    fail_case "well-formed scp origin still normalizes correctly" "rc=$rc output=$output"
+  fi
+
+  new_fixture issue54-multiple-origin-urls
+  multi_url=$BASE/second-origin.git
+  git init -q --bare "$multi_url"
+  git -C "$REPO" config --add remote.origin.url "$multi_url"
+  output=$(validate_fixture_binding "$ALLOWED"); rc=$?
+  if [[ "$rc" -ne 0 && "$output" == "cannot determine origin URL for repository binding: $REPO" ]]; then
+    pass "multiple origin URLs are refused"
+  else
+    fail_case "multiple origin URLs are refused" "rc=$rc output=$output"
+  fi
+}
+
+run_issue54_reachability_cases() {
+  local candidate_commit expected output rc before anchor_branch
+  local merge_fakebin merge_records wrong_reason revparse_fakebin revparse_records
+  local endpoint_fakebin evil_origin
+
+  new_fixture issue54-tag-only-reachability
+  write_pin v1.0.0 "$BASE_COMMIT"
+  commit_release tag-only-candidate pass
+  candidate_commit=$RELEASE_COMMIT
+  tag_release signed v1.1.0 "$candidate_commit"
+  push_tag_only v1.1.0
+  before=$(git -C "$REPO" rev-parse HEAD)
+  expected="captured commit $candidate_commit is not on release branch origin/$BRANCH"
+  output=$(run_updater); rc=$?
+  if [[ "$rc" -ne 0 && $(git -C "$REPO" rev-parse HEAD) == "$before" \
+    && ! -e "$SENTINEL" ]] && printf '%s\n' "$output" | grep -Fq "$expected"; then
+    pass "tag-only reachable commit is refused"
+  else
+    fail_case "tag-only reachable commit is refused" "rc=$rc output=$output"
+  fi
+
+  new_fixture issue54-pruned-release-anchor
+  write_pin v1.0.0 "$BASE_COMMIT"
+  commit_release anchored-candidate pass
+  candidate_commit=$RELEASE_COMMIT
+  tag_release signed v1.1.0 "$candidate_commit"
+  push_tag_only v1.1.0
+  anchor_branch=release-anchor
+  git -C "$SRC" push -q "$ORIGIN" "HEAD:refs/heads/$anchor_branch"
+  output=$(CATY_UPDATER_RELEASE_BRANCH="$anchor_branch" run_updater --dry-run); rc=$?
+  git -C "$SRC" push -q "$ORIGIN" ":refs/heads/$anchor_branch"
+  output2=$(CATY_UPDATER_RELEASE_BRANCH="$anchor_branch" run_updater --dry-run); rc2=$?
+  if [[ "$rc" -eq 0 && "$rc2" -ne 0 ]] \
+    && printf '%s\n' "$output2" | grep -Fq "release ref refs/remotes/origin/$anchor_branch is unavailable: $REPO" \
+    && ! git -C "$REPO" show-ref --verify --quiet "refs/remotes/origin/$anchor_branch"; then
+    pass "deleted release anchor is pruned and cannot vouch on the next tick"
+  else
+    fail_case "deleted release anchor is pruned and cannot vouch on the next tick" "rc=$rc/$rc2 output=$output output2=$output2"
+  fi
+
+  new_fixture issue54-invalid-release-branch
+  write_pin v1.0.0 "$BASE_COMMIT"
+  commit_release invalid-branch-candidate pass
+  tag_release signed v1.1.0 "$RELEASE_COMMIT"
+  publish_branch_backed_release v1.1.0
+  output=$(CATY_UPDATER_RELEASE_BRANCH='bad..branch' run_updater); rc=$?
+  if [[ "$rc" -ne 0 ]] && printf '%s\n' "$output" | grep -Fq 'invalid release branch name configured' \
+    && ! printf '%s\n' "$output" | grep -Fq 'bad..branch'; then
+    pass "invalid release branch config is refused without echoing its value"
+  else
+    fail_case "invalid release branch config is refused without echoing its value" "rc=$rc output=$output"
+  fi
+
+  new_fixture issue54-merge-base-error
+  write_pin v1.0.0 "$BASE_COMMIT"
+  commit_release merge-error-candidate pass
+  candidate_commit=$RELEASE_COMMIT
+  tag_release signed v1.1.0 "$candidate_commit"
+  publish_branch_backed_release v1.1.0
+  merge_fakebin=$BASE/merge-fakebin
+  mkdir -p "$merge_fakebin"
+  cat >"$merge_fakebin/git" <<'MERGE_ERROR_GIT_SHIM'
+#!/usr/bin/env bash
+set -u
+if [[ "$*" == *" merge-base --is-ancestor "* ]]; then
+  exit 71
+fi
+exec "$REAL_GIT" "$@"
+MERGE_ERROR_GIT_SHIM
+  chmod +x "$merge_fakebin/git"
+  expected="reachability check failed (git error) for $candidate_commit against origin/$BRANCH"
+  output=$(PATH="$merge_fakebin:$PATH" REAL_GIT="$REAL_GIT" run_updater); rc=$?
+  merge_records=$(grep -F 'v1.1.0 ' "$(ineligible_path)" 2>/dev/null \
+    | grep -Fc " verification-failure $expected" || true)
+  wrong_reason=$(printf '%s\n' "$output" | grep -Fc 'is not on release branch' || true)
+  if [[ "$rc" -ne 0 && "$merge_records" -eq 1 && "$wrong_reason" -eq 0 ]] \
+    && printf '%s\n' "$output" | grep -Fq "$expected"; then
+    pass "merge-base operational failure has a distinct fatal reason"
+  else
+    fail_case "merge-base operational failure has a distinct fatal reason" \
+      "rc=$rc records=$merge_records wrong-reason=$wrong_reason output=$output"
+  fi
+
+  new_fixture issue54-release-ref-rev-parse-error
+  write_pin v1.0.0 "$BASE_COMMIT"
+  commit_release rev-parse-error-candidate pass
+  candidate_commit=$RELEASE_COMMIT
+  tag_release signed v1.1.0 "$candidate_commit"
+  publish_branch_backed_release v1.1.0
+  revparse_fakebin=$BASE/revparse-fakebin
+  mkdir -p "$revparse_fakebin"
+  cat >"$revparse_fakebin/git" <<'REV_PARSE_ERROR_GIT_SHIM'
+#!/usr/bin/env bash
+set -u
+if [[ "$*" == "-C $REV_PARSE_REPO rev-parse --verify refs/remotes/origin/$REV_PARSE_BRANCH" ]]; then
+  exit 71
+fi
+exec "$REAL_GIT" "$@"
+REV_PARSE_ERROR_GIT_SHIM
+  chmod +x "$revparse_fakebin/git"
+  expected="reachability check failed (git error) for $candidate_commit against origin/$BRANCH"
+  output=$(PATH="$revparse_fakebin:$PATH" REAL_GIT="$REAL_GIT" \
+    REV_PARSE_REPO="$REPO" REV_PARSE_BRANCH="$BRANCH" run_updater); rc=$?
+  revparse_records=$(grep -F 'v1.1.0 ' "$(ineligible_path)" 2>/dev/null \
+    | grep -Fc " verification-failure $expected" || true)
+  wrong_reason=$(printf '%s\n' "$output" | grep -Fc 'release ref refs/remotes/origin/' || true)
+  if [[ "$rc" -ne 0 && "$revparse_records" -eq 1 && "$wrong_reason" -eq 0 ]] \
+    && printf '%s\n' "$output" | grep -Fq "$expected"; then
+    pass "release-ref rev-parse operational failure has the git-error reason"
+  else
+    fail_case "release-ref rev-parse operational failure has the git-error reason" \
+      "rc=$rc records=$revparse_records wrong-reason=$wrong_reason output=$output"
+  fi
+
+  new_fixture issue54-captured-endpoint
+  write_pin v1.0.0 "$BASE_COMMIT"
+  commit_release endpoint-candidate pass
+  candidate_commit=$RELEASE_COMMIT
+  tag_release signed v1.1.0 "$candidate_commit"
+  publish_branch_backed_release v1.1.0
+  evil_origin=$BASE/evil-origin.git
+  git init -q --bare "$evil_origin"
+  endpoint_fakebin=$BASE/endpoint-fakebin
+  mkdir -p "$endpoint_fakebin"
+  cat >"$endpoint_fakebin/git" <<'ENDPOINT_GIT_SHIM'
+#!/usr/bin/env bash
+set -u
+if [[ "$*" == "-C $BIND_REPO remote get-url --all origin" ]]; then
+  output=$($REAL_GIT "$@") || exit $?
+  "$REAL_GIT" -C "$BIND_REPO" remote set-url origin "$EVIL_ORIGIN"
+  printf '%s\n' "$output"
+  exit 0
+fi
+exec "$REAL_GIT" "$@"
+ENDPOINT_GIT_SHIM
+  chmod +x "$endpoint_fakebin/git"
+  output=$(PATH="$endpoint_fakebin:$PATH" REAL_GIT="$REAL_GIT" BIND_REPO="$REPO" \
+    EVIL_ORIGIN="$evil_origin" run_updater); rc=$?
+  if [[ "$rc" -eq 0 && $(git -C "$REPO" rev-parse HEAD) == "$candidate_commit" ]]; then
+    pass "network operations stay bound to the endpoint captured at validation"
+  else
+    fail_case "network operations stay bound to the endpoint captured at validation" "rc=$rc output=$output"
+  fi
+}
+
+run_issue54_retry_case() {
+  local candidate_commit expected output rc dedupe_rc recovery_rc
+  local reports failure_heartbeats failure_records clear_records sentinel_lines
+
+  new_fixture issue54-reachability-retry
+  write_pin v1.0.0 "$BASE_COMMIT"
+  commit_release retry-candidate pass
+  candidate_commit=$RELEASE_COMMIT
+  tag_release signed v1.1.0 "$candidate_commit"
+  push_tag_only v1.1.0
+  expected="captured commit $candidate_commit is not on release branch origin/$BRANCH"
+  output=$(run_updater); rc=$?
+  run_updater >/dev/null; dedupe_rc=$?
+  reports=$(grep -Fc 'updater failed: claire repo v1.1.0' "$LOGS/hot-inbox.log" 2>/dev/null || true)
+  failure_heartbeats=$(grep -Fc "job-heartbeat updater-claire fail --reason $expected" \
+    "$LOGS/heartbeats.log" 2>/dev/null || true)
+  git -C "$SRC" push -q "$ORIGIN" "$BRANCH"
+  run_updater >/dev/null; recovery_rc=$?
+  failure_records=$(grep -F 'v1.1.0 ' "$(ineligible_path)" 2>/dev/null \
+    | grep -Fc ' verification-failure captured commit ' || true)
+  clear_records=$(grep -F 'v1.1.0 ' "$(ineligible_path)" 2>/dev/null \
+    | grep -Fc ' verification-failure-cleared' || true)
+  sentinel_lines=0
+  [[ ! -f "$SENTINEL" ]] || sentinel_lines=$(wc -l <"$SENTINEL")
+  if [[ "$rc" -ne 0 && "$dedupe_rc" -ne 0 && "$recovery_rc" -eq 0 \
+    && "$reports" -eq 1 && "$failure_heartbeats" -eq 1 \
+    && "$failure_records" -eq 1 && "$clear_records" -eq 1 \
+    && "$sentinel_lines" -eq 1 && $(git -C "$REPO" rev-parse HEAD) == "$candidate_commit" ]]; then
+    pass "reachability refusal deduplicates, retries, clears, and installs after branch recovery"
+  else
+    fail_case "reachability refusal deduplicates, retries, clears, and installs after branch recovery" \
+      "rc=$rc/$dedupe_rc/$recovery_rc reports=$reports heartbeats=$failure_heartbeats records=$failure_records clears=$clear_records installs=$sentinel_lines output=$output"
+  fi
+}
+
+case "${ISSUE54_REPLAY_CASE:-all}" in
+  updater)
+    run_issue54_updater_replay_case
+    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    [[ "$FAIL_COUNT" -eq 0 ]]
+    exit $?
+    ;;
+  bootstrap)
+    run_issue54_bootstrap_replay_case
+    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    [[ "$FAIL_COUNT" -eq 0 ]]
+    exit $?
+    ;;
+  endpoint-rewrite)
+    run_issue54_endpoint_rewrite_cases
+    run_issue54_endpoint_resolution_failure_case
+    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    [[ "$FAIL_COUNT" -eq 0 ]]
+    exit $?
+    ;;
+  binding)
+    run_issue54_binding_cases
+    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    [[ "$FAIL_COUNT" -eq 0 ]]
+    exit $?
+    ;;
+  normalization)
+    run_issue54_normalization_cases
+    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    [[ "$FAIL_COUNT" -eq 0 ]]
+    exit $?
+    ;;
+  reachability)
+    run_issue54_reachability_cases
+    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    [[ "$FAIL_COUNT" -eq 0 ]]
+    exit $?
+    ;;
+  retry)
+    run_issue54_retry_case
+    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    [[ "$FAIL_COUNT" -eq 0 ]]
+    exit $?
+    ;;
+  none)
+    ;;
+  all)
+    run_issue54_updater_replay_case
+    run_issue54_bootstrap_replay_case
+    run_issue54_endpoint_rewrite_cases
+    run_issue54_endpoint_resolution_failure_case
+    run_issue54_binding_cases
+    run_issue54_normalization_cases
+    run_issue54_reachability_cases
+    run_issue54_retry_case
+    ;;
+  *)
+    printf 'unknown ISSUE54_REPLAY_CASE: %s (expected updater, bootstrap, endpoint-rewrite, binding, normalization, reachability, retry, or none)\n' \
+      "$ISSUE54_REPLAY_CASE" >&2
+    exit 2
+    ;;
+esac
+
 new_fixture delta4-startup-pin-dedupe
 tag_release signed v1.0.0 "$BASE_COMMIT"
-push_tag v1.0.0
+publish_branch_backed_release v1.0.0
 fetch_local_tag v1.0.0
 startup_output=
 startup_rcs=
@@ -210,14 +978,14 @@ new_fixture delta4-dry-run-diagnostic
 commit_release installed pass
 installed_commit=$RELEASE_COMMIT
 tag_release signed v1.0.0 "$installed_commit"
-push_tag v1.0.0
+publish_branch_backed_release v1.0.0
 fetch_local_tag v1.0.0
 git -C "$REPO" checkout -q --detach "$installed_commit"
 append_ok_ledger v1.0.0
 ledger_before=$(cksum "$(ledger_path)")
 commit_release rejected pass
 tag_release unsigned v1.1.0 "$RELEASE_COMMIT"
-push_tag v1.1.0
+publish_branch_backed_release v1.1.0
 output=$(run_updater --dry-run); rc=$?
 ledger_after=$(cksum "$(ledger_path)")
 if [[ "$rc" -eq 0 && "$ledger_before" == "$ledger_after" \
@@ -255,7 +1023,7 @@ make_candidate() {
       tag_release "$kind" "$CANDIDATE_TAG" "$CANDIDATE_COMMIT"
     fi
   fi
-  push_tag "$CANDIDATE_TAG"
+  publish_branch_backed_release "$CANDIDATE_TAG"
 }
 
 if [[ "${SKIP_DELTA2_CASES:-0}" == 0 ]]; then
@@ -266,17 +1034,17 @@ if [[ "${SKIP_DELTA2_CASES:-0}" == 0 ]]; then
     commit_release installed pass
     installed_commit=$RELEASE_COMMIT
     tag_release signed v0.2.3 "$installed_commit"
-    push_tag v0.2.3
+    publish_branch_backed_release v0.2.3
     fetch_local_tag v0.2.3
     git -C "$REPO" checkout -q --detach "$installed_commit"
     append_ok_ledger v0.2.3
     tag_release "$poison_kind" v99.0.0 "$installed_commit"
-    push_tag v99.0.0
+    publish_branch_backed_release v99.0.0
     fetch_local_tag v99.0.0
     commit_release genuine pass
     genuine_commit=$RELEASE_COMMIT
     tag_release signed v0.3.0 "$genuine_commit"
-    push_tag v0.3.0
+    publish_branch_backed_release v0.3.0
     output=$(run_updater); rc=$?
     if [[ "$rc" -eq 0 && $(git -C "$REPO" rev-parse HEAD) == "$genuine_commit" ]] \
       && grep -Fq '"version":"v0.3.0"' "$(pin_path)"; then
@@ -288,7 +1056,7 @@ if [[ "${SKIP_DELTA2_CASES:-0}" == 0 ]]; then
 
   new_fixture delta2-floor-no-ledger
   tag_release lightweight v99.0.0 "$BASE_COMMIT"
-  push_tag v99.0.0
+  publish_branch_backed_release v99.0.0
   fetch_local_tag v99.0.0
   output=$(run_updater); rc=$?
   if [[ "$rc" -ne 0 && ! -e "$(pin_path)" ]] \
@@ -302,14 +1070,14 @@ if [[ "${SKIP_DELTA2_CASES:-0}" == 0 ]]; then
   commit_release installed pass
   installed_commit=$RELEASE_COMMIT
   tag_release signed v1.0.0 "$installed_commit"
-  push_tag v1.0.0
+  publish_branch_backed_release v1.0.0
   fetch_local_tag v1.0.0
   git -C "$REPO" checkout -q --detach "$installed_commit"
   append_ok_ledger v1.0.0
   ledger_before=$(cksum "$(ledger_path)")
   commit_release invalid pass
   tag_release unsigned v1.1.0 "$RELEASE_COMMIT"
-  push_tag v1.1.0
+  publish_branch_backed_release v1.1.0
   output=$(run_updater --dry-run); rc=$?
   ledger_after=$(cksum "$(ledger_path)")
   if [[ "$rc" -eq 0 && "$ledger_before" == "$ledger_after" \
@@ -328,11 +1096,11 @@ if [[ "${SKIP_DELTA2_CASES:-0}" == 0 ]]; then
   commit_release genuine pass
   genuine_commit=$RELEASE_COMMIT
   tag_release lightweight latest "$genuine_commit"
-  push_tag latest
+  publish_branch_backed_release latest
   tag_release lightweight v1.2.3-rc1 "$genuine_commit"
-  push_tag v1.2.3-rc1
+  publish_branch_backed_release v1.2.3-rc1
   tag_release signed v0.3.0 "$genuine_commit"
-  push_tag v0.3.0
+  publish_branch_backed_release v0.3.0
   output=$(run_updater); rc=$?
   first_head=$(git -C "$REPO" rev-parse HEAD)
   parse_rcs=$rc
@@ -365,7 +1133,7 @@ if [[ "${SKIP_DELTA2_CASES:-0}" == 0 ]]; then
   cat >"$parse_fakebin/git" <<'PARSE_GIT_SHIM'
 #!/usr/bin/env bash
 set -u
-if [[ "$*" == *" ls-remote --refs --tags origin"* ]]; then
+if [[ "$*" == *" ls-remote --refs --tags "* ]]; then
   output=$($REAL_GIT "$@") || exit $?
   printf '%s\n' "$output"
   first=$(printf '%s\n' "$output" | sed -n '1p')
@@ -390,7 +1158,7 @@ PARSE_GIT_SHIM
     write_pin v0.0.0 "$BASE_COMMIT"
     commit_release candidate pass
     tag_release signed v1.1.0 "$RELEASE_COMMIT"
-    push_tag v1.1.0
+    publish_branch_backed_release v1.1.0
     before=$(git -C "$REPO" rev-parse HEAD)
     parse_rcs=
     for tick in 1 2 3; do
@@ -421,7 +1189,7 @@ PARSE_GIT_SHIM
   commit_release genuine pass
   genuine_commit=$RELEASE_COMMIT
   tag_release signed v0.3.0 "$genuine_commit"
-  push_tag v0.3.0
+  publish_branch_backed_release v0.3.0
   output=$(PATH="$parse_fakebin:$PATH" REAL_GIT="$REAL_GIT" INJECT_NONSEMVER_DUP=1 run_updater); rc=$?
   reports=$(grep -Fc 'latest' "$LOGS/hot-inbox.log" 2>/dev/null || true)
   ineligible_records=$(grep -Fc 'latest' "$(ineligible_path)" 2>/dev/null || true)
@@ -440,14 +1208,14 @@ PARSE_GIT_SHIM
   commit_release installed pass
   installed_commit=$RELEASE_COMMIT
   tag_release signed v1.0.0 "$installed_commit"
-  push_tag v1.0.0
+  publish_branch_backed_release v1.0.0
   fetch_local_tag v1.0.0
   git -C "$REPO" checkout -q --detach "$installed_commit"
   write_pin v1.0.0 "$installed_commit"
   commit_release broken fail
   broken_commit=$RELEASE_COMMIT
   tag_release signed v1.1.0 "$broken_commit"
-  push_tag v1.1.0
+  publish_branch_backed_release v1.1.0
   install_rcs=
   for tick in 1 2 3; do
     run_updater >/dev/null
@@ -479,10 +1247,10 @@ PARSE_GIT_SHIM
   new_fixture delta2-atomic-second
   commit_release first pass
   tag_release signed v1.1.0 "$RELEASE_COMMIT"
-  push_tag v1.1.0
+  publish_branch_backed_release v1.1.0
   commit_release second pass
   tag_release signed v1.2.0 "$RELEASE_COMMIT"
-  push_tag v1.2.0
+  publish_branch_backed_release v1.2.0
   write_pin v1.0.0 "$BASE_COMMIT"
   atomic_fakebin=$BASE/atomic-fakebin
   atomic_counter=$BASE/atomic-counter
@@ -537,7 +1305,7 @@ run_side_path_variant() {
     CANDIDATE_COMMIT=$RELEASE_COMMIT
     CANDIDATE_TAG=v1.1.0
     tag_release signed "$CANDIDATE_TAG" "$CANDIDATE_COMMIT"
-    push_tag "$CANDIDATE_TAG"
+    publish_branch_backed_release "$CANDIDATE_TAG"
   else
     make_candidate "$kind"
   fi
@@ -588,7 +1356,7 @@ if [[ "${BASELINE_FOCUSED:-0}" == 1 ]]; then
   commit_release old-moved pass
   old_commit=$RELEASE_COMMIT
   tag_release signed v1.1.0 "$old_commit"
-  push_tag v1.1.0
+  publish_branch_backed_release v1.1.0
   fetch_local_tag v1.1.0
   git -C "$SRC" tag -d v1.1.0 >/dev/null
   commit_release moved pass
@@ -597,7 +1365,7 @@ if [[ "${BASELINE_FOCUSED:-0}" == 1 ]]; then
   commit_release legitimate pass
   legitimate_commit=$RELEASE_COMMIT
   tag_release signed v1.2.0 "$legitimate_commit"
-  push_tag v1.2.0
+  publish_branch_backed_release v1.2.0
   write_pin v1.0.0 "$BASE_COMMIT"
   output=$(run_updater); rc=$?
   if [[ "$rc" -eq 0 && $(git -C "$REPO" rev-parse HEAD) == "$legitimate_commit" ]]; then
@@ -610,12 +1378,12 @@ if [[ "${BASELINE_FOCUSED:-0}" == 1 ]]; then
   commit_release rollback-base pass
   rollback_commit=$RELEASE_COMMIT
   tag_release signed v1.0.0 "$rollback_commit"
-  push_tag v1.0.0
+  publish_branch_backed_release v1.0.0
   fetch_local_tag v1.0.0
   git -C "$REPO" checkout -q --detach "$rollback_commit"
   commit_release broken-target fail
   tag_release signed v1.1.0 "$RELEASE_COMMIT"
-  push_tag v1.1.0
+  publish_branch_backed_release v1.1.0
   write_pin v1.0.0 "$rollback_commit"
   baseline_fakebin=$BASE/fakebin
   mismatch_state=$BASE/mismatch-count
@@ -669,7 +1437,7 @@ new_fixture legacy-lightweight
 commit_release legacy pass
 CANDIDATE_COMMIT=$RELEASE_COMMIT
 tag_release lightweight v0.2.2 "$CANDIDATE_COMMIT"
-push_tag v0.2.2
+publish_branch_backed_release v0.2.2
 write_pin v0.1.0 "$BASE_COMMIT"
 before=$(git -C "$REPO" rev-parse HEAD)
 output=$(run_updater); rc=$?
@@ -685,7 +1453,7 @@ new_fixture numeric-floor
 commit_release numeric pass
 numeric_commit=$RELEASE_COMMIT
 tag_release signed v0.10.0 "$numeric_commit"
-push_tag v0.10.0
+publish_branch_backed_release v0.10.0
 write_pin v0.9.0 "$BASE_COMMIT"
 output=$(run_updater); rc=$?
 if [[ "$rc" -eq 0 && $(git -C "$REPO" rev-parse HEAD) == "$numeric_commit" ]]; then
@@ -699,7 +1467,7 @@ new_fixture numeric-floor-reverse
 commit_release lower-numeric pass
 lower_numeric_commit=$RELEASE_COMMIT
 tag_release signed v0.9.0 "$lower_numeric_commit"
-push_tag v0.9.0
+publish_branch_backed_release v0.9.0
 write_pin v0.10.0 "$BASE_COMMIT"
 before=$(git -C "$REPO" rev-parse HEAD)
 output=$(run_updater); rc=$?
@@ -717,7 +1485,7 @@ commit_release old-moved pass
 old_moved_commit=$RELEASE_COMMIT
 tag_release signed v1.1.0 "$old_moved_commit"
 old_moved_oid=$(git -C "$SRC" rev-parse refs/tags/v1.1.0)
-push_tag v1.1.0
+publish_branch_backed_release v1.1.0
 fetch_local_tag v1.1.0
 git -C "$SRC" tag -d v1.1.0 >/dev/null
 commit_release moved-content pass
@@ -727,7 +1495,7 @@ force_push_tag v1.1.0
 commit_release legitimate pass
 legit_commit=$RELEASE_COMMIT
 tag_release signed v1.2.0 "$legit_commit"
-push_tag v1.2.0
+publish_branch_backed_release v1.2.0
 write_pin v1.0.0 "$BASE_COMMIT"
 output=$(run_updater); rc=$?
 first_reports=$(grep -Fc "updater failed: claire repo v1.1.0" "$LOGS/hot-inbox.log" 2>/dev/null || true)
@@ -747,7 +1515,7 @@ new_fixture two-moved
 for moved_name in v1.1.0 v1.2.0; do
   commit_release "old-$moved_name" pass
   tag_release signed "$moved_name" "$RELEASE_COMMIT"
-  push_tag "$moved_name"
+  publish_branch_backed_release "$moved_name"
   fetch_local_tag "$moved_name"
 done
 for moved_name in v1.1.0 v1.2.0; do
@@ -759,7 +1527,7 @@ done
 commit_release valid-newer pass
 valid_newer_commit=$RELEASE_COMMIT
 tag_release signed v1.3.0 "$valid_newer_commit"
-push_tag v1.3.0
+publish_branch_backed_release v1.3.0
 write_pin v1.0.0 "$BASE_COMMIT"
 run_updater >/dev/null; rc=$?
 run_updater >/dev/null; rc2=$?
@@ -778,14 +1546,14 @@ new_fixture signer-rotation-recovery
 commit_release installed-key-a pass
 floor_commit=$RELEASE_COMMIT
 tag_release signed v0.2.3 "$floor_commit"
-push_tag v0.2.3
+publish_branch_backed_release v0.2.3
 fetch_local_tag v0.2.3
 git -C "$REPO" checkout -q --detach "$floor_commit"
 write_pin v0.2.3 "$floor_commit"
 commit_release rotated-key-b pass
 rotated_commit=$RELEASE_COMMIT
 tag_release unpinned v0.3.0 "$rotated_commit"
-push_tag v0.3.0
+publish_branch_backed_release v0.3.0
 
 output=$(run_updater); rc=$?
 first_reports=$(grep -Fc "updater failed: claire repo v0.3.0" "$LOGS/hot-inbox.log" 2>/dev/null || true)
@@ -800,7 +1568,7 @@ clear_records=$(grep -F 'v0.3.0 ' "$(ineligible_path)" 2>/dev/null | grep -Fc ' 
 
 # Remove key B again: because the successful tick cleared the dedupe state,
 # this later failure must emit a fresh report.
-printf 'fixture@example.invalid %s\n' "$(sed -n '1p' "$KEY.pub")" >"$ALLOWED"
+write_allowed_signers_for_key "$KEY.pub"
 run_updater >/dev/null; rc3=$?
 third_reports=$(grep -Fc "updater failed: claire repo v0.3.0" "$LOGS/hot-inbox.log" 2>/dev/null || true)
 sentinel_lines=0
@@ -846,7 +1614,7 @@ chmod +x "$FAKEBIN/git"
 new_fixture ls-remote-failure
 commit_release candidate pass
 tag_release signed v1.1.0 "$RELEASE_COMMIT"
-push_tag v1.1.0
+publish_branch_backed_release v1.1.0
 write_pin v1.0.0 "$BASE_COMMIT"
 before=$(git -C "$REPO" rev-parse HEAD)
 output=$(PATH="$FAKEBIN:$PATH" REAL_GIT="$REAL_GIT" FAKE_LS_REMOTE=1 run_updater); rc=$?
@@ -862,13 +1630,13 @@ new_fixture rollback-success
 commit_release rollback-base pass
 rollback_commit=$RELEASE_COMMIT
 tag_release signed v1.0.0 "$rollback_commit"
-push_tag v1.0.0
+publish_branch_backed_release v1.0.0
 fetch_local_tag v1.0.0
 git -C "$REPO" checkout -q --detach "$rollback_commit"
 commit_release broken-target fail
 broken_commit=$RELEASE_COMMIT
 tag_release signed v1.1.0 "$broken_commit"
-push_tag v1.1.0
+publish_branch_backed_release v1.1.0
 write_pin v1.0.0 "$rollback_commit"
 output=$(run_updater); rc=$?
 sentinel_lines=$(wc -l <"$SENTINEL" 2>/dev/null || printf '0')
@@ -883,12 +1651,12 @@ new_fixture rollback-identity-mismatch
 commit_release rollback-base pass
 rollback_commit=$RELEASE_COMMIT
 tag_release signed v1.0.0 "$rollback_commit"
-push_tag v1.0.0
+publish_branch_backed_release v1.0.0
 fetch_local_tag v1.0.0
 git -C "$REPO" checkout -q --detach "$rollback_commit"
 commit_release broken-target fail
 tag_release signed v1.1.0 "$RELEASE_COMMIT"
-push_tag v1.1.0
+publish_branch_backed_release v1.1.0
 write_pin v1.0.0 "$rollback_commit"
 MISMATCH_STATE=$BASE/mismatch-count
 output=$(PATH="$FAKEBIN:$PATH" REAL_GIT="$REAL_GIT" MISMATCH_REPO="$REPO" MISMATCH_STATE="$MISMATCH_STATE" run_updater); rc=$?
@@ -904,7 +1672,7 @@ new_fixture stable-soak-skip
 commit_release fresh pass
 fresh_commit=$RELEASE_COMMIT
 tag_release signed v1.1.0 "$fresh_commit" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-push_tag v1.1.0
+publish_branch_backed_release v1.1.0
 write_pin v1.0.0 "$BASE_COMMIT"
 before=$(git -C "$REPO" rev-parse HEAD)
 output=$(HOME="$HOME_DIR" UPDATER_INSTALL_SENTINEL="$SENTINEL" "$UPDATER" \
@@ -945,7 +1713,7 @@ new_fixture stale-lock
 commit_release candidate pass
 stale_lock_commit=$RELEASE_COMMIT
 tag_release signed v1.1.0 "$stale_lock_commit"
-push_tag v1.1.0
+publish_branch_backed_release v1.1.0
 write_pin v1.0.0 "$BASE_COMMIT"
 mkdir "$REPO/.family-updater.lock"
 printf '%s\n' 999999 >"$REPO/.family-updater.lock/pid"
@@ -960,7 +1728,7 @@ fi
 new_fixture dirty-worktree
 commit_release candidate pass
 tag_release signed v1.1.0 "$RELEASE_COMMIT"
-push_tag v1.1.0
+publish_branch_backed_release v1.1.0
 write_pin v1.0.0 "$BASE_COMMIT"
 printf 'local change\n' >>"$REPO/VERSION.fixture"
 before=$(git -C "$REPO" rev-parse HEAD)
@@ -978,7 +1746,7 @@ new_fixture already-current
 commit_release current pass
 current_commit=$RELEASE_COMMIT
 tag_release signed v1.1.0 "$current_commit"
-push_tag v1.1.0
+publish_branch_backed_release v1.1.0
 fetch_local_tag v1.1.0
 git -C "$REPO" checkout -q --detach "$current_commit"
 write_pin v1.1.0 "$current_commit"
@@ -994,7 +1762,7 @@ new_fixture missing-reporter
 commit_release candidate pass
 missing_reporter_commit=$RELEASE_COMMIT
 tag_release signed v1.1.0 "$missing_reporter_commit"
-push_tag v1.1.0
+publish_branch_backed_release v1.1.0
 write_pin v1.0.0 "$BASE_COMMIT"
 FMA=$BASE/missing-fma
 output=$(run_updater); rc=$?
@@ -1009,7 +1777,7 @@ new_fixture failing-reporter
 commit_release candidate pass
 failing_reporter_commit=$RELEASE_COMMIT
 tag_release signed v1.1.0 "$failing_reporter_commit"
-push_tag v1.1.0
+publish_branch_backed_release v1.1.0
 write_pin v1.0.0 "$BASE_COMMIT"
 cat >"$FMA/job-heartbeat" <<'FAILING_REPORTER'
 #!/usr/bin/env bash
@@ -1028,13 +1796,13 @@ new_fixture rollback-also-fails
 commit_release failing-base fail
 failing_base_commit=$RELEASE_COMMIT
 tag_release signed v1.0.0 "$failing_base_commit"
-push_tag v1.0.0
+publish_branch_backed_release v1.0.0
 fetch_local_tag v1.0.0
 git -C "$REPO" checkout -q --detach "$failing_base_commit"
 write_pin v1.0.0 "$failing_base_commit"
 commit_release broken-target fail
 tag_release signed v1.1.0 "$RELEASE_COMMIT"
-push_tag v1.1.0
+publish_branch_backed_release v1.1.0
 output=$(run_updater); rc=$?
 report_lines=$(wc -l <"$LOGS/hot-inbox.log" 2>/dev/null || printf '0')
 if [[ "$rc" -ne 0 && $(git -C "$REPO" rev-parse HEAD) == "$failing_base_commit" \
@@ -1063,11 +1831,11 @@ new_fixture bootstrap-exact
 commit_release owner-initial pass
 owner_commit=$RELEASE_COMMIT
 tag_release signed v1.0.0 "$owner_commit"
-push_tag v1.0.0
+publish_branch_backed_release v1.0.0
 commit_release newer-not-selected pass
 newer_commit=$RELEASE_COMMIT
 tag_release signed v2.0.0 "$newer_commit"
-push_tag v2.0.0
+publish_branch_backed_release v2.0.0
 fetch_local_tag v1.0.0
 fetch_local_tag v2.0.0
 cron_dest=$BASE/cron/family-updater
@@ -1085,7 +1853,7 @@ new_fixture bootstrap-cron-retry
 commit_release retry-owner pass
 retry_commit=$RELEASE_COMMIT
 tag_release signed v1.0.0 "$retry_commit"
-push_tag v1.0.0
+publish_branch_backed_release v1.0.0
 fetch_local_tag v1.0.0
 blocked_parent=$BASE/cron-parent
 printf 'not a directory\n' >"$blocked_parent"
@@ -1109,7 +1877,7 @@ new_fixture bootstrap-different-pin
 commit_release different-pin-owner pass
 different_pin_commit=$RELEASE_COMMIT
 tag_release signed v1.0.0 "$different_pin_commit"
-push_tag v1.0.0
+publish_branch_backed_release v1.0.0
 fetch_local_tag v1.0.0
 write_pin v1.0.0 "$BASE_COMMIT"
 before=$(git -C "$REPO" rev-parse HEAD)
@@ -1127,7 +1895,7 @@ new_fixture bootstrap-substituted
 commit_release attacker-content pass
 attacker_commit=$RELEASE_COMMIT
 tag_release unsigned v1.0.0 "$attacker_commit"
-push_tag v1.0.0
+publish_branch_backed_release v1.0.0
 fetch_local_tag v1.0.0
 before=$(git -C "$REPO" rev-parse HEAD)
 output=$(HOME="$HOME_DIR" "$BOOTSTRAP" --repo-dir "$REPO" --allowed-signers "$ALLOWED" --initial-tag v1.0.0 2>&1); rc=$?
@@ -1144,7 +1912,7 @@ genuine_commit=$RELEASE_COMMIT
 tag_release signed v1.0.0 "$genuine_commit"
 genuine_oid=$(git -C "$SRC" rev-parse refs/tags/v1.0.0)
 git -C "$SRC" update-ref refs/tags/v9.9.9 "$genuine_oid"
-push_tag v9.9.9
+publish_branch_backed_release v9.9.9
 fetch_local_tag v9.9.9
 before=$(git -C "$REPO" rev-parse HEAD)
 rebound_cron_dest=$BASE/cron/family-updater
