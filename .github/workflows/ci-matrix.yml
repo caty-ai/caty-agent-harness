@@ -1,0 +1,386 @@
+# post-merge portability detection net + public evidence。pre-merge gate は test-lint.yml が担う。
+# main が赤なら lane orchestrator Alpha / repo owner が同日中に fix-forward または revert する。
+# GitHub はリポジトリが 60 日間 inactive だと schedule を自動停止する（push で再有効化）。
+# pull_request は追加しない。test-lint.yml との二重発火と permanently-skipped cells が FP-5 を作るため。
+
+name: CI Matrix (main)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 18 * * 0'
+
+permissions:
+  contents: read
+
+jobs:
+  matrix-cell:
+    name: ${{ matrix.cell }}
+    runs-on: ${{ matrix.runner }}
+    # --init gives the container a reaping PID 1 (tini): without it, orphaned process
+    # groups killed by lib-bounded stay as zombies, kill -0 reports them alive, and the
+    # process-group suites fail for a container reason, not a git reason (dry-run r2,
+    # run 31840964344: lib-bounded 4 FAIL, container cell only). Empty image = no container.
+    container:
+      image: ${{ matrix.container_image }}
+      options: --init
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Baseline: test-lint の Ubuntu signal を main でも観測する。
+          - cell: ubuntu-c
+            runner: ubuntu-latest
+            container_image: ''
+            lc_all: C.UTF-8
+            bash_expect: '^GNU bash, version 5\.[0-9]+'
+            sort_expect: B-first
+            glob_expect: nomatch
+            setup: none
+            assert_system_bash32: false
+            run_lint: false
+            run_as_nonroot: false
+            assert_git_234: false
+          # GNU userland の non-C collation axis。
+          - cell: ubuntu-enus
+            runner: ubuntu-latest
+            container_image: ''
+            lc_all: en_US.UTF-8
+            bash_expect: '^GNU bash, version 5\.[0-9]+'
+            sort_expect: a-first
+            glob_expect: nomatch
+            setup: none
+            assert_system_bash32: false
+            run_lint: false
+            run_as_nonroot: false
+            assert_git_234: false
+          # Semantic cell, not a true 3.2: bash 5 with globasciiranges disabled.
+          - cell: ubuntu-globascii-semantic
+            runner: ubuntu-latest
+            container_image: ''
+            lc_all: en_US.UTF-8
+            bash_expect: '^GNU bash, version 5\.[0-9]+'
+            sort_expect: a-first
+            glob_expect: match
+            setup: globascii-shim
+            assert_system_bash32: false
+            run_lint: false
+            run_as_nonroot: false
+            assert_git_234: false
+          # bash 3.2 × C collation control.
+          - cell: macos-b32-c
+            runner: macos-latest
+            container_image: ''
+            lc_all: C
+            bash_expect: '^GNU bash, version 3\.2'
+            sort_expect: B-first
+            glob_expect: nomatch
+            setup: none
+            assert_system_bash32: true
+            run_lint: true
+            run_as_nonroot: false
+            assert_git_234: false
+          # bash 3.2 × non-C collation for the 26 unpinned suites.
+          - cell: macos-b32-enus
+            runner: macos-latest
+            container_image: ''
+            lc_all: en_US.UTF-8
+            bash_expect: '^GNU bash, version 3\.2'
+            sort_expect: a-first
+            glob_expect: match
+            setup: none
+            assert_system_bash32: true
+            run_lint: true
+            run_as_nonroot: false
+            assert_git_234: false
+          # brew bash 5 separates the bash-version effect from the macOS effect.
+          - cell: macos-b5-enus
+            runner: macos-latest
+            container_image: ''
+            lc_all: en_US.UTF-8
+            bash_expect: '^GNU bash, version 5\.[0-9]+'
+            sort_expect: a-first
+            glob_expect: nomatch
+            setup: brew-bash
+            assert_system_bash32: true
+            run_lint: false
+            run_as_nonroot: false
+            assert_git_234: false
+          # Real lower boundary: Ubuntu 22.04 tag/index digest resolved 2026-08-15.
+          - cell: git-2.34
+            runner: ubuntu-latest
+            container_image: ubuntu:22.04@sha256:0e0a0fc6d18feda9db1590da249ac93e8d5abfea8f4c3c0c849ce512b5ef8982
+            lc_all: C.UTF-8
+            bash_expect: '^GNU bash, version 5\.1'
+            sort_expect: B-first
+            glob_expect: nomatch
+            setup: none
+            assert_system_bash32: false
+            run_lint: false
+            run_as_nonroot: true
+            assert_git_234: true
+    env:
+      LC_ALL: ${{ matrix.lc_all }}
+      LANG: ${{ matrix.lc_all }}
+      CELL_ID: ${{ matrix.cell }}
+      BASH_EXPECT: ${{ matrix.bash_expect }}
+      SORT_EXPECT: ${{ matrix.sort_expect }}
+      GLOB_EXPECT: ${{ matrix.glob_expect }}
+      ASSERT_SYSTEM_BASH32: ${{ matrix.assert_system_bash32 }}
+      RUN_LINT: ${{ matrix.run_lint }}
+      RUN_AS_NONROOT: ${{ matrix.run_as_nonroot }}
+      ASSERT_GIT_234: ${{ matrix.assert_git_234 }}
+      # Measured by one local `make test` run on macOS, 2026-08-15; additions may raise it.
+      PASS_FLOOR: '931'
+    steps:
+      # Git must exist before checkout or checkout can silently degrade to its tarball fallback.
+      - name: Bootstrap git-2.34 container
+        if: matrix.run_as_nonroot
+        shell: bash
+        run: |
+          set -euo pipefail
+          apt-get update
+          # gawk: parity with GHA runner images. Bare ubuntu:22.04 ships mawk, which lacks
+          # ERE interval expressions ({4}) — install.sh's freshness check then degrades to a
+          # spurious warning and sentinel-cron keeps its notice (dry-run r3, run 31853911122;
+          # reproduced locally in the pinned image). The mawk incompatibility itself is a real
+          # portability finding filed as issue #84; this cell pins the runner-parity env.
+          apt-get install -y --no-install-recommends \
+            git make perl python3 gawk locales openssh-client ca-certificates coreutils findutils
+          locale-gen en_US.UTF-8
+          locale -a > /tmp/available-locales
+          grep -qiE '^C\.(UTF-8|utf8)$' /tmp/available-locales
+          grep -qiE '^en_US\.(UTF-8|utf8)$' /tmp/available-locales
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Put brew bash 5 on PATH
+        if: matrix.setup == 'brew-bash'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! brew list bash >/dev/null 2>&1; then
+            brew install bash
+          fi
+          echo "$(brew --prefix bash)/bin" >> "$GITHUB_PATH"
+
+      # Semantic cell: two propagation channels for bash-3.2 range semantics, because the
+      # suites cross env-sanitization boundaries — task-runner donechecks run under `env -i`
+      # with a pinned ABSOLUTE interpreter path resolved from PATH at workspace init
+      # (scripts/task-runner.sh:950-965, scripts/lib-donecheck.sh caty_load_interpreters):
+      #  1) PATH shim: captured by that PATH resolution, so it survives `env -i` re-exec by
+      #     absolute path. The shim reorders GNU long options BEFORE +O — bash rejects
+      #     `+O ... --noprofile` with "--: invalid option" (dry-run r1, run 31836960133).
+      #  2) BASH_ENV: reaches env-inheriting bash children invoked by absolute path.
+      # The bracket probes (ordinary + env -i boundary, expected: match) fail closed if
+      # either channel stops working.
+      - name: Enable bash-3.2 range semantics (PATH shim + BASH_ENV)
+        if: matrix.setup == 'globascii-shim'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shim_dir="$RUNNER_TEMP/globascii-shim"
+          mkdir -p "$shim_dir"
+          cat > "$shim_dir/bash" <<'SHIM'
+          #!/bin/sh
+          longs=
+          while [ $# -gt 0 ]; do
+            case "$1" in
+              --noprofile|--norc|--posix|--version|--help|--login|--noediting|--verbose)
+                longs="$longs $1"; shift ;;
+              *) break ;;
+            esac
+          done
+          exec /usr/bin/bash $longs +O globasciiranges "$@"
+          SHIM
+          chmod 755 "$shim_dir/bash"
+          printf '%s\n' 'shopt -u globasciiranges' > "$RUNNER_TEMP/disable-globasciiranges.sh"
+          echo "BASH_ENV=$RUNNER_TEMP/disable-globasciiranges.sh" >> "$GITHUB_ENV"
+          echo "$shim_dir" >> "$GITHUB_PATH"
+
+      - name: Preflight git-2.34 dependencies
+        if: matrix.run_as_nonroot
+        shell: bash
+        run: |
+          set -euo pipefail
+          for command_name in shasum python3 ssh-keygen git make stat mkfifo sort; do
+            command -v "$command_name"
+          done
+
+      - name: Prepare non-root test user
+        if: matrix.run_as_nonroot
+        shell: bash
+        run: |
+          set -euo pipefail
+          useradd --create-home --shell /bin/bash ciuser
+          chown -R ciuser:ciuser "$GITHUB_WORKSPACE"
+
+      - name: Assert axes and run tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cell_script=/tmp/caty-matrix-cell.sh
+          cat > "$cell_script" <<'BASH'
+          set -euo pipefail
+          # Container su(1) sessions inherit Ubuntu's private-group umask 002; the suites
+          # assert fixtures are not group- or world-writable (dry-run 31836960133,
+          # distill-audit via attest-wrapper). Match the runner default everywhere.
+          umask 022
+
+          fail() {
+            echo "::error::$*" >&2
+            exit 1
+          }
+
+          cd "$GITHUB_WORKSPACE"
+          if [ "$RUN_AS_NONROOT" = true ] && [ "$(id -u)" -eq 0 ]; then
+            fail "git-2.34 tests must run as non-root"
+          fi
+
+          resolved_bash=$(command -v bash)
+          bash_version=$(bash --version | sed -n '1p')
+          printf 'bash=%s\nversion=%s\n' "$resolved_bash" "$bash_version"
+          if ! grep -Eq "$BASH_EXPECT" <<<"$bash_version"; then
+            fail "unexpected PATH bash version: $bash_version (expected $BASH_EXPECT)"
+          fi
+          if [ "$ASSERT_SYSTEM_BASH32" = true ]; then
+            system_bash_version=$(/bin/bash --version | sed -n '1p')
+            if ! grep -Eq '^GNU bash, version 3\.2' <<<"$system_bash_version"; then
+              fail "macOS /bin/bash is not 3.2: $system_bash_version"
+            fi
+          fi
+
+          locale_out=/tmp/caty-locale-"$CELL_ID".out
+          locale_err=/tmp/caty-locale-"$CELL_ID".err
+          locale > "$locale_out" 2> "$locale_err"
+          cat "$locale_out"
+          if grep -Eiq 'Cannot set|cannot change locale' "$locale_err"; then
+            cat "$locale_err" >&2
+            fail "locale emitted a fallback warning"
+          fi
+          if [ -s "$locale_err" ]; then
+            cat "$locale_err" >&2
+          fi
+          effective_locale=$(awk -F= '$1 == "LC_COLLATE" {gsub(/"/, "", $2); print $2}' "$locale_out")
+          if [ "$effective_locale" != "$LC_ALL" ]; then
+            fail "effective LC_COLLATE=$effective_locale, expected $LC_ALL"
+          fi
+          locale -a > /tmp/caty-locales-"$CELL_ID"
+          if ! grep -qiE '^en_US\.(UTF-8|utf8)$' /tmp/caty-locales-"$CELL_ID"; then
+            fail "en_US.UTF-8 is unavailable; suite SKIP-as-PASS must not be reachable"
+          fi
+
+          sort_probe=$(printf 'a\nB\n' | sort | sed -n '1p')
+          case "$SORT_EXPECT" in
+            B-first) expected_sort=B ;;
+            a-first) expected_sort=a ;;
+            *) fail "unknown sort expectation: $SORT_EXPECT" ;;
+          esac
+          if [ "$sort_probe" != "$expected_sort" ]; then
+            fail "sort probe=$sort_probe, expected $expected_sort"
+          fi
+
+          bracket_probe=$(bash -c 'case B in [a-z]) echo match;; *) echo nomatch;; esac')
+          if [ "$bracket_probe" != "$GLOB_EXPECT" ]; then
+            fail "bracket probe=$bracket_probe, expected $GLOB_EXPECT"
+          fi
+          # Mirror the donecheck sanitization boundary: env -i, hardcoded PATH, LC_ALL
+          # forwarded, interpreter re-exec'd by the ABSOLUTE path PATH resolution yields
+          # (task-runner.sh:950-965). Expected value equals GLOB_EXPECT in every cell.
+          envi_bracket_probe=$(env -i PATH=/usr/bin:/bin LC_ALL="$LC_ALL" "$(command -v bash)" -c 'case B in [a-z]) echo match;; *) echo nomatch;; esac')
+          if [ "$envi_bracket_probe" != "$GLOB_EXPECT" ]; then
+            fail "env -i boundary bracket probe=$envi_bracket_probe, expected $GLOB_EXPECT (donecheck sanitization path)"
+          fi
+
+          if [ "${SKIP_DELTA2_CASES:-0}" != 0 ]; then
+            fail "SKIP_DELTA2_CASES must be unset or 0"
+          fi
+
+          git_version=$(git --version)
+          if [ "$ASSERT_GIT_234" = true ]; then
+            if ! grep -Eq '^git version 2\.34\.' <<<"$git_version"; then
+              fail "git boundary cell drifted: $git_version"
+            fi
+            UPDATER_VERIFY_REASON=
+            . scripts/lib-updater-verify.sh
+            capability_rc=0
+            updater_check_capabilities "$GITHUB_WORKSPACE" || capability_rc=$?
+            if [ "$capability_rc" -ne 0 ]; then
+              fail "updater_check_capabilities rc=$capability_rc: $UPDATER_VERIFY_REASON"
+            fi
+            if [ -n "$UPDATER_VERIFY_REASON" ]; then
+              fail "updater_check_capabilities left a reason after success: $UPDATER_VERIFY_REASON"
+            fi
+          fi
+
+          # Drift tripwire: the counted loop below intentionally mirrors the Makefile's
+          # `test` recipe verbatim. Compare the FULL recipe body, not a substring — a
+          # substring grep stayed green when a recipe line was prepended (Codex delta).
+          expected_recipe=$(printf '\t@set -e; for test_file in tests/*.test.sh; do bash "$$test_file"; done')
+          actual_recipe=$(awk '/^test:/{found=1; next} found && /^\t/{print; next} found{exit}' Makefile)
+          if [ "$actual_recipe" != "$expected_recipe" ]; then
+            fail "Makefile test recipe drifted from the CI inline loop - resync both"
+          fi
+          # shellcheck disable=SC2012 # Exact Makefile/CONTRIBUTING glob accounting contract.
+          expected=$(ls tests/*.test.sh | wc -l | tr -d '[:space:]')
+          test_log=/tmp/caty-test-"$CELL_ID".log
+          count_file=/tmp/caty-suite-count-"$CELL_ID"
+          (
+            set -euo pipefail
+            n=0
+            for f in tests/*.test.sh; do
+              bash "$f"
+              n=$((n + 1))
+            done
+            printf '%s\n' "$n" > "$count_file"
+          ) 2>&1 | tee "$test_log"
+          n=$(tr -d '[:space:]' < "$count_file")
+          if [ "$n" -ne "$expected" ]; then
+            fail "executed suite count $n != expected $expected"
+          fi
+
+          skip_count=$(awk 'tolower($0) ~ /(^[[:space:]]*skip([[:space:]:-]|$)|#[[:space:]]*skip([[:space:]:-]|$))/ {count++} END {print count+0}' "$test_log")
+          if [ "$skip_count" -ne 0 ]; then
+            fail "test output contains $skip_count SKIP lines"
+          fi
+          pass_count=$(awk '/^(PASS|ok)([[:space:]]|[[:punct:]])/ {count++} END {print count+0}' "$test_log")
+          if [ "$pass_count" -lt "$PASS_FLOOR" ]; then
+            fail "PASS/ok line count $pass_count is below pinned floor $PASS_FLOOR"
+          fi
+
+          if [ "$RUN_LINT" = true ]; then
+            make lint
+          fi
+
+          # GITHUB_STEP_SUMMARY is a fresh root-owned file per step, so the (possibly
+          # non-root) cell script writes the fingerprint to a temp file and the step
+          # shell appends it afterwards (dry-run r6: ciuser append = Permission denied).
+          {
+            echo "### Axis fingerprint: $CELL_ID"
+            echo
+            echo '| Axis | Observed |'
+            echo '| --- | --- |'
+            echo "| bash | \`$resolved_bash — $bash_version\` |"
+            echo "| effective LC_COLLATE | \`$effective_locale\` |"
+            echo "| sort probe | \`$sort_probe\` |"
+            echo "| bracket probe | \`$bracket_probe\` |"
+            echo "| git | \`$git_version\` |"
+            echo "| suites | \`$n / $expected\` |"
+            echo "| PASS/ok lines | \`$pass_count\` |"
+          } > /tmp/caty-fingerprint-"$CELL_ID".md
+          BASH
+          chmod 755 "$cell_script"
+
+          if [ "$RUN_AS_NONROOT" = true ]; then
+            su -m ciuser -s /bin/bash -c \
+              'HOME=/home/ciuser; USER=ciuser; LOGNAME=ciuser; export HOME USER LOGNAME; bash /tmp/caty-matrix-cell.sh'
+          else
+            bash "$cell_script"
+          fi
+          cat /tmp/caty-fingerprint-"$CELL_ID".md >> "$GITHUB_STEP_SUMMARY"

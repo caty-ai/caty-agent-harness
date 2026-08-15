@@ -1,0 +1,479 @@
+# 引用可能な主張は「同一 SHA に対する 50 回の独立実行（並列・毎回新規 VM）・フレーク0件」。
+# "consecutive" とは呼ばない。fresh-VM 並列は state-leak flake には同等だが、
+# shared-machine contention flake の証拠にはならないため、主張を意図的に狭めている。
+# GitHub はリポジトリが 60 日間 inactive だと schedule を自動停止する（push で再有効化）。
+# この workflow は required check ではなく、今後も required check にしない。
+# ci-matrix.yml と検査ロジックを inline で重複させる。workflow 外スクリプトを増やさないための意図的な重複。
+# 軸プローブ（sort/bracket/env -i 境界）は各ジョブのステップ内で fail-closed に検証してから
+# レシートを書く。レシートは同一性と集計の台帳であり、プローブ結果は載せない（意図的）。
+
+name: Flake Evidence
+
+on:
+  workflow_dispatch:
+  schedule:
+    # ci-matrix.yml (17 18 * * 0) の30分後: 同時刻だと 67 ジョブが殺到し
+    # macOS 並列上限5に対して 13 ジョブが競合するため意図的にずらす。
+    - cron: '47 18 * * 0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flake-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  flake:
+    name: ubuntu ${{ matrix.iteration }} / 50
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        iteration: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      ITERATION: ${{ matrix.iteration }}
+      # Measured by one local `make test` run on macOS, 2026-08-15; additions may raise it.
+      PASS_FLOOR: '931'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Assert axes, run tests, and write receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error::$*" >&2
+            exit 1
+          }
+
+          resolved_bash=$(command -v bash)
+          bash_version=$(bash --version | sed -n '1p')
+          printf 'bash=%s\nversion=%s\n' "$resolved_bash" "$bash_version"
+          if ! grep -Eq '^GNU bash, version 5\.[0-9]+' <<<"$bash_version"; then
+            fail "unexpected PATH bash version: $bash_version"
+          fi
+
+          locale_out=/tmp/caty-flake-ubuntu-locale.out
+          locale_err=/tmp/caty-flake-ubuntu-locale.err
+          locale > "$locale_out" 2> "$locale_err"
+          cat "$locale_out"
+          if grep -Eiq 'Cannot set|cannot change locale' "$locale_err"; then
+            cat "$locale_err" >&2
+            fail "locale emitted a fallback warning"
+          fi
+          if [ -s "$locale_err" ]; then
+            cat "$locale_err" >&2
+          fi
+          effective_locale=$(awk -F= '$1 == "LC_COLLATE" {gsub(/"/, "", $2); print $2}' "$locale_out")
+          if [ "$effective_locale" != "$LC_ALL" ]; then
+            fail "effective LC_COLLATE=$effective_locale, expected $LC_ALL"
+          fi
+          locale -a > /tmp/caty-flake-ubuntu-locales
+          if ! grep -qiE '^en_US\.(UTF-8|utf8)$' /tmp/caty-flake-ubuntu-locales; then
+            fail "en_US.UTF-8 is unavailable; suite SKIP-as-PASS must not be reachable"
+          fi
+
+          sort_probe=$(printf 'a\nB\n' | sort | sed -n '1p')
+          if [ "$sort_probe" != B ]; then
+            fail "sort probe=$sort_probe, expected B"
+          fi
+          bracket_probe=$(bash -c 'case B in [a-z]) echo match;; *) echo nomatch;; esac')
+          if [ "$bracket_probe" != nomatch ]; then
+            fail "bracket probe=$bracket_probe, expected nomatch"
+          fi
+          envi_bracket_probe=$(env -i PATH=/usr/bin:/bin LC_ALL="$LC_ALL" "$(command -v bash)" -c 'case B in [a-z]) echo match;; *) echo nomatch;; esac')
+          if [ "$envi_bracket_probe" != nomatch ]; then
+            fail "env -i boundary bracket probe=$envi_bracket_probe, expected nomatch"
+          fi
+          if [ "${SKIP_DELTA2_CASES:-0}" != 0 ]; then
+            fail "SKIP_DELTA2_CASES must be unset or 0"
+          fi
+
+          # Full-recipe-body drift tripwire (substring grep passed on prepended lines — Codex delta).
+          # shellcheck disable=SC2016 # Literal Makefile recipe text; $$ is make escaping, not expansion.
+          expected_recipe=$(printf '\t@set -e; for test_file in tests/*.test.sh; do bash "$$test_file"; done')
+          actual_recipe=$(awk '/^test:/{found=1; next} found && /^\t/{print; next} found{exit}' Makefile)
+          if [ "$actual_recipe" != "$expected_recipe" ]; then
+            fail "Makefile test recipe drifted from the CI inline loop - resync both"
+          fi
+          # shellcheck disable=SC2012 # Exact Makefile/CONTRIBUTING glob accounting contract.
+          expected=$(ls tests/*.test.sh | wc -l | tr -d '[:space:]')
+          test_log=/tmp/caty-flake-ubuntu-test.log
+          count_file=/tmp/caty-flake-ubuntu-suite-count
+          (
+            set -euo pipefail
+            n=0
+            for f in tests/*.test.sh; do
+              bash "$f"
+              n=$((n + 1))
+            done
+            printf '%s\n' "$n" > "$count_file"
+          ) 2>&1 | tee "$test_log"
+          n=$(tr -d '[:space:]' < "$count_file")
+          if [ "$n" -ne "$expected" ]; then
+            fail "executed suite count $n != expected $expected"
+          fi
+
+          skip_count=$(awk 'tolower($0) ~ /(^[[:space:]]*skip([[:space:]:-]|$)|#[[:space:]]*skip([[:space:]:-]|$))/ {count++} END {print count+0}' "$test_log")
+          if [ "$skip_count" -ne 0 ]; then
+            fail "test output contains $skip_count SKIP lines"
+          fi
+          pass_count=$(awk '/^(PASS|ok)([[:space:]]|[[:punct:]])/ {count++} END {print count+0}' "$test_log")
+          if [ "$pass_count" -lt "$PASS_FLOOR" ]; then
+            fail "PASS/ok line count $pass_count is below pinned floor $PASS_FLOOR"
+          fi
+
+          git_version=$(git --version)
+          evidence_date=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          {
+            printf 'iteration=%s\n' "$ITERATION"
+            printf 'sha=%s\n' "$(git rev-parse HEAD)"
+            printf 'suites=%s\n' "$n"
+            printf 'pass_lines=%s\n' "$pass_count"
+            printf 'bash=%s\n' "$bash_version"
+            printf 'locale=%s\n' "$effective_locale"
+            printf 'git=%s\n' "$git_version"
+            printf 'evidence_date=%s\n' "$evidence_date"
+          } > receipt.txt
+
+          {
+            echo "### Axis fingerprint: ubuntu iteration $ITERATION"
+            echo
+            echo '| Axis | Observed |'
+            echo '| --- | --- |'
+            echo "| bash | \`$resolved_bash — $bash_version\` |"
+            echo "| effective LC_COLLATE | \`$effective_locale\` |"
+            echo "| sort probe | \`$sort_probe\` |"
+            echo "| bracket probe | \`$bracket_probe\` |"
+            echo "| git | \`$git_version\` |"
+            echo "| suites | \`$n / $expected\` |"
+            echo "| PASS/ok lines | \`$pass_count\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Ubuntu receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: receipt-ubuntu-${{ matrix.iteration }}
+          path: receipt.txt
+          if-no-files-found: error
+
+  flake-macos:
+    name: macos-b32 ${{ matrix.iteration }} / 10
+    runs-on: macos-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        iteration: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    env:
+      LC_ALL: en_US.UTF-8
+      LANG: en_US.UTF-8
+      ITERATION: ${{ matrix.iteration }}
+      # Measured by one local `make test` run on macOS, 2026-08-15; additions may raise it.
+      PASS_FLOOR: '931'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Assert axes, run tests, and write receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error::$*" >&2
+            exit 1
+          }
+
+          resolved_bash=$(command -v bash)
+          bash_version=$(bash --version | sed -n '1p')
+          printf 'bash=%s\nversion=%s\n' "$resolved_bash" "$bash_version"
+          if ! grep -Eq '^GNU bash, version 3\.2' <<<"$bash_version"; then
+            fail "unexpected PATH bash version: $bash_version"
+          fi
+          system_bash_version=$(/bin/bash --version | sed -n '1p')
+          if ! grep -Eq '^GNU bash, version 3\.2' <<<"$system_bash_version"; then
+            fail "macOS /bin/bash is not 3.2: $system_bash_version"
+          fi
+
+          locale_out=/tmp/caty-flake-macos-locale.out
+          locale_err=/tmp/caty-flake-macos-locale.err
+          locale > "$locale_out" 2> "$locale_err"
+          cat "$locale_out"
+          if grep -Eiq 'Cannot set|cannot change locale' "$locale_err"; then
+            cat "$locale_err" >&2
+            fail "locale emitted a fallback warning"
+          fi
+          if [ -s "$locale_err" ]; then
+            cat "$locale_err" >&2
+          fi
+          effective_locale=$(awk -F= '$1 == "LC_COLLATE" {gsub(/"/, "", $2); print $2}' "$locale_out")
+          if [ "$effective_locale" != "$LC_ALL" ]; then
+            fail "effective LC_COLLATE=$effective_locale, expected $LC_ALL"
+          fi
+          locale -a > /tmp/caty-flake-macos-locales
+          if ! grep -qiE '^en_US\.(UTF-8|utf8)$' /tmp/caty-flake-macos-locales; then
+            fail "en_US.UTF-8 is unavailable; suite SKIP-as-PASS must not be reachable"
+          fi
+
+          sort_probe=$(printf 'a\nB\n' | sort | sed -n '1p')
+          if [ "$sort_probe" != a ]; then
+            fail "sort probe=$sort_probe, expected a"
+          fi
+          bracket_probe=$(bash -c 'case B in [a-z]) echo match;; *) echo nomatch;; esac')
+          if [ "$bracket_probe" != match ]; then
+            fail "bracket probe=$bracket_probe, expected match"
+          fi
+          envi_bracket_probe=$(env -i PATH=/usr/bin:/bin LC_ALL="$LC_ALL" "$(command -v bash)" -c 'case B in [a-z]) echo match;; *) echo nomatch;; esac')
+          if [ "$envi_bracket_probe" != match ]; then
+            fail "env -i boundary bracket probe=$envi_bracket_probe, expected match"
+          fi
+          if [ "${SKIP_DELTA2_CASES:-0}" != 0 ]; then
+            fail "SKIP_DELTA2_CASES must be unset or 0"
+          fi
+
+          # Full-recipe-body drift tripwire (substring grep passed on prepended lines — Codex delta).
+          # shellcheck disable=SC2016 # Literal Makefile recipe text; $$ is make escaping, not expansion.
+          expected_recipe=$(printf '\t@set -e; for test_file in tests/*.test.sh; do bash "$$test_file"; done')
+          actual_recipe=$(awk '/^test:/{found=1; next} found && /^\t/{print; next} found{exit}' Makefile)
+          if [ "$actual_recipe" != "$expected_recipe" ]; then
+            fail "Makefile test recipe drifted from the CI inline loop - resync both"
+          fi
+          # shellcheck disable=SC2012 # Exact Makefile/CONTRIBUTING glob accounting contract.
+          expected=$(ls tests/*.test.sh | wc -l | tr -d '[:space:]')
+          test_log=/tmp/caty-flake-macos-test.log
+          count_file=/tmp/caty-flake-macos-suite-count
+          (
+            set -euo pipefail
+            n=0
+            for f in tests/*.test.sh; do
+              bash "$f"
+              n=$((n + 1))
+            done
+            printf '%s\n' "$n" > "$count_file"
+          ) 2>&1 | tee "$test_log"
+          n=$(tr -d '[:space:]' < "$count_file")
+          if [ "$n" -ne "$expected" ]; then
+            fail "executed suite count $n != expected $expected"
+          fi
+
+          skip_count=$(awk 'tolower($0) ~ /(^[[:space:]]*skip([[:space:]:-]|$)|#[[:space:]]*skip([[:space:]:-]|$))/ {count++} END {print count+0}' "$test_log")
+          if [ "$skip_count" -ne 0 ]; then
+            fail "test output contains $skip_count SKIP lines"
+          fi
+          pass_count=$(awk '/^(PASS|ok)([[:space:]]|[[:punct:]])/ {count++} END {print count+0}' "$test_log")
+          if [ "$pass_count" -lt "$PASS_FLOOR" ]; then
+            fail "PASS/ok line count $pass_count is below pinned floor $PASS_FLOOR"
+          fi
+
+          make lint
+
+          git_version=$(git --version)
+          evidence_date=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          {
+            printf 'iteration=%s\n' "$ITERATION"
+            printf 'sha=%s\n' "$(git rev-parse HEAD)"
+            printf 'suites=%s\n' "$n"
+            printf 'pass_lines=%s\n' "$pass_count"
+            printf 'bash=%s\n' "$bash_version"
+            printf 'locale=%s\n' "$effective_locale"
+            printf 'git=%s\n' "$git_version"
+            printf 'evidence_date=%s\n' "$evidence_date"
+          } > receipt.txt
+
+          {
+            echo "### Axis fingerprint: macos-b32 iteration $ITERATION"
+            echo
+            echo '| Axis | Observed |'
+            echo '| --- | --- |'
+            echo "| bash | \`$resolved_bash — $bash_version\` |"
+            echo "| effective LC_COLLATE | \`$effective_locale\` |"
+            echo "| sort probe | \`$sort_probe\` |"
+            echo "| bracket probe | \`$bracket_probe\` |"
+            echo "| git | \`$git_version\` |"
+            echo "| suites | \`$n / $expected\` |"
+            echo "| PASS/ok lines | \`$pass_count\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload macOS receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: receipt-macos-${{ matrix.iteration }}
+          path: receipt.txt
+          if-no-files-found: error
+
+  flake-summary:
+    name: Verify 60 receipts
+    needs: [flake, flake-macos]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.sha }}
+      FLAKE_RESULT: ${{ needs.flake.result }}
+      FLAKE_MACOS_RESULT: ${{ needs.flake-macos.result }}
+      PASS_FLOOR: '931'
+    steps:
+      - name: Download every receipt
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: receipt-artifacts
+
+      - name: Fail closed and summarize receipts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error::$*" >&2
+            exit 1
+          }
+
+          receipt_value() {
+            key=$1
+            receipt=$2
+            # shellcheck disable=SC2016 # The awk program, including $0, must remain literal.
+            awk -v key="$key" '
+              index($0, key "=") == 1 {
+                count++
+                value=substr($0, length(key) + 2)
+              }
+              END {
+                if (count != 1) exit 1
+                print value
+              }
+            ' "$receipt"
+          }
+
+          total_count=$(find receipt-artifacts -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d '[:space:]')
+          ubuntu_count=$(find receipt-artifacts -mindepth 1 -maxdepth 1 -type d -name 'receipt-ubuntu-*' | wc -l | tr -d '[:space:]')
+          macos_count=$(find receipt-artifacts -mindepth 1 -maxdepth 1 -type d -name 'receipt-macos-*' | wc -l | tr -d '[:space:]')
+          [ "$total_count" -eq 60 ] || fail "expected exactly 60 artifact directories, found $total_count"
+          [ "$ubuntu_count" -eq 50 ] || fail "expected exactly 50 Ubuntu receipts, found $ubuntu_count"
+          [ "$macos_count" -eq 10 ] || fail "expected exactly 10 macOS receipts, found $macos_count"
+
+          table_rows=/tmp/caty-flake-table.md
+          : > "$table_rows"
+          canonical_sha=
+          canonical_suites=
+          canonical_pass_ubuntu=
+          canonical_pass_macos=
+
+          validate_receipt() {
+            runner_name=$1
+            expected_iteration=$2
+            receipt=$3
+
+            [ -f "$receipt" ] || fail "missing receipt file: $receipt"
+            line_count=$(wc -l < "$receipt" | tr -d '[:space:]')
+            [ "$line_count" -eq 8 ] || fail "$receipt must contain exactly 8 fields, found $line_count"
+
+            receipt_iteration=$(receipt_value iteration "$receipt")
+            receipt_sha=$(receipt_value sha "$receipt")
+            receipt_suites=$(receipt_value suites "$receipt")
+            receipt_pass_lines=$(receipt_value pass_lines "$receipt")
+            receipt_bash=$(receipt_value bash "$receipt")
+            receipt_locale=$(receipt_value locale "$receipt")
+            receipt_git=$(receipt_value git "$receipt")
+            receipt_date=$(receipt_value evidence_date "$receipt")
+
+            [ "$receipt_iteration" = "$expected_iteration" ] || fail "$receipt iteration=$receipt_iteration, expected $expected_iteration"
+            case "$receipt_suites" in ''|*[!0-9]*) fail "$receipt has invalid suite count" ;; esac
+            case "$receipt_pass_lines" in ''|*[!0-9]*) fail "$receipt has invalid PASS count" ;; esac
+            [ "$receipt_suites" -gt 0 ] || fail "$receipt reports zero suites"
+            [ "$receipt_pass_lines" -ge "$PASS_FLOOR" ] || fail "$receipt PASS count is below $PASS_FLOOR"
+            [ -n "$receipt_bash" ] || fail "$receipt has empty bash fingerprint"
+            [ -n "$receipt_locale" ] || fail "$receipt has empty locale fingerprint"
+            [ -n "$receipt_git" ] || fail "$receipt has empty git fingerprint"
+            if ! grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' <<<"$receipt_date"; then
+              fail "$receipt has invalid evidence date: $receipt_date"
+            fi
+
+            [ "$receipt_sha" = "$EXPECTED_SHA" ] || fail "$receipt sha=$receipt_sha, expected $EXPECTED_SHA"
+            if [ -z "$canonical_sha" ]; then
+              canonical_sha=$receipt_sha
+            elif [ "$receipt_sha" != "$canonical_sha" ]; then
+              fail "$receipt SHA differs from the other receipts"
+            fi
+            if [ -z "$canonical_suites" ]; then
+              canonical_suites=$receipt_suites
+            elif [ "$receipt_suites" != "$canonical_suites" ]; then
+              fail "$receipt suite count differs from the other receipts"
+            fi
+
+            case "$runner_name" in
+              ubuntu)
+                grep -Eq '^GNU bash, version 5\.[0-9]+' <<<"$receipt_bash" || fail "$receipt is not bash 5.x"
+                [ "$receipt_locale" = C.UTF-8 ] || fail "$receipt locale=$receipt_locale, expected C.UTF-8"
+                # Same SHA on the same runner class must do identical work: a floor alone
+                # would let an iteration that quietly did less (but stayed above 931)
+                # certify as part of "60/60".
+                if [ -z "$canonical_pass_ubuntu" ]; then
+                  canonical_pass_ubuntu=$receipt_pass_lines
+                elif [ "$receipt_pass_lines" != "$canonical_pass_ubuntu" ]; then
+                  fail "$receipt pass_lines=$receipt_pass_lines differs from other ubuntu receipts ($canonical_pass_ubuntu)"
+                fi
+                ;;
+              macos-b32)
+                grep -Eq '^GNU bash, version 3\.2' <<<"$receipt_bash" || fail "$receipt is not bash 3.2"
+                [ "$receipt_locale" = en_US.UTF-8 ] || fail "$receipt locale=$receipt_locale, expected en_US.UTF-8"
+                if [ -z "$canonical_pass_macos" ]; then
+                  canonical_pass_macos=$receipt_pass_lines
+                elif [ "$receipt_pass_lines" != "$canonical_pass_macos" ]; then
+                  fail "$receipt pass_lines=$receipt_pass_lines differs from other macOS receipts ($canonical_pass_macos)"
+                fi
+                ;;
+              *) fail "unknown receipt runner: $runner_name" ;;
+            esac
+
+            printf "| %s | %s | \`%s\` | %s | %s | %s |\n" \
+              "$runner_name" "$receipt_iteration" "$receipt_sha" "$receipt_suites" \
+              "$receipt_pass_lines" "$receipt_date" >> "$table_rows"
+          }
+
+          i=1
+          while [ "$i" -le 50 ]; do
+            artifact_dir=receipt-artifacts/receipt-ubuntu-"$i"
+            [ -d "$artifact_dir" ] || fail "missing Ubuntu iteration $i (exact set 1..50 required)"
+            artifact_file_count=$(find "$artifact_dir" -maxdepth 1 -type f | wc -l | tr -d '[:space:]')
+            [ "$artifact_file_count" -eq 1 ] || fail "$artifact_dir must contain exactly one file"
+            validate_receipt ubuntu "$i" "$artifact_dir/receipt.txt"
+            i=$((i + 1))
+          done
+
+          i=1
+          while [ "$i" -le 10 ]; do
+            artifact_dir=receipt-artifacts/receipt-macos-"$i"
+            [ -d "$artifact_dir" ] || fail "missing macOS iteration $i (exact set 1..10 required)"
+            artifact_file_count=$(find "$artifact_dir" -maxdepth 1 -type f | wc -l | tr -d '[:space:]')
+            [ "$artifact_file_count" -eq 1 ] || fail "$artifact_dir must contain exactly one file"
+            validate_receipt macos-b32 "$i" "$artifact_dir/receipt.txt"
+            i=$((i + 1))
+          done
+
+          if [ "$FLAKE_RESULT" != success ]; then
+            fail "needs.flake.result=$FLAKE_RESULT, expected success"
+          fi
+          if [ "$FLAKE_MACOS_RESULT" != success ]; then
+            fail "needs.flake-macos.result=$FLAKE_MACOS_RESULT, expected success"
+          fi
+
+          {
+            echo '### Flake evidence receipts'
+            echo
+            echo '| runner | iteration | sha | suites | PASS/ok lines | evidence date (UTC) |'
+            echo '| --- | ---: | --- | ---: | ---: | --- |'
+            cat "$table_rows"
+            echo
+            echo "**60/60 green (ubuntu 50 + macos-b32 10) on $canonical_sha**"
+          } >> "$GITHUB_STEP_SUMMARY"
