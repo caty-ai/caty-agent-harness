@@ -13,6 +13,8 @@
 ![platform: macOS | Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
 ![status: public preview](https://img.shields.io/badge/status-public--preview-blue)
 
+<sub>CI evidence (2026-08-15 UTC): [matrix 7/7 green](https://github.com/caty-ai/caty-agent-harness/actions/runs/31858953187) ・ [60 independent runs of one SHA, 0 flakes](https://github.com/caty-ai/caty-agent-harness/actions/runs/31859000233). Weekly schedule — GitHub pauses schedules after 60 days of repo inactivity, so mind the run date.</sub>
+
 Re-explaining everything. Context that vanishes. A cheerful "done!" with nothing to show for it.<br>
 Caty Agent Harness fixes those — with plain text files and real checks.<br>
 Not magic. The machinery remembers, drives, and checks, so the AI can focus on thinking —<br>

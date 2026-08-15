@@ -13,6 +13,8 @@
 ![platform: macOS | Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
 ![status: public preview](https://img.shields.io/badge/status-public--preview-blue)
 
+<sub>CI 証拠（2026-08-15 UTC）: [マトリクス 7/7 green](https://github.com/caty-ai/caty-agent-harness/actions/runs/31858953187) ・ [同一 SHA に対する 60 回の独立実行・フレーク0件](https://github.com/caty-ai/caty-agent-harness/actions/runs/31859000233)。週次実行 — リポジトリが60日間動かないと GitHub が schedule を自動停止するため、run の日付も確認してください。</sub>
+
 説明のやり直し。消える文脈。証拠のない「できました！」。<br>
 Caty Agent Harness は、その全部をただのテキストファイルと確認の仕組みで解決します。<br>
 魔法ではありません。覚える・進める・確かめるは機械が受け持ち、AI は考えることに集中する —<br>
