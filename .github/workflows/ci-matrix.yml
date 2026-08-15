@@ -19,7 +19,13 @@ jobs:
   matrix-cell:
     name: ${{ matrix.cell }}
     runs-on: ${{ matrix.runner }}
-    container: ${{ matrix.container_image }}
+    # --init gives the container a reaping PID 1 (tini): without it, orphaned process
+    # groups killed by lib-bounded stay as zombies, kill -0 reports them alive, and the
+    # process-group suites fail for a container reason, not a git reason (dry-run r2,
+    # run 31840964344: lib-bounded 4 FAIL, container cell only). Empty image = no container.
+    container:
+      image: ${{ matrix.container_image }}
+      options: --init
     timeout-minutes: 45
     strategy:
       fail-fast: false
