@@ -1,6 +1,6 @@
 # EV-005 environment digest (analysis-plan §2, §10; runner-spec §6)
 
-Status: in the sealing scope; manifest pending. Both cells verified 2026-08-15 by their
+Status: **SEALED** (covered by `MANIFEST.sha256`). Both cells verified 2026-08-15 by their
 operators against the shipped image artifact; operator reports and the author's acceptance are
 in family-vault `20_projects/ev-005/env-prep/{alec,cero}-env-prep.md`.
 

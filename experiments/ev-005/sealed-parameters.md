@@ -1,6 +1,6 @@
 # EV-005 sealed parameters (analysis-plan §10)
 
-Status: in the sealing scope; manifest pending. Every numeric lever that can move an outcome
+Status: **SEALED** (covered by `MANIFEST.sha256`). Every numeric lever that can move an outcome
 lives here, frozen, so no parameter is chosen after seeing data.
 
 ## 1. Gaming-audit sample (analysis-plan §8)

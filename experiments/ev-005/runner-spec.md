@@ -1,10 +1,8 @@
 # EV-005 runner/wrapper specification (sealed; analysis-plan §2, §8, §10)
 
-- Status: **in the sealing scope (analysis-plan §10); manifest pending.** This line changes to
-  "sealed" in the same commit that generates `MANIFEST.sha256` — until that object exists, a
-  reader cannot distinguish "sealed" from "intended to be sealed", and claiming the former is
-  the apparent-rigor failure this pack is trying to avoid (delta-round finding, two seats).
-  This document specifies the run harness for all arms and
+- Status: **SEALED** — covered by `MANIFEST.sha256` (analysis-plan §10); verify with
+  `python3 tools/seal-manifest.py experiments/ev-005 --check`. Post-sealing changes follow the §10 amendment
+  procedure only. This document specifies the run harness for all arms and
   cells: replica provisioning, prompt assembly, the declaration/delivery measurement layer, the
   W gate, budget enforcement, the audit log schema, and the environment digest. The pilot's
   §7 order-guarantee check is verified against the audit log this spec defines.

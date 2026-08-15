@@ -1,6 +1,6 @@
 # EV-005 source-repository provenance (analysis-plan §2, model pre-exposure registration)
 
-Status: in the sealing scope; manifest pending. Retrieved from the GitHub API on 2026-08-15.
+Status: **SEALED** (covered by `MANIFEST.sha256`). Retrieved from the GitHub API on 2026-08-15.
 
 | source repo | created (UTC) | visibility |
 | --- | --- | --- |

@@ -1,6 +1,6 @@
 # EV-005 leak-canary detection rule (analysis-plan §3.1 `contaminated`)
 
-Status: in the sealing scope; manifest pending.
+Status: **SEALED** (covered by `MANIFEST.sha256`).
 
 ## Planting (translation-rules R9, applied at replica build)
 

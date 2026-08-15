@@ -1,7 +1,7 @@
 # EV-005 arm instruction texts (sealed treatment definition)
 
-- Status: **in the sealing scope (analysis-plan §2, §10); manifest pending.** This line changes
-  to "sealed" in the same commit that generates `MANIFEST.sha256`. These three texts ARE the
+- Status: **SEALED** — covered by `MANIFEST.sha256` (analysis-plan §2, §10); verify with
+  `python3 tools/seal-manifest.py experiments/ev-005 --check`. These three texts ARE the
   experimental manipulation; arms differ only in the runner's enforcement (W) and in the text
   below. Every other part of the prompt — task sheet, budget block, and the **task file layout
   including the readable, executable `donecheck.sh`** — is byte-identical across arms. The one
