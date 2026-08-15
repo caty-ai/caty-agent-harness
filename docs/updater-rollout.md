@@ -79,14 +79,22 @@ endpoint.
 
 IPv6 hosts, `git://`, non-default ports, relative paths, nested group paths such
 as `host/group/subgroup/repo`, query or fragment suffixes, multi-valued origin
-URLs, and `file://` URLs with a non-local host are refused. `insteadOf` rewrites are evaluated as the effective fetch endpoint;
-mirror layouts that normalize to a different or four-component identity are
-unsupported. Failure reasons never include the raw URL.
+URLs, scp-like absolute paths such as `git@github.com:/abs/path/repo.git`, and
+`file://` URLs with a non-local host are refused. Mirror layouts that normalize
+to a different or four-component identity are unsupported. Failure reasons
+never include the raw URL.
 
-The effective origin URL is captured once during signer validation. Branch
-fetches, `ls-remote`, candidate-tag fetches, and bootstrap fetches all consume
-that captured endpoint, never the mutable remote name. Ref updates still target
-`refs/remotes/origin/*` through explicit refspecs.
+The effective origin URL, including any pre-existing `insteadOf` expansion, is
+captured once during signer validation. Before each branch fetch, tag listing,
+candidate-tag fetch, and bootstrap fetch, the updater asks Git to resolve that
+captured value again. It refuses if resolution fails or a new URL rewrite would
+change the endpoint. Ref updates still target `refs/remotes/origin/*` through
+explicit refspecs.
+
+Repository-local Git configuration is trusted operator state. The updater does
+not neutralize it; it detects endpoint-changing URL configuration immediately
+before every network operation and fails closed. A legitimate mirror rewrite
+that already expanded during capture remains equal and continues to work.
 
 ## Release ritual and reachability
 
@@ -209,12 +217,28 @@ Before enabling this release:
 The upgraded updater refuses until the directive exists and releases are
 branch-backed, so migrate signer files before enabling it. If a host's pin or
 floor is foreign or suspect, quarantine it; never lower or hand-edit the floor.
-Under incident procedure, remove the affected clone and its per-clone updater
-state, create a clean clone, and run trusted bootstrap with an owner-confirmed
-release name. Publish the repair release before cloning: bootstrap fetches
-branches with tags suppressed, so the owner-named tag must already be present
-in the clean clone. Name an annotated, signed tag; `v0.1.0` is lightweight and
-verification refuses it.
+Name an annotated, signed repair tag; `v0.1.0` is lightweight and verification
+refuses it. Use one of these two recovery routes:
+
+- **Clean clone:** publish the repair release before cloning, remove the
+  affected clone and its per-clone updater state, create a clean clone, and run
+  trusted bootstrap with the owner-confirmed release name. Bootstrap fetches
+  branches with tags suppressed, so the tag must arrive with the clean clone.
+- **Existing clone:** capture the validated origin endpoint, fetch tags
+  non-forced from that endpoint, then re-run trusted bootstrap. Non-forced tag
+  fetching never moves an existing local tag ref:
+
+  ```sh
+  captured_origin=$(git -C "$repo" remote get-url origin)
+  git -C "$repo" fetch --tags "$captured_origin"
+  /trusted/updater-bootstrap \
+    --repo-dir "$repo" \
+    --allowed-signers "$signers" \
+    --initial-tag "$owner_confirmed_tag" \
+    --cron-wrapper-dest "$HOME/.local/bin/caty-family-updater-cron"
+  ```
+
+The clean-clone route is:
 
 ```sh
 mkdir -p "$quarantine"

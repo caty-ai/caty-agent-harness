@@ -30,7 +30,18 @@ fail() {
   exit 1
 }
 
-trap 'updater_cleanup_allowed_signers_snapshot' EXIT HUP INT TERM
+updater_bootstrap_signal_exit() {
+  local status=$1
+
+  trap - HUP INT TERM
+  updater_cleanup_allowed_signers_snapshot
+  exit "$status"
+}
+
+trap 'updater_cleanup_allowed_signers_snapshot' EXIT
+trap 'updater_bootstrap_signal_exit 129' HUP
+trap 'updater_bootstrap_signal_exit 130' INT
+trap 'updater_bootstrap_signal_exit 143' TERM
 
 while (($# > 0)); do
   case "$1" in

@@ -161,70 +161,110 @@ updater_normalize_host_identity() {
   local host=$1
   local path=$2
   local output_var=$3
-  local normalized_identity
+  local normalized_host normalized_path normalized_identity
 
-  updater_strip_host_repo_suffix "$path" path
-  if [[ -z "$host" || "$host" == *[[:space:]]* || "$host" == *:* || "$host" == */* \
-    || "$host" == *'['* || "$host" == *']'* || "$path" == *[[:space:]]* \
-    || "$path" == /* || "$path" == */*/* || "$path" != */* \
-    || "$path" == */ || "$path" == *//* ]]; then
+  printf -v "$output_var" '%s' ''
+  normalized_host=$(printf '%s' "$host" | tr '[:upper:]' '[:lower:]') || return 1
+  normalized_path=$(printf '%s' "$path" | tr '[:upper:]' '[:lower:]') || return 1
+  updater_strip_host_repo_suffix "$normalized_path" normalized_path
+  if [[ -z "$normalized_host" || "$normalized_host" == *[[:space:]]* \
+    || "$normalized_host" == *:* || "$normalized_host" == */* \
+    || "$normalized_host" == *'['* || "$normalized_host" == *']'* \
+    || "$normalized_path" == *[[:space:]]* || "$normalized_path" == /* \
+    || "$normalized_path" == */*/* || "$normalized_path" != */* \
+    || "$normalized_path" == */ || "$normalized_path" == *//* ]]; then
     return 1
   fi
-  normalized_identity=$(printf '%s/%s' "$host" "$path" | tr '[:upper:]' '[:lower:]') || return 1
+  normalized_identity=$normalized_host/$normalized_path
   printf -v "$output_var" '%s' "$normalized_identity"
 }
 
 updater_normalize_repo_url() {
   local value=$1
   local output_var=$2
-  local rest authority host_port host path port normalized_url
+  local rest authority host_port host path port normalized_url scheme scp_value userinfo
 
+  printf -v "$output_var" '%s' ''
   normalized_url=
   if [[ "$value" == /* ]]; then
     [[ "$value" != *'?'* && "$value" != *'#'* ]] || return 1
+    while [[ "$value" == //* ]]; do value=${value#/}; done
     normalized_url=$(cd "$value" 2>/dev/null && pwd -P) || return 1
-  elif [[ "$value" == file://* ]]; then
+  elif [[ "$value" == *://* ]]; then
     [[ "$value" != *'?'* && "$value" != *'#'* ]] || return 1
-    rest=${value#file://}
-    if [[ "$rest" == /* ]]; then
-      path=$rest
-    elif [[ "$rest" == localhost/* ]]; then
-      path=/${rest#localhost/}
-    else
-      return 1
-    fi
-    normalized_url=$(cd "$path" 2>/dev/null && pwd -P) || return 1
-  elif [[ "$value" == ssh://* || "$value" == https://* ]]; then
-    [[ "$value" != *'?'* && "$value" != *'#'* ]] || return 1
-    if [[ "$value" == ssh://* ]]; then
-      rest=${value#ssh://}
-      port=22
-    else
-      rest=${value#https://}
-      port=443
-    fi
-    [[ "$rest" == */* ]] || return 1
-    authority=${rest%%/*}
-    path=${rest#*/}
-    host_port=${authority##*@}
-    [[ -n "$host_port" && "$host_port" != *'['* && "$host_port" != *']'* ]] || return 1
-    if [[ "$host_port" == *:* ]]; then
-      host=${host_port%:*}
-      [[ "${host_port##*:}" == "$port" ]] || return 1
-    else
-      host=$host_port
-    fi
-    updater_normalize_host_identity "$host" "$path" normalized_url || return 1
-  elif [[ "$value" == *://* || "$value" != *:* ]]; then
-    return 1
+    scheme=${value%%://*}
+    scheme=$(printf '%s' "$scheme" | tr '[:upper:]' '[:lower:]') || return 1
+    rest=${value#*://}
+    case "$scheme" in
+      file)
+        if [[ "$rest" == /* ]]; then
+          path=$rest
+        elif [[ "$rest" == */* ]]; then
+          authority=${rest%%/*}
+          authority=$(printf '%s' "$authority" | tr '[:upper:]' '[:lower:]') || return 1
+          [[ "$authority" == localhost ]] || return 1
+          path=/${rest#*/}
+        else
+          return 1
+        fi
+        while [[ "$path" == //* ]]; do path=${path#/}; done
+        normalized_url=$(cd "$path" 2>/dev/null && pwd -P) || return 1
+        ;;
+      ssh|https)
+        if [[ "$scheme" == ssh ]]; then
+          port=22
+        else
+          port=443
+        fi
+        [[ "$rest" == */* ]] || return 1
+        authority=${rest%%/*}
+        path=${rest#*/}
+        host_port=${authority##*@}
+        [[ -n "$host_port" && "$host_port" != *'['* && "$host_port" != *']'* ]] || return 1
+        if [[ "$host_port" == *:* ]]; then
+          host=${host_port%:*}
+          [[ "${host_port##*:}" == "$port" ]] || return 1
+        else
+          host=$host_port
+        fi
+        updater_normalize_host_identity "$host" "$path" normalized_url || return 1
+        ;;
+      *)
+        return 1
+        ;;
+    esac
   else
+    [[ "$value" == *:* ]] || return 1
     [[ "$value" != *'?'* && "$value" != *'#'* && "$value" != *[[:space:]]* ]] || return 1
-    authority=${value%%:*}
-    path=${value#*:}
-    host=${authority##*@}
+    scp_value=$value
+    if [[ "$scp_value" == *@* ]]; then
+      userinfo=${scp_value%%@*}
+      [[ -n "$userinfo" && "$userinfo" != *:* ]] || return 1
+      scp_value=${scp_value#*@}
+      [[ "$scp_value" != *@* ]] || return 1
+    fi
+    authority=${scp_value%%:*}
+    path=${scp_value#*:}
+    [[ "$authority" != "$scp_value" ]] || return 1
+    host=$authority
     updater_normalize_host_identity "$host" "$path" normalized_url || return 1
   fi
   printf -v "$output_var" '%s' "$normalized_url"
+}
+
+updater_assert_endpoint_unrewritten() {
+  local repo=$1
+  local url=$2
+  local resolved
+
+  if ! resolved=$(git -C "$repo" ls-remote --get-url "$url" 2>/dev/null); then
+    UPDATER_VERIFY_REASON="cannot resolve the effective origin endpoint: $repo"
+    return 1
+  fi
+  if [[ "$resolved" != "$url" ]]; then
+    UPDATER_VERIFY_REASON="origin endpoint is rewritten by git URL configuration: $repo"
+    return 1
+  fi
 }
 
 updater_check_capabilities() {
@@ -658,13 +698,19 @@ updater_sync_remote_tags() {
     UPDATER_VERIFY_REASON="captured origin URL is unavailable"
     return 1
   fi
+  if ! updater_assert_endpoint_unrewritten "$repo" "$origin_url"; then
+    return 1
+  fi
   if ! git -C "$repo" fetch --no-tags --prune "$origin_url" \
     '+refs/heads/*:refs/remotes/origin/*' >/dev/null 2>&1; then
-    UPDATER_VERIFY_REASON="branch fetch failed"
+    UPDATER_VERIFY_REASON="branch fetch failed against captured endpoint"
+    return 1
+  fi
+  if ! updater_assert_endpoint_unrewritten "$repo" "$origin_url"; then
     return 1
   fi
   if ! output=$(git -C "$repo" ls-remote --refs --tags "$origin_url" 2>/dev/null); then
-    UPDATER_VERIFY_REASON="git ls-remote --refs --tags origin failed"
+    UPDATER_VERIFY_REASON="git ls-remote --refs --tags against captured endpoint failed"
     return 1
   fi
 
@@ -724,9 +770,12 @@ updater_sync_remote_tags() {
     refspecs+=("refs/tags/$name:refs/tags/$name")
   done <<<"$candidates"
   if (( ${#refspecs[@]} > 0 )); then
+    if ! updater_assert_endpoint_unrewritten "$repo" "$origin_url"; then
+      return 1
+    fi
     if ! git -C "$repo" fetch --atomic --no-tags "$origin_url" "${refspecs[@]}" \
       >/dev/null 2>&1; then
-      UPDATER_VERIFY_REASON="atomic candidate tag fetch failed; no new tag refs were installed"
+      UPDATER_VERIFY_REASON="atomic candidate tag fetch failed against captured endpoint; no new tag refs were installed"
       return 1
     fi
   fi
@@ -742,9 +791,12 @@ updater_fetch_release_refs() {
     UPDATER_VERIFY_REASON="captured origin URL is unavailable"
     return 1
   fi
+  if ! updater_assert_endpoint_unrewritten "$repo" "$origin_url"; then
+    return 1
+  fi
   if ! git -C "$repo" fetch --no-tags --prune "$origin_url" \
     '+refs/heads/*:refs/remotes/origin/*' >/dev/null 2>&1; then
-    UPDATER_VERIFY_REASON="branch fetch failed"
+    UPDATER_VERIFY_REASON="branch fetch failed against captured endpoint"
     return 1
   fi
 }

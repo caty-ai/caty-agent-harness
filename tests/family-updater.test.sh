@@ -205,6 +205,60 @@ FOREIGN_CRON_WRAPPER
   git -C "$FOREIGN_SRC" push -q "$ORIGIN" "refs/tags/$tag:refs/tags/$tag"
 }
 
+make_endpoint_rewrite_foreign_release() {
+  local label=$1 tag=$2
+
+  FOREIGN_ORIGIN=$BASE/rewrite-foreign-origin.git
+  FOREIGN_SRC=$BASE/rewrite-foreign-src
+  git init -q --bare "$FOREIGN_ORIGIN"
+  git init -q "$FOREIGN_SRC"
+  git -C "$FOREIGN_SRC" config user.name 'Rewrite Foreign Fixture'
+  git -C "$FOREIGN_SRC" config user.email fixture@example.invalid
+  git -C "$FOREIGN_SRC" config gpg.format ssh
+  git -C "$FOREIGN_SRC" config user.signingkey "$KEY"
+  write_fake_install "$FOREIGN_SRC" pass
+  mkdir -p "$FOREIGN_SRC/templates"
+  cat >"$FOREIGN_SRC/templates/updater-cron.tmpl.sh" <<'FOREIGN_CRON_WRAPPER'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'rewrite foreign fixture updater cron wrapper\n'
+FOREIGN_CRON_WRAPPER
+  printf '%s\n' "$label" >"$FOREIGN_SRC/VERSION.fixture"
+  git -C "$FOREIGN_SRC" add -A
+  GIT_AUTHOR_DATE=2020-04-01T00:00:00Z GIT_COMMITTER_DATE=2020-04-01T00:00:00Z \
+    git -C "$FOREIGN_SRC" commit -qm "$label"
+  FOREIGN_COMMIT=$(git -C "$FOREIGN_SRC" rev-parse HEAD)
+  FOREIGN_BRANCH=$(git -C "$FOREIGN_SRC" rev-parse --abbrev-ref HEAD)
+  GIT_COMMITTER_DATE=2020-04-01T00:00:00Z \
+    git -C "$FOREIGN_SRC" tag -s "$tag" "$FOREIGN_COMMIT" -m "$tag"
+  git -C "$FOREIGN_SRC" push -q "$FOREIGN_ORIGIN" \
+    "refs/heads/$FOREIGN_BRANCH:refs/heads/$BRANCH" \
+    "refs/tags/$tag:refs/tags/$tag"
+}
+
+write_post_binding_rewrite_shim() {
+  local fakebin=$1
+
+  mkdir -p "$fakebin"
+  cat >"$fakebin/git" <<'POST_BINDING_REWRITE_GIT_SHIM'
+#!/usr/bin/env bash
+set -u
+if [[ "$*" == "-C $BIND_REPO remote get-url --all origin" ]]; then
+  output=$($REAL_GIT "$@") || exit $?
+  printf 'armed\n' >"$REWRITE_STATE"
+  printf '%s\n' "$output"
+  exit 0
+fi
+if [[ -f "$REWRITE_STATE" ]]; then
+  mv "$REWRITE_STATE" "$REWRITE_STATE.injected"
+  "$REAL_GIT" -C "$BIND_REPO" config --local \
+    "url.$FOREIGN_ORIGIN.insteadOf" "$CAPTURED_ORIGIN" || exit $?
+fi
+exec "$REAL_GIT" "$@"
+POST_BINDING_REWRITE_GIT_SHIM
+  chmod +x "$fakebin/git"
+}
+
 run_issue54_updater_replay_case() {
   local legitimate_commit foreign_commit expected_reason output rc
   local verification_records moved_records install_failure_records
@@ -279,6 +333,99 @@ run_issue54_bootstrap_replay_case() {
   else
     fail_case "bootstrap refuses a foreign owner-named tag without checkout, pin, or wrapper" \
       "foreign replay was accepted: rc=$rc before=$before after=$after pin=$(test -e "$(pin_path)" && echo yes || echo no) wrapper=$(test -e "$cron_dest" && echo yes || echo no) output=$output"
+  fi
+}
+
+run_issue54_endpoint_rewrite_cases() {
+  local before after before_pin after_pin expected output rc fakebin rewrite_state cron_dest
+  local report_surface foreign_ref
+
+  new_fixture issue54-post-binding-endpoint-rewrite
+  write_pin v1.0.0 "$BASE_COMMIT"
+  before=$(git -C "$REPO" rev-parse HEAD)
+  before_pin=$(sed -n '1p' "$(pin_path)")
+  make_endpoint_rewrite_foreign_release rewrite-foreign-release v1.1.0
+  fakebin=$BASE/rewrite-fakebin
+  rewrite_state=$BASE/rewrite-state
+  write_post_binding_rewrite_shim "$fakebin"
+  expected="origin endpoint is rewritten by git URL configuration: $REPO"
+
+  output=$(PATH="$fakebin:$PATH" REAL_GIT="$REAL_GIT" BIND_REPO="$REPO" \
+    CAPTURED_ORIGIN="$ORIGIN" FOREIGN_ORIGIN="$FOREIGN_ORIGIN" \
+    REWRITE_STATE="$rewrite_state" run_updater --dry-run); rc=$?
+  after=$(git -C "$REPO" rev-parse HEAD)
+  after_pin=$(sed -n '1p' "$(pin_path)")
+  foreign_ref=$(git -C "$REPO" show-ref --verify --hash "refs/remotes/origin/$BRANCH" 2>/dev/null || true)
+  report_surface=$(grep -R -E 'job-heartbeat|hot-inbox-post| fail$' "$LOGS" "$HOME_DIR/.claude/state" \
+    2>/dev/null || true)
+  if [[ "$rc" -ne 0 && "$before" == "$after" && "$before_pin" == "$after_pin" \
+    && "$foreign_ref" == "$BASE_COMMIT" && ! -e "$SENTINEL" && -z "$report_surface" \
+    && -f "$rewrite_state.injected" ]] \
+    && ! git -C "$REPO" show-ref --verify --quiet refs/tags/v1.1.0 \
+    && printf '%s\n' "$output" | grep -Fq "family-updater error: $expected"; then
+    pass "post-binding URL rewrite is refused before recurring network and side effects"
+  else
+    fail_case "post-binding URL rewrite is refused before recurring network and side effects" \
+      "rc=$rc head=$before/$after pin-same=$(test "$before_pin" = "$after_pin" && echo yes || echo no) remote-ref=$foreign_ref foreign-tag=$(git -C "$REPO" show-ref --verify --quiet refs/tags/v1.1.0 && echo yes || echo no) reports=$(test -n "$report_surface" && echo yes || echo no) output=$output"
+  fi
+
+  new_fixture issue54-bootstrap-post-binding-endpoint-rewrite
+  before=$(git -C "$REPO" rev-parse HEAD)
+  make_endpoint_rewrite_foreign_release rewrite-foreign-bootstrap v1.1.0
+  "$REAL_GIT" -C "$REPO" fetch -q --no-tags "$FOREIGN_ORIGIN" \
+    refs/tags/v1.1.0:refs/tags/v1.1.0
+  fakebin=$BASE/rewrite-fakebin
+  rewrite_state=$BASE/rewrite-state
+  write_post_binding_rewrite_shim "$fakebin"
+  cron_dest=$BASE/cron/family-updater
+  expected="origin endpoint is rewritten by git URL configuration: $REPO"
+
+  output=$(HOME="$HOME_DIR" PATH="$fakebin:$PATH" REAL_GIT="$REAL_GIT" \
+    BIND_REPO="$REPO" CAPTURED_ORIGIN="$ORIGIN" FOREIGN_ORIGIN="$FOREIGN_ORIGIN" \
+    REWRITE_STATE="$rewrite_state" CATY_UPDATER_RELEASE_BRANCH="$BRANCH" "$BOOTSTRAP" \
+    --repo-dir "$REPO" --allowed-signers "$ALLOWED" --initial-tag v1.1.0 \
+    --cron-wrapper-dest "$cron_dest" 2>&1); rc=$?
+  after=$(git -C "$REPO" rev-parse HEAD)
+  foreign_ref=$(git -C "$REPO" show-ref --verify --hash "refs/remotes/origin/$BRANCH" 2>/dev/null || true)
+  if [[ "$rc" -ne 0 && "$before" == "$after" && "$foreign_ref" == "$BASE_COMMIT" \
+    && ! -e "$(pin_path)" && ! -e "$cron_dest" && -f "$rewrite_state.injected" ]] \
+    && printf '%s\n' "$output" | grep -Fq "updater-bootstrap error: $expected"; then
+    pass "post-binding URL rewrite is refused before bootstrap network and side effects"
+  else
+    fail_case "post-binding URL rewrite is refused before bootstrap network and side effects" \
+      "rc=$rc head=$before/$after remote-ref=$foreign_ref pin=$(test -e "$(pin_path)" && echo yes || echo no) wrapper=$(test -e "$cron_dest" && echo yes || echo no) output=$output"
+  fi
+}
+
+run_issue54_endpoint_resolution_failure_case() {
+  local output rc fakebin expected
+
+  new_fixture issue54-endpoint-resolution-failure
+  fakebin=$BASE/resolve-fakebin
+  mkdir -p "$fakebin"
+  cat >"$fakebin/git" <<'ENDPOINT_RESOLVE_GIT_SHIM'
+#!/usr/bin/env bash
+set -u
+if [[ "$*" == "-C $RESOLVE_REPO ls-remote --get-url $RESOLVE_URL" ]]; then
+  exit 71
+fi
+exec "$REAL_GIT" "$@"
+ENDPOINT_RESOLVE_GIT_SHIM
+  chmod +x "$fakebin/git"
+  expected="cannot resolve the effective origin endpoint: $REPO"
+  output=$(HOME="$HOME_DIR" PATH="$fakebin:$PATH" REAL_GIT="$REAL_GIT" \
+    RESOLVE_REPO="$REPO" RESOLVE_URL="$ORIGIN" bash -c '
+      source "$1"
+      updater_assert_endpoint_unrewritten "$2" "$3" || {
+        printf "%s\n" "$UPDATER_VERIFY_REASON"
+        exit 1
+      }
+    ' _ "$ROOT/scripts/lib-updater-verify.sh" "$REPO" "$ORIGIN" 2>&1); rc=$?
+  if [[ "$rc" -ne 0 && "$output" == "$expected" ]]; then
+    pass "endpoint resolution failure is refused without exposing the endpoint"
+  else
+    fail_case "endpoint resolution failure is refused without exposing the endpoint" \
+      "rc=$rc output=$output"
   fi
 }
 
@@ -397,7 +544,7 @@ run_issue54_binding_cases() {
 }
 
 run_issue54_normalization_cases() {
-  local identity output rc probe_cred token_surface multi_url token_fakebin
+  local identity output rc probe_cred token_surface multi_url token_fakebin duplicate_path
 
   new_fixture issue54-normalization
   identity=$(cd "$ORIGIN" && pwd -P)
@@ -412,6 +559,29 @@ run_issue54_normalization_cases() {
       fail_case "accepted host origin normalizes without userinfo: ${accepted%%:*}" "rc=$rc output=$output"
     fi
   done
+  for accepted in \
+    'git@GitHub.COM:MixedOrg/MixedRepo.git' \
+    'git@GitHub.COM:MixedOrg/MixedRepo.GIT' \
+    'git@GitHub.COM:MixedOrg/MixedRepo.Git'; do
+    output=$(normalize_fixture_url "$accepted"); rc=$?
+    if [[ "$rc" -eq 0 && "$output" == github.com/mixedorg/mixedrepo ]]; then
+      pass "host suffix spelling and mixed-case identity normalize consistently"
+    else
+      fail_case "host suffix spelling and mixed-case identity normalize consistently" \
+        "origin=$accepted rc=$rc output=$output"
+    fi
+  done
+  for accepted in \
+    'SSH://git@GitHub.COM:22/Org/Repo.git' \
+    'Https://GitHub.COM:443/Org/Repo.git'; do
+    output=$(normalize_fixture_url "$accepted"); rc=$?
+    if [[ "$rc" -eq 0 && "$output" == github.com/org/repo ]]; then
+      pass "mixed-case URL scheme normalizes case-insensitively"
+    else
+      fail_case "mixed-case URL scheme normalizes case-insensitively" \
+        "origin=$accepted rc=$rc output=$output"
+    fi
+  done
   for accepted in "$ORIGIN" "file://$ORIGIN" "file://localhost$ORIGIN"; do
     output=$(normalize_fixture_url "$accepted"); rc=$?
     if [[ "$rc" -eq 0 && "$output" == "$identity" ]]; then
@@ -420,6 +590,20 @@ run_issue54_normalization_cases() {
       fail_case "accepted local origin resolves to its physical path" "rc=$rc output=$output"
     fi
   done
+  output=$(normalize_fixture_url "FILE://$ORIGIN"); rc=$?
+  if [[ "$rc" -eq 0 && "$output" == "$identity" ]]; then
+    pass "uppercase file URL scheme preserves the case-exact path identity"
+  else
+    fail_case "uppercase file URL scheme preserves the case-exact path identity" "rc=$rc output=$output"
+  fi
+  duplicate_path=//${ORIGIN#/}
+  output=$(normalize_fixture_url "$duplicate_path"); rc=$?
+  if [[ "$rc" -eq 0 && "$output" == "$identity" ]]; then
+    pass "duplicate leading slashes collapse to one physical path identity"
+  else
+    fail_case "duplicate leading slashes collapse to one physical path identity" \
+      "origin=$duplicate_path rc=$rc output=$output expected=$identity"
+  fi
   for refused in \
     'ssh://git@example.invalid:2222/org/repo.git' \
     'https://example.invalid:444/org/repo.git' \
@@ -476,6 +660,27 @@ TOKEN_GIT_SHIM
   else
     fail_case "malformed credential origin is refused without exposing its token" \
       "rc=$rc output-token=$(case $output in *$probe_cred*) echo yes;; *) echo no;; esac) state-token=$(test -n "$token_surface" && echo yes || echo no)"
+  fi
+
+  new_fixture issue54-malformed-scp-credential-origin
+  probe_cred='issue54-scp-secret'
+  git -C "$REPO" remote set-url origin "user:$probe_cred@host:org/repo.git"
+  write_pin v0.0.0 "$BASE_COMMIT"
+  output=$(run_updater); rc=$?
+  token_surface=$(grep -R -F "$probe_cred" "$HOME_DIR/.claude/state" "$LOGS" 2>/dev/null || true)
+  if [[ "$rc" -ne 0 && "$output" != *"$probe_cred"* && -z "$token_surface" ]] \
+    && printf '%s\n' "$output" | grep -Fq "cannot normalize origin URL for repository binding: $REPO"; then
+    pass "malformed scp credential origin is refused without exposing its secret"
+  else
+    fail_case "malformed scp credential origin is refused without exposing its secret" \
+      "rc=$rc output-token=$(case $output in *$probe_cred*) echo yes;; *) echo no;; esac) surface-token=$(test -n "$token_surface" && echo yes || echo no) output=$output"
+  fi
+
+  output=$(normalize_fixture_url 'git@GitHub.COM:Org/Repo.git'); rc=$?
+  if [[ "$rc" -eq 0 && "$output" == github.com/org/repo ]]; then
+    pass "well-formed scp origin still normalizes correctly"
+  else
+    fail_case "well-formed scp origin still normalizes correctly" "rc=$rc output=$output"
   fi
 
   new_fixture issue54-multiple-origin-urls
@@ -683,6 +888,13 @@ case "${ISSUE54_REPLAY_CASE:-all}" in
     [[ "$FAIL_COUNT" -eq 0 ]]
     exit $?
     ;;
+  endpoint-rewrite)
+    run_issue54_endpoint_rewrite_cases
+    run_issue54_endpoint_resolution_failure_case
+    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    [[ "$FAIL_COUNT" -eq 0 ]]
+    exit $?
+    ;;
   binding)
     run_issue54_binding_cases
     printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
@@ -712,13 +924,15 @@ case "${ISSUE54_REPLAY_CASE:-all}" in
   all)
     run_issue54_updater_replay_case
     run_issue54_bootstrap_replay_case
+    run_issue54_endpoint_rewrite_cases
+    run_issue54_endpoint_resolution_failure_case
     run_issue54_binding_cases
     run_issue54_normalization_cases
     run_issue54_reachability_cases
     run_issue54_retry_case
     ;;
   *)
-    printf 'unknown ISSUE54_REPLAY_CASE: %s (expected updater, bootstrap, binding, normalization, reachability, retry, or none)\n' \
+    printf 'unknown ISSUE54_REPLAY_CASE: %s (expected updater, bootstrap, endpoint-rewrite, binding, normalization, reachability, retry, or none)\n' \
       "$ISSUE54_REPLAY_CASE" >&2
     exit 2
     ;;
