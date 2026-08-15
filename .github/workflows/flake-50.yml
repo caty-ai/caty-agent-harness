@@ -97,8 +97,11 @@ jobs:
             fail "SKIP_DELTA2_CASES must be unset or 0"
           fi
 
+          # Full-recipe-body drift tripwire (substring grep passed on prepended lines — Codex delta).
           # shellcheck disable=SC2016 # Literal Makefile recipe text; $$ is make escaping, not expansion.
-          if ! grep -qF 'for test_file in tests/*.test.sh; do bash "$$test_file"; done' Makefile; then
+          expected_recipe=$(printf '\t@set -e; for test_file in tests/*.test.sh; do bash "$$test_file"; done')
+          actual_recipe=$(awk '/^test:/{found=1; next} found && /^\t/{print; next} found{exit}' Makefile)
+          if [ "$actual_recipe" != "$expected_recipe" ]; then
             fail "Makefile test recipe drifted from the CI inline loop - resync both"
           fi
           # shellcheck disable=SC2012 # Exact Makefile/CONTRIBUTING glob accounting contract.
@@ -239,8 +242,11 @@ jobs:
             fail "SKIP_DELTA2_CASES must be unset or 0"
           fi
 
+          # Full-recipe-body drift tripwire (substring grep passed on prepended lines — Codex delta).
           # shellcheck disable=SC2016 # Literal Makefile recipe text; $$ is make escaping, not expansion.
-          if ! grep -qF 'for test_file in tests/*.test.sh; do bash "$$test_file"; done' Makefile; then
+          expected_recipe=$(printf '\t@set -e; for test_file in tests/*.test.sh; do bash "$$test_file"; done')
+          actual_recipe=$(awk '/^test:/{found=1; next} found && /^\t/{print; next} found{exit}' Makefile)
+          if [ "$actual_recipe" != "$expected_recipe" ]; then
             fail "Makefile test recipe drifted from the CI inline loop - resync both"
           fi
           # shellcheck disable=SC2012 # Exact Makefile/CONTRIBUTING glob accounting contract.

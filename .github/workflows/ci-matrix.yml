@@ -143,8 +143,13 @@ jobs:
         run: |
           set -euo pipefail
           apt-get update
+          # gawk: parity with GHA runner images. Bare ubuntu:22.04 ships mawk, which lacks
+          # ERE interval expressions ({4}) — install.sh's freshness check then degrades to a
+          # spurious warning and sentinel-cron keeps its notice (dry-run r3, run 31853911122;
+          # reproduced locally in the pinned image). The mawk incompatibility itself is a real
+          # portability finding filed as issue #84; this cell pins the runner-parity env.
           apt-get install -y --no-install-recommends \
-            git make perl python3 locales openssh-client ca-certificates coreutils findutils
+            git make perl python3 gawk locales openssh-client ca-certificates coreutils findutils
           locale-gen en_US.UTF-8
           locale -a > /tmp/available-locales
           grep -qiE '^C\.(UTF-8|utf8)$' /tmp/available-locales
@@ -317,9 +322,11 @@ jobs:
           fi
 
           # Drift tripwire: the counted loop below intentionally mirrors the Makefile's
-          # `test` recipe verbatim. If the recipe ever changes, fail loudly instead of
-          # letting the two executable contracts diverge silently.
-          if ! grep -qF 'for test_file in tests/*.test.sh; do bash "$$test_file"; done' Makefile; then
+          # `test` recipe verbatim. Compare the FULL recipe body, not a substring — a
+          # substring grep stayed green when a recipe line was prepended (Codex delta).
+          expected_recipe=$(printf '\t@set -e; for test_file in tests/*.test.sh; do bash "$$test_file"; done')
+          actual_recipe=$(awk '/^test:/{found=1; next} found && /^\t/{print; next} found{exit}' Makefile)
+          if [ "$actual_recipe" != "$expected_recipe" ]; then
             fail "Makefile test recipe drifted from the CI inline loop - resync both"
           fi
           # shellcheck disable=SC2012 # Exact Makefile/CONTRIBUTING glob accounting contract.
