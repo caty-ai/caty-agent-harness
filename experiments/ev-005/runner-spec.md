@@ -31,10 +31,25 @@
    all arms. Flagged for non-author review as a design-reading decision.
 3. **Prompt assembly** (arm-instructions.md): `<task.md> + <shared budget block> + <arm text>`,
    byte-exact, nothing else injected, identical model parameters across arms within a cell.
-4. **Run environment.** Each run executes inside the sealed environment (§6) with a per-run
-   `HOME` and `TMPDIR`, run-local git config (`GIT_CONFIG_GLOBAL=/dev/null`,
-   `GIT_CONFIG_SYSTEM=/dev/null` for every git/donecheck/pipeline invocation — workstation hooks
-   excluded by construction), and network/`gh`/web mechanically blocked.
+4. **Run environment — the container is the *task execution sandbox* (amendment A-2).** Every
+   action the agent takes on the task — reading and writing files, running commands, running the
+   repository's own tests, invoking `.ev005-donecheck.sh` — executes inside the digest-matching
+   container (§6) with a per-run `HOME` and `TMPDIR`, run-local git config
+   (`GIT_CONFIG_GLOBAL=/dev/null`, `GIT_CONFIG_SYSTEM=/dev/null` for every git/donecheck/pipeline
+   invocation — workstation hooks excluded by construction), and **no network reachable from
+   inside it** (`--network none`): the agent has no web, no `gh`, no package fetch, no route to
+   anything.
+   The **model/controller process runs on the host** and drives the sandbox through the runner's
+   local exec channel. Its provider transport is harness infrastructure, not an agent capability
+   — the agent cannot address it, cannot reach the provider, and gains nothing from its
+   existence. *Rationale (A-2): the earlier wording ("each run executes inside the sealed
+   environment … network blocked") admitted a reading under which the model process itself had
+   to live in a networkless container, which is unsatisfiable — the crossover-cell operator
+   demonstrated that `api.anthropic.com:443` fails at DNS under `--network none`, and the three
+   escape routes (enable container networking / run the model on the host / pick a transport)
+   are each an unregistered experimental condition. The property the experiment actually needs is
+   that **the agent's reachable surface is sealed and identical across arms**, which this
+   wording states directly.*
 5. **Termination.** A run ends at: verified delivery (W, gate pass), wall-clock exhaustion
    (45 min of *agent* wall-clock as defined in §1.6, wrapper-enforced: SIGTERM, 30 s grace,
    SIGKILL; coded per §3.1), `ABANDON-DECLARE`, or operator abort (logged with reason). B/B+
@@ -131,6 +146,34 @@ Event records (`ts` monotonic + wall, `seq`):
   `declarations_scored`, `wallclock_s` (agent time — the budgeted quantity), `paused_s` (total
   verification time carved out per §1.6), `elapsed_s` (their sum). Publishing all three makes
   the §1.6 carve-out auditable per run and per arm rather than asserted.
+
+## 5b. Agent harness and model invocation (sealed, amendment A-2)
+
+The model identity and its invocation are outcome-relevant and are therefore registered, not
+left to the operator:
+
+| | main-series cell (Alec) | crossover cell (Cero) |
+| --- | --- | --- |
+| model id | `claude-sonnet-5` | `claude-opus-5` |
+| agent harness | Claude Code CLI | Claude Code CLI |
+| harness version | 2.1.220 | 2.1.132 |
+| harness path | `/Users/jikumaru-sho/.local/bin/claude` | `/home/admin/.local/bin/claude` |
+| role | the confirmatory series (all three arms) | descriptive crossover only (§2) |
+
+- **Identical within a cell across arms.** Model id, harness version, and every sampling or
+  configuration parameter are byte-identical for W, B+ and B within a cell; only the sealed arm
+  text and the enforcement mechanism differ. This is what the primary contrast requires.
+- **Not pooled across cells.** The two cells run different harness versions (2.1.220 vs 2.1.132)
+  and different CPU architectures. This does not touch the confirmatory contrast, which lives
+  entirely inside the main-series cell; the crossover carries no α claim (§4). The difference is
+  recorded as a limitation rather than repaired, because aligning versions after sealing would
+  itself be an unregistered change.
+- **Recorded per run.** The audit-log header's `model_id` and `env_fingerprint` carry the model
+  id and harness version actually used, so a drift between this table and reality is detectable
+  post hoc rather than assumed away.
+- **Topology.** Host: model/controller process, wrapper, audit log, sealed gate bytes. Container:
+  the replica and everything the agent does to it, networkless. The channel between them is the
+  runner's local exec interface; the agent never observes it and cannot invoke it.
 
 ## 6. Environment digest
 

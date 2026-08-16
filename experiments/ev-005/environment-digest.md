@@ -18,6 +18,20 @@ Distribution rule: images are built once from the pinned Dockerfile, shipped as
 `docker save` archives, and `docker load`ed at each cell. **Local rebuilds are prohibited** —
 a rebuild produces a different image ID and breaks the digest recorded here.
 
+## Agent harness (amendment A-2)
+
+The container above is the **task execution sandbox**; the model/controller runs on the host and
+drives it (runner-spec §1.4, §5b). Registered identities:
+
+| | main-series cell | crossover cell |
+| --- | --- | --- |
+| model id | `claude-sonnet-5` | `claude-opus-5` |
+| harness | Claude Code CLI 2.1.220 | Claude Code CLI 2.1.132 |
+| path | `/Users/jikumaru-sho/.local/bin/claude` | `/home/admin/.local/bin/claude` |
+
+Identical within a cell across all three arms; not pooled across cells (the confirmatory
+contrast lives entirely inside the main-series cell — §4).
+
 ## Run invariants (both cells)
 
 - `--init` is **mandatory**. Without it, PID 1 lacks normal signal semantics and suites that
