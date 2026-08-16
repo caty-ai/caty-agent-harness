@@ -13,6 +13,17 @@ Status: **SEALED** (covered by `MANIFEST.sha256`). Retrieved from the GitHub API
 Task→repo distribution across the analysis set: harness 16, family-os 7,
 family-memory-architecture 5, context-kit 1, self-growth-loop 1 (n = 30).
 
+## Sealed provenance snapshot of the normative issue (amendment A-3.6)
+
+The state of caty-ai/caty-agent-harness#63 at sealing is preserved in this corpus as
+`provenance/issue-63-snapshot.md` and hashed into the manifest. Registered digest:
+
+    SHA-256(provenance/issue-63-snapshot.md) =
+    e91e0ee1ac71ba5a968f376a9f59012c0f1d217158626a10d9c9994ce9ec5c99
+
+The sealed in-repo files govern over the live issue (analysis-plan, header note); later issue
+comments are the public amendment trail and carry no authority over the sealed text.
+
 ## Reading
 
 Every source repository was created **after** the training cutoff of both models used in this

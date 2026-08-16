@@ -32,6 +32,7 @@ SCOPE_FILES = [
     "canary-rule.md",
     "source-provenance.md",
     "environment-digest.md",
+    "provenance/issue-63-snapshot.md",
     "tools/validate-task.sh",
     "tools/mdd-sim.py",
     "tools/mdd-power-table.md",
