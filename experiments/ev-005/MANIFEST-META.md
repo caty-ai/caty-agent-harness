@@ -1,8 +1,8 @@
 # EV-005 sealed manifest — metadata
 
-- Files sealed: **264**
-- Manifest digest (SHA-256 of `MANIFEST.sha256`): `82eaf48bd4bd6c065a531cd045323818c45f0d91d589909cf0ffe577c212416d`
-- Git commit at generation: `d3dc6e15f94f7ca9d0dd161d9e319a8287322c5e`
+- Files sealed: **265**
+- Manifest digest (SHA-256 of `MANIFEST.sha256`): `3b18d81738afaa3435f82c292b59e011dc9636a8be7e270b1c872aeb4239821a`
+- Git commit at generation: `769e9087bd4d8d73163837d972314ec4f03ff8b5`
 - Generator: `tools/seal-manifest.py` (stdlib only, deterministic, fail-closed on
   a missing scope entry or a symlink inside the scope).
 
@@ -13,5 +13,3 @@
 Exit 0 means every sealed file matches its recorded digest and no file was added to
 or removed from the sealed scope. Any post-sealing change requires the §10
 amendment procedure; the amendment note records the new manifest digest.
-
-| v3 (after amendment A-2) | `ev-005-sealed-v3` | (see below) | `82eaf48b…` | `MANIFEST.sha256.ots` over the current `MANIFEST.sha256`; v2 proof preserved as `seals/MANIFEST-v2.sha256.ots` over `seals/MANIFEST-v2.sha256` |

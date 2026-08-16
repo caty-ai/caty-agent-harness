@@ -506,14 +506,20 @@ no fenced-block discrimination, every matching line counts — are untouched, as
 changed. The three arm texts are byte-identical to v3. `schedule_seed` is new and governs
 execution scheduling only; it enters no analysis.
 
-**Verification performed.** Recorded at the point of sealing in the re-seal record posted to #63,
-and summarized here: the third contradiction was reproduced independently by the author before
-adjudication (host built-in `Bash` executes outside the container, on a second host and a second
-CLI build); the enforced tool configuration was measured end to end against a probe MCP server
-(built-ins absent, single MCP tool present); the load-test throttle scan was re-checked against
-raw logs and its positives shown to be false; `seal-manifest.py --check` passes over the
-regenerated manifest; the runner's unit suite and the seven-case self-test, including the new
-host-decoy negative probe, pass on the registered host.
+**Verification performed** (full record in the v4 re-seal record posted to #63; summarized
+here). Review: the A-3 draft went to a five-seat panel (3 NO-GO / 2 GO-WITH-CONDITIONS), one
+consolidated revision closed the adopted findings, a three-seat delta round then found — in
+convergence with the author's own execution — that this sub-amendment's measurement channel was
+registered but unimplemented (see the revision-round-2 note in A-3.7), a second revision
+implemented it, and the final delta round returned GO / GO / GO-WITH-CONDITIONS with the two
+conditions discharged before sealing. Executed evidence, taken by the author personally rather
+than delegated: the 16-row gate-observation table with the old-method flip and the
+patched-copy suite failure (D1 packet); the run-identity re-validation of p02/t22/t01 on the
+registered host (C4 packet); the enforced tool configuration measured end to end on the
+registered build for both model ids; the load-test throttle scan re-checked against raw logs
+(all positives false); the unit suite — 59 tests, docker-backed — passing on both the
+development host and the registered host; and `seal-manifest.py --check` passing over the
+regenerated 265-file v4 manifest at the sealing commit (output in the re-seal record).
 
 **Manifest.** Before: `82eaf48bd4bd6c065a531cd045323818c45f0d91d589909cf0ffe577c212416d`
 (tag `ev-005-sealed-v3`, commit `8ae62ff`). After: recorded in the re-seal record with tag

@@ -262,5 +262,8 @@ The confirmatory series and the descriptive crossover run the same host, image, 
 and differ only by model id — but they also run **different task lists** (the crossover uses the
 ten designated tasks of sealed-parameters §3). Results are not pooled across cells (§4), and the
 crossover carries no α claim. Under A-3.1 the agent's tool surface is a single sandboxed shell
-channel rather than Claude Code's default toolset; this is identical in all three arms and cannot
-produce the primary contrast, but it bounds what the result generalizes to.
+channel rather than Claude Code's default toolset; this is identical in all three arms and so
+cannot **differ** between arms — but constancy does not rule out effect modification: the size of
+the enforcement effect under this tool surface may differ from its size under the native toolset
+(runner-spec §5c carries the governing wording; a delta seat found this paragraph still carried
+the pre-revision conflation). It bounds what the result generalizes to.

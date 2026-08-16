@@ -140,7 +140,9 @@ Fixed before any run exists: after the main series completes, take all main-seri
 run_ids sorted lexicographically and draw `crosscheck_sample_size` of them with
 `random.Random(crosscheck_seed).sample(sorted_ids, crosscheck_sample_size)`. The host operator's
 independent second implementation re-executes the adjudication for each sampled run on the same
-host and the same inputs. Every disagreement in outcome coding is published, and each is
-adjudicated under the §3.1/§5 `check_bug` machinery (arm- and outcome-redacted records, symmetric
-removal if upheld). Same-host agreement removes the environment as an explanation for a
-disagreement; it does **not** recreate an independent operator, and is not claimed to.
+host and the same inputs. **The drawn run_ids are published together with the seed at draw time**
+(a golden vector, so the draw is verifiable without pinning an interpreter version — delta-seat
+suggestion). Every disagreement in outcome coding is published, and each is adjudicated under
+the §3.1/§5 `check_bug` machinery (arm- and outcome-redacted records, symmetric removal if
+upheld). Same-host agreement removes the environment as an explanation for a disagreement; it
+does **not** recreate an independent operator, and is not claimed to.

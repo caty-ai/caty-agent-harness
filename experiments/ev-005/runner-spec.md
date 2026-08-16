@@ -286,7 +286,10 @@ left to the operator:
   empty-provisioned harness configuration directory (`environment-digest.md`). Three mechanical
   guards: (a) the preflight check `C-HOST-SUBPROC` runs a real controller session — startup plus
   one registered-tool turn — under host-side process tracing and fails if any host subprocess
-  beyond the registered MCP server and the docker client is spawned; (b) each run's
+  beyond the registered MCP server and the docker client is spawned (a stub probe mode exists
+  for containerized unit tests only; the registered preflight is the real session, and the
+  probe mode actually used is recorded in the preflight artifact — a run may proceed only on a
+  real-mode pass); (b) each run's
   `env_fingerprint` includes the controller config digest, **compared fail-closed at run start
   against the preflight-recorded value for that seat** — a mismatch aborts the run before the
   agent acts; (c) `--strict-mcp-config` covers MCP servers. What this does and does not prove:
