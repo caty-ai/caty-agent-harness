@@ -592,6 +592,61 @@ with tag `ev-005-sealed-v5`; file count unchanged (sentence-level edits only).
 
 ---
 
+## A-5 — The controller config digest covers the configuration-sensitive subset, not runtime state (2026-08-17)
+
+**Who.** Author: Alpha, who also caused the defect (the A-4-round digest scope was the author's
+own specification). Found by the first real pilot batch, with the pilot's own ledger as the
+evidence.
+
+**What was wrong.** The revision-round guard compared a **whole-directory** digest of the seat
+configuration directory, recorded at preflight, against every run start. The real controller is
+stateful: it writes session transcripts, feature-flag caches and session state into that
+directory on every run. Consequence, executed on the registered host: a block's three arms
+share one seat and start concurrently, so only each seat's first-started run could ever match —
+**42 of the pilot's 45 runs were invalidated at run start** by
+`controller_config_digest differs from the preflight-recorded seat value`; the 3 surviving runs
+were healthy full-budget timeouts. The comparison as registered was incompatible with the
+instrument, and no amount of narrow reading rescues it.
+
+**Remedy.** The digest's scope becomes the **configuration-sensitive subset** — root
+`settings*.json` **plus `managed-settings.json`**, `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`,
+`hooks/**`, `plugins/**` **except `plugins/cache/**`** (the CLI manages that cache itself — the
+registered intrinsic startup probe scans it, so including it would re-import the stateful-churn
+failure this amendment removes), `commands/**`, `skills/**`, `agents/**`, `output-styles/**`,
+and root MCP configuration files (`.mcp.json`, `mcp*.json`) — the paths through which
+configuration can alter controller behavior or inject content. **Symlinks under the subset,
+file or directory, contribute their relative path and `readlink` target to the digest**, so
+acquiring or retargeting a link flips it (a focused seat executed the silent directory-symlink
+bypass in the first cut). Runtime state (`projects/**`, `statsig/**`, `todos/**`,
+`shell-snapshots/**`, `.claude.json`, `.credentials.json`, caches) is excluded by registration.
+On `.claude.json`, stated at the width of the evidence: its MCP surface is closed by the
+registered argv's `--strict-mcp-config` plus the realized-tool init assertion; its non-MCP
+behavior keys are a containment argument, not a proof — a key that enables a plugin acts
+through plugin files that ARE in the subset, and the seats are provisioned empty with the
+behavioral preflight as the second guard — and this residual is registered rather than glossed.
+The preflight/run-start fail-closed comparison mechanism is unchanged — only its scope moved
+from "everything, including what the instrument itself churns" to "everything an operator or a
+hook could use to change behavior".
+
+**Alternative rejected.** Re-recording the baseline digest after every run (a moving baseline
+verifies nothing an attacker could not also move); parsing `.claude.json` for config-relevant
+keys (fragile schema coupling for a surface `--strict-mcp-config` already closes).
+
+**Verification performed at sealing.** Unit tests both directions (runtime churn —
+transcripts, state, credential rotation, flag caches, `plugins/cache` — leaves the digest
+unchanged; planting any subset member — settings, hook, plugin, `CLAUDE.md`, `.mcp.json`, a
+symlink — changes it and aborts the run start), suite green docker-backed on both hosts, plus
+a focused seat review that executed the first cut's two escapes (cache churn, directory
+symlink) before this final scope. **Operational acceptance, recorded after sealing:** the first
+post-v6 pilot completing without a digest abort is the confirmation in operation and is
+recorded in #63 with the pilot report.
+
+**Manifest.** Before: `50ad5b7ea23fef1f3f14490a5e8f98f76913784bcf4776773e8db4403c5c6a13`
+(tag `ev-005-sealed-v5`, commit `48539ba`, 265 files). After: recorded in the v6 re-seal record
+with tag `ev-005-sealed-v6`; file count unchanged (sentence-level edits only).
+
+---
+
 **Note for the results report.** A-1 and A-2 were each a single defect found by contact with
 reality. A-3 is different in kind: it is what a deliberate, whole-corpus sweep found once the
 author stopped adjudicating defects one at a time. Five of its six items were invisible to review

@@ -284,7 +284,9 @@ left to the operator:
   evidence — a delta seat found the earlier sentence wider than what the check proves).** The
   controller process loads no workstation configuration: each provider seat is an isolated,
   empty-provisioned harness configuration directory (`environment-digest.md`). Three mechanical
-  guards: (a) the preflight check `C-HOST-SUBPROC` runs a real controller session — startup plus
+  guards (digest scope per amendment A-5: the configuration-sensitive subset registered in
+  `environment-digest.md`, not the whole stateful directory): (a) the preflight check
+  `C-HOST-SUBPROC` runs a real controller session — startup plus
   one registered-tool turn — under host-side process tracing and fails if any host subprocess is
   spawned beyond the registered MCP server, the docker client, and the harness's **registered
   controller-intrinsic startup probes** (amendment A-4: a closed allowlist pinned by executable

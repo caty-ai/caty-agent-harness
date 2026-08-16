@@ -107,10 +107,19 @@ the host-side controller is a property of how the seats are provisioned, not a p
 
 Two mechanical guards keep it a property rather than a promise (registered, A-3 revision round;
 scope per runner-spec §5b, stated at the width of the evidence): (a) each run's
-`env_fingerprint` includes a **controller config digest** — SHA-256 over the seat configuration
-directory's sorted relative paths and non-credential file bytes — recorded at preflight and
-**compared fail-closed at every run start**: a seat that acquires a settings file, hook or
-plugin after preflight aborts the next run before the agent acts; (b) the preflight check
+`env_fingerprint` includes a **controller config digest** — SHA-256 over the seat directory's
+**configuration-sensitive subset** (settings files including `managed-settings.json`,
+`CLAUDE.md`/`CLAUDE.local.md`/`AGENTS.md`, `hooks/`, `plugins/` except the CLI-managed
+`plugins/cache/`, `commands/`, `skills/`, `agents/`, `output-styles/`, MCP configuration files;
+symlinks contribute path+target — the paths through which configuration can alter controller
+behavior or inject content; amendment A-5:
+the first pilot proved a whole-directory digest incompatible with a stateful controller, which
+mutates transcripts, flag caches and session state on every run — 42/45 runs were invalidated
+by the earlier scope, and runtime state is now excluded by registration, with
+`--strict-mcp-config` plus the realized-tool init assertion covering the excluded
+`.claude.json`'s MCP surface) — recorded at preflight and **compared fail-closed at every run
+start**: a seat that acquires a settings file, hook or plugin after preflight aborts the next
+run before the agent acts; (b) the preflight check
 `C-HOST-SUBPROC` runs a real controller session (startup plus one registered-tool turn) under
 host-side process tracing and fails on any host subprocess beyond the registered MCP server,
 the docker client, and the harness's registered controller-intrinsic startup probes (a closed,
