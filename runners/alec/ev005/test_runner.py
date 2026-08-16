@@ -80,6 +80,7 @@ class RunnerUnitTests(unittest.TestCase):
                 "--timeout-s", "5",
                 "--mcp-server", "/fixture/mcp_stub.py",
                 "--docker-executable", "/bin/true",
+                "--harness-path", "/fixture/controller_stub.py",
                 "--", "/fixture/controller_stub.py",
             ],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
@@ -321,6 +322,162 @@ class RunnerUnitTests(unittest.TestCase):
                 runner.controller_config_digest(Path(td) / "missing"),
                 runner.controller_config_digest(Path(td) / "empty-missing-equivalent"),
             )
+
+    def classify_controller_rows(
+        self, root: Path, rows: list[runner.ProcessObservation],
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        package = root / "install/node_modules/@anthropic-ai/claude-code"
+        cli = package / "cli.js"
+        cli.parent.mkdir(parents=True, exist_ok=True)
+        cli.write_text("registered CLI entrypoint\n")
+        bundle = package / "bin/claude.exe"
+        bundle.parent.mkdir(parents=True, exist_ok=True)
+        bundle.write_text("registered CLI bundle\n")
+        harness = root / "bin/claude"
+        harness.parent.mkdir(exist_ok=True)
+        if not harness.exists():
+            harness.symlink_to(cli)
+        config_dir = root / "seat-config"
+        (config_dir / "plugins/cache").mkdir(parents=True, exist_ok=True)
+        controller_cwd = root / "controller-cwd"
+        controller_cwd.mkdir(exist_ok=True)
+        return runner.classify_controller_observations(
+            rows, controller_pid=100,
+            mcp_server=root / "mcp_exec_server.py",
+            docker_executable=Path("/usr/bin/docker"),
+            harness_path=harness,
+            controller_config_dir=config_dir,
+            controller_cwd=controller_cwd,
+        )
+
+    def test_controller_intrinsic_exact_observed_inventory_is_classified(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_cache = root / "seat-config/plugins/cache"
+            controller_cwd = root / "controller-cwd"
+            bundle = root / "install/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
+            rows = [
+                runner.ProcessObservation(
+                    101, 100, "/usr/bin/git",
+                    ("/usr/bin/git", "config", "--get", "remote.origin.url"),
+                    str(controller_cwd),
+                ),
+                runner.ProcessObservation(
+                    102, 100, str(bundle), ("rg", "--version"), str(controller_cwd),
+                ),
+                runner.ProcessObservation(
+                    103, 100, str(bundle),
+                    (
+                        "rg", "--no-config", "--files", "--hidden", "--no-ignore",
+                        "--max-depth", "4", "--glob", ".orphaned_at", str(config_cache),
+                    ),
+                    str(controller_cwd),
+                ),
+                runner.ProcessObservation(
+                    104, 100, str(bundle),
+                    ("rg", "--no-config", "--files", "--hidden", str(controller_cwd)),
+                    str(controller_cwd),
+                ),
+                runner.ProcessObservation(
+                    105, 100, "/usr/bin/dash",
+                    ("/bin/sh", "-c", runner.IDE_DETECTION_COMMAND),
+                    str(controller_cwd),
+                ),
+                runner.ProcessObservation(
+                    106, 105, "/usr/bin/ps", ("ps", "aux"), str(controller_cwd),
+                ),
+                runner.ProcessObservation(
+                    107, 105, "/usr/bin/grep",
+                    ("grep", "-E", runner.IDE_PROCESS_PATTERN), str(controller_cwd),
+                ),
+                runner.ProcessObservation(
+                    108, 105, "/usr/bin/grep", ("grep", "-v", "grep"),
+                    str(controller_cwd),
+                ),
+                runner.ProcessObservation(
+                    109, 100, "/usr/bin/dash",
+                    ("/bin/sh", "-c", runner.NPM_ROOT_COMMAND), str(controller_cwd),
+                ),
+                runner.ProcessObservation(
+                    110, 109, "/usr/bin/env",
+                    ("/usr/bin/env", "node", "/usr/bin/npm", "root", "-g"),
+                    str(controller_cwd),
+                ),
+                runner.ProcessObservation(
+                    110, 109, "/usr/bin/node",
+                    ("node", "/usr/bin/npm", "root", "-g"), str(controller_cwd),
+                ),
+            ]
+            observed, unexpected = self.classify_controller_rows(root, rows)
+            self.assertFalse(unexpected, unexpected)
+            self.assertEqual(
+                {row["kind"] for row in observed}, {"controller-intrinsic"},
+            )
+
+    def test_controller_intrinsic_near_misses_remain_unexpected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            controller_cwd = root / "controller-cwd"
+            bundle = root / "install/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
+            near_misses = {
+                "npm-shell-command": runner.ProcessObservation(
+                    201, 100, "/usr/bin/dash",
+                    ("/bin/sh", "-c", "npm root -g && curl x"), str(controller_cwd),
+                ),
+                "ide-pattern": runner.ProcessObservation(
+                    202, 100, "/usr/bin/dash",
+                    ("/bin/sh", "-c", "ps aux | grep -E \"code|vim\" | grep -v grep"),
+                    str(controller_cwd),
+                ),
+                "rg-outside-roots": runner.ProcessObservation(
+                    203, 100, str(bundle),
+                    ("rg", "--no-config", "--files", "--hidden", "/home/admin/ev005-run"),
+                    str(controller_cwd),
+                ),
+                "system-rg": runner.ProcessObservation(
+                    204, 100, "/usr/bin/rg", ("rg", "--version"), str(controller_cwd),
+                ),
+                "git-other-key": runner.ProcessObservation(
+                    205, 100, "/usr/bin/git",
+                    ("git", "config", "--get", "user.email"), str(controller_cwd),
+                ),
+                "planted-settings-sleep": runner.ProcessObservation(
+                    206, 100, "/bin/sleep", ("/bin/sleep", "0.01"), str(controller_cwd),
+                ),
+                "bare-ps": runner.ProcessObservation(
+                    207, 100, "/usr/bin/ps", ("ps", "aux"), str(controller_cwd),
+                ),
+            }
+            for name, row in near_misses.items():
+                with self.subTest(name=name):
+                    observed, unexpected = self.classify_controller_rows(root, [row])
+                    self.assertEqual(observed[0]["kind"], "unexpected")
+                    self.assertEqual(unexpected, observed)
+
+    def test_ide_children_require_the_exact_parent_and_complete_triple(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            controller_cwd = root / "controller-cwd"
+            shell = runner.ProcessObservation(
+                301, 100, "/usr/bin/dash",
+                ("/bin/sh", "-c", runner.IDE_DETECTION_COMMAND), str(controller_cwd),
+            )
+            incomplete = [
+                shell,
+                runner.ProcessObservation(
+                    302, 301, "/usr/bin/ps", ("ps", "aux"), str(controller_cwd),
+                ),
+            ]
+            observed, unexpected = self.classify_controller_rows(root, incomplete)
+            self.assertEqual(observed[0]["kind"], "unexpected")
+            self.assertIn(observed[0], unexpected)
+
+            wrong_parent = runner.ProcessObservation(
+                303, 999, "/usr/bin/ps", ("ps", "aux"), str(controller_cwd),
+            )
+            observed, unexpected = self.classify_controller_rows(root, [wrong_parent])
+            self.assertEqual(observed[0]["kind"], "unexpected")
+            self.assertEqual(unexpected, observed)
 
     def test_controller_host_subprocess_guard_passes_clean_config(self):
         with tempfile.TemporaryDirectory() as td:

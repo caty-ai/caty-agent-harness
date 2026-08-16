@@ -99,6 +99,7 @@ def verify_controller_subprocess_guard(
             "--timeout-s", "10",
             "--mcp-server", "/runner-runtime/mcp_exec_server.py",
             "--docker-executable", "/usr/bin/docker",
+            "--harness-path", "/runner-runtime/stub_agent.py",
             "--", "/runner-runtime/stub_agent.py",
         ]
         cp = subprocess.run(
@@ -136,6 +137,7 @@ def verify_controller_subprocess_guard(
         agent_argv,
         mcp_server=HERE / "mcp_exec_server.py",
         docker_executable=Path(docker_executable),
+        harness_path=Path(real_cell.harness_path),
         timeout_s=ns.real_budget_s,
         env=env,
         stdin_bytes=prompt,
@@ -149,6 +151,7 @@ def verify_controller_subprocess_guard(
         agent_argv,
         mcp_server=HERE / "mcp_exec_server.py",
         docker_executable=Path(docker_executable),
+        harness_path=Path(real_cell.harness_path),
         timeout_s=ns.real_budget_s,
         env=env,
         stdin_bytes=tool_prompt,

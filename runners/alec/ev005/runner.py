@@ -87,6 +87,19 @@ PR_SET_DUMPABLE = 4
 PR_GET_DUMPABLE = 3
 TRUSTED_SHELL_PATHS = ("/bin/bash", "/bin/sh", "/bin/dash")
 TRUSTED_NON_EXECUTING_READER_PATHS = ("/bin/cat", "/bin/head", "/bin/grep")
+SYSTEM_SHELL_PATHS = ("/bin/bash", "/bin/sh", "/bin/dash", "/usr/bin/dash")
+SYSTEM_GIT_PATHS = ("/usr/bin/git",)
+SYSTEM_PS_PATHS = ("/usr/bin/ps", "/bin/ps")
+SYSTEM_GREP_PATHS = ("/usr/bin/grep", "/bin/grep")
+SYSTEM_ENV_PATHS = ("/usr/bin/env",)
+SYSTEM_NODE_PATHS = ("/usr/bin/node", "/bin/node")
+SYSTEM_NPM_PATHS = ("/usr/bin/npm", "/bin/npm")
+IDE_PROCESS_PATTERN = (
+    "code|cursor|windsurf|idea|pycharm|webstorm|phpstorm|rubymine|clion|goland|"
+    "rider|datagrip|dataspell|aqua|gateway|fleet|android-studio"
+)
+IDE_DETECTION_COMMAND = f'ps aux | grep -E "{IDE_PROCESS_PATTERN}" | grep -v grep'
+NPM_ROOT_COMMAND = "npm root -g"
 GATE_EXECUTION = "gate-execution"
 GATE_NO_MATCH = "no-match"
 GATE_UNKNOWN_EXECUTOR = "unknown-target-executor"
@@ -1746,8 +1759,102 @@ def _same_executable(observed: str, expected: Path) -> bool:
         return Path(observed).resolve() == expected.resolve()
 
 
-def _controller_child_kind(
-    row: ProcessObservation, *, mcp_server: Path, docker_executable: Path,
+def _matches_system_executable(observed: str, expected_paths: tuple[str, ...]) -> bool:
+    return any(_same_executable(observed, Path(path)) for path in expected_paths)
+
+
+def _argv0_matches(argv0: str, name: str, expected_paths: tuple[str, ...]) -> bool:
+    if argv0 == name:
+        return True
+    return Path(argv0).is_absolute() and _matches_system_executable(argv0, expected_paths)
+
+
+def _registered_node_modules_root(harness_path: Path) -> Path | None:
+    resolved = harness_path.resolve()
+    for parent in resolved.parents:
+        if parent.name == "node_modules":
+            return parent
+    return None
+
+
+def _path_is_within(path: str, roots: tuple[Path, ...]) -> bool:
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        return False
+    resolved = candidate.resolve()
+    return any(
+        resolved == root.resolve() or resolved.is_relative_to(root.resolve())
+        for root in roots
+    )
+
+
+def _is_registered_bundle_rg(
+    row: ProcessObservation, *, harness_path: Path,
+    controller_config_dir: Path, controller_cwd: Path,
+) -> bool:
+    node_modules_root = _registered_node_modules_root(harness_path)
+    if node_modules_root is None:
+        return False
+    executable = Path(row.executable).resolve()
+    registered_bundle = (
+        node_modules_root / "@anthropic-ai/claude-code/bin/claude.exe"
+    ).resolve()
+    if (
+        not executable.is_relative_to(node_modules_root.resolve())
+        or not _same_executable(row.executable, registered_bundle)
+        or not row.argv
+        or row.argv[0] != "rg"
+    ):
+        return False
+    if row.argv == ("rg", "--version"):
+        return True
+    prefix = ("rg", "--no-config", "--files", "--hidden")
+    if row.argv[:len(prefix)] != prefix:
+        return False
+    suffix = row.argv[len(prefix):]
+    roots = (controller_config_dir, controller_cwd)
+    if len(suffix) == 1:
+        return _path_is_within(suffix[0], roots)
+    if (
+        len(suffix) == 6
+        and suffix[:5] == (
+            "--no-ignore", "--max-depth", "4", "--glob", ".orphaned_at",
+        )
+    ):
+        return _path_is_within(suffix[5], roots)
+    return False
+
+
+def _npm_child_class(row: ProcessObservation) -> str | None:
+    if (
+        len(row.argv) == 5
+        and _matches_system_executable(row.executable, SYSTEM_ENV_PATHS)
+        and _argv0_matches(row.argv[0], "env", SYSTEM_ENV_PATHS)
+        and row.argv[1:] == ("node", "/usr/bin/npm", "root", "-g")
+    ):
+        return "intrinsic-npm-env"
+    if (
+        len(row.argv) == 4
+        and _matches_system_executable(row.executable, SYSTEM_NODE_PATHS)
+        and _argv0_matches(row.argv[0], "node", SYSTEM_NODE_PATHS)
+        and row.argv[1:] == ("/usr/bin/npm", "root", "-g")
+    ):
+        return "intrinsic-npm-node"
+    if (
+        len(row.argv) == 3
+        and _matches_system_executable(row.executable, SYSTEM_NPM_PATHS)
+        and _argv0_matches(row.argv[0], "npm", SYSTEM_NPM_PATHS)
+        and row.argv[1:] == ("root", "-g")
+    ):
+        return "intrinsic-npm-exec"
+    return None
+
+
+def _controller_child_class(
+    row: ProcessObservation, *, controller_pid: int,
+    parent_classes: dict[int, str | None], mcp_server: Path,
+    docker_executable: Path, harness_path: Path,
+    controller_config_dir: Path, controller_cwd: Path,
 ) -> str | None:
     if _same_executable(row.executable, docker_executable):
         return "docker-cli"
@@ -1757,11 +1864,113 @@ def _controller_child_kind(
         and Path(row.argv[1]).resolve() == mcp_server.resolve()
     ):
         return "registered-mcp-server"
+    if row.ppid == controller_pid:
+        if (
+            len(row.argv) == 4
+            and _matches_system_executable(row.executable, SYSTEM_GIT_PATHS)
+            and _argv0_matches(row.argv[0], "git", SYSTEM_GIT_PATHS)
+            and row.argv[1:] == ("config", "--get", "remote.origin.url")
+        ):
+            return "intrinsic-git"
+        if _is_registered_bundle_rg(
+            row, harness_path=harness_path,
+            controller_config_dir=controller_config_dir,
+            controller_cwd=controller_cwd,
+        ):
+            return "intrinsic-bundle-rg"
+        if (
+            _matches_system_executable(row.executable, SYSTEM_SHELL_PATHS)
+            and row.argv == ("/bin/sh", "-c", IDE_DETECTION_COMMAND)
+        ):
+            return "intrinsic-ide-shell"
+        if (
+            _matches_system_executable(row.executable, SYSTEM_SHELL_PATHS)
+            and row.argv == ("/bin/sh", "-c", NPM_ROOT_COMMAND)
+        ):
+            return "intrinsic-npm-shell"
+    parent_class = parent_classes.get(row.ppid)
+    if parent_class == "intrinsic-ide-shell":
+        if (
+            len(row.argv) == 2
+            and _matches_system_executable(row.executable, SYSTEM_PS_PATHS)
+            and _argv0_matches(row.argv[0], "ps", SYSTEM_PS_PATHS)
+            and row.argv[1] == "aux"
+        ):
+            return "intrinsic-ide-ps"
+        if (
+            len(row.argv) == 3
+            and _matches_system_executable(row.executable, SYSTEM_GREP_PATHS)
+            and _argv0_matches(row.argv[0], "grep", SYSTEM_GREP_PATHS)
+            and row.argv[1:] == ("-E", IDE_PROCESS_PATTERN)
+        ):
+            return "intrinsic-ide-grep-pattern"
+        if (
+            len(row.argv) == 3
+            and _matches_system_executable(row.executable, SYSTEM_GREP_PATHS)
+            and _argv0_matches(row.argv[0], "grep", SYSTEM_GREP_PATHS)
+            and row.argv[1:] == ("-v", "grep")
+        ):
+            return "intrinsic-ide-grep-v"
+    if parent_class == "intrinsic-npm-shell":
+        return _npm_child_class(row)
     return None
+
+
+def classify_controller_observations(
+    rows: list[ProcessObservation], *, controller_pid: int,
+    mcp_server: Path, docker_executable: Path, harness_path: Path,
+    controller_config_dir: Path, controller_cwd: Path,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Classify the registered controller's closed host-subprocess inventory."""
+    parent_classes: dict[int, str | None] = {}
+    classified: list[tuple[dict[str, Any], str | None]] = []
+    ide_shell_entries: dict[int, dict[str, Any]] = {}
+    ide_children: dict[int, list[tuple[dict[str, Any], str | None]]] = {}
+    for row in rows:
+        child_class = _controller_child_class(
+            row, controller_pid=controller_pid, parent_classes=parent_classes,
+            mcp_server=mcp_server, docker_executable=docker_executable,
+            harness_path=harness_path, controller_config_dir=controller_config_dir,
+            controller_cwd=controller_cwd,
+        )
+        parent_classes[row.pid] = child_class
+        kind = (
+            "controller-intrinsic"
+            if child_class is not None and child_class.startswith("intrinsic-")
+            else child_class or "unexpected"
+        )
+        entry = {
+            "pid": row.pid,
+            "ppid": row.ppid,
+            "executable": row.executable,
+            "argv": list(row.argv),
+            "kind": kind,
+        }
+        classified.append((entry, child_class))
+        if child_class == "intrinsic-ide-shell":
+            ide_shell_entries[row.pid] = entry
+        if row.ppid in ide_shell_entries:
+            ide_children.setdefault(row.ppid, []).append((entry, child_class))
+
+    expected_ide_children = {
+        "intrinsic-ide-ps", "intrinsic-ide-grep-pattern", "intrinsic-ide-grep-v",
+    }
+    for shell_pid, shell_entry in ide_shell_entries.items():
+        children = ide_children.get(shell_pid, [])
+        child_classes = [child_class for _, child_class in children]
+        if len(child_classes) != 3 or set(child_classes) != expected_ide_children:
+            shell_entry["kind"] = "unexpected"
+            for child_entry, _ in children:
+                child_entry["kind"] = "unexpected"
+
+    observed = [entry for entry, _ in classified]
+    unexpected = [entry for entry in observed if entry["kind"] == "unexpected"]
+    return observed, unexpected
 
 
 def check_controller_subprocesses(
     argv: list[str], *, mcp_server: Path, docker_executable: Path,
+    harness_path: Path,
     timeout_s: float, env: dict[str, str], stdin_bytes: bytes = b"",
     cwd: Path | None = None,
 ) -> dict[str, Any]:
@@ -1776,29 +1985,19 @@ def check_controller_subprocesses(
     )
     traced = {proc.pid}
     initialized: set[int] = set()
-    observed: list[dict[str, Any]] = []
-    unexpected: list[dict[str, Any]] = []
+    observation_rows: list[ProcessObservation] = []
+    observation_errors: list[dict[str, Any]] = []
     root_returncode: int | None = None
     timed_out = False
 
     def record_exec(pid: int) -> None:
         row = _read_process_observation(pid)
         if row is None:
-            unexpected.append({"pid": pid, "error": "process identity unavailable at exec stop"})
+            observation_errors.append(
+                {"pid": pid, "error": "process identity unavailable at exec stop"}
+            )
             return
-        kind = _controller_child_kind(
-            row, mcp_server=mcp_server, docker_executable=docker_executable,
-        )
-        entry = {
-            "pid": row.pid,
-            "ppid": row.ppid,
-            "executable": row.executable,
-            "argv": list(row.argv),
-            "kind": kind or "unexpected",
-        }
-        observed.append(entry)
-        if kind is None:
-            unexpected.append(entry)
+        observation_rows.append(row)
 
     def handle_stop(pid: int, status: int, *, initial: bool = False) -> None:
         event = (status >> 16) & 0xFFFF
@@ -1862,6 +2061,16 @@ def check_controller_subprocesses(
         raise InfraIntegrity(
             f"C-HOST-SUBPROC: controller exited rc={root_returncode}"
         )
+    controller_cwd = (cwd or Path.cwd()).resolve()
+    controller_config_dir = resolve_controller_config_dir(env)
+    observed, unexpected = classify_controller_observations(
+        observation_rows, controller_pid=proc.pid,
+        mcp_server=mcp_server, docker_executable=docker_executable,
+        harness_path=harness_path,
+        controller_config_dir=controller_config_dir,
+        controller_cwd=controller_cwd,
+    )
+    unexpected = [*observation_errors, *unexpected]
     if unexpected:
         raise InfraIntegrity(
             "C-HOST-SUBPROC: unexpected host-side subprocess: "
@@ -1870,7 +2079,7 @@ def check_controller_subprocesses(
     return {
         "id": "C-HOST-SUBPROC",
         "status": "PASS",
-        "allowed": ["registered-mcp-server", "docker-cli"],
+        "allowed": ["registered-mcp-server", "docker-cli", "controller-intrinsic"],
         "observed": observed,
     }
 
@@ -3516,7 +3725,7 @@ def versions_from_image(image: str) -> dict[str, str]:
 
 
 def controller_subprocess_command(
-    timeout_s: float, mcp_server: str, docker_executable: str,
+    timeout_s: float, mcp_server: str, docker_executable: str, harness_path: str,
     command: list[str],
 ) -> int:
     if command and command[0] == "--":
@@ -3525,6 +3734,7 @@ def controller_subprocess_command(
         command,
         mcp_server=Path(mcp_server),
         docker_executable=Path(docker_executable),
+        harness_path=Path(harness_path),
         timeout_s=timeout_s,
         env=os.environ.copy(),
         stdin_bytes=sys.stdin.buffer.read(),
@@ -3595,6 +3805,7 @@ def build_parser() -> argparse.ArgumentParser:
     controller_check.add_argument("--timeout-s", type=float, required=True)
     controller_check.add_argument("--mcp-server", required=True)
     controller_check.add_argument("--docker-executable", required=True)
+    controller_check.add_argument("--harness-path", required=True)
     controller_check.add_argument("controller_command", nargs=argparse.REMAINDER)
     return p
 
@@ -3621,7 +3832,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         if ns.command == "_selftest-host-subproc":
             return controller_subprocess_command(
-                ns.timeout_s, ns.mcp_server, ns.docker_executable,
+                ns.timeout_s, ns.mcp_server, ns.docker_executable, ns.harness_path,
                 ns.controller_command,
             )
         return container_run()
