@@ -1786,6 +1786,8 @@ def _same_executable(observed: str, expected: Path) -> bool:
 def _same_resolved_path(observed: str, expected: Path) -> bool:
     try:
         return Path(observed).resolve(strict=True) == expected.resolve(strict=True)
+    except FileNotFoundError:
+        return os.path.realpath(observed) == os.path.realpath(expected)
     except OSError:
         return False
 

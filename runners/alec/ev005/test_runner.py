@@ -481,6 +481,82 @@ class RunnerUnitTests(unittest.TestCase):
                 {row["kind"] for row in observed}, {"controller-intrinsic"},
             )
 
+    def test_plugins_cache_rg_classifies_when_cache_does_not_exist(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            package = root / "install/node_modules/@anthropic-ai/claude-code"
+            cli = package / "cli.js"
+            cli.parent.mkdir(parents=True)
+            cli.write_text("registered CLI entrypoint\n")
+            bundle = package / "bin/claude.exe"
+            bundle.parent.mkdir()
+            bundle.write_text("registered CLI bundle\n")
+            harness = root / "bin/claude"
+            harness.parent.mkdir()
+            harness.symlink_to(cli)
+            config_dir = root / "seat-config"
+            config_dir.mkdir()
+            config_cache = config_dir / "plugins/cache"
+            controller_cwd = root / "controller-cwd"
+            controller_cwd.mkdir()
+            row = runner.ProcessObservation(
+                111, 100, str(bundle),
+                (
+                    "rg", "--no-config", "--files", "--hidden", "--no-ignore",
+                    "--max-depth", "4", "--glob", ".orphaned_at", str(config_cache),
+                ),
+                str(controller_cwd),
+            )
+
+            self.assertFalse(config_cache.exists())
+            self.assertEqual(
+                runner._registered_bundle_rg_class(
+                    row, harness_path=harness,
+                    controller_config_dir=config_dir,
+                    controller_cwd=controller_cwd,
+                ),
+                "intrinsic-bundle-rg-plugins-cache",
+            )
+
+    def test_same_resolved_path_preserves_existing_path_comparisons(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            expected = root / "expected"
+            expected.write_text("expected\n")
+            alias = root / "alias"
+            alias.symlink_to(expected)
+            different = root / "different"
+            different.write_text("different\n")
+
+            self.assertTrue(runner._same_resolved_path(str(expected), expected))
+            self.assertTrue(runner._same_resolved_path(str(alias), expected))
+            self.assertFalse(runner._same_resolved_path(str(different), expected))
+
+    def test_same_resolved_path_rejects_dotdot_through_nonexistent_tail(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            allowed = root / "allowed"
+            allowed.mkdir()
+            outside = root / "outside"
+            outside.mkdir()
+            observed = allowed / "nonexistent" / ".." / ".." / "outside"
+
+            self.assertFalse((allowed / "nonexistent").exists())
+            self.assertFalse(runner._same_resolved_path(str(observed), allowed))
+
+    def test_same_resolved_path_rejects_in_root_symlink_to_outside(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            allowed = root / "allowed"
+            allowed.mkdir()
+            outside = root / "outside"
+            outside.mkdir()
+            (allowed / "escape").symlink_to(outside, target_is_directory=True)
+            observed = allowed / "escape" / "nonexistent"
+            expected = allowed / "nonexistent"
+
+            self.assertFalse(runner._same_resolved_path(str(observed), expected))
+
     def test_controller_intrinsic_near_misses_remain_unexpected(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
