@@ -525,6 +525,52 @@ regenerated 265-file v4 manifest at the sealing commit (output in the re-seal re
 (tag `ev-005-sealed-v3`, commit `8ae62ff`). After: recorded in the re-seal record with tag
 `ev-005-sealed-v4`; the v1, v2 and v3 proofs and manifests remain under `seals/`.
 
+## A-4 — The controller's intrinsic startup probes are registered (2026-08-17)
+
+**Who.** Author: Alpha. Found by the registered `C-HOST-SUBPROC` preflight itself on the
+registered host, minutes after the v4 seal, with **still zero runs of any kind executed**.
+
+**What was wrong.** The v4-sealed guard claimed the controller spawns *no host-side subprocess
+other than the registered MCP server and the docker client*. The first real-mode preflight
+(CLI 2.1.132, empty-provisioned seat) **failed the check**: the registered harness intrinsically
+spawns startup probes that no configuration causes — `git config --get remote.origin.url`, its
+bundled `rg` (a `--version` call, a scan of the seat's `plugins/cache`, a scan of the controller
+working directory), an IDE-detection `sh -c "ps aux | grep -E …"` pipeline, and
+`sh -c "npm root -g"` with its node/npm children. The sealed sentence was therefore false for
+the real instrument. The check failing closed here — before any run, on the exact class of
+divergence it was built to catch — is the preflight working, and the fix is to register reality,
+not to widen the guard until it stops complaining.
+
+**Why this is not a contamination path.** Every observed probe reads only runner-private state:
+the controller working directory is a runner-private, non-repository directory (so the git
+remote probe reads nothing), and the `rg` scans target that directory and the seat's own plugins
+cache. Constant across arms; nothing task- or source-visible enters the controller through them.
+
+**Remedy.** `C-HOST-SUBPROC` gains a **closed controller-intrinsic allowlist**, each entry
+pinned by executable identity AND exact argv shape AND (for the `rg` scans) path operands
+constrained to the seat configuration directory or the controller working directory. Allowed
+probes are recorded in the preflight artifact as `controller-intrinsic` rather than silently
+dropped; **everything else keeps failing**, including any other `sh -c` string, any scan
+targeting a path outside the two allowed roots, and any new probe a future CLI build introduces
+(a new intrinsic probe is a registered-environment change and must arrive as an amendment).
+Sentences updated in `runner-spec.md` §5b and `environment-digest.md`.
+
+**Alternative rejected.** Allowing "any subprocess whose ancestor is the harness binary" — that
+would gut the guard, because a configuration-injected hook executes as exactly such a child.
+
+**Verification performed.** Two-direction tests over the exact observed inventory plus
+near-misses (a different `sh -c` string, an out-of-root `rg` target, `git config --get
+user.email`, a bare top-level `ps aux`) — inventory passes as intrinsic, every near-miss and the
+planted-settings case still fails; the real-mode preflight re-run passes on the registered host;
+the P1–P5 mutation confirmations, which the failing preflight had blocked, re-run and each
+mutation fires. Recorded in the v5 re-seal record.
+
+**Manifest.** Before: `3b18d81738afaa3435f82c292b59e011dc9636a8be7e270b1c872aeb4239821a`
+(tag `ev-005-sealed-v4`, commit `d9f3546`, 265 files). After: recorded in the v5 re-seal record
+with tag `ev-005-sealed-v5`; file count unchanged (sentence-level edits only).
+
+---
+
 **Note for the results report.** A-1 and A-2 were each a single defect found by contact with
 reality. A-3 is different in kind: it is what a deliberate, whole-corpus sweep found once the
 author stopped adjudicating defects one at a time. Five of its six items were invisible to review

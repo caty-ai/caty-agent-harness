@@ -112,8 +112,11 @@ directory's sorted relative paths and non-credential file bytes — recorded at 
 **compared fail-closed at every run start**: a seat that acquires a settings file, hook or
 plugin after preflight aborts the next run before the agent acts; (b) the preflight check
 `C-HOST-SUBPROC` runs a real controller session (startup plus one registered-tool turn) under
-host-side process tracing and fails on any host subprocess beyond the registered MCP server and
-the docker client. A configuration that executes host commands at startup or on a tool turn
+host-side process tracing and fails on any host subprocess beyond the registered MCP server,
+the docker client, and the harness's registered controller-intrinsic startup probes (a closed,
+identity-and-argv-pinned allowlist — amendment A-4, governing wording in runner-spec §5b; the
+first real-mode preflight on this host failed the v4 guard against exactly these probes, which
+is the check working). A configuration that executes host commands at startup or on a tool turn
 fails at preflight; the controller is not traced during the 45-minute run itself — that
 residual is registered in runner-spec §5b rather than glossed here.
 
