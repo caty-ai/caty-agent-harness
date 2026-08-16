@@ -87,7 +87,6 @@ PR_SET_DUMPABLE = 4
 PR_GET_DUMPABLE = 3
 TRUSTED_SHELL_PATHS = ("/bin/bash", "/bin/sh", "/bin/dash")
 TRUSTED_NON_EXECUTING_READER_PATHS = ("/bin/cat", "/bin/head", "/bin/grep")
-SYSTEM_SHELL_PATHS = ("/bin/bash", "/bin/sh", "/bin/dash", "/usr/bin/dash")
 SYSTEM_GIT_PATHS = ("/usr/bin/git",)
 SYSTEM_PS_PATHS = ("/usr/bin/ps", "/bin/ps")
 SYSTEM_GREP_PATHS = ("/usr/bin/grep", "/bin/grep")
@@ -872,10 +871,35 @@ def resolve_controller_config_dir(env: dict[str, str] | None = None) -> Path:
     """Resolve the controller config directory exactly from its launch environment."""
     launch_env = os.environ if env is None else env
     configured = launch_env.get("CLAUDE_CONFIG_DIR")
-    if configured:
-        return Path(configured).expanduser().resolve()
-    home = launch_env.get("HOME")
-    return ((Path(home) if home else Path.home()) / ".claude").resolve()
+    if not configured:
+        raise InfraIntegrity("CLAUDE_CONFIG_DIR must be set for controller preflight and run")
+    return Path(configured).expanduser().resolve()
+
+
+def assert_controller_cwd_not_in_git_repo(controller_cwd: Path) -> Path:
+    """Fail closed unless the controller runs outside every Git repository."""
+    try:
+        resolved = controller_cwd.resolve(strict=True)
+    except OSError as exc:
+        raise InfraIntegrity(f"controller working directory is unavailable: {exc}") from exc
+    try:
+        cp = subprocess.run(
+            ["git", "-C", str(resolved), "rev-parse", "--absolute-git-dir"],
+            env={**os.environ, **GIT_ENV}, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, check=False,
+        )
+    except OSError as exc:
+        raise InfraIntegrity(f"cannot inspect controller working directory with Git: {exc}") from exc
+    if cp.returncode == 0:
+        raise InfraIntegrity(
+            f"controller working directory must not be inside a Git repository: {resolved}"
+        )
+    if cp.returncode != 128:
+        raise InfraIntegrity(
+            "cannot establish that controller working directory is outside Git: "
+            f"rc={cp.returncode}: {cp.stderr.strip()}"
+        )
+    return resolved
 
 
 def controller_config_digest(config_dir: Path) -> str:
@@ -1759,6 +1783,34 @@ def _same_executable(observed: str, expected: Path) -> bool:
         return Path(observed).resolve() == expected.resolve()
 
 
+def _same_resolved_path(observed: str, expected: Path) -> bool:
+    try:
+        return Path(observed).resolve(strict=True) == expected.resolve(strict=True)
+    except OSError:
+        return False
+
+
+def _matches_executable_identity(
+    observed: str, expected: ExecutableIdentity,
+) -> bool:
+    try:
+        actual = _executable_identity(Path(observed))
+    except OSError:
+        return False
+    return (
+        (actual.device, actual.inode) == (expected.device, expected.inode)
+        or actual.sha256 == expected.sha256
+    )
+
+
+def controller_shell_identity() -> ExecutableIdentity:
+    """Capture the executable identity to which `/bin/sh` resolves on this host."""
+    try:
+        return _executable_identity(Path("/bin/sh").resolve(strict=True))
+    except OSError as exc:
+        raise InfraIntegrity(f"cannot establish controller /bin/sh identity: {exc}") from exc
+
+
 def _matches_system_executable(observed: str, expected_paths: tuple[str, ...]) -> bool:
     return any(_same_executable(observed, Path(path)) for path in expected_paths)
 
@@ -1777,24 +1829,13 @@ def _registered_node_modules_root(harness_path: Path) -> Path | None:
     return None
 
 
-def _path_is_within(path: str, roots: tuple[Path, ...]) -> bool:
-    candidate = Path(path)
-    if not candidate.is_absolute():
-        return False
-    resolved = candidate.resolve()
-    return any(
-        resolved == root.resolve() or resolved.is_relative_to(root.resolve())
-        for root in roots
-    )
-
-
-def _is_registered_bundle_rg(
+def _registered_bundle_rg_class(
     row: ProcessObservation, *, harness_path: Path,
     controller_config_dir: Path, controller_cwd: Path,
-) -> bool:
+) -> str | None:
     node_modules_root = _registered_node_modules_root(harness_path)
     if node_modules_root is None:
-        return False
+        return None
     executable = Path(row.executable).resolve()
     registered_bundle = (
         node_modules_root / "@anthropic-ai/claude-code/bin/claude.exe"
@@ -1805,24 +1846,26 @@ def _is_registered_bundle_rg(
         or not row.argv
         or row.argv[0] != "rg"
     ):
-        return False
+        return None
     if row.argv == ("rg", "--version"):
-        return True
+        return "intrinsic-bundle-rg-version"
     prefix = ("rg", "--no-config", "--files", "--hidden")
     if row.argv[:len(prefix)] != prefix:
-        return False
+        return None
     suffix = row.argv[len(prefix):]
-    roots = (controller_config_dir, controller_cwd)
-    if len(suffix) == 1:
-        return _path_is_within(suffix[0], roots)
     if (
         len(suffix) == 6
         and suffix[:5] == (
             "--no-ignore", "--max-depth", "4", "--glob", ".orphaned_at",
         )
+        and _same_resolved_path(
+            suffix[5], controller_config_dir / "plugins" / "cache",
+        )
     ):
-        return _path_is_within(suffix[5], roots)
-    return False
+        return "intrinsic-bundle-rg-plugins-cache"
+    if len(suffix) == 1 and _same_resolved_path(suffix[0], controller_cwd):
+        return "intrinsic-bundle-rg-controller-cwd"
+    return None
 
 
 def _npm_child_class(row: ProcessObservation) -> str | None:
@@ -1855,8 +1898,13 @@ def _controller_child_class(
     parent_classes: dict[int, str | None], mcp_server: Path,
     docker_executable: Path, harness_path: Path,
     controller_config_dir: Path, controller_cwd: Path,
+    shell_identity: ExecutableIdentity,
 ) -> str | None:
-    if _same_executable(row.executable, docker_executable):
+    if (
+        _same_executable(row.executable, docker_executable)
+        and row.argv
+        and row.argv[0] == "docker"
+    ):
         return "docker-cli"
     if (
         len(row.argv) == 2
@@ -1864,6 +1912,8 @@ def _controller_child_class(
         and Path(row.argv[1]).resolve() == mcp_server.resolve()
     ):
         return "registered-mcp-server"
+    if not _same_resolved_path(row.cwd, controller_cwd):
+        return None
     if row.ppid == controller_pid:
         if (
             len(row.argv) == 4
@@ -1872,19 +1922,20 @@ def _controller_child_class(
             and row.argv[1:] == ("config", "--get", "remote.origin.url")
         ):
             return "intrinsic-git"
-        if _is_registered_bundle_rg(
+        bundle_rg_class = _registered_bundle_rg_class(
             row, harness_path=harness_path,
             controller_config_dir=controller_config_dir,
             controller_cwd=controller_cwd,
-        ):
-            return "intrinsic-bundle-rg"
+        )
+        if bundle_rg_class is not None:
+            return bundle_rg_class
         if (
-            _matches_system_executable(row.executable, SYSTEM_SHELL_PATHS)
+            _matches_executable_identity(row.executable, shell_identity)
             and row.argv == ("/bin/sh", "-c", IDE_DETECTION_COMMAND)
         ):
             return "intrinsic-ide-shell"
         if (
-            _matches_system_executable(row.executable, SYSTEM_SHELL_PATHS)
+            _matches_executable_identity(row.executable, shell_identity)
             and row.argv == ("/bin/sh", "-c", NPM_ROOT_COMMAND)
         ):
             return "intrinsic-npm-shell"
@@ -1922,16 +1973,21 @@ def classify_controller_observations(
     controller_config_dir: Path, controller_cwd: Path,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Classify the registered controller's closed host-subprocess inventory."""
+    shell_identity = controller_shell_identity()
     parent_classes: dict[int, str | None] = {}
     classified: list[tuple[dict[str, Any], str | None]] = []
-    ide_shell_entries: dict[int, dict[str, Any]] = {}
+    ide_shell_entries: list[dict[str, Any]] = []
     ide_children: dict[int, list[tuple[dict[str, Any], str | None]]] = {}
+    ide_owner_by_pid: dict[int, int] = {}
+    npm_shell_entries: list[dict[str, Any]] = []
+    npm_children: dict[int, list[tuple[dict[str, Any], str | None]]] = {}
+    npm_owner_by_pid: dict[int, int] = {}
     for row in rows:
         child_class = _controller_child_class(
             row, controller_pid=controller_pid, parent_classes=parent_classes,
             mcp_server=mcp_server, docker_executable=docker_executable,
             harness_path=harness_path, controller_config_dir=controller_config_dir,
-            controller_cwd=controller_cwd,
+            controller_cwd=controller_cwd, shell_identity=shell_identity,
         )
         parent_classes[row.pid] = child_class
         kind = (
@@ -1948,20 +2004,72 @@ def classify_controller_observations(
         }
         classified.append((entry, child_class))
         if child_class == "intrinsic-ide-shell":
-            ide_shell_entries[row.pid] = entry
-        if row.ppid in ide_shell_entries:
-            ide_children.setdefault(row.ppid, []).append((entry, child_class))
+            ide_owner = len(ide_shell_entries)
+            ide_shell_entries.append(entry)
+            ide_owner_by_pid[row.pid] = ide_owner
+        else:
+            ide_owner = ide_owner_by_pid.get(row.ppid)
+            if ide_owner is not None:
+                ide_children.setdefault(ide_owner, []).append((entry, child_class))
+                ide_owner_by_pid[row.pid] = ide_owner
+        if child_class == "intrinsic-npm-shell":
+            npm_owner = len(npm_shell_entries)
+            npm_shell_entries.append(entry)
+            npm_owner_by_pid[row.pid] = npm_owner
+        else:
+            npm_owner = npm_owner_by_pid.get(row.ppid)
+            if npm_owner is not None:
+                npm_children.setdefault(npm_owner, []).append((entry, child_class))
+                npm_owner_by_pid[row.pid] = npm_owner
 
     expected_ide_children = {
         "intrinsic-ide-ps", "intrinsic-ide-grep-pattern", "intrinsic-ide-grep-v",
     }
-    for shell_pid, shell_entry in ide_shell_entries.items():
-        children = ide_children.get(shell_pid, [])
+    complete_ide_subtrees: list[list[dict[str, Any]]] = []
+    for shell_index, shell_entry in enumerate(ide_shell_entries):
+        children = ide_children.get(shell_index, [])
         child_classes = [child_class for _, child_class in children]
         if len(child_classes) != 3 or set(child_classes) != expected_ide_children:
             shell_entry["kind"] = "unexpected"
             for child_entry, _ in children:
                 child_entry["kind"] = "unexpected"
+        else:
+            complete_ide_subtrees.append(
+                [shell_entry, *(child_entry for child_entry, _ in children)]
+            )
+
+    expected_npm_children = ["intrinsic-npm-env", "intrinsic-npm-node"]
+    complete_npm_subtrees: list[list[dict[str, Any]]] = []
+    for shell_index, shell_entry in enumerate(npm_shell_entries):
+        children = npm_children.get(shell_index, [])
+        child_classes = [child_class for _, child_class in children]
+        child_pids = {child_entry["pid"] for child_entry, _ in children}
+        if sorted(child_classes) != expected_npm_children or len(child_pids) != 1:
+            shell_entry["kind"] = "unexpected"
+            for child_entry, _ in children:
+                child_entry["kind"] = "unexpected"
+        else:
+            complete_npm_subtrees.append(
+                [shell_entry, *(child_entry for child_entry, _ in children)]
+            )
+
+    for duplicate_subtree in complete_ide_subtrees[1:] + complete_npm_subtrees[1:]:
+        for entry in duplicate_subtree:
+            entry["kind"] = "unexpected"
+
+    capped_intrinsic_shapes = {
+        "intrinsic-git",
+        "intrinsic-bundle-rg-version",
+        "intrinsic-bundle-rg-plugins-cache",
+        "intrinsic-bundle-rg-controller-cwd",
+    }
+    shape_counts: dict[str, int] = {}
+    for entry, child_class in classified:
+        if child_class not in capped_intrinsic_shapes or entry["kind"] == "unexpected":
+            continue
+        shape_counts[child_class] = shape_counts.get(child_class, 0) + 1
+        if shape_counts[child_class] > 1:
+            entry["kind"] = "unexpected"
 
     observed = [entry for entry, _ in classified]
     unexpected = [entry for entry in observed if entry["kind"] == "unexpected"]
@@ -1977,6 +2085,7 @@ def check_controller_subprocesses(
     """Fail if a traced controller executes any unregistered host child."""
     if not argv:
         raise InfraIntegrity("C-HOST-SUBPROC: empty controller command")
+    controller_cwd = assert_controller_cwd_not_in_git_repo(cwd or Path.cwd())
     started = time.monotonic()
     proc = subprocess.Popen(
         argv, env=env, cwd=cwd, stdin=subprocess.PIPE,
@@ -2061,7 +2170,6 @@ def check_controller_subprocesses(
         raise InfraIntegrity(
             f"C-HOST-SUBPROC: controller exited rc={root_returncode}"
         )
-    controller_cwd = (cwd or Path.cwd()).resolve()
     controller_config_dir = resolve_controller_config_dir(env)
     observed, unexpected = classify_controller_observations(
         observation_rows, controller_pid=proc.pid,
@@ -3140,6 +3248,15 @@ def _execute_host_run(
         out.chmod(0o777)
     controller_dir = out / "host-controller"
     controller_dir.mkdir(mode=0o700)
+    assert_controller_cwd_not_in_git_repo(controller_dir)
+    agent_env = os.environ.copy()
+    for key in ("EV005_CONTAINER_NAME", "EV005_DONECHECK_TIMEOUT_S", "EV005_LOCAL_EXEC_SERVER"):
+        agent_env.pop(key, None)
+    agent_env.update(agent_env_overrides)
+    controller_config_dir = resolve_controller_config_dir(agent_env)
+    config_digest = assert_controller_config_digest(
+        ns.preflight_controller_config_digest, controller_config_dir,
+    )
     mcp_config = controller_dir / "mcp-config.json"
     debug_file = controller_dir / "claude-debug.log"
     exec_audit_path = controller_dir / "sandbox-exec-results.jsonl"
@@ -3156,14 +3273,6 @@ def _execute_host_run(
         cell, agent_argv, mcp_config=mcp_config, debug_file=debug_file,
     )
     realized_argv = realized_agent_argv(agent_argv, prompt_path)
-    agent_env = os.environ.copy()
-    for key in ("EV005_CONTAINER_NAME", "EV005_DONECHECK_TIMEOUT_S", "EV005_LOCAL_EXEC_SERVER"):
-        agent_env.pop(key, None)
-    agent_env.update(agent_env_overrides)
-    controller_config_dir = resolve_controller_config_dir(agent_env)
-    config_digest = assert_controller_config_digest(
-        ns.preflight_controller_config_digest, controller_config_dir,
-    )
     env_fp_payload = {
         "image_tag": cell.image_tag, "image_id": actual_id,
         "cell": ns.cell, "home": "/home/ev005",
