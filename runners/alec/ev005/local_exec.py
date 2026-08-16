@@ -13,21 +13,7 @@ import json
 import os
 import subprocess
 from dataclasses import dataclass
-from typing import Mapping, Sequence
-
-
-SANDBOX_ENV = {
-    "HOME": "/home/ev005",
-    "TMPDIR": "/home/ev005/tmp",
-    "PATH": "/runner-bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin",
-    "GIT_CONFIG_GLOBAL": "/dev/null",
-    "GIT_CONFIG_SYSTEM": "/dev/null",
-    "EV005_IPC_DIR": "/agent-ipc",
-    "EV005_REAL_BASH": "/runner-runtime/real-bash",
-    "EV005_REPLICA": "/work/replica",
-    "LANG": "C.UTF-8",
-    "LC_ALL": "C.UTF-8",
-}
+from typing import Sequence
 
 
 @dataclass(frozen=True)
@@ -38,33 +24,30 @@ class ExecResult:
     stderr: bytes
 
 
-def docker_exec_argv(container: str, argv: Sequence[str], extra_env: Mapping[str, str] | None = None) -> list[str]:
+def docker_exec_argv(container: str, argv: Sequence[str], timeout_s: float) -> list[str]:
     if not container or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-" for ch in container):
         raise ValueError("invalid EV-005 container name")
     if not argv:
         raise ValueError("empty sandbox command")
-    env = dict(SANDBOX_ENV)
-    timeout_value = os.environ.get("EV005_DONECHECK_TIMEOUT_S")
-    if timeout_value:
-        env["EV005_DONECHECK_TIMEOUT_S"] = timeout_value
-    if extra_env:
-        env.update({str(k): str(v) for k, v in extra_env.items()})
-    command = ["docker", "exec", "--user", "ev005", "--workdir", "/work/replica"]
-    for key, value in sorted(env.items()):
-        command.extend(["--env", f"{key}={value}"])
-    command.append(container)
-    command.extend(str(part) for part in argv)
-    return command
+    return [
+        "docker", "exec", "--user", "0", "--workdir", "/work/replica",
+        container, "python3", "/runner-runtime/runner.py", "_container-supervise",
+        "--timeout-s", str(timeout_s), "--", *(str(part) for part in argv),
+    ]
 
 
 def run_in_sandbox(
     argv: Sequence[str], *, container: str | None = None,
-    timeout_s: float | None = None, extra_env: Mapping[str, str] | None = None,
+    timeout_s: float | None = None,
 ) -> ExecResult:
     name = container or os.environ.get("EV005_CONTAINER_NAME", "")
-    command = docker_exec_argv(name, argv, extra_env)
+    effective_timeout = 1800.0 if timeout_s is None else timeout_s
+    command = docker_exec_argv(name, argv, effective_timeout)
     try:
-        cp = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, timeout=timeout_s)
+        cp = subprocess.run(
+            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+            timeout=effective_timeout + 5.0,
+        )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"sandbox local-exec timeout after {timeout_s}s") from exc
     return ExecResult(command, cp.returncode, cp.stdout, cp.stderr)
