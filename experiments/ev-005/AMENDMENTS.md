@@ -555,6 +555,27 @@ targeting a path outside the two allowed roots, and any new probe a future CLI b
 (a new intrinsic probe is a registered-environment change and must arrive as an amendment).
 Sentences updated in `runner-spec.md` §5b and `environment-digest.md`.
 
+**Mini-delta hardening (same amendment, second round — three seats, two with executed
+counter-probes).** The first cut of the allowlist was exactly as wide as its argv shapes, and
+the seats proved that is wider than the registration's intent: a registered literal launched by
+a *hook* from a different working directory, a *duplicate* of a registered probe tree, a
+registered command under a *different shell binary*, and a *childless* registered shell all
+classified intrinsic. The allowlist is therefore additionally pinned by: (a) **cwd** — every
+intrinsic row's working directory must resolve to the controller's runner-private working
+directory, and preflight asserts that directory is not inside a git repository; (b) **multiset**
+— each registered probe shape is accepted at most its observed count per session (git×1, each
+rg form×1, one IDE tree, one npm tree), the N+1-th occurrence fails; (c) **subtree
+completeness** — the npm shell, like the IDE shell, is intrinsic only with its exact child
+chain present; (d) **shell identity** — the identity `/bin/sh` actually resolves to on the
+registered host, not a path list; (e) the two rg argv shapes are bound to their two observed
+targets (no shape×root cross-product); (f) the pre-existing docker-cli class requires
+`argv[0] == "docker"`; (g) an unset controller config dir in classification context is an
+error, never a fallback. Residual, stated rather than glossed: the intrinsic probes are two
+read-only literals and a bounded scan set — a hook that replays exactly one registered probe
+tree from the registered cwd in the same session slot is indistinguishable by this check alone;
+the per-run config-digest comparison (guard (b) above) is the covering control for planted
+configuration, and both guards must pass.
+
 **Alternative rejected.** Allowing "any subprocess whose ancestor is the harness binary" — that
 would gut the guard, because a configuration-injected hook executes as exactly such a child.
 
