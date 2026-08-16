@@ -1,0 +1,18 @@
+{
+  "crossover-vps": {
+    "harness_name": "Claude Code CLI",
+    "harness_path": "/home/admin/.local/bin/claude",
+    "harness_version": "2.1.132",
+    "image_id": "09fe0422da1342751365965cc8733113cbba9510fc7049c72368da3a299d1b41",
+    "image_tag": "ev005-validate:v3-amd64",
+    "model_id": "claude-opus-5"
+  },
+  "main-vps": {
+    "harness_name": "Claude Code CLI",
+    "harness_path": "/home/admin/.local/bin/claude",
+    "harness_version": "2.1.132",
+    "image_id": "09fe0422da1342751365965cc8733113cbba9510fc7049c72368da3a299d1b41",
+    "image_tag": "ev005-validate:v3-amd64",
+    "model_id": "claude-sonnet-5"
+  }
+}

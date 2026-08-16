@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import sys
 import time
 
 from local_exec import run_shell
@@ -40,6 +41,9 @@ def require_ok(command: str) -> None:
 
 
 def main() -> int:
+    if "--version" in sys.argv[1:]:
+        emit("1 (EV-005 deterministic stub)")
+        return 0
     scenario = os.environ["EV005_STUB_SCENARIO"]
     if scenario == "immediate":
         emit("DONE-DECLARE")
@@ -67,6 +71,9 @@ def main() -> int:
         if first == 0:
             emit("ERROR_FIRST_DELIVERY_UNEXPECTEDLY_PASSED")
             time.sleep(10)
+        # Each delivery runs in a fresh shell; avoid a same-second $RANDOM
+        # seed collision in the runner's existing nonce protocol.
+        time.sleep(1.1)
         require_ok("printf 'pass\\n' > PASS")
         deliver()
         time.sleep(10)

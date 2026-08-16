@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -93,15 +94,21 @@ class RunnerUnitTests(unittest.TestCase):
     def test_audit_records_have_required_shapes(self):
         log = runner.AuditLog(Path(tempfile.mkdtemp()) / "audit.jsonl")
         log.header(
-            run_id="r1", task_id="p01", arm="B", cell="mac-mini",
-            model_id="claude-sonnet-5", harness_version="2.1.220",
+            run_id="r1", task_id="p01", arm="B", cell="main-vps",
+            model_id="claude-sonnet-5", harness_version="2.1.132",
             operator="Alec", replica_sha="abc",
             env_fingerprint="digest", start_ts="2026-01-01T00:00:00Z",
+            worker_id="worker-1", account_id="seat-03", block_id="block-a",
+            slot_index=2,
+            agent_argv={"argv": ["/registered/claude", "-p"], "stdin_path": "/out/prompt"},
+            mcp_config_digest="mcp-digest",
         )
         log.event("declaration", marker="DONE-DECLARE", snapshot_sha="def", scored=True, count_after=1)
         log.trailer(
             end_ts="2026-01-01T00:00:01Z", end_reason="wallclock",
             declarations_scored=1, wallclock_s=1.0, paused_s=0.0, elapsed_s=1.0,
+            provider_wait_s=None, provider_retry_count=None,
+            provider_throttle_count=None, provider_longest_stall_s=None,
         )
         rows = [json.loads(line) for line in log.path.read_text().splitlines()]
         self.assertEqual(set(rows[0]), runner.HEADER_FIELDS)
@@ -120,9 +127,69 @@ class RunnerUnitTests(unittest.TestCase):
         self.assertEqual(argv[-3:], ["bash", "-lc", "pwd"])
 
     def test_registered_audit_identity_is_explicit(self):
-        self.assertEqual(runner.MODEL_ID, "claude-sonnet-5")
-        self.assertEqual(runner.HARNESS_VERSION, "2.1.220")
+        main = runner.load_cell("main-vps")
+        crossover = runner.load_cell("crossover-vps")
+        self.assertEqual(main.model_id, "claude-sonnet-5")
+        self.assertEqual(crossover.model_id, "claude-opus-5")
+        self.assertEqual(main.harness_path, "/home/admin/.local/bin/claude")
+        self.assertEqual(crossover.harness_path, "/home/admin/.local/bin/claude")
+        self.assertEqual(main.harness_version, "2.1.132")
+        self.assertEqual(crossover.harness_version, "2.1.132")
         self.assertIn("harness_version", runner.HEADER_FIELDS)
+
+    def test_constructed_agent_argv_has_exact_enforced_surface(self):
+        cell = runner.load_cell("main-vps")
+        argv = runner.construct_agent_argv(
+            cell, mcp_config=Path("/private/mcp.json"), debug_file=Path("/private/debug.log"),
+        )
+        self.assertEqual(argv[0], "/home/admin/.local/bin/claude")
+        self.assertEqual(argv[1:], [
+            "--model", "claude-sonnet-5",
+            "--tools", "",
+            "--strict-mcp-config",
+            "--mcp-config", "/private/mcp.json",
+            "--allowed-tools", "mcp__ev005-local-exec__sandbox_exec",
+            "--dangerously-skip-permissions",
+            "--debug-file", "/private/debug.log",
+            "-p",
+        ])
+
+    def test_constructed_agent_argv_mismatch_is_rejected(self):
+        cell = runner.load_cell("main-vps")
+        expected = runner.construct_agent_argv(
+            cell, mcp_config=Path("/private/mcp.json"), debug_file=Path("/private/debug.log"),
+        )
+        asserted = [part for part in expected if part != "--tools"]
+        with self.assertRaisesRegex(runner.InfraIntegrity, "caller agent argv assertion"):
+            runner.assert_agent_argv(json.dumps(asserted), expected)
+
+    def test_account_id_secret_guard(self):
+        runner.validate_account_id("seat-03")
+        for value in ("sk-secret", "person@example.com", "x" * 65, ""):
+            with self.subTest(value=value):
+                with self.assertRaises(runner.InfraIntegrity):
+                    runner.validate_account_id(value)
+
+    def test_both_registered_cells_receive_live_identity_validation(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            for cell_id in ("main-vps", "crossover-vps"):
+                with self.subTest(cell=cell_id):
+                    registered = runner.load_cell(cell_id)
+                    harness = root / f"claude-{cell_id}"
+                    harness.write_text(
+                        "#!/bin/sh\n"
+                        f"printf '%s\\n' '{registered.harness_version} (Claude Code)'\n"
+                    )
+                    harness.chmod(0o755)
+                    cell = replace(registered, harness_path=str(harness))
+                    mcp = root / f"{cell_id}-mcp.json"
+                    debug = root / f"{cell_id}-debug.log"
+                    argv = runner.construct_agent_argv(cell, mcp_config=mcp, debug_file=debug)
+                    measured = runner.verify_registered_harness(
+                        cell, argv, mcp_config=mcp, debug_file=debug,
+                    )
+                    self.assertEqual(measured, registered.harness_version)
 
     def test_declaration_budget_caps_at_five(self):
         budget = runner.DeclarationBudget(limit=5)

@@ -1,6 +1,6 @@
 # Alec EV-005 phase-2 wrapper
 
-Containerized EV-005 runner for the sealed v2 experiment pack.
+Containerized EV-005 runner for the sealed experiment pack.
 
 ## Invariants
 
@@ -10,6 +10,8 @@ Containerized EV-005 runner for the sealed v2 experiment pack.
 - Run-start gate and fixture bytes are copied into runner-private storage and are the only bytes used for declaration and pipeline adjudication.
 - The container has no network, drops capabilities except the four required by `runner-spec.md`, and runs the agent as an unprivileged user.
 - Declaration snapshots are durable Git refs and every audit event has a monotonic sequence number.
+- The selected cell comes from `cells.json`; the runner live-probes its registered harness before every run.
+- The runner disables every built-in Claude Code tool and supplies exactly one runner-owned MCP tool, `sandbox_exec`.
 
 ## Canary handling
 
@@ -32,16 +34,20 @@ Inside Linux containers, an inotify watcher emits `donecheck_read` when the repl
 python3 runners/alec/ev005/test_runner.py
 ```
 
-## Six-case container self-test
+## Seven-case container self-test
 
 ```bash
 python3 runners/alec/ev005/selftest.py \
   --output /path/to/fresh/selftest-output \
+  --real-account-id seat-03 \
   --wrapper-sha <code-commit-sha>
 ```
 
-The output directory must not already exist. It contains one audit bundle per case plus
-`SELFTEST-REPORT.json`; keep generated evidence outside the source tree.
+The first six cases use the deterministic stub. The seventh invokes the registered real CLI
+and verifies that a host-only decoy is unreachable when built-ins are disabled. The output
+directory must not already exist. It contains one audit bundle per case plus
+`SELFTEST-REPORT.json`; keep generated evidence outside the source tree. Run it on the VPS
+that owns the registered cell and provider seat.
 
 ## Seal verification
 
@@ -49,7 +55,7 @@ The output directory must not already exist. It contains one audit bundle per ca
 python3 experiments/ev-005/tools/seal-manifest.py experiments/ev-005 --check
 ```
 
-Expected result for sealed v2: `MANIFEST OK — 264 files match`.
+Expected result: `MANIFEST OK — 264 files match`.
 
 ## Scope
 

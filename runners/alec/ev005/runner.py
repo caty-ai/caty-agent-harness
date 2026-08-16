@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""EV-005 independent runner for Alec's main-series cell.
+"""EV-005 independent runner for registered main-series and crossover cells.
 
 The host command starts exactly one `docker run --init --network none` task
 sandbox.  The registered model/controller stays on the host and can act on the
@@ -31,17 +31,34 @@ import uuid
 from pathlib import Path
 from typing import Any, Iterable
 
-IMAGE = "ev005-validate:v3-arm64"
-IMAGE_ID = "sha256:c1859bf00f07c768f91786fe88920d804dc661a1299edd953e72ab710b70c331"
-CELL = "mac-mini"
+HERE = Path(__file__).resolve().parent
+CELLS_PATH = HERE / "cells.json"
 OPERATOR = "Alec"
-MODEL_ID = "claude-sonnet-5"
-HARNESS_NAME = "Claude Code CLI"
-HARNESS_VERSION = "2.1.220"
-HARNESS_PATH = "/Users/jikumaru-sho/.local/bin/claude"
 REGISTERED_VERSIONS = {
     "python": "3.12.14", "node": "v20.19.2", "ripgrep": "14.1.1",
     "make": "4.4.1", "git": "2.47.3",
+}
+
+MCP_SERVER_NAME = "ev005-local-exec"
+MCP_TOOL_NAME = "sandbox_exec"
+ALLOWED_MCP_TOOL = f"mcp__{MCP_SERVER_NAME}__{MCP_TOOL_NAME}"
+
+# This is the complete controller surface. Values in braces are filled only
+# from the selected registered cell or files written by this runner.
+ENFORCED_AGENT_FLAGS = (
+    "--model", "{model_id}",
+    "--tools", "",
+    "--strict-mcp-config",
+    "--mcp-config", "{mcp_config}",
+    "--allowed-tools", ALLOWED_MCP_TOOL,
+    "--dangerously-skip-permissions",
+    "--debug-file", "{debug_file}",
+    "-p",
+)
+
+CELL_FIELDS = {
+    "model_id", "harness_name", "harness_version", "harness_path",
+    "image_tag", "image_id",
 }
 
 SHARED_BUDGET = (
@@ -78,11 +95,13 @@ ARM_TEXT = {
 
 HEADER_FIELDS = {
     "run_id", "task_id", "arm", "cell", "model_id", "harness_version", "operator",
-    "replica_sha", "env_fingerprint", "start_ts",
+    "replica_sha", "env_fingerprint", "start_ts", "worker_id", "account_id",
+    "block_id", "slot_index", "agent_argv", "mcp_config_digest",
 }
 TRAILER_FIELDS = {
     "end_ts", "end_reason", "declarations_scored", "wallclock_s",
-    "paused_s", "elapsed_s",
+    "paused_s", "elapsed_s", "provider_wait_s", "provider_retry_count",
+    "provider_throttle_count", "provider_longest_stall_s",
 }
 GIT_ENV = {
     "GIT_CONFIG_GLOBAL": "/dev/null",
@@ -96,6 +115,135 @@ GIT_ENV = {
 
 class InfraIntegrity(RuntimeError):
     pass
+
+
+@dataclasses.dataclass(frozen=True)
+class CellRegistration:
+    cell_id: str
+    model_id: str
+    harness_name: str
+    harness_version: str
+    harness_path: str
+    image_tag: str
+    image_id: str
+
+
+def load_cell(cell_id: str, cells_path: Path = CELLS_PATH) -> CellRegistration:
+    try:
+        table = json.loads(cells_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise InfraIntegrity(f"cannot load registered cells: {exc}") from exc
+    if not isinstance(table, dict) or cell_id not in table:
+        raise InfraIntegrity(f"unregistered EV-005 cell: {cell_id}")
+    raw = table[cell_id]
+    if not isinstance(raw, dict) or set(raw) != CELL_FIELDS:
+        unexpected = set(raw) ^ CELL_FIELDS if isinstance(raw, dict) else CELL_FIELDS
+        raise InfraIntegrity(f"invalid cell registration {cell_id}: {sorted(unexpected)}")
+    if any(not isinstance(raw[field], str) or not raw[field] for field in CELL_FIELDS):
+        raise InfraIntegrity(f"invalid empty cell registration value: {cell_id}")
+    harness_path = Path(raw["harness_path"])
+    if not harness_path.is_absolute():
+        harness_path = (cells_path.parent / harness_path).resolve()
+    image_id_value = raw["image_id"]
+    if not image_id_value.startswith("sha256:"):
+        image_id_value = f"sha256:{image_id_value}"
+    return CellRegistration(
+        cell_id=cell_id,
+        model_id=raw["model_id"],
+        harness_name=raw["harness_name"],
+        harness_version=raw["harness_version"],
+        harness_path=str(harness_path),
+        image_tag=raw["image_tag"],
+        image_id=image_id_value,
+    )
+
+
+def validate_account_id(account_id: str) -> None:
+    lowered = account_id.lower()
+    if not account_id or "sk-" in lowered or "@" in account_id or len(account_id) > 64:
+        raise InfraIntegrity("account_id must be a non-secret provider-seat label of at most 64 characters")
+
+
+def parse_agent_env_overrides(raw: str, cell: CellRegistration) -> dict[str, str]:
+    if raw == "{}":
+        return {}
+    try:
+        overrides = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise InfraIntegrity(f"invalid agent environment JSON: {exc}") from exc
+    if (
+        not isinstance(overrides, dict)
+        or cell.cell_id != "selftest"
+        or set(overrides) != {"EV005_STUB_SCENARIO"}
+    ):
+        raise InfraIntegrity("caller agent environment overrides are forbidden for registered runs")
+    return {"EV005_STUB_SCENARIO": str(overrides["EV005_STUB_SCENARIO"])}
+
+
+def write_mcp_config(path: Path, *, container_name: str, donecheck_timeout_s: float) -> str:
+    config = {
+        "mcpServers": {
+            MCP_SERVER_NAME: {
+                "type": "stdio",
+                "command": sys.executable,
+                "args": [str(HERE / "mcp_exec_server.py")],
+                "env": {
+                    "EV005_CONTAINER_NAME": container_name,
+                    "EV005_DONECHECK_TIMEOUT_S": str(donecheck_timeout_s),
+                },
+            },
+        },
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config, sort_keys=True, indent=2) + "\n")
+    path.chmod(0o600)
+    return file_sha256(path)
+
+
+def construct_agent_argv(
+    cell: CellRegistration, *, mcp_config: Path, debug_file: Path,
+) -> list[str]:
+    values = {
+        "model_id": cell.model_id,
+        "mcp_config": str(mcp_config),
+        "debug_file": str(debug_file),
+    }
+    return [cell.harness_path, *(part.format(**values) for part in ENFORCED_AGENT_FLAGS)]
+
+
+def realized_agent_argv(agent_argv: list[str], prompt_path: Path) -> dict[str, Any]:
+    return {"argv": list(agent_argv), "stdin_path": str(prompt_path)}
+
+
+def assert_agent_argv(assertion_json: str | None, constructed_argv: list[str]) -> None:
+    if assertion_json is None:
+        return
+    try:
+        asserted_argv = json.loads(assertion_json)
+    except json.JSONDecodeError as exc:
+        raise InfraIntegrity(f"invalid agent argv assertion JSON: {exc}") from exc
+    if asserted_argv != constructed_argv:
+        raise InfraIntegrity("caller agent argv assertion differs from runner-constructed argv")
+
+
+PROVIDER_METRIC_FIELDS = (
+    "provider_wait_s", "provider_retry_count", "provider_throttle_count",
+    "provider_longest_stall_s",
+)
+
+
+def provider_metrics_from_debug(debug_path: Path) -> dict[str, float | int | None]:
+    """Return only measurements the controller can support without inference.
+
+    Claude Code's debug stream is retained as raw evidence, but its human log
+    schema does not provide stable, machine-labelled provider wait/retry/
+    throttle totals. Until it does, publishing null is the honest measurement.
+    """
+    try:
+        debug_path.stat()
+    except OSError:
+        pass
+    return {field: None for field in PROVIDER_METRIC_FIELDS}
 
 
 def utc_now() -> str:
@@ -644,6 +792,8 @@ class RunController:
         if self.arm != "W" or not (self.replica / ".ev005").exists():
             return
         for req in sorted((self.replica / ".ev005").glob("request-*")):
+            if req.suffix == ".tmp":
+                continue
             nonce = req.name.removeprefix("request-")
             done = req.with_name(f"handled-{nonce}")
             if done.exists():
@@ -783,6 +933,10 @@ class RunController:
             harness_version=self.cfg["harness_version"],
             operator=self.cfg["operator"], replica_sha=replica_sha,
             env_fingerprint=self.cfg["env_fingerprint"],
+            worker_id=self.cfg["worker_id"], account_id=self.cfg["account_id"],
+            block_id=self.cfg["block_id"], slot_index=self.cfg["slot_index"],
+            agent_argv=self.cfg["agent_argv"],
+            mcp_config_digest=self.cfg["mcp_config_digest"],
             start_ts=str(started["start_ts"]),
         )
         (self.out / "agent-clock-started.ack").write_text("ok\n")
@@ -832,6 +986,7 @@ class RunController:
             declarations_scored=self.budget.scored,
             wallclock_s=round(wallclock, 6), paused_s=round(paused, 6),
             elapsed_s=round(elapsed, 6),
+            **provider_metrics_from_debug(self.out / self.cfg["provider_debug_relpath"]),
         )
         return 0
 
@@ -846,31 +1001,66 @@ def image_id(image: str) -> str:
     return cp.stdout.strip()
 
 
-def verify_registered_harness(ns: argparse.Namespace, agent_argv: list[str]) -> None:
-    """Fail closed if the confirmatory cell drifts from amendment A-2."""
-    if ns.model_id != MODEL_ID:
-        return
-    if ns.harness_name != HARNESS_NAME or ns.harness_version != HARNESS_VERSION:
-        raise InfraIntegrity("registered Claude harness identity drift")
-    if Path(ns.harness_path).resolve() != Path(HARNESS_PATH).resolve():
-        raise InfraIntegrity("registered Claude harness path drift")
-    if not agent_argv or Path(agent_argv[0]).resolve() != Path(HARNESS_PATH).resolve():
-        raise InfraIntegrity("agent argv does not invoke the registered Claude harness")
-    cp = subprocess.run(
-        [HARNESS_PATH, "--version"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, check=False,
-    )
-    if cp.returncode != 0 or not cp.stdout.startswith(f"{HARNESS_VERSION} "):
-        raise InfraIntegrity(f"Claude harness version drift: {cp.stdout.strip()}")
+def verify_registered_harness(
+    cell: CellRegistration, agent_argv: list[str], *, mcp_config: Path, debug_file: Path,
+) -> str:
+    """Fail closed on identity, path, live version, or enforced-surface drift."""
+    expected_argv = construct_agent_argv(cell, mcp_config=mcp_config, debug_file=debug_file)
+    if agent_argv != expected_argv:
+        raise InfraIntegrity("constructed agent argv does not match the exact enforced flag set")
+    required_values = {
+        "--model": cell.model_id,
+        "--tools": "",
+        "--mcp-config": str(mcp_config),
+        "--allowed-tools": ALLOWED_MCP_TOOL,
+        "--debug-file": str(debug_file),
+    }
+    for flag, value in required_values.items():
+        if agent_argv.count(flag) != 1:
+            raise InfraIntegrity(f"enforced agent surface requires exactly one {flag}")
+        index = agent_argv.index(flag)
+        if index + 1 >= len(agent_argv) or agent_argv[index + 1] != value:
+            raise InfraIntegrity(f"enforced agent surface has wrong value for {flag}")
+    for flag in ("--strict-mcp-config", "--dangerously-skip-permissions", "-p"):
+        if agent_argv.count(flag) != 1:
+            raise InfraIntegrity(f"enforced agent surface requires exactly one {flag}")
+    if agent_argv[-1] != "-p":
+        raise InfraIntegrity("sealed prompt must be supplied on stdin to terminal -p")
+    harness = Path(cell.harness_path)
+    if (
+        not harness.is_file()
+        or not os.access(harness, os.X_OK)
+        or Path(agent_argv[0]).resolve() != harness.resolve()
+    ):
+        raise InfraIntegrity("agent argv does not invoke the registered harness path")
+    try:
+        cp = subprocess.run(
+            [cell.harness_path, "--version"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, check=False,
+        )
+    except OSError as exc:
+        raise InfraIntegrity(f"registered harness version probe failed: {exc}") from exc
+    output = cp.stdout.strip()
+    measured_version = output.split(maxsplit=1)[0] if output else ""
+    if cp.returncode != 0 or measured_version != cell.harness_version:
+        raise InfraIntegrity(
+            f"registered harness version drift for {cell.cell_id}: "
+            f"expected {cell.harness_version}, got {output or '<empty>'}"
+        )
+    return measured_version
 
 
-def host_run(ns: argparse.Namespace) -> int:
-    actual_id = image_id(ns.image)
-    if actual_id != ns.image_id:
-        raise InfraIntegrity(f"image ID mismatch: expected {ns.image_id}, got {actual_id}")
+def _host_run_with_cell(ns: argparse.Namespace, cell: CellRegistration) -> int:
+    validate_account_id(ns.account_id)
+    if cell.cell_id != ns.cell:
+        raise InfraIntegrity("selected cell id does not match its registration")
+    agent_env_overrides = parse_agent_env_overrides(ns.agent_env_json, cell)
+    actual_id = image_id(cell.image_tag)
+    if actual_id != cell.image_id:
+        raise InfraIntegrity(f"image ID mismatch: expected {cell.image_id}, got {actual_id}")
     out = Path(ns.output).resolve()
     out.mkdir(parents=True, exist_ok=False)
-    wrapper_dir = Path(__file__).resolve().parent
+    wrapper_dir = HERE
     source = Path(ns.source_repo).resolve()
     task = Path(ns.task_dir).resolve()
     if not (source / ".git").exists():
@@ -879,6 +1069,23 @@ def host_run(ns: argparse.Namespace) -> int:
     prompt = assemble_prompt((task / "task.md").read_bytes(), ns.arm)
     prompt_path = out / "controller-prompt.bin"
     prompt_path.write_bytes(prompt)
+    donecheck_timeout_s = ns.donecheck_timeout_s or meta.get("timeout_s", 120)
+    container_name = f"ev005-{ns.run_id}-{uuid.uuid4().hex[:10]}".lower()
+    controller_dir = out / "host-controller"
+    controller_dir.mkdir(mode=0o700)
+    mcp_config = controller_dir / "mcp-config.json"
+    debug_file = controller_dir / "claude-debug.log"
+    mcp_config_sha256 = write_mcp_config(
+        mcp_config,
+        container_name=container_name,
+        donecheck_timeout_s=float(donecheck_timeout_s),
+    )
+    agent_argv = construct_agent_argv(cell, mcp_config=mcp_config, debug_file=debug_file)
+    assert_agent_argv(ns.agent_argv_json, agent_argv)
+    measured_harness_version = verify_registered_harness(
+        cell, agent_argv, mcp_config=mcp_config, debug_file=debug_file,
+    )
+    realized_argv = realized_agent_argv(agent_argv, prompt_path)
     wrapper_sha = ns.wrapper_sha
     env_fp_payload = {
         "image_id": actual_id,
@@ -886,10 +1093,12 @@ def host_run(ns: argparse.Namespace) -> int:
         "home": "/home/ev005",
         "wrapper_sha": wrapper_sha,
         "versions": ns.versions,
-        "model_id": ns.model_id,
-        "harness_name": ns.harness_name,
-        "harness_version": ns.harness_version,
-        "harness_path": ns.harness_path,
+        "model_id": cell.model_id,
+        "harness_name": cell.harness_name,
+        "harness_version": measured_harness_version,
+        "harness_path": cell.harness_path,
+        "agent_argv": realized_argv,
+        "mcp_config_digest": mcp_config_sha256,
         "topology": "host-controller/local-exec/networkless-task-sandbox-v1",
     }
     env_fingerprint = sha256_bytes(json.dumps(env_fp_payload, sort_keys=True).encode())
@@ -898,18 +1107,24 @@ def host_run(ns: argparse.Namespace) -> int:
         "arm": ns.arm,
         "cell": ns.cell,
         "operator": ns.operator,
-        "model_id": ns.model_id,
-        "harness_version": ns.harness_version,
+        "model_id": cell.model_id,
+        "harness_version": measured_harness_version,
+        "worker_id": ns.worker_id,
+        "account_id": ns.account_id,
+        "block_id": ns.block_id,
+        "slot_index": ns.slot_index,
         "budget_s": ns.budget_s,
-        "donecheck_timeout_s": ns.donecheck_timeout_s or meta.get("timeout_s", 120),
+        "donecheck_timeout_s": donecheck_timeout_s,
         "term_grace_s": ns.term_grace_s,
         "env_fingerprint": env_fingerprint,
         "env_fingerprint_components": env_fp_payload,
         "prompt_sha256": sha256_bytes(prompt),
+        "agent_argv": realized_argv,
+        "mcp_config_digest": mcp_config_sha256,
+        "provider_debug_relpath": str(debug_file.relative_to(out)),
     }
     config = out / "config.json"
     config.write_text(json.dumps(cfg, sort_keys=True, indent=2) + "\n")
-    container_name = f"ev005-{ns.run_id}-{uuid.uuid4().hex[:10]}".lower()
     docker_argv = [
         "docker", "run", "--rm", "--init", "--name", container_name,
         "--network", "none", "--cap-drop", "ALL", "--cap-add", "CHOWN",
@@ -921,7 +1136,7 @@ def host_run(ns: argparse.Namespace) -> int:
         "-v", f"{source}:/runner-private/source:ro",
         "-v", f"{task}:/runner-private/task:ro",
         "-v", f"{out}:/runner-private/out:rw",
-        ns.image, "python3", "/runner-private/wrapper/runner.py", "_container-run",
+        cell.image_tag, "python3", "/runner-private/wrapper/runner.py", "_container-run",
         "/runner-private/out/config.json",
     ]
     container_log = (out / "container-terminal.log").open("wb")
@@ -938,18 +1153,15 @@ def host_run(ns: argparse.Namespace) -> int:
             raise InfraIntegrity("task sandbox readiness timeout")
         time.sleep(0.02)
 
-    controller_dir = out / "host-controller"
-    controller_dir.mkdir()
-    mapping = {"prompt_file": str(prompt_path), "repo": str(controller_dir)}
-    agent_argv = [part.format(**mapping) for part in json.loads(ns.agent_argv_json)]
-    verify_registered_harness(ns, agent_argv)
     agent_env = os.environ.copy()
-    agent_env.update({str(k): str(v) for k, v in json.loads(ns.agent_env_json).items()})
-    agent_env.update({
-        "EV005_CONTAINER_NAME": container_name,
-        "EV005_DONECHECK_TIMEOUT_S": str(cfg["donecheck_timeout_s"]),
-        "EV005_LOCAL_EXEC_SERVER": str(wrapper_dir / "mcp_exec_server.py"),
-    })
+    for key in ("EV005_CONTAINER_NAME", "EV005_DONECHECK_TIMEOUT_S", "EV005_LOCAL_EXEC_SERVER"):
+        agent_env.pop(key, None)
+    agent_env.update(agent_env_overrides)
+    if cell.cell_id == "selftest":
+        agent_env.update({
+            "EV005_CONTAINER_NAME": container_name,
+            "EV005_DONECHECK_TIMEOUT_S": str(cfg["donecheck_timeout_s"]),
+        })
     stream_path = out / "agent-output.stream"
     handled_controls: set[str] = set()
     exit_written = False
@@ -1040,6 +1252,10 @@ def host_run(ns: argparse.Namespace) -> int:
             container_log.close()
 
 
+def host_run(ns: argparse.Namespace) -> int:
+    return _host_run_with_cell(ns, load_cell(ns.cell))
+
+
 def container_run(config_path: str) -> int:
     cfg = json.loads(Path(config_path).read_text())
     controller: RunController | None = None
@@ -1068,6 +1284,9 @@ def container_run(config_path: str) -> int:
                     declarations_scored=controller.budget.scored,
                     wallclock_s=round(wallclock, 6), paused_s=round(paused, 6),
                     elapsed_s=round(wallclock + paused, 6),
+                    **provider_metrics_from_debug(
+                        controller.out / controller.cfg["provider_debug_relpath"]
+                    ),
                 )
         except Exception as audit_exc:
             print(f"EV005 fatal audit failure: {audit_exc}", file=sys.stderr)
@@ -1098,18 +1317,16 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--task-dir", required=True)
     run.add_argument("--source-repo", required=True)
     run.add_argument("--output", required=True)
-    run.add_argument("--model-id", default=MODEL_ID)
-    run.add_argument("--harness-name", default=HARNESS_NAME)
-    run.add_argument("--harness-version", default=HARNESS_VERSION)
-    run.add_argument("--harness-path", default=HARNESS_PATH)
-    run.add_argument("--agent-argv-json", required=True)
+    run.add_argument("--cell", required=True)
+    run.add_argument("--worker-id", required=True)
+    run.add_argument("--account-id", required=True)
+    run.add_argument("--block-id", required=True)
+    run.add_argument("--slot-index", required=True, type=int)
+    run.add_argument("--agent-argv-json")
     run.add_argument("--agent-env-json", default="{}")
     run.add_argument("--budget-s", type=float, default=2700.0)
     run.add_argument("--donecheck-timeout-s", type=float)
     run.add_argument("--term-grace-s", type=float, default=30.0)
-    run.add_argument("--image", default=IMAGE)
-    run.add_argument("--image-id", default=IMAGE_ID)
-    run.add_argument("--cell", default=CELL)
     run.add_argument("--operator", default=OPERATOR)
     run.add_argument("--wrapper-sha", default="WORKTREE")
     run.add_argument("--versions", type=json.loads, default=REGISTERED_VERSIONS)
