@@ -101,18 +101,28 @@ The rules there apply in addition to the Hermes-specific wiring below.
    `VERIFIER_CLI_BIN` defaults to `$HOME/.local/bin/claude`; the provider never uses a
    `PATH` lookup. It delivers the fenced bundle prompt on stdin from a private temporary
    file and launches the CLI with print mode, no tools, no session persistence, strict
-   empty MCP configuration, and safe mode. Before launch it removes API key, endpoint,
-   Claude config/session, agent-process, Node preload, and TLS trust-override variables
-   from the child environment while retaining `HOME` for subscription credential
-   discovery. The CLI must therefore be authenticated through the login discovered via
-   `HOME`; token/config-directory overrides such as `CLAUDE_CODE_OAUTH_TOKEN` and
-   `CLAUDE_CONFIG_DIR` are deliberately stripped. This matters for both trust and
-   billing: if `ANTHROPIC_API_KEY` survives, the CLI authenticates with that key and
-   incurs metered API usage instead of using the logged-in subscription. The job
-   environment must not set `HTTPS_PROXY`, `HTTP_PROXY`, or `ALL_PROXY` unless the
-   operator intends verifier traffic to traverse that proxy; those variables are not
-   stripped because some deployment hosts require an explicit proxy. The provider also
-   starts the CLI in a fresh neutral temporary directory and removes it on exit.
+   empty MCP configuration, and safe mode. Before launch it rebuilds the child
+   environment with `/usr/bin/env -i`, keeping only `HOME` for subscription credential
+   discovery, a fixed `PATH=/usr/bin:/bin`, `TMPDIR` pointed at the provider's private
+   temporary work directory, and `HTTPS_PROXY`, `HTTP_PROXY`, and `ALL_PROXY` only when
+   each variable is set in the parent environment. Set-but-empty proxy variables are
+   forwarded as empty because they are still present; every other parent variable is
+   dropped structurally by `env -i`. The CLI must therefore be authenticated through the
+   login discovered via `HOME`; token/config-directory overrides such as
+   `CLAUDE_CODE_OAUTH_TOKEN` and `CLAUDE_CONFIG_DIR` are deliberately absent. This
+   matters for both trust and billing: if `ANTHROPIC_API_KEY` survives, the CLI
+   authenticates with that key and incurs metered API usage instead of using the
+   logged-in subscription. The provider also starts the CLI in a fresh neutral
+   temporary directory and removes it on exit.
+
+   Because `PATH` is fixed, the CLI named by `VERIFIER_CLI_BIN` must be a
+   self-contained executable or have its interpreter and any helper it spawns within
+   `/usr/bin:/bin`; an interpreter elsewhere, such as under a home directory or
+   Homebrew prefix, fails only when the production attest invokes it. Only the
+   uppercase `HTTPS_PROXY`, `HTTP_PROXY`, and `ALL_PROXY` names are forwarded;
+   `NO_PROXY` and lowercase `http_proxy`, `https_proxy`, and `all_proxy` are dropped,
+   so any host that needs them must re-export the uppercase variables in the job
+   environment.
 
    This is a mandatory defense against the **checkpoint stop-hook final-message
    replacement hazard**: in this family, a host checkpoint hook has replaced the final
