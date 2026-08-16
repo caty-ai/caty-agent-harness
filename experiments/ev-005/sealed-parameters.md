@@ -126,3 +126,21 @@ the owner has reviewed a public budget-comparability memo (analysis-plan §7). T
 5% of the attempt budget: below it, a wait disparity moves effective per-run agent time by less
 than the run-to-run noise the k=3 design already absorbs; above it, budget comparability — the
 stated identity condition of the primary contrast — is in question and a human decides.
+**Null branch (fail-closed):** any pilot run with `provider_wait_s = null` makes this gate not
+evaluable, which is treated as triggered (analysis-plan §7); the same null condition fails the
+`main_blocks_concurrent = 5` test in `environment-digest.md`, which then resolves to 3 pending
+owner review of the channel failure.
+
+## 8. Host-operator cross-check of the registered runner (amendment A-3.2)
+
+    crosscheck_seed        = 20260817
+    crosscheck_sample_size = max(10, ceil(0.10 * main_series_runs))   # = 27 at 270 runs
+
+Fixed before any run exists: after the main series completes, take all main-series scoring
+run_ids sorted lexicographically and draw `crosscheck_sample_size` of them with
+`random.Random(crosscheck_seed).sample(sorted_ids, crosscheck_sample_size)`. The host operator's
+independent second implementation re-executes the adjudication for each sampled run on the same
+host and the same inputs. Every disagreement in outcome coding is published, and each is
+adjudicated under the §3.1/§5 `check_bug` machinery (arm- and outcome-redacted records, symmetric
+removal if upheld). Same-host agreement removes the environment as an explanation for a
+disagreement; it does **not** recreate an independent operator, and is not claimed to.

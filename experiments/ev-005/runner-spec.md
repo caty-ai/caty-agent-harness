@@ -69,7 +69,10 @@
    invoker** (`agent` — the agent running `donecheck.sh` itself in any arm; `gate` — the runner
    executing the sealed copy on a W delivery). The clock resumes when the invocation returns or
    is killed at `timeout_s`. Rationale (acceptance-seat finding, round 4): three of the thirty
-   analysis-set tasks carry `timeout_s = 1800` with measured gate runs of 671–716 s, so an
+   analysis-set tasks carry `timeout_s = 1800` with measured full gate runs of 663–716 s
+   (recomputed from `tools/validate-logs/{t01,t07,t30}.log`; t30's pre-tree runs fail in 1–2 s
+   and are excluded from the range — a delta seat found this document previously carried two
+   different ranges for one measurement), so an
    unpaused clock would charge W — which must pass through the gate to end a run — up to ~35 of
    its 45 minutes on three tasks, while charging B least. That cost is correlated with the
    treatment and would confound the primary contrast. Each run's audit-log trailer publishes
@@ -172,27 +175,50 @@ Event records (`ts` monotonic + wall, `seq`):
   for agent invocations the wrapper records the working-tree dirty state), `exit`,
   `stdout_digest` (SHA-256), `duration_ms`. Agent invocations are detected from
   wrapper-observed process execution of `donecheck.sh` in the replica; B-arm spontaneous use is
-  reported from these events (§8 of the plan).
+  reported from these events (§8 of the plan). **Registered boundary of "execution" (revision
+  round 2):** an invocation is counted when a traced process executes the exact replica gate as
+  its script operand under a trusted shell identity. In-process sourcing (`source <gate>`) and
+  stdin-fed shells (`bash -s < <gate>`) execute the gate's *content* without a gate-operand
+  process; they are classified as **read-equivalents** — not counted, and not budget-paused
+  (§1.6), in every arm alike. H-2's stratification and the B-arm spontaneous-use report are
+  therefore statements about *operand executions*; a run that only ever sources the gate
+  contributes to `donecheck_read` coverage (best-effort), not to invocation counts. This is a
+  measurement-boundary registration, symmetric across arms, made before any data exists.
 - `donecheck_read` — best-effort observable reads of `donecheck.sh` (wrapper-observed file
   opens where the cell's sandbox exposes them); **coverage is best-effort and stated as such**
   (limitation recorded; the H-2 stratification uses `donecheck_invocation`, which is reliable,
   not `donecheck_read`).
 - `operator_intervention` — `reason`, free text, mandatory for `operator_abort` coding.
 - `canary_check` — sealed canary rule id, `hit` (bool), scope (context|output).
-- `gate_resource_sample` (amendment A-3.3) — recorded at every `donecheck_invocation`: the
-  worker cgroup's `nr_throttled` and `throttled_usec`. A run whose gate invocation shows CPU
-  throttling above the registered threshold is void for infrastructure and re-executed under the
-  same block assignment; both attempts remain in the log. The criterion never inspects the run's
-  outcome, so it cannot act asymmetrically on the arms by way of their results.
+- `gate_resource_sample` (amendment A-3.3; this sentence is the same rule as
+  `environment-digest.md`'s, stated once with its numbers — a delta seat found the two files
+  previously described the trigger differently) — recorded at **every** `donecheck_invocation`,
+  whichever invoker and whichever arm: the worker cgroup's `nr_throttled` and `throttled_usec`
+  (CPU) and `memory.events` `oom_kill` (memory), sampled immediately before and after the
+  invocation, with deltas and the invocation's wall-clock. A run is void for INFRASTRUCTURE if,
+  during any `donecheck_invocation`, `throttled_usec` increases by more than 1% of that
+  invocation's wall-clock duration, or `oom_kill` increases at all. Unreadable counters are
+  published as `null`, never `0`, and a `null` sample can never satisfy the void criterion —
+  but a `null` sample in the pilot fails the `main_blocks_concurrent` condition
+  (`environment-digest.md`). On a void, the **whole block** — all three arms — is re-executed
+  once, concurrently, under the same block assignment (same seat, same cores policy); all
+  attempts of all arms remain in the log; the re-executed block's attempts are the scoring
+  attempts; a second void in the re-executed block stops that block without replacement,
+  operator-visible. The criterion never inspects the run's outcome, so it cannot act
+  asymmetrically on the arms by way of their results.
 - Trailer: `end_ts`, `end_reason` (`delivered`|`wallclock`|`abandon`|`operator`),
   `declarations_scored`, `wallclock_s` (agent time — the budgeted quantity), `paused_s` (total
   verification time carved out per §1.6), `elapsed_s` (their sum). Publishing all three makes
   the §1.6 carve-out auditable per run and per arm rather than asserted.
   Amendment A-3.4 adds `provider_wait_s`, `provider_retry_count`, `provider_throttle_count` and
   `provider_longest_stall_s`. **Provider waiting is inside the budget** (§1.6), so these are
-  published to make that arithmetic checkable, not to remove it. Any of them the harness cannot
-  measure honestly is published as `null` — never as `0`, which would assert a measurement that
-  was not made.
+  published to make that arithmetic checkable, not to remove it. **Source (A-3.7 / revision
+  round 2):** the metrics are aggregated from the registered stream's `api_retry` events
+  (count; sum of `retry_delay_ms`; count with `error_status` 429/529; max delay). With the
+  stream present, zero `api_retry` events is a **measured zero** and is published as `0`; when
+  the stream itself was unavailable or unparseable the metrics are `null` — never a fabricated
+  `0`, which would assert a measurement that was not made. A `null` here is also an
+  infrastructure-integrity signal for the run (the registered channel was broken).
 
 ## 5b. Agent harness and model invocation (sealed, amendment A-2)
 
@@ -229,7 +255,9 @@ left to the operator:
       --mcp-config <runner-written file>
       --allowed-tools mcp__ev005-local-exec__sandbox_exec
       --output-format stream-json  --verbose      (the §2 measurement channel)
-      --debug-file <runner-private path>          (the §5 provider-wait source)
+      --debug-file <runner-private path>          (raw provider-transport evidence, retained;
+                                                   the §5 provider metrics are derived from the
+                                                   stream's api_retry events — A-3.7)
       --dangerously-skip-permissions  -p            (prompt on stdin, §1.3)
 
   `--tools ''` removes every built-in tool, and MCP tools survive it, so the agent holds exactly
@@ -252,13 +280,20 @@ left to the operator:
 - **Recorded per run.** The audit-log header carries `model_id`, `env_fingerprint`, the realized
   `agent_argv` and `mcp_config_digest`, so a drift between this table and reality — including a
   quietly re-enabled built-in tool — is detectable post hoc rather than assumed away.
-- **Controller isolation (registered, A-3 revision round).** The controller process loads no
-  workstation configuration: each provider seat is an isolated, empty-provisioned harness
-  configuration directory (`environment-digest.md`). Two mechanical guards: the header's
-  `env_fingerprint` includes a controller config digest, and the self-test asserts the controller
-  spawns no host-side subprocess other than the registered MCP server and the docker client
-  (check `C-HOST-SUBPROC`). `--strict-mcp-config` alone covers MCP servers only; these guards
-  cover settings, hooks and plugins, which is where host command execution would otherwise enter.
+- **Controller isolation (registered, A-3 revision round; scope stated at the width of the
+  evidence — a delta seat found the earlier sentence wider than what the check proves).** The
+  controller process loads no workstation configuration: each provider seat is an isolated,
+  empty-provisioned harness configuration directory (`environment-digest.md`). Three mechanical
+  guards: (a) the preflight check `C-HOST-SUBPROC` runs a real controller session — startup plus
+  one registered-tool turn — under host-side process tracing and fails if any host subprocess
+  beyond the registered MCP server and the docker client is spawned; (b) each run's
+  `env_fingerprint` includes the controller config digest, **compared fail-closed at run start
+  against the preflight-recorded value for that seat** — a mismatch aborts the run before the
+  agent acts; (c) `--strict-mcp-config` covers MCP servers. What this does and does not prove:
+  a configuration that executes host commands at startup or on a tool turn fails at preflight; a
+  configuration planted after preflight is caught by the digest comparison at the next run
+  start; the controller is **not** traced during the 45-minute run itself, and that residual is
+  registered here rather than papered over.
 - **Topology.** Host: model/controller process, wrapper, audit log, sealed gate bytes. Container:
   the replica and everything the agent does to it, networkless. The channel between them is §5c;
   the agent can invoke it, but cannot address the host, the Docker socket, the container name, or
@@ -290,9 +325,13 @@ The channel is therefore registered here, and enforced by §5b:
 **Registered as a limitation.** Under this configuration the agent works through a single shell
 channel and does not hold Claude Code's native `Read`/`Edit`/`Glob`/`Grep` tools, and the tool's
 name and description disclose that it is operating in a sandbox. Both properties are constant
-across arms, so neither can produce the primary contrast — but both bound generalization: this
-experiment measures an agent operating through one sandboxed shell tool, **not** stock Claude Code
-in its default configuration, and the §9 report must not be written as though it did.
+across arms, so neither can **differ** between arms — but constancy does not rule out
+**effect modification**: the size of the enforcement effect measured through one sandboxed shell
+tool may differ from the size the same enforcement would have under the native toolset (a delta
+seat corrected the earlier "cannot produce the contrast" phrasing, which conflated the two).
+Both properties bound generalization: this experiment measures an agent operating through one
+sandboxed shell tool, **not** stock Claude Code in its default configuration; the §9 report must
+not be written as though it did, and must carry the effect-modification caveat explicitly.
 
 ## 6. Environment digest
 
@@ -307,7 +346,10 @@ in its default configuration, and the §9 report must not be written as though i
   agent harness and model id string, and the wrapper's own commit SHA. Runs execute only inside
   a digest-matching container; each run's audit-log header carries the `env_fingerprint`
   (image digest + cell id + per-run HOME path + wrapper SHA + realized agent argv + MCP config
-  digest) so drift is detectable post hoc.
+  digest + controller config digest + SHA-256 of the MCP server source and of the tool
+  name/schema/description strings — the last two added in revision round 2 because the tool
+  description is instruction text the agent reads, and unsealed instruction text must not be
+  able to drift silently) so drift is detectable post hoc.
 - **Concurrency (amendment A-3.3).** Runs are no longer serialized. `environment-digest.md`
   registers the policy in full — disjoint non-oversubscribed CPU sets per worker, memory cap,
   swap off, private tmpfs; `pilot_blocks_concurrent = 5` with `main_blocks_concurrent` set from
@@ -319,8 +361,9 @@ in its default configuration, and the §9 report must not be written as though i
 - Per-run `HOME` is run-private and passwd-consistent by construction (this is the
   runner-layer guarantee referenced by the t12 REV4 isolation exemption). R11 validation of
   suite-invoking donechecks is executed in the same container class (validation-environment
-  fidelity), so the gate durations measured in `tools/validate-logs/` — 654–716 s for the three
-  `timeout_s = 1800` tasks — transfer to the pilot's budget arithmetic under §1.6.
+  fidelity), so the gate durations measured in `tools/validate-logs/` — 663–716 s full-run range
+  for the three `timeout_s = 1800` tasks (§1.6 carries the same number; fast-fail pre runs
+  excluded) — transfer to the pilot's budget arithmetic under §1.6.
 - **Run-identity re-validation (A-3 revision round, closing a two-seat finding).** The sealed
   R11 evidence was earned executing gates as uid 0 with `HOME=/root`; runs execute gates as the
   unprivileged run user (uid 1000 `ev005`, `HOME=/home/ev005`). Three representative gates —

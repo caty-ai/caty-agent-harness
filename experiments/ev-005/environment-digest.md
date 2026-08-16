@@ -35,7 +35,9 @@ crossover's model comparison is a comparison of models rather than of five thing
 carry that load: the registered runner is the *other* operator's implementation; every audit log
 is self-verifying against the sealed pack (image digest, realized agent argv, MCP config digest,
 canary checks, gate bytes); and the host operator's independent second implementation is retained
-and cross-checks a sample of runs on the same host and the same inputs.
+and cross-checks a **registered sample** of runs on the same host and the same inputs
+(sealed-parameters §8: seed, sample size, draw procedure and disagreement handling — a delta
+seat found the earlier "a sample" unfalsifiable as written).
 
 **Phase-1 record, superseded as a run environment (retained, not deleted).** Main-series cell,
 operator Alec: `ev005-validate:v3-arm64`, image ID
@@ -103,13 +105,17 @@ one. Each seat's configuration directory is created empty, so no workstation `CL
 setting or plugin is loaded into a controller process — the isolation a review seat required of
 the host-side controller is a property of how the seats are provisioned, not a promise.
 
-Two mechanical guards keep it a property rather than a promise (registered, A-3 revision round):
-(a) each run's `env_fingerprint` includes a **controller config digest** — SHA-256 over the
-seat configuration directory's sorted relative paths and non-credential file bytes at run start —
-so a seat that quietly acquires a settings file, hook or plugin changes fingerprint and is
-detectable post hoc; (b) the self-test asserts that a controller session spawns **no host-side
-subprocess other than the registered MCP server and the docker client** (check `C-HOST-SUBPROC`),
-so a configuration that executes host commands fails before any run starts.
+Two mechanical guards keep it a property rather than a promise (registered, A-3 revision round;
+scope per runner-spec §5b, stated at the width of the evidence): (a) each run's
+`env_fingerprint` includes a **controller config digest** — SHA-256 over the seat configuration
+directory's sorted relative paths and non-credential file bytes — recorded at preflight and
+**compared fail-closed at every run start**: a seat that acquires a settings file, hook or
+plugin after preflight aborts the next run before the agent acts; (b) the preflight check
+`C-HOST-SUBPROC` runs a real controller session (startup plus one registered-tool turn) under
+host-side process tracing and fails on any host subprocess beyond the registered MCP server and
+the docker client. A configuration that executes host commands at startup or on a tool turn
+fails at preflight; the controller is not traced during the 45-minute run itself — that
+residual is registered in runner-spec §5b rather than glossed here.
 
 ## Run invariants (both cells)
 
@@ -155,12 +161,16 @@ rule of layer 1 holds with headroom. The pilot is the calibration workload becau
 first workload with the real shape — long agentic sessions, not probe calls — and because it is
 sealed as a separate list that can never enter §4 or §6. Then, read from the pilot's audit logs:
 
-    main_blocks_concurrent = 5   if every pilot gate invocation completed within 50% of its
+    main_blocks_concurrent = 5   if every pilot donecheck invocation completed within 50% of its
                                  timeout_s, and provider_throttle_count summed over the pilot is 0
     main_blocks_concurrent = 3   otherwise
 
-Values above 5 require a further amendment with recorded evidence. No operator discretion enters,
-and the rule is fixed here before the calibration exists.
+**Null branch (fail-closed, registered on a delta-seat finding):** a `null` in any quantity this
+rule reads — a missing `gate_resource_sample`, an unmeasured `provider_throttle_count` — means
+the 5-condition is **not satisfied**: the value resolves to 3, and the measurement failure itself
+is reported to the owner before the main series starts. An uncomputable condition never resolves
+upward. Values above 5 require a further amendment with recorded evidence. No operator discretion
+enters, and the rule is fixed here before the calibration exists.
 
 **3. Runtime backstop — a drift detector, and honest about being one.** Each donecheck invocation
 records the worker cgroup's `cpu.stat` (`nr_throttled`, `throttled_usec`) and its own wall-clock as
@@ -184,9 +194,18 @@ can be a genuinely slow tree, and voiding on it would let an outcome-adjacent qu
 runs. It is published per invocation, summarised per arm, and it is the quantity the
 `main_blocks_concurrent` rule reads.
 
-Void runs are re-executed under the same block assignment; both attempts remain in the log, the
-**re-executed attempt is the scoring attempt**, and voids are counted and published per arm.
-Neither the criterion nor the count inspects the run's outcome.
+On a void, the **whole block** — all three arms — is re-executed once, concurrently, under the
+same block assignment (same seat, same cores policy), because the property being protected is
+that a block's three arms meet the same conditions at the same moment: re-running one arm alone
+would break exactly the matching the block exists to provide (a delta seat executed this failure
+against the draft orchestrator). All attempts of all arms remain in the log; the re-executed
+block's attempts are the scoring attempts; a second void in the re-executed block stops that
+block without replacement, operator-visible — never a third attempt. Voids are counted and
+published per arm, and the void rule now also covers `oom_kill` events in the worker cgroup's
+`memory.events` during a donecheck invocation (the `/work` tmpfs and the memory cap share
+8 GiB, so an OOM-killed gate would otherwise code a correct tree as a failure invisibly).
+Neither the criterion nor the count inspects the run's outcome. Analysis-plan §5 registers the
+per-arm publication and the compromise cap for this category.
 
 **Assignment rule.** A **block** is one (task, replicate *k*) pair.
 

@@ -176,8 +176,11 @@ independently described so no one has to take the bundle on trust.
 
 **What was wrong.** A-2 established that the container is the task execution sandbox and that
 "the model/controller process runs on the host and drives the sandbox through the runner's local
-exec channel." That channel was named and never specified: no tool, no schema, no visibility
-properties, and — decisively — no requirement that the runner enforce it.
+exec channel." That channel was named and never specified: no tool, no schema, and — decisively —
+no requirement that the runner enforce it. (The pre-A-3 text did state visibility properties —
+the agent never observes the channel and cannot invoke it directly — but nothing made them
+enforceable; an earlier draft of this entry said "no visibility properties", which overstated
+the gap, as a review seat noted.)
 
 The registered harness does not provide it for free. Claude Code executes its built-in tools in
 the **host** namespace. The crossover operator measured this on the VPS (CLI 2.1.132): the
@@ -275,10 +278,12 @@ by a single operator, where previously the confirmatory series ran on hardware o
 else. Three things carry that load instead: the registered runner is the **other** operator's
 implementation, not the host operator's; every run's audit log is self-verifying against the
 sealed pack (image digest, realized argv, MCP config digest, canary checks, gate bytes); and the
-host operator's independent second implementation is retained and cross-checks a sample of runs on
-the same host and the same inputs. Two implementations agreeing on one host and one input set is a
-stronger check of the runner than two implementations on two hosts, because a disagreement can no
-longer be explained away by the environment.
+host operator's independent second implementation is retained and cross-checks a registered
+sample of runs on the same host and the same inputs (sealed-parameters §8: seed, size, draw and
+disagreement handling). Same-host agreement removes the environment as an explanation for a
+disagreement; it does **not** recreate an independent confirmatory operator, and is not claimed
+to. (An earlier draft called it "a stronger check" than two hosts — a review seat correctly
+objected that the two setups check different things, and the comparative claim is withdrawn.)
 
 ---
 
@@ -307,14 +312,20 @@ manipulated variable.
    physical cores). The pilot — sealed as a separate list, and unable to enter §4 or §6 — is the
    calibration workload, because it is the first workload with the real shape: long agentic
    sessions rather than probe calls. From the pilot's audit logs: `main_blocks_concurrent = 5` if
-   every gate invocation completed within 50 % of its `timeout_s` and the pilot's summed
-   `provider_throttle_count` is 0; otherwise `3`. **Values above 6 require a further amendment
-   with recorded evidence.** The rule is fixed here, before the calibration is read, and it
-   admits no operator discretion.
+   every donecheck invocation completed within 50 % of its `timeout_s` and the pilot's summed
+   `provider_throttle_count` is 0; otherwise `3`, with a fail-closed null branch — an
+   unmeasurable input resolves the rule to 3, never up (`environment-digest.md` carries the
+   governing wording). **Values above 5 require a further amendment with recorded evidence**
+   (an earlier draft of this entry said 6, disagreeing with the sealed digest — the digest
+   governs). The rule is fixed here, before the calibration is read, and it admits no operator
+   discretion.
 3. **Runtime backstop, arm-blind.** Each donecheck invocation records the worker cgroup's CPU
-   throttling counters. A run whose gate invocation shows throttling above the registered
-   threshold is void for **infrastructure** and is re-executed under the same block assignment;
-   both attempts remain in the log. This criterion never inspects the outcome.
+   throttling counters and `oom_kill` events. A run voided by the registered rule causes the
+   **whole block** to be re-executed once under the same assignment (revision round 2 — a delta
+   seat executed the single-arm-retry failure against the draft orchestrator: re-running one arm
+   alone breaks the same-conditions matching the block exists to provide); all attempts remain
+   in the log, a second void stops the block, and analysis-plan §5 registers the category, its
+   per-arm publication and its compromise cap. This criterion never inspects the outcome.
 
 **Assignment rule (this is what makes worker and provider seat non-confounding by construction).**
 A **block** is one (task, replicate *k*) pair. Its three runs — W, B+ and B — execute
@@ -339,16 +350,23 @@ running it rather than by trusting it.
 
 **Recorded, not assumed (owner instruction).** Every run's audit log carries `worker_id`,
 `account_id`, `block_id` and `slot_index`. `account_id` is a non-secret seat label; the runner
-fails closed if it looks like a credential. §6 gains a registered sensitivity analysis (entry 5)
-that re-fits the primary contrast with worker and provider seat as factors and reports whether the
-conclusion moves. The point of the assignment rule is that these effects should be absent by
-construction; the point of the sensitivity analysis is that "should be" is checked rather than
+fails closed if it looks like a credential. §6 gains a registered sensitivity entry (entry 5),
+made **executable** in revision round 2 after three seats independently found "re-fit with
+factors" named no procedure: the primary statistic recomputed on per-seat and per-slot block
+subsets, descriptive, with a registered direction-flip predicate — analysis-plan §6 entry 5 is
+the governing wording. The point of the assignment rule is that these effects should be absent
+by construction; the point of the sensitivity entry is that "should be" is checked rather than
 believed.
 
-**Measurement supporting this section, and its limits.** The host operator ran a concurrency load
-test at 1, 3, 5 and 8 workers with per-worker CPU sets, memory caps and private tmpfs (host: 96
-logical / 48 physical cores, 377 GiB). Provider round-trip latency was flat from 1 to 8 concurrent
-workers (measured API time ≈ 2.2–3.0 s throughout) and **no provider throttling occurred**. The
+**Measurement supporting this section, and its limits.** The host operator launched a concurrency
+matrix at 1, 3, 5, 8 and 12 workers with per-worker CPU sets, memory caps and private tmpfs
+(host: 96 logical / 48 physical cores, 377 GiB). **The matrix did not complete**: it was
+force-stopped with the serial baseline still running, and the heavy-worker rows at 5, 8 and 12
+workers are unparseable — `environment-digest.md` carries the per-phase status table and is the
+governing record (an earlier draft of this entry described the test as run to completion; a
+review seat caught the mismatch). What the incomplete matrix does establish: provider round-trip
+latency for the light probe calls was flat from 1 to 8 concurrent workers (≈ 2.2–3.0 s
+throughout) and **no provider throttling occurred**. The
 author re-checked the throttle scan rather than accepting its summary: every "throttle signal" it
 reported was a false positive — millisecond fields in ISO timestamps (`…429Z`) and a duration
 string (`durationMs=12429`) — and the heavy task is itself a rate-limit classification task whose
@@ -392,9 +410,12 @@ theoretical; under parallel execution with a shared pool it is the obvious impro
 Substitution of any other model or harness is an infrastructure-integrity failure (§7), not an
 operational judgement call — including under load, including as a fallback, and **including
 Fable**, which the owner has ruled inadmissible for this experiment in any role. The provider seat
-pool is registered in `environment-digest.md` as non-secret labels; at sealing it contains **one**
-seat, which is the honest state of the host rather than the owner's total capacity. Enlarging the
-pool is an amendment, and the assignment rule above degenerates correctly to a single seat.
+pool is registered in `environment-digest.md` as non-secret labels; as of the v4 sealing it
+contains **five** seats (`seat-01/02/04/05/06`), each an isolated empty-provisioned configuration
+directory with liveness established by a live API call per seat per model id; the host's default
+account is deliberately excluded (the digest records why). An earlier state of this entry said
+one seat, which was true when written and is superseded by the registered five-seat pool.
+Changing the pool is an amendment; the assignment rule degenerates correctly to any pool size.
 
 ---
 
@@ -457,8 +478,22 @@ ignored `--tools ''` would pass the check.
    event's realized list was exactly `['mcp__probe__probe_exec']` with `mcp_servers: ['probe']`.
    This also discharges the seats' objection that A-3.1's enforcement had only been measured on
    CLI 2.1.224 — a build the experiment does not run.
-3. `--debug-file` was already required by the implementation for A-3.4's provider metrics but was
-   missing from the registered flag list. Author-found spec/implementation drift, now closed.
+3. `--debug-file` is registered as retained raw provider-transport evidence; the A-3.4 provider
+   metrics are derived from the stream's `api_retry` events (runner-spec §5 carries the exact
+   aggregation and the measured-zero-versus-null rule). An earlier draft of this item said the
+   implementation already required `--debug-file` for the metrics — it did not, see the
+   revision-round-2 note below.
+
+**Revision-round-2 note (honesty record).** As sealed in the v4 candidate's first draft, every
+runtime property this sub-amendment registers — the stream-json argv, the realized-tool-list
+abort, the api_retry-derived metrics — was **registered but not implemented**: the enforced argv
+ended at `--debug-file`, nothing parsed stream events, the provider metrics were null by
+construction, and a green unit test pinned the wrong argv in place. The author and two delta
+seats found this independently (one seat executed the declaration-loss and the silent
+extra-tool acceptance; another executed the null metrics against a synthetic 429 event). The
+implementation, its fail-closed init assertion, the whole-block void retry and the measured
+tests landed in revision round 2 before sealing; the sealed text above is therefore a
+description of the instrument as it exists, not as intended.
 
 **What was deliberately not done.** The sealed matcher's semantics — exact line, case-sensitive,
 no fenced-block discrimination, every matching line counts — are untouched, as is the
