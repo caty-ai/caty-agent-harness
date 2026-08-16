@@ -17,6 +17,9 @@ import threading
 from pathlib import Path
 from typing import Any, Iterable
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import runner as runner_module
+
 
 HERE = Path(__file__).resolve().parent
 RUNNER = HERE / "runner.py"
@@ -284,7 +287,7 @@ def next_attempt_directory(root: Path, initial_attempt: int) -> tuple[int, Path]
 def build_runner_command(
     *, assignment: BlockAssignment, arm: str, slot: int,
     task_dir: Path, source_repo: Path, output: Path, cell: str,
-    worker: WorkerAllocation, run_id: str,
+    worker: WorkerAllocation, run_id: str, controller_config_digest: str,
 ) -> list[str]:
     return [
         sys.executable, str(RUNNER), "run",
@@ -300,6 +303,7 @@ def build_runner_command(
         "--slot-index", str(slot),
         "--cpuset-cpus", worker.cpuset,
         "--memory-bytes", str(REGISTERED_MEMORY_BYTES),
+        "--preflight-controller-config-digest", controller_config_digest,
     ]
 
 
@@ -339,6 +343,7 @@ def make_ledger_row(
     attempt: int, started: str, ended: str, exit_status: int | None,
     trailer: dict[str, Any] | None, output: Path, dry_run: bool,
     is_void_retry: bool, recovered_after_restart: bool,
+    block_attempt: int | None = None, scoring_attempt: bool | None = None,
 ) -> dict[str, Any]:
     void = bool(
         (trailer or {}).get("infrastructure_void") is True
@@ -378,7 +383,8 @@ def make_ledger_row(
         "void": void,
         "void_reason": void_reason if void else None,
         "status_reason": status_reason,
-        "scoring_attempt": is_void_retry or not void,
+        "block_attempt": block_attempt if block_attempt is not None else (2 if is_void_retry else 1),
+        "scoring_attempt": (is_void_retry or not void) if scoring_attempt is None else scoring_attempt,
         "output": str(output),
         "dry_run": dry_run,
         "recovered_after_restart": recovered_after_restart,
@@ -389,6 +395,7 @@ def recover_unledgered_outputs(
     *, assignment: BlockAssignment, arm: str, slot: int, cell: str,
     blocks_concurrent: int, worker: WorkerAllocation, out_root: Path,
     ledger_path: Path, ledger_lock: threading.Lock, history: list[dict[str, Any]],
+    append_recovered: bool = True,
 ) -> None:
     attempts_root = out_root / "runs" / assignment.block_id / arm_slug(arm)
     if not attempts_root.is_dir():
@@ -445,7 +452,8 @@ def recover_unledgered_outputs(
             ended = utc_now()
             dry_run = False
         trailer = audit_trailer(output / "audit.jsonl")
-        is_void_retry = any(bool(row.get("void")) for row in history)
+        block_attempt = int(identity.get("block_attempt", attempt)) if status_path.is_file() else attempt
+        is_void_retry = block_attempt == 2
         row = make_ledger_row(
             assignment=assignment, arm=arm, slot=slot, cell=cell,
             blocks_concurrent=blocks_concurrent, worker=actual_worker,
@@ -453,8 +461,11 @@ def recover_unledgered_outputs(
             exit_status=exit_status, trailer=trailer, output=output,
             dry_run=dry_run, is_void_retry=is_void_retry,
             recovered_after_restart=True,
+            block_attempt=block_attempt,
+            scoring_attempt=None if append_recovered else False,
         )
-        append_ledger(ledger_path, row, ledger_lock)
+        if append_recovered:
+            append_ledger(ledger_path, row, ledger_lock)
         history.append(row)
         known_run_ids.add(run_id)
 
@@ -465,6 +476,8 @@ def run_arm(
     worker: WorkerAllocation, out_root: Path, ledger_path: Path,
     ledger_lock: threading.Lock, history: list[dict[str, Any]],
     blocks_concurrent: int, dry_run: bool, dry_run_delay_s: float,
+    preflight_controller_config_digest: str | None = None,
+    block_attempt: int = 1,
 ) -> bool:
     recover_unledgered_outputs(
         assignment=assignment, arm=arm, slot=slot, cell=cell,
@@ -491,6 +504,11 @@ def run_arm(
             assignment=assignment, arm=arm, slot=slot,
             task_dir=task_dir, source_repo=source_repo, output=output,
             cell=cell, worker=worker, run_id=run_id,
+            controller_config_digest=(
+                preflight_controller_config_digest
+                if preflight_controller_config_digest is not None
+                else runner_module.controller_config_digest(seat_dir)
+            ),
         )
         env = os.environ.copy()
         env["CLAUDE_CONFIG_DIR"] = str(seat_dir)
@@ -535,30 +553,142 @@ def run_arm(
     return False
 
 
+def execute_arm_attempt(
+    *, assignment: BlockAssignment, arm: str, slot: int,
+    task_dir: Path, source_repo: Path, seat_dir: Path, cell: str,
+    worker: WorkerAllocation, out_root: Path, blocks_concurrent: int,
+    dry_run: bool, dry_run_delay_s: float, history: list[dict[str, Any]],
+    block_attempt: int, preflight_controller_config_digest: str,
+) -> dict[str, Any]:
+    attempt, output = next_attempt_directory(
+        out_root / "runs" / assignment.block_id / arm_slug(arm), len(history) + 1,
+    )
+    run_id = (
+        f"ev005-{assignment.rank:03d}-{assignment.task_id}-k{assignment.replicate}-"
+        f"{arm_slug(arm)}-a{attempt}"
+    )
+    command = build_runner_command(
+        assignment=assignment, arm=arm, slot=slot,
+        task_dir=task_dir, source_repo=source_repo, output=output,
+        cell=cell, worker=worker, run_id=run_id,
+        controller_config_digest=preflight_controller_config_digest,
+    )
+    env = os.environ.copy()
+    env["CLAUDE_CONFIG_DIR"] = str(seat_dir)
+    started = utc_now()
+    identity = {
+        "series": assignment.series, "cell": cell,
+        "blocks_concurrent": blocks_concurrent, "block_id": assignment.block_id,
+        "block_attempt": block_attempt, "arm": arm, "slot_index": slot,
+        "seat": assignment.seat, "worker_id": worker.worker_id,
+        "physical_cores": [list(core) for core in worker.physical_cores],
+        "logical_cpus": list(worker.logical_cpus), "cpuset": worker.cpuset,
+    }
+    exit_status = run_process(
+        command, env, output, dry_run=dry_run,
+        dry_run_delay_s=dry_run_delay_s, run_id=run_id,
+        started_ts=started, attempt_identity=identity,
+    )
+    ended = utc_now()
+    return make_ledger_row(
+        assignment=assignment, arm=arm, slot=slot, cell=cell,
+        blocks_concurrent=blocks_concurrent, worker=worker, run_id=run_id,
+        attempt=attempt, started=started, ended=ended, exit_status=exit_status,
+        trailer=audit_trailer(output / "audit.jsonl"), output=output,
+        dry_run=dry_run, is_void_retry=block_attempt == 2,
+        recovered_after_restart=False, block_attempt=block_attempt,
+        scoring_attempt=False,
+    )
+
+
 def run_block(
     *, assignment: BlockAssignment, workers: tuple[WorkerAllocation, ...],
     task_dirs: dict[str, Path], source_repos: dict[str, Path], seats: dict[str, Path],
     cell: str, out_root: Path, ledger_path: Path, ledger_lock: threading.Lock,
     ledger_rows: list[dict[str, Any]], dry_run: bool, dry_run_delay_s: float,
     blocks_concurrent: int,
+    preflight_controller_config_digests: dict[str, str] | None = None,
 ) -> bool:
-    futures: list[concurrent.futures.Future[bool]] = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-        for arm, slot in assignment.arms:
-            worker = workers[slot]
-            history = logical_history(ledger_rows, assignment.block_id, arm)
-            futures.append(pool.submit(
-                run_arm,
-                assignment=assignment, arm=arm, slot=slot,
-                task_dir=task_dirs[assignment.task_id],
-                source_repo=source_repos[assignment.task_id],
-                seat_dir=seats[assignment.seat], cell=cell,
-                worker=worker, out_root=out_root, ledger_path=ledger_path,
-                ledger_lock=ledger_lock, history=history,
-                blocks_concurrent=blocks_concurrent,
-                dry_run=dry_run, dry_run_delay_s=dry_run_delay_s,
-            ))
-    return all(future.result() for future in futures)
+    persisted_run_ids = {str(row.get("run_id")) for row in ledger_rows}
+    histories = {
+        arm: logical_history(ledger_rows, assignment.block_id, arm)
+        for arm, _ in assignment.arms
+    }
+    for arm, slot in assignment.arms:
+        recover_unledgered_outputs(
+            assignment=assignment, arm=arm, slot=slot, cell=cell,
+            blocks_concurrent=blocks_concurrent, worker=workers[slot],
+            out_root=out_root, ledger_path=ledger_path, ledger_lock=ledger_lock,
+            history=histories[arm], append_recovered=False,
+        )
+    digest = (preflight_controller_config_digests or {}).get(assignment.seat)
+    if digest is None:
+        digest = runner_module.controller_config_digest(seats[assignment.seat])
+
+    def wave_rows(number: int) -> dict[str, dict[str, Any]]:
+        found: dict[str, dict[str, Any]] = {}
+        for arm, _ in assignment.arms:
+            candidates = [
+                row for row in histories[arm]
+                if int(row.get("block_attempt", row.get("attempt", 1))) == number
+                and row.get("completed") is True
+            ]
+            if candidates:
+                found[arm] = candidates[-1]
+        return found
+
+    def complete_wave(number: int) -> dict[str, dict[str, Any]]:
+        existing = wave_rows(number)
+        pending: list[tuple[str, int, concurrent.futures.Future[dict[str, Any]]]] = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+            for arm, slot in assignment.arms:
+                if arm in existing:
+                    continue
+                pending.append((arm, slot, pool.submit(
+                    execute_arm_attempt,
+                    assignment=assignment, arm=arm, slot=slot,
+                    task_dir=task_dirs[assignment.task_id],
+                    source_repo=source_repos[assignment.task_id],
+                    seat_dir=seats[assignment.seat], cell=cell,
+                    worker=workers[slot], out_root=out_root,
+                    blocks_concurrent=blocks_concurrent, dry_run=dry_run,
+                    dry_run_delay_s=dry_run_delay_s, history=histories[arm],
+                    block_attempt=number,
+                    preflight_controller_config_digest=digest,
+                )))
+        new_rows = {arm: future.result() for arm, _, future in pending}
+        combined = {**existing, **new_rows}
+        if set(combined) != set(ARMS):
+            raise RuntimeError(f"block {assignment.block_id} wave {number} is incomplete")
+        wave_void = any(bool(row.get("void")) for row in combined.values())
+        scoring = number == 2 or not wave_void
+        for arm, _ in assignment.arms:
+            row = combined[arm]
+            if str(row.get("run_id")) in persisted_run_ids:
+                continue
+            row["scoring_attempt"] = scoring
+            row["block_retry_triggered"] = wave_void if number == 1 else False
+            append_ledger(ledger_path, row, ledger_lock)
+            if row not in histories[arm]:
+                histories[arm].append(row)
+            with ledger_lock:
+                ledger_rows.append(row)
+            persisted_run_ids.add(str(row.get("run_id")))
+        return combined
+
+    second = wave_rows(2)
+    if len(second) == 3:
+        second = complete_wave(2)
+        return not any(bool(row.get("void")) for row in second.values()) and all(
+            successful(row) for row in second.values()
+        )
+    first = complete_wave(1)
+    if not any(bool(row.get("void")) for row in first.values()):
+        return all(successful(row) for row in first.values())
+    second = complete_wave(2)
+    if any(bool(row.get("void")) for row in second.values()):
+        return False
+    return all(successful(row) for row in second.values())
 
 
 def load_json_map(path: Path, description: str) -> dict[str, Path]:
@@ -642,6 +772,9 @@ def main(argv: list[str] | None = None) -> int:
     for label, path in seats.items():
         if not path.is_dir():
             raise RuntimeError(f"seat configuration directory is missing for {label}: {path}")
+    preflight_controller_config_digests = {
+        label: runner_module.controller_config_digest(path) for label, path in seats.items()
+    }
     task_dirs, source_repos = load_tasks(ns.tasks_dir.resolve(), ns.series, repos)
     rows = schedule(ns.series, task_dirs, SEAT_POOL)
     assignments = block_assignments(rows, ns.series)
@@ -672,6 +805,7 @@ def main(argv: list[str] | None = None) -> int:
                     ledger_lock=ledger_lock, ledger_rows=ledger_rows,
                     blocks_concurrent=ns.blocks_concurrent,
                     dry_run=ns.dry_run, dry_run_delay_s=ns.dry_run_delay_s,
+                    preflight_controller_config_digests=preflight_controller_config_digests,
                 )
                 active[future] = (bundle_index, assignment.seat)
                 active_seats.add(assignment.seat)

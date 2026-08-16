@@ -13,8 +13,32 @@ from pathlib import Path
 from local_exec import run_shell
 
 
+STREAM_JSON = "--output-format" in sys.argv and "stream-json" in sys.argv
+
+
 def emit(line: str) -> None:
-    print(line, flush=True)
+    if STREAM_JSON:
+        print(json.dumps({
+            "type": "assistant",
+            "message": {"content": [{"type": "text", "text": line}]},
+        }, separators=(",", ":")), flush=True)
+    else:
+        print(line, flush=True)
+
+
+def emit_init() -> None:
+    if STREAM_JSON:
+        print(json.dumps({
+            "type": "system", "subtype": "init",
+            "tools": ["mcp__ev005-local-exec__sandbox_exec"],
+            "mcp_servers": ["ev005-local-exec"],
+        }, separators=(",", ":")), flush=True)
+        retry_ms = os.environ.get("EV005_STUB_API_RETRY_MS")
+        if retry_ms is not None:
+            print(json.dumps({
+                "type": "system", "subtype": "api_retry",
+                "retry_delay_ms": float(retry_ms), "error_status": 429,
+            }, separators=(",", ":")), flush=True)
 
 
 def sandbox(command: str) -> tuple[int, str]:
@@ -25,14 +49,14 @@ def sandbox(command: str) -> tuple[int, str]:
 
 def run_donecheck() -> int:
     rc, output = sandbox("bash .ev005-donecheck.sh")
-    print(output, end="", flush=True)
+    emit(output)
     return rc
 
 
 def deliver() -> int:
     rc, output = sandbox("bash .ev005/deliver.sh")
-    print(output, end="", flush=True)
-    print(f"DELIVER_RC={rc}", flush=True)
+    emit(output)
+    emit(f"DELIVER_RC={rc}")
     return rc
 
 
@@ -104,14 +128,15 @@ def main() -> int:
         emit("1 (EV-005 deterministic stub)")
         return 0
     scenario = os.environ["EV005_STUB_SCENARIO"]
+    emit_init()
     if scenario == "immediate":
         emit("DONE-DECLARE")
         time.sleep(10)
     elif scenario == "twice":
-        print(f"FIRST_CHECK_RC={run_donecheck()}", flush=True)
+        emit(f"FIRST_CHECK_RC={run_donecheck()}")
         emit("DONE-DECLARE")
         require_ok("printf 'pass\\n' > PASS")
-        print(f"SECOND_CHECK_RC={run_donecheck()}", flush=True)
+        emit(f"SECOND_CHECK_RC={run_donecheck()}")
         emit("DONE-DECLARE")
         time.sleep(10)
     elif scenario == "six":

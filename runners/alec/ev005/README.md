@@ -21,7 +21,7 @@ Containerized EV-005 runner for the sealed experiment pack.
   set is empty, `NoNewPrivs` is 1, and `setuid(0)` fails.
 - Declaration snapshots are durable Git refs and every audit event has a monotonic sequence number.
 - The selected cell comes from `cells.json`; the runner live-probes its registered harness before every run.
-- The runner disables every built-in Claude Code tool and supplies exactly one runner-owned MCP tool, `sandbox_exec`.
+- The runner disables every built-in Claude Code tool and supplies exactly one runner-owned MCP tool, `sandbox_exec`; the first `stream-json` init event must realize exactly that tool and server.
 - Audit/control state lives in a root-owned mode-0700 tmpfs. Every audit record is
   first mirrored as one atomic `EV005_AUDIT` stdout frame and then fsynced to the
   tmpfs log. The host copies the tmpfs log at checkpoints and before removing the
@@ -35,7 +35,7 @@ For every run, the wrapper derives a token from the task id and run id (the run-
 
 At run end, the wrapper emits two `canary_check` events with `rule_id="canary-rule.md"`:
 
-- `scope="output"`: exact byte search over the complete captured agent stdout and stderr streams.
+- `scope="output"`: exact byte search over the complete captured controller streams, extracted assistant text, and every captured `sandbox_exec` stdout/stderr result.
 - `scope="context"`: exact byte search over the final tracked diff plus untracked file names and bytes.
 
 The token itself is never written to the audit log.
@@ -171,11 +171,14 @@ python3 runners/alec/ev005/orchestrate.py \
 ```
 
 `repos.json` maps each `meta.json` `source_repo` value to a local clone path. `seats.json` maps
-the five sealed seat labels to their isolated `CLAUDE_CONFIG_DIR` paths. Pass `--resume` after an
-interruption; successful ledger entries are not run again, while incomplete work and the one
-registered infrastructure-void retry retain the original block, seat, slot, and physical-core
-assignment policy. Registered runs receive two whole physical cores, an 8 GiB memory limit with
-swap disabled, and an 8 GiB private `/work` tmpfs.
+the five sealed seat labels to their isolated `CLAUDE_CONFIG_DIR` paths. Their configuration
+digests are recorded before scheduling and rechecked immediately before each controller launch.
+Pass `--resume` after an interruption. If any arm is infrastructure-void, the complete three-arm
+block is executed once more under the same seat, slots, and physical-core assignment policy; the
+second block attempt scores all arms, and a second void stops the block without a third attempt.
+Registered runs receive two whole physical cores, an 8 GiB memory limit with swap disabled, and
+an 8 GiB private `/work` tmpfs. Gate resource events also record `memory.events` `oom`/`oom_kill`;
+an observed `oom_kill` increase voids the run, while unreadable counters remain null.
 
 `--dry-run` is a non-scoring scheduler smoke mode that drives `stub_agent.py`; it never invokes a
 registered cell and must not be used as experiment evidence.

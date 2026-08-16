@@ -141,6 +141,26 @@ def verify_controller_subprocess_guard(
         stdin_bytes=prompt,
         cwd=check_dir,
     )
+    tool_prompt = (
+        b"Call mcp__ev005-local-exec__sandbox_exec exactly once with command `true`, "
+        b"then reply with exactly C-HOST-SUBPROC-TOOL-OK.\n"
+    )
+    tool_result = runner.check_controller_subprocesses(
+        agent_argv,
+        mcp_server=HERE / "mcp_exec_server.py",
+        docker_executable=Path(docker_executable),
+        timeout_s=ns.real_budget_s,
+        env=env,
+        stdin_bytes=tool_prompt,
+        cwd=check_dir,
+    )
+    observed_kinds = {row.get("kind") for row in tool_result.get("observed", [])}
+    if not {"registered-mcp-server", "docker-cli"}.issubset(observed_kinds):
+        raise ProbeAssertion(
+            "C-HOST-SUBPROC",
+            f"tool-turn probe did not exercise both registered child classes: {sorted(observed_kinds)}",
+        )
+    result["tool_turn"] = tool_result
     result["controller_config_digest"] = runner.controller_config_digest(config_dir)
     return result
 
@@ -338,6 +358,9 @@ def main(argv: list[str] | None = None) -> int:
             "--slot-index", "0",
             "--cpuset-cpus", "0-3",
             "--memory-bytes", str(runner.REGISTERED_MEMORY_BYTES),
+            "--preflight-controller-config-digest", runner.controller_config_digest(
+                runner.resolve_controller_config_dir()
+            ),
             "--agent-env-json", json.dumps({"EV005_STUB_SCENARIO": scenario}),
             "--budget-s", str(budget_s),
             "--donecheck-timeout-s", "1",
@@ -442,6 +465,9 @@ def main(argv: list[str] | None = None) -> int:
             "--slot-index", "0",
             "--cpuset-cpus", "0-3",
             "--memory-bytes", str(runner.REGISTERED_MEMORY_BYTES),
+            "--preflight-controller-config-digest", runner.controller_config_digest(
+                runner.resolve_controller_config_dir()
+            ),
             "--budget-s", str(ns.real_budget_s),
             "--donecheck-timeout-s", "1",
             "--term-grace-s", "5",

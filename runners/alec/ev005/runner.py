@@ -18,6 +18,7 @@ import dataclasses
 import datetime as dt
 import hashlib
 import json
+import math
 import os
 import platform
 import pwd
@@ -47,6 +48,9 @@ OBSERVATION_MECHANISM = "ptrace-descendant-exec-exit-v2"
 AUDIT_STDOUT_PREFIX = b"EV005_AUDIT "
 CONTROL_STDOUT_PREFIX = b"EV005_CONTROL "
 PIPE_ATOMIC_LIMIT = 4096
+SUPERVISOR_READY = b"EV005_SUPERVISOR_READY_v1\n"
+SUPERVISOR_RESULT_PREFIX = b"\0EV005_SUPERVISOR_RESULT_v1 "
+SUPERVISOR_INFRA_PREFIX = b"\0EV005_SUPERVISOR_INFRA_v1 "
 REGISTERED_MEMORY_BYTES = 8 * 1024**3
 INFRASTRUCTURE_VOID_EXIT = 3
 SELFTEST_MUTATIONS = {"P1", "P2", "P3", "P4", "P5"}
@@ -105,6 +109,8 @@ ENFORCED_AGENT_FLAGS = (
     "--strict-mcp-config",
     "--mcp-config", "{mcp_config}",
     "--allowed-tools", ALLOWED_MCP_TOOL,
+    "--output-format", "stream-json",
+    "--verbose",
     "--dangerously-skip-permissions",
     "--debug-file", "{debug_file}",
     "-p",
@@ -178,12 +184,18 @@ class CpuStatSample:
     nr_throttled: int | None
     throttled_usec: int | None
     observation_error: str | None = None
+    oom: int | None = None
+    oom_kill: int | None = None
+    memory_observation_error: str | None = None
 
     def as_dict(self) -> dict[str, int | str | None]:
         return {
             "nr_throttled": self.nr_throttled,
             "throttled_usec": self.throttled_usec,
             "observation_error": self.observation_error,
+            "oom": self.oom,
+            "oom_kill": self.oom_kill,
+            "memory_observation_error": self.memory_observation_error,
         }
 
 
@@ -250,17 +262,25 @@ def parse_agent_env_overrides(raw: str, cell: CellRegistration) -> dict[str, str
     return {"EV005_STUB_SCENARIO": str(overrides["EV005_STUB_SCENARIO"])}
 
 
-def write_mcp_config(path: Path, *, container_name: str, donecheck_timeout_s: float) -> str:
+def write_mcp_config(
+    path: Path, *, container_name: str, donecheck_timeout_s: float,
+    exec_audit_path: Path | None = None, infrastructure_signal_path: Path | None = None,
+) -> str:
+    server_env = {
+        "EV005_CONTAINER_NAME": container_name,
+        "EV005_DONECHECK_TIMEOUT_S": str(donecheck_timeout_s),
+    }
+    if exec_audit_path is not None:
+        server_env["EV005_EXEC_AUDIT_PATH"] = str(exec_audit_path)
+    if infrastructure_signal_path is not None:
+        server_env["EV005_INFRA_SIGNAL_PATH"] = str(infrastructure_signal_path)
     config = {
         "mcpServers": {
             MCP_SERVER_NAME: {
                 "type": "stdio",
                 "command": sys.executable,
                 "args": [str(HERE / "mcp_exec_server.py")],
-                "env": {
-                    "EV005_CONTAINER_NAME": container_name,
-                    "EV005_DONECHECK_TIMEOUT_S": str(donecheck_timeout_s),
-                },
+                "env": server_env,
             },
         },
     }
@@ -302,6 +322,10 @@ PROVIDER_METRIC_FIELDS = (
 )
 
 
+def unavailable_provider_metrics() -> dict[str, None]:
+    return {field: None for field in PROVIDER_METRIC_FIELDS}
+
+
 def provider_metrics_from_debug(debug_path: Path) -> dict[str, float | int | None]:
     """Return only measurements the controller can support without inference.
 
@@ -313,7 +337,7 @@ def provider_metrics_from_debug(debug_path: Path) -> dict[str, float | int | Non
         debug_path.stat()
     except OSError:
         pass
-    return {field: None for field in PROVIDER_METRIC_FIELDS}
+    return unavailable_provider_metrics()
 
 
 def utc_now() -> str:
@@ -342,6 +366,33 @@ def read_cpu_stat(path: Path) -> CpuStatSample:
         return parse_cpu_stat(path.read_text())
     except OSError as exc:
         return CpuStatSample(None, None, f"cannot read {path}: {exc}")
+
+
+def parse_memory_events(contents: str) -> tuple[int | None, int | None, str | None]:
+    values: dict[str, int] = {}
+    try:
+        for line in contents.splitlines():
+            fields = line.split()
+            if len(fields) == 2 and fields[0] in {"oom", "oom_kill"}:
+                values[fields[0]] = int(fields[1])
+    except ValueError as exc:
+        return None, None, f"invalid memory.events counter: {exc}"
+    missing = sorted({"oom", "oom_kill"} - values.keys())
+    if missing:
+        return None, None, f"memory.events missing counters: {', '.join(missing)}"
+    if values["oom"] < 0 or values["oom_kill"] < 0:
+        return None, None, "memory.events counters must be nonnegative"
+    return values["oom"], values["oom_kill"], None
+
+
+def with_memory_events(sample: CpuStatSample, path: Path) -> CpuStatSample:
+    try:
+        oom, oom_kill, error = parse_memory_events(path.read_text())
+    except OSError as exc:
+        oom, oom_kill, error = None, None, f"cannot read {path}: {exc}"
+    return dataclasses.replace(
+        sample, oom=oom, oom_kill=oom_kill, memory_observation_error=error,
+    )
 
 
 def resolve_container_cpu_stat(
@@ -391,7 +442,7 @@ def sample_docker_cpu_stat(
         )
     except (OSError, ValueError) as exc:
         return CpuStatSample(None, None, f"cannot resolve agent-container cgroup: {exc}")
-    return read_cpu_stat(path)
+    return with_memory_events(read_cpu_stat(path), path.with_name("memory.events"))
 
 
 def cpu_stat_from_dict(row: object) -> CpuStatSample:
@@ -406,7 +457,19 @@ def cpu_stat_from_dict(row: object) -> CpuStatSample:
         return CpuStatSample(None, None, "malformed cgroup counters")
     if (nr is None or usec is None) and error is None:
         error = "cpu.stat counters are unmeasured"
-    return CpuStatSample(nr, usec, str(error) if error is not None else None)
+    oom = row.get("oom")
+    oom_kill = row.get("oom_kill")
+    memory_error = row.get("memory_observation_error")
+    if (oom is not None and not isinstance(oom, int)) or (
+        oom_kill is not None and not isinstance(oom_kill, int)
+    ):
+        oom, oom_kill, memory_error = None, None, "malformed memory.events counters"
+    if (oom is None or oom_kill is None) and memory_error is None:
+        memory_error = "memory.events counters are unmeasured"
+    return CpuStatSample(
+        nr, usec, str(error) if error is not None else None,
+        oom, oom_kill, str(memory_error) if memory_error is not None else None,
+    )
 
 
 def gate_resource_sample(
@@ -415,6 +478,11 @@ def gate_resource_sample(
     """Build the registered resource event and apply the strict >1% void rule."""
     errors = list(dict.fromkeys(
         error for error in (before.observation_error, after.observation_error) if error
+    ))
+    memory_errors = list(dict.fromkeys(
+        error for error in (
+            before.memory_observation_error, after.memory_observation_error,
+        ) if error
     ))
     nr_delta: int | None = None
     usec_delta: int | None = None
@@ -434,14 +502,31 @@ def gate_resource_sample(
         errors.append("negative invocation wall-clock")
         wallclock_s = 0.0
     wallclock_usec = round(wallclock_s * 1_000_000)
-    void = bool(
+    oom_delta: int | None = None
+    oom_kill_delta: int | None = None
+    if not memory_errors and None not in (
+        before.oom, before.oom_kill, after.oom, after.oom_kill,
+    ):
+        assert before.oom is not None and after.oom is not None
+        assert before.oom_kill is not None and after.oom_kill is not None
+        oom_delta = after.oom - before.oom
+        oom_kill_delta = after.oom_kill - before.oom_kill
+        if oom_delta < 0 or oom_kill_delta < 0:
+            memory_errors.append("memory.events counters decreased during invocation")
+            oom_delta = None
+            oom_kill_delta = None
+    throttled_void = bool(
         usec_delta is not None
         and usec_delta > wallclock_s * 1_000_000 * 0.01
     )
-    reason = (
-        "INFRASTRUCTURE: cgroup throttled_usec delta exceeded 1% of donecheck wall-clock"
-        if void else None
-    )
+    oom_void = bool(oom_kill_delta is not None and oom_kill_delta > 0)
+    reasons = []
+    if throttled_void:
+        reasons.append("cgroup throttled_usec delta exceeded 1% of donecheck wall-clock")
+    if oom_void:
+        reasons.append("cgroup memory.events oom_kill increased during donecheck")
+    void = throttled_void or oom_void
+    reason = "INFRASTRUCTURE: " + "; ".join(reasons) if reasons else None
     return {
         "invoker": invoker,
         "nr_throttled_before": before.nr_throttled,
@@ -456,9 +541,15 @@ def gate_resource_sample(
             usec_delta / wallclock_usec
             if usec_delta is not None and wallclock_usec > 0 else None
         ),
+        "oom_before": before.oom,
+        "oom_after": after.oom,
+        "oom_delta": oom_delta,
+        "oom_kill_before": before.oom_kill,
+        "oom_kill_after": after.oom_kill,
+        "oom_kill_delta": oom_kill_delta,
         "void_for_infrastructure": void,
         "void_reason": reason,
-        "observation_error": "; ".join(errors) if errors else None,
+        "observation_error": "; ".join(errors + memory_errors) if errors or memory_errors else None,
     }
 
 
@@ -539,6 +630,117 @@ class CapturedOutputObserver:
     @property
     def canary_hit(self) -> bool:
         return self.canary in self.captured
+
+
+class AgentStreamObserver:
+    """Validate the registered JSONL stream and extract measured events."""
+
+    def __init__(self, arm: str, canary: bytes):
+        self.arm = arm
+        self.canary = canary
+        self.captured = bytearray()
+        self.extracted_text = bytearray()
+        self.partial = bytearray()
+        self.init_seen = False
+        self.retry_count = 0
+        self.wait_s = 0.0
+        self.throttle_count = 0
+        self.longest_stall_s = 0.0
+
+    def _assistant_texts(self, row: dict[str, Any]) -> list[str]:
+        if row.get("type") != "assistant":
+            return []
+        message = row.get("message")
+        content = message.get("content") if isinstance(message, dict) else row.get("content")
+        if not isinstance(content, list):
+            raise InfraIntegrity("stream-json assistant event has no content list")
+        texts: list[str] = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text")
+                if not isinstance(text, str):
+                    raise InfraIntegrity("stream-json assistant text block is malformed")
+                texts.append(text)
+        return texts
+
+    def _event(self, raw: bytes) -> list[str]:
+        try:
+            row = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise InfraIntegrity(f"non-JSON controller stdout under stream-json: {exc}") from exc
+        if not isinstance(row, dict):
+            raise InfraIntegrity("stream-json event must be a JSON object")
+        if not self.init_seen:
+            if row.get("type") != "system" or row.get("subtype") != "init":
+                raise InfraIntegrity("first stream-json event is not system/init")
+            if row.get("tools") != [ALLOWED_MCP_TOOL]:
+                raise InfraIntegrity(f"realized tool list mismatch: {row.get('tools')!r}")
+            if row.get("mcp_servers") != [MCP_SERVER_NAME]:
+                raise InfraIntegrity(f"realized MCP server list mismatch: {row.get('mcp_servers')!r}")
+            self.init_seen = True
+            return []
+        if row.get("type") == "system" and row.get("subtype") == "api_retry":
+            delay = row.get("retry_delay_ms")
+            if isinstance(delay, bool) or not isinstance(delay, (int, float)):
+                raise InfraIntegrity("api_retry.retry_delay_ms must be numeric")
+            delay = float(delay)
+            if not math.isfinite(delay) or delay < 0:
+                raise InfraIntegrity("api_retry.retry_delay_ms must be finite and nonnegative")
+            delay_s = delay / 1000.0
+            self.retry_count += 1
+            self.wait_s += delay_s
+            self.longest_stall_s = max(self.longest_stall_s, delay_s)
+            try:
+                status = int(row.get("error_status"))
+            except (TypeError, ValueError):
+                status = None
+            if status in {429, 529}:
+                self.throttle_count += 1
+        markers: list[str] = []
+        for text in self._assistant_texts(row):
+            encoded = text.encode()
+            self.extracted_text.extend(encoded)
+            self.extracted_text.extend(b"\n")
+            for line in text.split("\n"):
+                marker = marker_for_line(line, self.arm)
+                if marker:
+                    markers.append(marker)
+        return markers
+
+    def feed(self, chunk: bytes) -> tuple[list[bytes], list[str]]:
+        self.captured.extend(chunk)
+        self.partial.extend(chunk)
+        frames: list[bytes] = []
+        markers: list[str] = []
+        while b"\n" in self.partial:
+            raw, _, rest = self.partial.partition(b"\n")
+            self.partial = bytearray(rest)
+            if not raw:
+                raise InfraIntegrity("blank controller stdout line under stream-json")
+            markers.extend(self._event(bytes(raw)))
+            frames.append(bytes(raw) + b"\n")
+        return frames, markers
+
+    def finish(self) -> None:
+        if self.partial:
+            raise InfraIntegrity("unterminated controller stdout line under stream-json")
+        if not self.init_seen:
+            raise InfraIntegrity("controller stream ended before system/init")
+
+    @property
+    def canary_hit(self) -> bool:
+        return self.canary in self.captured or self.canary in self.extracted_text
+
+    @property
+    def provider_metrics(self) -> dict[str, float | int]:
+        if not self.init_seen:
+            raise InfraIntegrity("provider metrics requested without a valid stream")
+        return {
+            "provider_wait_s": round(self.wait_s, 6),
+            "provider_retry_count": self.retry_count,
+            "provider_throttle_count": self.throttle_count,
+            "provider_longest_stall_s": round(self.longest_stall_s, 6),
+        }
 
 
 def _write_atomic_stdout(prefix: bytes, payload: bytes) -> None:
@@ -683,8 +885,30 @@ def controller_config_digest(config_dir: Path) -> str:
     return digest.hexdigest()
 
 
+def assert_controller_config_digest(expected: str, config_dir: Path) -> str:
+    actual = controller_config_digest(config_dir)
+    if actual != expected:
+        raise InfraIntegrity(
+            "controller_config_digest differs from the preflight-recorded seat value"
+        )
+    return actual
+
+
 def environment_fingerprint(components: dict[str, Any]) -> str:
     return sha256_bytes(json.dumps(components, sort_keys=True).encode())
+
+
+def mcp_server_fingerprint() -> dict[str, str]:
+    from mcp_exec_server import TOOL
+
+    return {
+        "source_sha256": file_sha256(HERE / "mcp_exec_server.py"),
+        "tool_name_sha256": sha256_bytes(str(TOOL["name"]).encode()),
+        "tool_description_sha256": sha256_bytes(str(TOOL["description"]).encode()),
+        "tool_schema_sha256": sha256_bytes(
+            json.dumps(TOOL["inputSchema"], sort_keys=True, separators=(",", ":")).encode()
+        ),
+    }
 
 
 def observation_config() -> dict[str, Any]:
@@ -1678,6 +1902,7 @@ class RunController:
         self.control_seq = 0
         self.infrastructure_void = False
         self.infrastructure_void_reasons: list[str] = []
+        self.provider_metrics: dict[str, float | int | None] = unavailable_provider_metrics()
 
     @property
     def arm(self) -> str:
@@ -1707,6 +1932,10 @@ class RunController:
             try:
                 expected_size = int(ack_row["stream_size"])
                 self.output_canary_hit = bool(ack_row["output_canary_hit"])
+                metrics = ack_row["provider_metrics"]
+                if not isinstance(metrics, dict) or set(metrics) != set(PROVIDER_METRIC_FIELDS):
+                    raise ValueError("invalid provider metric keys")
+                self.provider_metrics = dict(metrics)
             except (ValueError, KeyError) as exc:
                 raise InfraIntegrity("invalid host termination acknowledgement") from exc
             stream = PRIVATE_STREAM_PATH
@@ -1726,7 +1955,9 @@ class RunController:
         # docker-id resolution acknowledgement, keeping this read adjacent to
         # the gate boundary. Docker Desktop also requires this namespace-local
         # path because the daemon VM's host cgroup tree is not visible here.
-        local = read_cpu_stat(CGROUP_ROOT / "cpu.stat")
+        local = with_memory_events(
+            read_cpu_stat(CGROUP_ROOT / "cpu.stat"), CGROUP_ROOT / "memory.events",
+        )
         if local.nr_throttled is not None and local.throttled_usec is not None:
             return local
         if host.nr_throttled is not None and host.throttled_usec is not None:
@@ -1734,7 +1965,12 @@ class RunController:
         errors = list(dict.fromkeys(
             error for error in (host.observation_error, local.observation_error) if error
         ))
-        return CpuStatSample(None, None, "; ".join(errors) or "cgroup cpu.stat is unmeasured")
+        return CpuStatSample(
+            None, None, "; ".join(errors) or "cgroup cpu.stat is unmeasured",
+            local.oom if local.oom is not None else host.oom,
+            local.oom_kill if local.oom_kill is not None else host.oom_kill,
+            local.memory_observation_error if local.oom is None else None,
+        )
 
     def _log_resource_sample(
         self, invoker: str, before: CpuStatSample, after: CpuStatSample, wallclock_s: float,
@@ -2097,7 +2333,7 @@ class RunController:
                 "; ".join(self.infrastructure_void_reasons)
                 if self.infrastructure_void_reasons else None
             ),
-            **provider_metrics_from_debug(Path("/nonexistent/provider-debug.log")),
+            **self.provider_metrics,
         )
         return INFRASTRUCTURE_VOID_EXIT if self.infrastructure_void else 0
 
@@ -2154,6 +2390,7 @@ def verify_registered_harness(
         "--tools": "",
         "--mcp-config": str(mcp_config),
         "--allowed-tools": ALLOWED_MCP_TOOL,
+        "--output-format": "stream-json",
         "--debug-file": str(debug_file),
     }
     for flag, value in required_values.items():
@@ -2162,7 +2399,7 @@ def verify_registered_harness(
         index = agent_argv.index(flag)
         if index + 1 >= len(agent_argv) or agent_argv[index + 1] != value:
             raise InfraIntegrity(f"enforced agent surface has wrong value for {flag}")
-    for flag in ("--strict-mcp-config", "--dangerously-skip-permissions", "-p"):
+    for flag in ("--strict-mcp-config", "--verbose", "--dangerously-skip-permissions", "-p"):
         if agent_argv.count(flag) != 1:
             raise InfraIntegrity(f"enforced agent surface requires exactly one {flag}")
     if agent_argv[-1] != "-p":
@@ -2641,6 +2878,24 @@ def _relay_chunk(relay: subprocess.Popen[bytes], chunk: bytes) -> None:
         raise InfraIntegrity("agent-output relay acknowledgement mismatch")
 
 
+def exec_audit_bytes(path: Path) -> bytes:
+    if not path.exists():
+        return b""
+    captured = bytearray()
+    try:
+        for line in path.read_text().splitlines():
+            row = json.loads(line)
+            stdout = base64.b64decode(row["stdout_b64"], validate=True)
+            stderr = base64.b64decode(row["stderr_b64"], validate=True)
+            payload = stdout + stderr
+            if row.get("byte_count") != len(payload) or row.get("sha256") != sha256_bytes(payload):
+                raise ValueError("digest or byte-count mismatch")
+            captured.extend(payload)
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise InfraIntegrity(f"sandbox_exec audit stream is invalid: {exc}") from exc
+    return bytes(captured)
+
+
 def _execute_host_run(
     ns: argparse.Namespace, cell: CellRegistration,
     wiring_factory: Callable[..., HostRunWiring],
@@ -2678,9 +2933,13 @@ def _execute_host_run(
     controller_dir.mkdir(mode=0o700)
     mcp_config = controller_dir / "mcp-config.json"
     debug_file = controller_dir / "claude-debug.log"
+    exec_audit_path = controller_dir / "sandbox-exec-results.jsonl"
+    infrastructure_signal_path = controller_dir / "mcp-infrastructure.jsonl"
     mcp_config_sha256 = write_mcp_config(
         mcp_config, container_name=container_name,
         donecheck_timeout_s=float(donecheck_timeout_s),
+        exec_audit_path=exec_audit_path,
+        infrastructure_signal_path=infrastructure_signal_path,
     )
     agent_argv = construct_agent_argv(cell, mcp_config=mcp_config, debug_file=debug_file)
     assert_agent_argv(ns.agent_argv_json, agent_argv)
@@ -2692,7 +2951,10 @@ def _execute_host_run(
     for key in ("EV005_CONTAINER_NAME", "EV005_DONECHECK_TIMEOUT_S", "EV005_LOCAL_EXEC_SERVER"):
         agent_env.pop(key, None)
     agent_env.update(agent_env_overrides)
-    config_digest = controller_config_digest(resolve_controller_config_dir(agent_env))
+    controller_config_dir = resolve_controller_config_dir(agent_env)
+    config_digest = assert_controller_config_digest(
+        ns.preflight_controller_config_digest, controller_config_dir,
+    )
     env_fp_payload = {
         "image_tag": cell.image_tag, "image_id": actual_id,
         "cell": ns.cell, "home": "/home/ev005",
@@ -2701,6 +2963,7 @@ def _execute_host_run(
         "harness_version": measured_harness_version, "harness_path": cell.harness_path,
         "agent_argv": realized_argv, "mcp_config_digest": mcp_config_sha256,
         "controller_config_digest": config_digest,
+        "mcp_server": mcp_server_fingerprint(),
         "observation_config": observation_config(),
         "topology": "host-controller/local-exec/networkless-task-sandbox-v2",
         "cpuset_cpus": normalize_cpuset_cpus(ns.cpuset_cpus),
@@ -2794,10 +3057,12 @@ def _execute_host_run(
         terminate_seen = False
         relayed_size = 0
         last_checkpoint = time.monotonic()
-        output_observer = CapturedOutputObserver(
+        output_observer = AgentStreamObserver(
             ns.arm, canary_token(str(meta["id"]), ns.run_id),
         )
+        infra_signal_size = 0
         with prompt_path.open("rb") as prompt_fh:
+            assert_controller_config_digest(config_digest, controller_config_dir)
             agent = subprocess.Popen(
                 agent_argv, cwd=controller_dir, env=agent_env, stdin=prompt_fh,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, preexec_fn=os.setsid,
@@ -2816,20 +3081,22 @@ def _execute_host_run(
                         with stream_path.open("ab", buffering=0) as fh:
                             fh.write(chunk)
                             os.fsync(fh.fileno())
+                        frames, markers = output_observer.feed(chunk)
                         assert relay
-                        if relay.poll() is None:
-                            try:
-                                _relay_chunk(relay, chunk)
-                                relayed_size += len(chunk)
-                            except (BrokenPipeError, InfraIntegrity):
-                                relay_deadline = time.monotonic() + 1.0
-                                while docker.poll() is None and time.monotonic() < relay_deadline:
-                                    time.sleep(0.01)
-                                if docker.poll() is None:
-                                    raise
-                        elif docker.poll() is None:
-                            raise InfraIntegrity("agent-output relay exited while sandbox remained live")
-                        for marker in output_observer.feed(chunk):
+                        for frame in frames:
+                            if relay.poll() is None:
+                                try:
+                                    _relay_chunk(relay, frame)
+                                    relayed_size += len(frame)
+                                except (BrokenPipeError, InfraIntegrity):
+                                    relay_deadline = time.monotonic() + 1.0
+                                    while docker.poll() is None and time.monotonic() < relay_deadline:
+                                        time.sleep(0.01)
+                                    if docker.poll() is None:
+                                        raise
+                            elif docker.poll() is None:
+                                raise InfraIntegrity("agent-output relay exited while sandbox remained live")
+                        for marker in markers:
                             marker_sequence += 1
                             _container_message(
                                 container_name, f"host-marker-{marker_sequence:06d}",
@@ -2839,6 +3106,22 @@ def _execute_host_run(
                 return wrote
 
             while docker.poll() is None:
+                if infrastructure_signal_path.exists():
+                    current_size = infrastructure_signal_path.stat().st_size
+                    if current_size > infra_signal_size:
+                        rows = infrastructure_signal_path.read_text().splitlines()
+                        if not rows:
+                            raise InfraIntegrity("empty MCP infrastructure signal")
+                        try:
+                            signal_row = json.loads(rows[-1])
+                            signal_error = str(signal_row["error"])
+                        except (KeyError, TypeError, json.JSONDecodeError) as exc:
+                            raise InfraIntegrity("malformed MCP infrastructure signal") from exc
+                        _container_message(
+                            container_name, f"supervisor-error-mcp-{current_size}",
+                            {"error": signal_error},
+                        )
+                        infra_signal_size = current_size
                 for prefix, row in reader.poll():
                     if prefix != CONTROL_STDOUT_PREFIX or row.get("kind") != "agent-control":
                         continue
@@ -2877,16 +3160,25 @@ def _execute_host_run(
                             agent.wait()
                         while pump_agent_output(0):
                             pass
+                        output_observer.finish()
                     _container_message(
                         container_name, request_id, {
                             "stream_size": relayed_size,
-                            "output_canary_hit": output_observer.canary_hit,
+                            "output_canary_hit": (
+                                output_observer.canary_hit
+                                or canary_token(str(meta["id"]), ns.run_id)
+                                in exec_audit_bytes(exec_audit_path)
+                            ),
+                            "provider_metrics": output_observer.provider_metrics,
                         },
                     )
                     handled_controls.add(request_id)
                     checkpoint_audit(container_name, wiring.audit_source, out, final=False)
                 pump_agent_output(0.01)
                 if agent.poll() is not None and not exit_written and not terminate_seen:
+                    while pump_agent_output(0):
+                        pass
+                    output_observer.finish()
                     _container_message(
                         container_name, "agent-exit", {"returncode": agent.returncode},
                     )
@@ -3021,6 +3313,7 @@ def container_supervise(
     test_basename_substring_mutation: bool = False,
     test_observer_no_drop: bool = False,
 ) -> int:
+    os.write(2, SUPERVISOR_READY)
     if command and command[0] == "--":
         command = command[1:]
     target = Path("/work/replica/.ev005-donecheck.sh")
@@ -3157,8 +3450,11 @@ def container_supervise(
             PRIVATE_MESSAGES_PATH, f"supervisor-error-{supervision_id}",
             {"error": failure},
         )
+        os.write(2, SUPERVISOR_INFRA_PREFIX + failure.encode(errors="replace") + b"\n")
         return 125
-    return int(result_returncode)
+    result = int(result_returncode)
+    os.write(2, SUPERVISOR_RESULT_PREFIX + str(result).encode() + b"\n")
+    return result
 
 
 def container_run() -> int:
@@ -3259,6 +3555,7 @@ def _add_run_arguments(
         default=None if resources_required else REGISTERED_MEMORY_BYTES,
     )
     parser.add_argument("--agent-argv-json")
+    parser.add_argument("--preflight-controller-config-digest", required=True)
     parser.add_argument("--agent-env-json", default="{}")
     parser.add_argument("--budget-s", type=float, default=2700.0)
     parser.add_argument("--donecheck-timeout-s", type=float)

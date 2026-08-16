@@ -1,5 +1,7 @@
 import json
 import hashlib
+import contextlib
+import io
 import os
 import subprocess
 import sys
@@ -16,6 +18,7 @@ sys.path.insert(0, str(HERE))
 import runner
 import local_exec
 import orchestrate
+import mcp_exec_server
 
 
 class RunnerUnitTests(unittest.TestCase):
@@ -249,6 +252,7 @@ class RunnerUnitTests(unittest.TestCase):
                 "--slot-index", "0",
                 "--cpuset-cpus", "0-3",
                 "--memory-bytes", str(runner.REGISTERED_MEMORY_BYTES),
+                "--preflight-controller-config-digest", "0" * 64,
                 "--selftest-probe-json", "{}",
             ],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False,
@@ -720,6 +724,8 @@ class RunnerUnitTests(unittest.TestCase):
             "--strict-mcp-config",
             "--mcp-config", "/private/mcp.json",
             "--allowed-tools", "mcp__ev005-local-exec__sandbox_exec",
+            "--output-format", "stream-json",
+            "--verbose",
             "--dangerously-skip-permissions",
             "--debug-file", "/private/debug.log",
             "-p",
@@ -1125,6 +1131,310 @@ class RunnerUnitTests(unittest.TestCase):
             print("SMOKE_INTERVALS=" + json.dumps(intervals, sort_keys=True))
             for row in rows[:6]:
                 print("SMOKE_LEDGER=" + json.dumps(row, sort_keys=True))
+
+    def test_stream_json_extracts_markers_retries_and_wrapped_canary(self):
+        token = b"EV005-CANARY-stream-test"
+        observer = runner.AgentStreamObserver("B+", token)
+        fixture = [
+            {"type": "system", "subtype": "init", "tools": [runner.ALLOWED_MCP_TOOL],
+             "mcp_servers": [runner.MCP_SERVER_NAME]},
+            {"type": "assistant", "message": {"content": [
+                {"type": "text", "text": "I'll run the first command."}]}},
+            {"type": "tool", "content": "interleaved"},
+            {"type": "assistant", "message": {"content": [
+                {"type": "text", "text": "DONE-DECLARE\n\nNow running…"}]}},
+            {"type": "system", "subtype": "api_retry", "retry_delay_ms": 1250,
+             "error_status": 429},
+            {"type": "system", "subtype": "api_retry", "retry_delay_ms": 2750,
+             "error_status": "529"},
+            {"type": "system", "subtype": "api_retry", "retry_delay_ms": 500,
+             "error_status": 500},
+            {"type": "assistant", "message": {"content": [
+                {"type": "text", "text": token.decode()}]}},
+        ]
+        payload = b"".join(json.dumps(row).encode() + b"\n" for row in fixture)
+        markers = []
+        for chunk in (payload[:37], payload[37:151], payload[151:]):
+            _, found = observer.feed(chunk)
+            markers.extend(found)
+        observer.finish()
+        self.assertEqual(markers, ["DONE-DECLARE"])
+        self.assertEqual(observer.provider_metrics, {
+            "provider_wait_s": 4.5,
+            "provider_retry_count": 3,
+            "provider_throttle_count": 2,
+            "provider_longest_stall_s": 2.75,
+        })
+        self.assertTrue(observer.canary_hit)
+
+        zero = runner.AgentStreamObserver("B", b"absent")
+        zero.feed(json.dumps(fixture[0]).encode() + b"\n")
+        zero.finish()
+        self.assertEqual(zero.provider_metrics, {
+            "provider_wait_s": 0.0, "provider_retry_count": 0,
+            "provider_throttle_count": 0, "provider_longest_stall_s": 0.0,
+        })
+        self.assertEqual(runner.unavailable_provider_metrics(), {
+            field: None for field in runner.PROVIDER_METRIC_FIELDS
+        })
+
+    def test_stream_json_fails_closed_before_marker_relay(self):
+        bad_init = runner.AgentStreamObserver("B", b"canary")
+        with self.assertRaisesRegex(runner.InfraIntegrity, "realized tool list mismatch"):
+            bad_init.feed(json.dumps({
+                "type": "system", "subtype": "init", "tools": ["Bash"],
+                "mcp_servers": [runner.MCP_SERVER_NAME],
+            }).encode() + b"\n")
+        broken = runner.AgentStreamObserver("B", b"canary")
+        with self.assertRaisesRegex(runner.InfraIntegrity, "non-JSON controller stdout"):
+            broken.feed(b"DONE-DECLARE\n")
+
+    def test_registered_channel_protection_removed_demonstration(self):
+        init = json.dumps({
+            "type": "system", "subtype": "init", "tools": [runner.ALLOWED_MCP_TOOL],
+            "mcp_servers": [runner.MCP_SERVER_NAME],
+        }).encode() + b"\n"
+        event = json.dumps({"type": "assistant", "message": {"content": [{
+            "type": "text", "text": "DONE-DECLARE\n\nNow running…",
+        }]}}).encode() + b"\n"
+        new = runner.AgentStreamObserver("B", b"absent")
+        _, markers = new.feed(init + event)
+        new.finish()
+        old = runner.CapturedOutputObserver("B", b"absent")
+        old_markers = old.feed(b"MARK-1\n")
+        self.assertEqual(markers, ["DONE-DECLARE"])
+        self.assertEqual(old_markers, [])
+        print("CHANNEL_PROTECTION_EVIDENCE=new:1 old:0")
+
+    def test_timeout_validation_at_local_and_mcp_boundaries(self):
+        for value in (float("nan"), float("inf"), -float("inf"), 0, -1, 1800.0001):
+            with self.subTest(boundary="local", value=value):
+                with self.assertRaises(ValueError):
+                    local_exec.docker_exec_argv("valid", ["true"], value)
+            with self.subTest(boundary="mcp", value=value):
+                with mock.patch.object(mcp_exec_server, "run_shell") as called:
+                    output = io.StringIO()
+                    with contextlib.redirect_stdout(output):
+                        mcp_exec_server.handle({"id": 1, "method": "tools/call", "params": {
+                            "name": "sandbox_exec", "arguments": {"command": "true", "timeout_s": value},
+                        }})
+                    called.assert_not_called()
+                    self.assertEqual(json.loads(output.getvalue())["error"]["code"], -32602)
+        self.assertIn("1800.0", local_exec.docker_exec_argv("valid", ["true"], 1800))
+
+    def test_mcp_task_failure_is_result_but_infrastructure_is_signaled(self):
+        task_result = local_exec.ExecResult(["docker"], 7, b"ordinary\n", b"")
+        with mock.patch.object(mcp_exec_server, "run_shell", return_value=task_result):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                mcp_exec_server.handle({"id": 1, "method": "tools/call", "params": {
+                    "name": "sandbox_exec", "arguments": {"command": "false"},
+                }})
+            row = json.loads(output.getvalue())
+            self.assertTrue(row["result"]["isError"])
+            self.assertEqual(row["result"]["structuredContent"]["exit_code"], 7)
+        with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {
+            "EV005_INFRA_SIGNAL_PATH": str(Path(td) / "infra.jsonl"),
+        }), mock.patch.object(
+            mcp_exec_server, "run_shell",
+            side_effect=local_exec.ExecInfrastructureError("container gone"),
+        ):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                mcp_exec_server.handle({"id": 2, "method": "tools/call", "params": {
+                    "name": "sandbox_exec", "arguments": {"command": "true"},
+                }})
+            row = json.loads(output.getvalue())
+            self.assertEqual(row["error"]["code"], -32001)
+            self.assertNotIn("container gone", row["error"]["message"])
+            self.assertIn("container gone", (Path(td) / "infra.jsonl").read_text())
+
+    def test_local_exec_distinguishes_task_exit_from_channel_failure(self):
+        for returncode in (7, 125):
+            stderr = (
+                local_exec.SUPERVISOR_READY + b"task stderr without newline"
+                + local_exec.SUPERVISOR_RESULT_PREFIX + str(returncode).encode() + b"\n"
+            )
+            completed = subprocess.CompletedProcess([], returncode, b"task stdout", stderr)
+            with mock.patch.object(local_exec.subprocess, "run", return_value=completed):
+                result = local_exec.run_in_sandbox(["false"], container="ev005-test", timeout_s=1)
+            self.assertEqual(result.returncode, returncode)
+            self.assertEqual(result.stderr, b"task stderr without newline")
+        broken = subprocess.CompletedProcess([], 1, b"", b"container gone")
+        with mock.patch.object(local_exec.subprocess, "run", return_value=broken):
+            with self.assertRaisesRegex(local_exec.ExecInfrastructureError, "before trusted"):
+                local_exec.run_in_sandbox(["true"], container="ev005-test", timeout_s=1)
+        supervisor = subprocess.CompletedProcess(
+            [], 125, b"", local_exec.SUPERVISOR_READY
+            + local_exec.SUPERVISOR_INFRA_PREFIX + b"observer failed\n",
+        )
+        with mock.patch.object(local_exec.subprocess, "run", return_value=supervisor):
+            with self.assertRaisesRegex(local_exec.ExecInfrastructureError, "observer failed"):
+                local_exec.run_in_sandbox(["true"], container="ev005-test", timeout_s=1)
+
+    def test_exec_result_canary_audit_is_scanned(self):
+        token = b"EV005-CANARY-tool-only"
+        with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {
+            "EV005_EXEC_AUDIT_PATH": str(Path(td) / "exec.jsonl"),
+        }):
+            mcp_exec_server.audit_exec_result(b"prefix " + token, b" stderr")
+            captured = runner.exec_audit_bytes(Path(td) / "exec.jsonl")
+            self.assertTrue(runner.canary_in_output(b"", token, captured))
+
+    def test_memory_events_oom_kill_void_and_missing_null(self):
+        before = runner.CpuStatSample(1, 100, oom=4, oom_kill=7)
+        at = runner.gate_resource_sample(
+            "gate", before, runner.CpuStatSample(1, 100, oom=5, oom_kill=7), 1.0,
+        )
+        above = runner.gate_resource_sample(
+            "gate", before, runner.CpuStatSample(1, 100, oom=5, oom_kill=8), 1.0,
+        )
+        below = runner.gate_resource_sample(
+            "gate", before, runner.CpuStatSample(1, 100, oom=3, oom_kill=6), 1.0,
+        )
+        self.assertFalse(at["void_for_infrastructure"])
+        self.assertTrue(above["void_for_infrastructure"])
+        self.assertIsNone(below["oom_kill_delta"])
+        self.assertFalse(below["void_for_infrastructure"])
+        with tempfile.TemporaryDirectory() as td:
+            missing = runner.with_memory_events(runner.CpuStatSample(1, 1), Path(td) / "missing")
+            event = runner.gate_resource_sample("gate", missing, missing, 1.0)
+            self.assertIsNone(event["oom_kill_delta"])
+            self.assertFalse(event["void_for_infrastructure"])
+
+    def test_environment_fingerprint_registers_mcp_source_and_tool_contract(self):
+        fingerprint = runner.mcp_server_fingerprint()
+        self.assertEqual(set(fingerprint), {
+            "source_sha256", "tool_name_sha256", "tool_description_sha256", "tool_schema_sha256",
+        })
+        self.assertEqual(fingerprint["source_sha256"], runner.file_sha256(HERE / "mcp_exec_server.py"))
+
+    def test_af3_production_supervise_argv_has_no_test_switches(self):
+        argv = local_exec.docker_exec_argv("ev005-test", ["/bin/echo", "--test-no-drop"], 1)
+        separator = argv.index("--")
+        self.assertFalse(any(part.startswith("--test-") for part in argv[:separator]))
+        parsed = runner.build_parser().parse_args(argv[argv.index("_container-supervise"):])
+        self.assertFalse(parsed.test_no_drop)
+        self.assertEqual(parsed.supervised_command, ["--", "/bin/echo", "--test-no-drop"])
+
+    def test_preflight_controller_digest_match_and_planted_drift(self):
+        with tempfile.TemporaryDirectory() as td:
+            config = Path(td)
+            expected = runner.controller_config_digest(config)
+            self.assertEqual(runner.assert_controller_config_digest(expected, config), expected)
+            (config / "settings.json").write_text("{}\n")
+            with self.assertRaisesRegex(runner.InfraIntegrity, "preflight-recorded"):
+                runner.assert_controller_config_digest(expected, config)
+
+    def test_schedule_bytes_are_golden(self):
+        task_ids = {
+            "main": [f"t{i:02d}" for i in range(1, 31)],
+            "crossover": ["t02", "t05", "t08", "t11", "t14", "t17", "t20", "t23", "t26", "t29"],
+            "pilot": [f"p{i:02d}" for i in range(1, 6)],
+        }
+        rows = []
+        for series in ("main", "crossover", "pilot"):
+            for row in orchestrate.schedule(series, task_ids[series], orchestrate.SEAT_POOL):
+                rows.append({
+                    "series": series, "task": row["block"][0], "k": row["block"][1],
+                    "rank": row["rank"], "arm": row["arm"], "slot": row["slot"],
+                    "seat": row["seat"],
+                })
+        payload = json.dumps(rows, sort_keys=True, separators=(",", ":")).encode()
+        self.assertEqual(
+            hashlib.sha256(payload).hexdigest(),
+            "2c0d64f577f5cbef5776f223d726721289af135da83e8ea370510a875f21a331",
+        )
+
+    def test_whole_block_void_retry_double_void_and_resume(self):
+        assignment = orchestrate.BlockAssignment(
+            series="pilot", task_id="p01", replicate=1, rank=0, seat="seat-01",
+            arms=(("B", 0), ("B+", 1), ("W", 2)),
+        )
+        workers = tuple(
+            orchestrate.WorkerAllocation(f"worker-{slot:02d}", ((slot * 2,), (slot * 2 + 1,)),
+                                          (slot * 2, slot * 2 + 1))
+            for slot in range(3)
+        )
+
+        def exercise(root: Path, *, second_void: bool, existing: list[dict] | None = None):
+            for name in ("task", "source", "seat", "out"):
+                (root / name).mkdir(exist_ok=True)
+            calls = []
+
+            def fake_run(command, env, output, **kwargs):
+                identity = kwargs["attempt_identity"]
+                calls.append((identity["block_attempt"], identity["arm"]))
+                output.mkdir(parents=True)
+                void = (
+                    (identity["block_attempt"] == 1 and identity["arm"] == "B")
+                    or (second_void and identity["block_attempt"] == 2 and identity["arm"] == "W")
+                )
+                (output / "audit.jsonl").write_text(json.dumps({
+                    "end_ts": "test", "end_reason": "operator" if void else "wallclock",
+                    "infrastructure_void": void,
+                    "infrastructure_void_reason": "INFRASTRUCTURE: synthetic" if void else None,
+                }) + "\n")
+                return orchestrate.VOID_EXIT_STATUS if void else 0
+
+            ledger_rows = list(existing or [])
+            ledger = root / "out" / "ledger.jsonl"
+            if ledger_rows:
+                ledger.write_text("".join(
+                    json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n"
+                    for row in ledger_rows
+                ))
+            with mock.patch.object(orchestrate, "run_process", side_effect=fake_run):
+                ok = orchestrate.run_block(
+                    assignment=assignment, workers=workers,
+                    task_dirs={"p01": root / "task"}, source_repos={"p01": root / "source"},
+                    seats={"seat-01": root / "seat"}, cell="main-vps",
+                    out_root=root / "out", ledger_path=ledger,
+                    ledger_lock=threading.Lock(), ledger_rows=ledger_rows,
+                    dry_run=False, dry_run_delay_s=0, blocks_concurrent=1,
+                    preflight_controller_config_digests={"seat-01": runner.controller_config_digest(root / "seat")},
+                )
+            return ok, calls, orchestrate.read_ledger(ledger)
+
+        with tempfile.TemporaryDirectory() as td:
+            ok, calls, rows = exercise(Path(td), second_void=False)
+            self.assertTrue(ok)
+            self.assertEqual(sorted(calls), [(1, "B"), (1, "B+"), (1, "W"),
+                                             (2, "B"), (2, "B+"), (2, "W")])
+            self.assertEqual(sum(row["scoring_attempt"] for row in rows), 3)
+            self.assertEqual({row["block_attempt"] for row in rows if row["scoring_attempt"]}, {2})
+        with tempfile.TemporaryDirectory() as td:
+            ok, calls, rows = exercise(Path(td), second_void=True)
+            self.assertFalse(ok)
+            self.assertEqual(len(calls), 6)
+            self.assertEqual(max(row["block_attempt"] for row in rows), 2)
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            existing = []
+            for arm, slot in assignment.arms:
+                if arm != "B":
+                    continue
+                is_void = arm == "B"
+                existing.append({
+                    "series": "pilot", "cell": "main-vps", "blocks_concurrent": 1,
+                    "block_id": assignment.block_id, "rank": 0, "task_id": "p01",
+                    "replicate": 1, "arm": arm, "slot_index": slot, "seat": "seat-01",
+                    "worker_id": workers[slot].worker_id, "worker_cores": {},
+                    "memory_bytes": orchestrate.REGISTERED_MEMORY_BYTES,
+                    "run_id": f"resume-{arm}", "attempt": 1, "block_attempt": 1,
+                    "start_ts": "test", "end_ts": "test",
+                    "exit_status": orchestrate.VOID_EXIT_STATUS if is_void else 0,
+                    "completed": True, "void": is_void,
+                    "void_reason": "INFRASTRUCTURE: synthetic" if is_void else None,
+                    "status_reason": None, "scoring_attempt": False,
+                    "output": "existing", "dry_run": False, "recovered_after_restart": False,
+                })
+            ok, calls, rows = exercise(root, second_void=False, existing=existing)
+            self.assertTrue(ok)
+            self.assertEqual(sorted(calls), [
+                (1, "B+"), (1, "W"), (2, "B"), (2, "B+"), (2, "W"),
+            ])
+            self.assertEqual(len(rows), 6)
 
     def test_snapshot_pathspec_excludes_ev005_directory(self):
         with tempfile.TemporaryDirectory() as td:
