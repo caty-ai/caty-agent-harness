@@ -917,23 +917,58 @@ def assert_controller_cwd_not_in_git_repo(controller_cwd: Path) -> Path:
     return resolved
 
 
-def controller_config_digest(config_dir: Path) -> str:
-    """Hash sorted paths and non-credential bytes under a controller config directory."""
-    digest = hashlib.sha256()
+CONTROLLER_CONFIG_ROOT_FILES = (
+    "CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", ".mcp.json", "managed-settings.json",
+)
+CONTROLLER_CONFIG_ROOT_GLOBS = ("settings*.json", "mcp*.json")
+CONTROLLER_CONFIG_SUBDIRS = (
+    "agents", "hooks", "plugins", "commands", "skills", "output-styles",
+)
+CONTROLLER_CONFIG_EXCLUDED_PREFIXES = (("plugins", "cache"),)
+
+
+def _controller_config_subset_entries(config_dir: Path) -> list[Path]:
     if not config_dir.is_dir():
-        return digest.hexdigest()
-    files = sorted(
-        (path for path in config_dir.rglob("*") if path.is_file()),
-        key=lambda path: path.relative_to(config_dir).as_posix(),
-    )
-    for path in files:
+        return []
+    selected: dict[str, Path] = {}
+
+    def add(path: Path) -> None:
+        relative = path.relative_to(config_dir)
+        if any(
+            relative.parts[:len(prefix)] == prefix
+            for prefix in CONTROLLER_CONFIG_EXCLUDED_PREFIXES
+        ):
+            return
+        if path.is_symlink() or path.is_file():
+            selected[relative.as_posix()] = path
+
+    for name in CONTROLLER_CONFIG_ROOT_FILES:
+        add(config_dir / name)
+    for pattern in CONTROLLER_CONFIG_ROOT_GLOBS:
+        for path in config_dir.glob(pattern):
+            add(path)
+    for dirname in CONTROLLER_CONFIG_SUBDIRS:
+        root = config_dir / dirname
+        if root.is_symlink():
+            add(root)
+            continue
+        if not root.is_dir():
+            continue
+        for path in root.rglob("*"):
+            add(path)
+    return [selected[relative] for relative in sorted(selected)]
+
+
+def controller_config_digest(config_dir: Path) -> str:
+    """Hash the configuration-sensitive subset of a controller config directory."""
+    digest = hashlib.sha256()
+    for path in _controller_config_subset_entries(config_dir):
         relative = path.relative_to(config_dir).as_posix().encode()
+        data = os.fsencode(os.readlink(path)) if path.is_symlink() else path.read_bytes()
         digest.update(struct.pack("!Q", len(relative)))
         digest.update(relative)
-        if "credential" not in path.name.lower():
-            data = path.read_bytes()
-            digest.update(struct.pack("!Q", len(data)))
-            digest.update(data)
+        digest.update(struct.pack("!Q", len(data)))
+        digest.update(data)
     return digest.hexdigest()
 
 

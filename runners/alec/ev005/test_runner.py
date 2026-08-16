@@ -292,35 +292,172 @@ class RunnerUnitTests(unittest.TestCase):
             self.assertIn(mount, mutants[mutation])
         self.assertNotIn("no-new-privileges", p5)
 
-    def test_controller_config_digest_tracks_paths_and_noncredential_bytes(self):
+    def test_controller_config_digest_hashes_the_exact_configuration_subset(self):
+        included_cases = {
+            "settings.json": b'{"hooks":[]}\n',
+            "settings.local.json": b'{"local":true}\n',
+            "managed-settings.json": b'{"managed":true}\n',
+            "settings.experimental.json": b'{"variant":"exp"}\n',
+            "CLAUDE.md": b"# controller instructions\n",
+            "CLAUDE.local.md": b"# local controller instructions\n",
+            "AGENTS.md": b"# seat policy\n",
+            ".mcp.json": b'{"mcpServers":{"stub":{}}}\n',
+            "mcp.extra.json": b'{"transport":"stdio"}\n',
+            "agents/reviewer.md": b"# reviewer agent\n",
+            "hooks/preflight.sh": b"#!/bin/sh\nexit 0\n",
+            "plugins/tool/plugin.json": b'{"name":"tool"}\n',
+            "commands/run.txt": b"run\n",
+            "skills/helper/SKILL.md": b"# helper\n",
+            "output-styles/plain/style.txt": b"plain\n",
+        }
+        for relative, payload in included_cases.items():
+            with self.subTest(case=relative), tempfile.TemporaryDirectory() as td:
+                config = Path(td) / "config"
+                config.mkdir()
+                baseline = runner.controller_config_digest(config)
+                target = config / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(payload)
+                self.assertNotEqual(baseline, runner.controller_config_digest(config))
+                with self.assertRaisesRegex(runner.InfraIntegrity, "preflight-recorded"):
+                    runner.assert_controller_config_digest(baseline, config)
+                target.unlink()
+                self.assertEqual(baseline, runner.controller_config_digest(config))
+
+    def test_controller_config_digest_ignores_plugins_cache_churn_only(self):
         with tempfile.TemporaryDirectory() as td:
             config = Path(td) / "config"
             config.mkdir()
-            empty = runner.controller_config_digest(config)
-            self.assertEqual(empty, hashlib.sha256(b"").hexdigest())
-            self.assertEqual(empty, runner.controller_config_digest(config))
+            baseline = runner.controller_config_digest(config)
+
+            cache = config / "plugins/cache"
+            cache.mkdir(parents=True)
+            (cache / "registry.json").write_text('{"orphaned_at":"2026-08-17T00:00:00Z"}\n')
+            (cache / "nested/state.json").parent.mkdir()
+            (cache / "nested/state.json").write_text('{"status":"installed"}\n')
+            self.assertEqual(baseline, runner.controller_config_digest(config))
+
+            plugin = config / "plugins/tool/plugin.json"
+            plugin.parent.mkdir()
+            plugin.write_text('{"name":"tool"}\n')
+            self.assertNotEqual(baseline, runner.controller_config_digest(config))
+            plugin.unlink()
+            self.assertEqual(baseline, runner.controller_config_digest(config))
+
+    def test_controller_config_digest_tracks_file_and_directory_symlink_targets(self):
+        cases = (("file-link", False), ("dir-link", True))
+        for name, target_is_directory in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                config = root / "config"
+                hooks = config / "hooks"
+                hooks.mkdir(parents=True)
+                outside = root / "outside"
+                outside.mkdir()
+                first_target = outside / f"{name}-first"
+                second_target = outside / f"{name}-second"
+                if target_is_directory:
+                    first_target.mkdir()
+                    second_target.mkdir()
+                else:
+                    first_target.write_text("first target bytes\n")
+                    second_target.write_text("second target bytes\n")
+
+                baseline = runner.controller_config_digest(config)
+                link = hooks / name
+                link.symlink_to(first_target, target_is_directory=target_is_directory)
+                acquired = runner.controller_config_digest(config)
+                self.assertNotEqual(baseline, acquired)
+
+                if target_is_directory:
+                    (first_target / "outside-churn.txt").write_text("outside target bytes\n")
+                else:
+                    first_target.write_text("mutated outside target bytes\n")
+                self.assertEqual(acquired, runner.controller_config_digest(config))
+
+                link.unlink()
+                link.symlink_to(second_target, target_is_directory=target_is_directory)
+                retargeted = runner.controller_config_digest(config)
+                self.assertNotEqual(acquired, retargeted)
+
+                link.unlink()
+                self.assertEqual(baseline, runner.controller_config_digest(config))
+
+    def test_controller_config_digest_ignores_runtime_state_and_unrelated_files(self):
+        with tempfile.TemporaryDirectory() as td:
+            config = Path(td) / "config"
+            config.mkdir()
+            (config / "settings.json").write_text("{}\n")
+            baseline = runner.controller_config_digest(config)
+            ignored_files = {
+                "projects/session-1/transcript.jsonl": b"assistant: hello\n",
+                "statsig/cache/flags.json": b'{"flag":"a"}\n',
+                "todos/run.json": b'{"todo":"x"}\n',
+                "shell-snapshots/env.txt": b"PATH=/bin\n",
+                "cache/tool/cache.json": b'{"cache":"warm"}\n',
+                ".cache/tool/cache.json": b'{"cache":"hidden"}\n',
+                ".claude.json": b'{"session":"one","mcpServers":{"ignored":{"command":"stub"}}}\n',
+                ".credentials.json": b'{"token":"one"}\n',
+                "README.md": b"notes\n",
+                "docs/settings.json": b'{"nested":true}\n',
+                "nested/CLAUDE.md": b"# nested\n",
+                "nested/AGENTS.md": b"# nested agents\n",
+                "nested/.mcp.json": b'{"nested":true}\n',
+                "nested/mcp.extra.json": b'{"nested":"mcp"}\n',
+                "other-hooks/preflight.sh": b"#!/bin/sh\nexit 1\n",
+            }
+            for relative, payload in ignored_files.items():
+                target = config / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(payload)
+            self.assertEqual(baseline, runner.controller_config_digest(config))
+
+            (config / "projects/session-2/transcript.jsonl").parent.mkdir(parents=True, exist_ok=True)
+            (config / "projects/session-2/transcript.jsonl").write_text("assistant: churn\n")
+            (config / "statsig/cache/flags-2.json").write_text('{"flag":"b"}\n')
+            (config / "cache/tool/cache-2.json").write_text('{"cache":"warmer"}\n')
+            (config / ".cache/tool/cache-2.json").write_text('{"cache":"hidden-warmer"}\n')
+            (config / ".claude.json").write_text(
+                '{"session":"two","history":[1,2],"mcpServers":{"ignored":{"command":"rotated"}}}\n'
+            )
+            (config / ".credentials.json").write_text('{"token":"two","rotated":true}\n')
+            self.assertEqual(baseline, runner.controller_config_digest(config))
+            self.assertEqual(runner.assert_controller_config_digest(baseline, config), baseline)
+
+    def test_controller_config_digest_returns_to_preflight_value_when_settings_removed(self):
+        with tempfile.TemporaryDirectory() as td:
+            config = Path(td) / "config"
+            config.mkdir()
+            baseline = runner.controller_config_digest(config)
+            fingerprint = runner.environment_fingerprint({"controller_config_digest": baseline})
             settings = config / "settings.json"
-            settings.write_text('{"hooks": []}\n')
-            with_settings = runner.controller_config_digest(config)
-            self.assertNotEqual(empty, with_settings)
+            settings.write_text('{"hooks":[]}\n')
+            changed = runner.controller_config_digest(config)
+            self.assertNotEqual(baseline, changed)
             self.assertNotEqual(
-                runner.environment_fingerprint({"controller_config_digest": empty}),
-                runner.environment_fingerprint({"controller_config_digest": with_settings}),
+                fingerprint,
+                runner.environment_fingerprint({"controller_config_digest": changed}),
             )
-            credential = config / "ApiCredential.JSON"
-            credential.write_text("token-one\n")
-            credential_path_only = runner.controller_config_digest(config)
-            credential.write_text("rotated-token-two\n")
+            settings.unlink()
+            self.assertEqual(baseline, runner.controller_config_digest(config))
             self.assertEqual(
-                credential_path_only, runner.controller_config_digest(config),
+                fingerprint,
+                runner.environment_fingerprint({
+                    "controller_config_digest": runner.controller_config_digest(config),
+                }),
             )
-            credential.unlink()
-            self.assertNotEqual(
-                credential_path_only, runner.controller_config_digest(config),
-            )
+
+    def test_controller_config_digest_empty_and_missing_dirs_match_empty_input(self):
+        with tempfile.TemporaryDirectory() as td:
             self.assertEqual(
                 runner.controller_config_digest(Path(td) / "missing"),
-                runner.controller_config_digest(Path(td) / "empty-missing-equivalent"),
+                hashlib.sha256(b"").hexdigest(),
+            )
+            empty_dir = Path(td) / "empty"
+            empty_dir.mkdir()
+            self.assertEqual(
+                runner.controller_config_digest(empty_dir),
+                hashlib.sha256(b"").hexdigest(),
             )
 
     def test_controller_config_dir_never_falls_back_to_home(self):

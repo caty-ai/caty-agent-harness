@@ -31,7 +31,7 @@ def emit_init() -> None:
         print(json.dumps({
             "type": "system", "subtype": "init",
             "tools": ["mcp__ev005-local-exec__sandbox_exec"],
-            "mcp_servers": ["ev005-local-exec"],
+            "mcp_servers": [{"name": "ev005-local-exec", "status": "connected"}],
         }, separators=(",", ":")), flush=True)
         retry_ms = os.environ.get("EV005_STUB_API_RETRY_MS")
         if retry_ms is not None:
