@@ -1547,7 +1547,7 @@ class RunnerUnitTests(unittest.TestCase):
         observer = runner.AgentStreamObserver("B+", token)
         fixture = [
             {"type": "system", "subtype": "init", "tools": [runner.ALLOWED_MCP_TOOL],
-             "mcp_servers": [runner.MCP_SERVER_NAME]},
+             "mcp_servers": [{"name": runner.MCP_SERVER_NAME, "status": "connected"}]},
             {"type": "assistant", "message": {"content": [
                 {"type": "text", "text": "I'll run the first command."}]}},
             {"type": "tool", "content": "interleaved"},
@@ -1588,12 +1588,47 @@ class RunnerUnitTests(unittest.TestCase):
             field: None for field in runner.PROVIDER_METRIC_FIELDS
         })
 
+    def test_stream_json_init_pins_realized_mcp_server_shape(self):
+        def init_event(mcp_servers):
+            return json.dumps({
+                "type": "system", "subtype": "init",
+                "tools": [runner.ALLOWED_MCP_TOOL],
+                "mcp_servers": mcp_servers,
+            }).encode() + b"\n"
+
+        accepted = (
+            [{"name": runner.MCP_SERVER_NAME, "status": "connected"}],
+            [runner.MCP_SERVER_NAME],
+        )
+        for mcp_servers in accepted:
+            with self.subTest(accepted=mcp_servers):
+                observer = runner.AgentStreamObserver("B", b"absent")
+                observer.feed(init_event(mcp_servers))
+                observer.finish()
+
+        rejected = (
+            [{"name": runner.MCP_SERVER_NAME, "status": "failed"}],
+            [
+                {"name": runner.MCP_SERVER_NAME, "status": "connected"},
+                {"name": "unexpected", "status": "connected"},
+            ],
+            [{"status": "connected"}],
+            [{"name": "unexpected", "status": "connected"}],
+        )
+        for mcp_servers in rejected:
+            with self.subTest(rejected=mcp_servers):
+                observer = runner.AgentStreamObserver("B", b"absent")
+                with self.assertRaisesRegex(
+                    runner.InfraIntegrity, "realized MCP server list mismatch",
+                ):
+                    observer.feed(init_event(mcp_servers))
+
     def test_stream_json_fails_closed_before_marker_relay(self):
         bad_init = runner.AgentStreamObserver("B", b"canary")
         with self.assertRaisesRegex(runner.InfraIntegrity, "realized tool list mismatch"):
             bad_init.feed(json.dumps({
                 "type": "system", "subtype": "init", "tools": ["Bash"],
-                "mcp_servers": [runner.MCP_SERVER_NAME],
+                "mcp_servers": [{"name": runner.MCP_SERVER_NAME, "status": "connected"}],
             }).encode() + b"\n")
         broken = runner.AgentStreamObserver("B", b"canary")
         with self.assertRaisesRegex(runner.InfraIntegrity, "non-JSON controller stdout"):
@@ -1602,7 +1637,7 @@ class RunnerUnitTests(unittest.TestCase):
     def test_registered_channel_protection_removed_demonstration(self):
         init = json.dumps({
             "type": "system", "subtype": "init", "tools": [runner.ALLOWED_MCP_TOOL],
-            "mcp_servers": [runner.MCP_SERVER_NAME],
+            "mcp_servers": [{"name": runner.MCP_SERVER_NAME, "status": "connected"}],
         }).encode() + b"\n"
         event = json.dumps({"type": "assistant", "message": {"content": [{
             "type": "text", "text": "DONE-DECLARE\n\nNow running…",

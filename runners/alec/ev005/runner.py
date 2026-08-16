@@ -687,8 +687,23 @@ class AgentStreamObserver:
                 raise InfraIntegrity("first stream-json event is not system/init")
             if row.get("tools") != [ALLOWED_MCP_TOOL]:
                 raise InfraIntegrity(f"realized tool list mismatch: {row.get('tools')!r}")
-            if row.get("mcp_servers") != [MCP_SERVER_NAME]:
-                raise InfraIntegrity(f"realized MCP server list mismatch: {row.get('mcp_servers')!r}")
+            mcp_servers = row.get("mcp_servers")
+            if not isinstance(mcp_servers, list):
+                raise InfraIntegrity(f"realized MCP server list mismatch: {mcp_servers!r}")
+            mcp_server_names = []
+            for server in mcp_servers:
+                if isinstance(server, str):
+                    mcp_server_names.append(server)
+                elif (
+                    isinstance(server, dict)
+                    and isinstance(server.get("name"), str)
+                    and server.get("status") == "connected"
+                ):
+                    mcp_server_names.append(server["name"])
+                else:
+                    raise InfraIntegrity(f"realized MCP server list mismatch: {mcp_servers!r}")
+            if mcp_server_names != [MCP_SERVER_NAME]:
+                raise InfraIntegrity(f"realized MCP server list mismatch: {mcp_servers!r}")
             self.init_seen = True
             return []
         if row.get("type") == "system" and row.get("subtype") == "api_retry":
