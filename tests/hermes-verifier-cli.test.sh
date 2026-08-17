@@ -146,6 +146,33 @@ case "$mode" in
   no-following-reason)
     printf 'VERDICT: pass\n \t \n'
     ;;
+  nbsp-only-reason)
+    printf 'VERDICT: pass\n\302\240\n'
+    ;;
+  ideographic-space-only-reason)
+    printf 'VERDICT: pass\n\343\200\200\n'
+    ;;
+  zwsp-only-reason)
+    printf 'VERDICT: pass\n\342\200\213\n'
+    ;;
+  unicode-ascii-space-only-reason)
+    printf 'VERDICT: pass\n\302\240\t \302\240\n'
+    ;;
+  japanese-reason)
+    printf 'VERDICT: pass\n\346\227\245\346\234\254\350\252\236\343\201\256\347\220\206\347\224\261\n'
+    ;;
+  unicode-spaces-between)
+    printf 'VERDICT: pass\nleft\302\240middle\343\200\200right\342\200\213end\n'
+    ;;
+  ansi-embedded-reason)
+    printf 'VERDICT: pass\nvisible\033[31m reason\177\n'
+    ;;
+  control-only-reason)
+    printf 'VERDICT: pass\n\033\007\177\n'
+    ;;
+  unicode-blank-before-reason)
+    printf 'VERDICT: pass\n\302\240\t\343\200\200\n\346\227\245\346\234\254\350\252\236\343\201\256\347\220\206\347\224\261\n'
+    ;;
   one-line)
     printf 'VERDICT: pass\n'
     ;;
@@ -429,7 +456,9 @@ fi
 failure_matrix_ok=1
 for cli_mode in nonzero empty zero-anchor duplicate-anchored anchored-extra \
   extra-before-anchor same-line-double no-following-reason one-line lowercase-anchor \
-  malformed-anchor malformed-spacing-anchor leading-space-anchor; do
+  malformed-anchor malformed-spacing-anchor leading-space-anchor nbsp-only-reason \
+  ideographic-space-only-reason zwsp-only-reason unicode-ascii-space-only-reason \
+  control-only-reason; do
   stub_reset_markers
   stub_set_mode "$cli_mode"
   set +e
@@ -521,6 +550,84 @@ if [[ "$benign_matrix_ok" -eq 1 ]]; then
 else
   fail_case '[7] verdict-first, benign blanks, CRLF/trailing space, and extra findings normalize to two lines' \
     'one or more benign CLI reply shapes were rejected'
+fi
+
+reason_hygiene_ok=1
+for hygiene_case in \
+  'japanese-reason|VERDICT: pass|\346\227\245\346\234\254\350\252\236\343\201\256\347\220\206\347\224\261' \
+  'unicode-spaces-between|VERDICT: pass|left\302\240middle\343\200\200right\342\200\213end' \
+  'ansi-embedded-reason|VERDICT: pass|visible[31m reason' \
+  'unicode-blank-before-reason|VERDICT: pass|\346\227\245\346\234\254\350\252\236\343\201\256\347\220\206\347\224\261'; do
+  cli_mode=${hygiene_case%%|*}
+  expected_encoded=${hygiene_case#*|}
+  expected_encoded=${expected_encoded/|/\\n}
+  expected_output=$(printf '%b' "$expected_encoded")
+  stub_reset_markers
+  stub_set_mode "$cli_mode"
+  set +e
+  hygiene_output=$(FABLE_CONFORMING_PROVIDER_PATH="$CLI_PROVIDER" \
+    VERIFIER_BUNDLE_MIN_BYTES=64 VERIFIER_CLI_BIN="$cli_stub" \
+    "$WRAPPER" "$bundle" 2>"$TMP_ROOT/$cli_mode.err")
+  hygiene_rc=$?
+  set -e
+  if [[ "$hygiene_rc" -ne 0 || "$hygiene_output" != "$expected_output" ]]; then
+    reason_hygiene_ok=0
+  fi
+done
+if [[ "$reason_hygiene_ok" -eq 1 ]]; then
+  pass '[7b] Unicode reasons survive byte-for-byte while C0 and DEL bytes are removed before output'
+else
+  fail_case '[7b] Unicode reasons survive byte-for-byte while C0 and DEL bytes are removed before output' \
+    'one or more valid reason hygiene shapes diverged from the byte contract'
+fi
+
+direct_provider_hygiene_ok=1
+
+stub_reset_markers
+stub_set_mode zwsp-only-reason
+set +e
+VERIFIER_CLI_BIN="$cli_stub" "$CLI_PROVIDER" "$bundle" \
+  >"$TMP_ROOT/direct-zwsp.out" 2>"$TMP_ROOT/direct-zwsp.err"
+direct_zwsp_rc=$?
+set -e
+if [[ "$direct_zwsp_rc" -ne 1 || -s "$TMP_ROOT/direct-zwsp.out" ]] \
+  || ! grep -Fqx 'CLI verifier provider: CLI returned malformed output' \
+    "$TMP_ROOT/direct-zwsp.err"; then
+  direct_provider_hygiene_ok=0
+fi
+
+stub_reset_markers
+stub_set_mode japanese-reason
+printf 'VERDICT: pass\n\346\227\245\346\234\254\350\252\236\343\201\256\347\220\206\347\224\261\n' \
+  >"$TMP_ROOT/direct-japanese.expected"
+set +e
+VERIFIER_CLI_BIN="$cli_stub" "$CLI_PROVIDER" "$bundle" \
+  >"$TMP_ROOT/direct-japanese.out" 2>"$TMP_ROOT/direct-japanese.err"
+direct_japanese_rc=$?
+set -e
+if [[ "$direct_japanese_rc" -ne 0 ]] \
+  || ! cmp -s "$TMP_ROOT/direct-japanese.expected" "$TMP_ROOT/direct-japanese.out"; then
+  direct_provider_hygiene_ok=0
+fi
+
+stub_reset_markers
+stub_set_mode ansi-embedded-reason
+printf 'VERDICT: pass\nvisible[31m reason\n' >"$TMP_ROOT/direct-controls.expected"
+set +e
+VERIFIER_CLI_BIN="$cli_stub" "$CLI_PROVIDER" "$bundle" \
+  >"$TMP_ROOT/direct-controls.out" 2>"$TMP_ROOT/direct-controls.err"
+direct_controls_rc=$?
+set -e
+if [[ "$direct_controls_rc" -ne 0 ]] \
+  || ! cmp -s "$TMP_ROOT/direct-controls.expected" "$TMP_ROOT/direct-controls.out"; then
+  direct_provider_hygiene_ok=0
+fi
+
+if [[ "$direct_provider_hygiene_ok" -eq 1 ]]; then
+  pass '[7c] direct CLI provider rejects ZWSP-only reasons and preserves Japanese while stripping C0/DEL bytes'
+else
+  fail_case '[7c] direct CLI provider rejects ZWSP-only reasons and preserves Japanese while stripping C0/DEL bytes' \
+    'one or more direct provider stdout or malformed-output byte contracts diverged'
 fi
 
 verdict_matrix_ok=1

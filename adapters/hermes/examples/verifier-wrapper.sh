@@ -47,6 +47,19 @@ if ! LC_ALL=C awk '
     }
     return count
   }
+  function sanitize_reason(line) {
+    gsub(/[\001-\010\013-\037\177]/, "", line)
+    sub(/[[:space:]]+$/, "", line)
+    return line
+  }
+  function reason_is_empty(line, scratch) {
+    scratch = line
+    gsub(/[[:space:]]/, "", scratch)
+    gsub(/\302\240/, "", scratch)
+    gsub(/\343\200\200/, "", scratch)
+    gsub(/\342\200\213/, "", scratch)
+    return scratch == ""
+  }
   {
     sub(/\r$/, "")
     sub(/[[:space:]]+$/, "")
@@ -63,9 +76,10 @@ if ! LC_ALL=C awk '
       exit 1
     }
     for (line = verdict_number + 1; line <= NR; line++) {
-      if (lines[line] != "") {
+      reason = sanitize_reason(lines[line])
+      if (!reason_is_empty(reason)) {
         print verdict
-        print lines[line]
+        print reason
         exit 0
       }
     }
