@@ -229,14 +229,17 @@ SH
   HERMES_STEP_CMD="$dir/fake-hermes" HERMES_PROBE_CMD='/bin/ls ~' run_adapter "$dir" >/dev/null 2>&1
   code=$?
   set -e
+  # Portability: BSD ls exits 1 on a missing operand, GNU ls exits 2 — assert
+  # nonzero rather than a specific code. The discriminating guard is the
+  # sentinel/111 pair, not this premise arm.
   if [[ "$shell_expanded_rc" -eq 0 ]] \
-    && [[ "$literal_argv_rc" -eq 1 ]] \
+    && [[ "$literal_argv_rc" -ne 0 ]] \
     && [[ "$code" -eq 111 ]] \
     && [[ ! -e "$sentinel" ]] \
     && [[ ! -e "$literal_tilde" ]]; then
     pass "$name"
   else
-    fail "$name" "expected shell-tilde rc0, literal-argv rc1, and adapter rc111 without step launch: shell=$shell_expanded_rc literal=$literal_argv_rc adapter=$code"
+    fail "$name" "expected shell-tilde rc0, literal-argv nonzero rc, and adapter rc111 without step launch: shell=$shell_expanded_rc literal=$literal_argv_rc adapter=$code"
   fi
 }
 
