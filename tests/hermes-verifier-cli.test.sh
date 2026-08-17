@@ -54,6 +54,24 @@ write_sorted_lines() {
   printf '%s\n' "$@" | LC_ALL=C sort >"$destination"
 }
 
+write_env_without_numeric_shlvl() {
+  local destination=$1
+  local grep_rc
+  if [[ ! -e "$env_marker" ]]; then
+    : >"$destination"
+    return 0
+  fi
+  if LC_ALL=C grep -Ev '^SHLVL=[0-9]+$' "$env_marker" >"$destination"; then
+    return 0
+  else
+    grep_rc=$?
+  fi
+  if [[ "$grep_rc" -eq 1 ]]; then
+    return 0
+  fi
+  return "$grep_rc"
+}
+
 cat >"$cli_stub" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -224,6 +242,7 @@ EOF
 
 invoking_dir=$(pwd -P)
 expected_env=$TMP_ROOT/expected-env
+normalized_env=$TMP_ROOT/normalized-env
 stub_reset_markers
 stub_set_mode valid
 set +e
@@ -250,14 +269,14 @@ write_sorted_lines "$expected_env" \
   "HOME=$HOME" \
   "PATH=/usr/bin:/bin" \
   "PWD=$cli_pwd" \
-  'SHLVL=1' \
   "TMPDIR=$cli_pwd" \
   '_=/usr/bin/env'
+write_env_without_numeric_shlvl "$normalized_env"
 fence_count=$(LC_ALL=C grep -Ec '^CATY_UNTRUSTED_BUNDLE_[0-9a-f]{48}$' "$stdin_marker" 2>/dev/null || true)
 fence_unique=$(LC_ALL=C grep -E '^CATY_UNTRUSTED_BUNDLE_[0-9a-f]{48}$' "$stdin_marker" 2>/dev/null \
   | sort -u | wc -l | tr -d '[:space:]')
-unexpected_env=$(comm -13 "$expected_env" "$env_marker" | paste -sd, - || true)
-missing_env=$(comm -23 "$expected_env" "$env_marker" | paste -sd, - || true)
+unexpected_env=$(comm -13 "$expected_env" "$normalized_env" | paste -sd, - || true)
+missing_env=$(comm -23 "$expected_env" "$normalized_env" | paste -sd, - || true)
 if [[ "$valid_rc" -eq 0 ]] \
   && [[ "$valid_output" == 'VERDICT: pass
 stub accepted the verifier request' ]] \
@@ -267,7 +286,7 @@ stub accepted the verifier request' ]] \
   && [[ "$fence_count" -eq 2 && "$fence_unique" -eq 1 ]] \
   && [[ -n "$cli_pwd" && "$cli_pwd" != "$invoking_dir" && ! -e "$cli_pwd" ]] \
   && [[ "$cli_pwd" == "$child_tmp"/caty-verifier-cli.* ]] \
-  && diff -u "$expected_env" "$env_marker" >/dev/null; then
+  && diff -u "$expected_env" "$normalized_env" >/dev/null; then
   pass '[1] wrapper path sends exact isolated argv/stdin/cwd and structurally drops planted parent variables'
 else
   fail_case '[1] wrapper path sends exact isolated argv/stdin/cwd and structurally drops planted parent variables' \
@@ -292,14 +311,14 @@ write_sorted_lines "$expected_env" \
   "HOME=$HOME" \
   "PATH=/usr/bin:/bin" \
   "PWD=$proxy_cli_pwd" \
-  'SHLVL=1' \
   "TMPDIR=$proxy_cli_pwd" \
   '_=/usr/bin/env'
+write_env_without_numeric_shlvl "$normalized_env"
 if [[ "$proxy_rc" -eq 0 ]] \
   && [[ "$proxy_output" == 'VERDICT: pass
 stub accepted the verifier request' ]] \
   && [[ "$proxy_cli_pwd" == "$child_tmp"/caty-verifier-cli.* ]] \
-  && diff -u "$expected_env" "$env_marker" >/dev/null; then
+  && diff -u "$expected_env" "$normalized_env" >/dev/null; then
   pass '[1b] wrapper forwards exactly HTTPS_PROXY when it is set and omits unset HTTP_PROXY and ALL_PROXY'
 else
   fail_case '[1b] wrapper forwards exactly HTTPS_PROXY when it is set and omits unset HTTP_PROXY and ALL_PROXY' \
@@ -323,14 +342,14 @@ write_sorted_lines "$expected_env" \
   "HOME=$HOME" \
   "PATH=/usr/bin:/bin" \
   "PWD=$empty_proxy_cli_pwd" \
-  'SHLVL=1' \
   "TMPDIR=$empty_proxy_cli_pwd" \
   '_=/usr/bin/env'
+write_env_without_numeric_shlvl "$normalized_env"
 if [[ "$empty_proxy_rc" -eq 0 ]] \
   && [[ "$empty_proxy_output" == 'VERDICT: pass
 stub accepted the verifier request' ]] \
   && [[ "$empty_proxy_cli_pwd" == "$child_tmp"/caty-verifier-cli.* ]] \
-  && diff -u "$expected_env" "$env_marker" >/dev/null; then
+  && diff -u "$expected_env" "$normalized_env" >/dev/null; then
   pass '[1c] wrapper treats a set-but-empty proxy variable as present and forwards it unchanged'
 else
   fail_case '[1c] wrapper treats a set-but-empty proxy variable as present and forwards it unchanged' \
@@ -361,14 +380,14 @@ write_sorted_lines "$expected_env" \
   "HTTP_PROXY=$http_proxy_value" \
   "PATH=/usr/bin:/bin" \
   "PWD=$all_proxies_cli_pwd" \
-  'SHLVL=1' \
   "TMPDIR=$all_proxies_cli_pwd" \
   '_=/usr/bin/env'
+write_env_without_numeric_shlvl "$normalized_env"
 if [[ "$all_proxies_rc" -eq 0 ]] \
   && [[ "$all_proxies_output" == 'VERDICT: pass
 stub accepted the verifier request' ]] \
   && [[ "$all_proxies_cli_pwd" == "$child_tmp"/caty-verifier-cli.* ]] \
-  && diff -u "$expected_env" "$env_marker" >/dev/null; then
+  && diff -u "$expected_env" "$normalized_env" >/dev/null; then
   pass '[1d] wrapper forwards distinct HTTPS_PROXY, HTTP_PROXY, and ALL_PROXY values exactly'
 else
   fail_case '[1d] wrapper forwards distinct HTTPS_PROXY, HTTP_PROXY, and ALL_PROXY values exactly' \
