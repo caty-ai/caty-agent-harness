@@ -215,7 +215,10 @@ Event records (`ts` monotonic + wall, `seq`):
   attempts; a second void in the re-executed block stops that block without replacement,
   operator-visible. The criterion never inspects the run's outcome, so it cannot act
   asymmetrically on the arms by way of their results.
-- Trailer: `end_ts`, `end_reason` (`delivered`|`wallclock`|`abandon`|`operator`),
+- Trailer: `end_ts`, `end_reason` (`delivered`|`wallclock`|`abandon`|`session_end`|`operator`
+  — `session_end`, amendment A-7: the controller exited cleanly before any other terminal
+  condition; a run end, never an infrastructure failure; non-zero controller exit remains
+  `operator` with reason),
   `declarations_scored`, `wallclock_s` (agent time — the budgeted quantity), `paused_s` (total
   verification time carved out per §1.6), `elapsed_s` (their sum). Publishing all three makes
   the §1.6 carve-out auditable per run and per arm rather than asserted.

@@ -691,6 +691,43 @@ with tag `ev-005-sealed-v7`; file count unchanged.
 
 ---
 
+## A-7 — The outcome machine gains `session_end` (owner decision, 2026-08-17)
+
+**Who.** Proposed by Alpha from pilot #3's audit trail; **approved by the owner** — the first
+amendment of the campaign to touch §3.1's outcome state machine, deliberately put to the owner
+rather than self-served.
+
+**What was wrong.** The registered harness ends its session when the model finishes speaking.
+§3.1 had no state for "the agent ended its session without declaring": the wrapper coded a
+clean controller exit as infrastructure failure (17 runs in pilot #3), and because a scored
+declaration is deliberately not a terminal condition for B/B+ (§1.5 declare-and-continue), it
+also destroyed runs whose byte-exact `DONE-DECLARE` had already been scored — a measured run
+lost to a missing vocabulary word.
+
+**Remedy.** §3.1 gains **`session_end`** — clean controller exit, no scored declaration, no
+ABANDON; arm-symmetric; non-success under ITT; priority between `abandon` and `verified_pass`.
+Clean exits *with* scored declarations are simply adjudicated on the terminal declaration
+snapshot (existing states; no new semantics). Non-zero controller exits remain infrastructure.
+The trailer vocabulary gains `end_reason: session_end` (runner-spec §5).
+
+**Alternative rejected (owner-visible in the proposal).** Re-prompting the agent to continue
+until budget exhaustion — changes the agent's experience mid-campaign and manufactures budget
+consumption the agent chose not to spend. Mapping clean exits into `abandon` — falsifies that
+state's registered "explicit ABANDON" definition.
+
+**Verification performed at sealing.** Both-direction unit tests (clean exit + no declaration ⇒
+`session_end` trailer and normal posthoc; clean exit + scored declaration ⇒ terminal-declaration
+adjudication with no infrastructure event; rc≠0 ⇒ infrastructure unchanged), suite green
+docker-backed on both hosts. **Operational acceptance:** pilot #4 outcome distribution, posted
+with the pilot report — that batch also supplies the first interpretable §7 difficulty band,
+since pilot #3's floor flag was contaminated by this defect.
+
+**Manifest.** Before: `98574a9f5aae147f98cc5b6e0557a30391ee1a3191d00f1d7a46199ba9d2e03b`
+(tag `ev-005-sealed-v7`, commit `37b344d`, 265 files). After: recorded in the v8 re-seal record
+with tag `ev-005-sealed-v8`; file count unchanged.
+
+---
+
 **Note for the results report.** A-1 and A-2 were each a single defect found by contact with
 reality. A-3 is different in kind: it is what a deliberate, whole-corpus sweep found once the
 author stopped adjudicating defects one at a time. Five of its six items were invisible to review
