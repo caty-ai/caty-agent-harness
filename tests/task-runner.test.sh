@@ -117,7 +117,9 @@ PY
 }
 
 file_mode() {
-  stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1" 2>/dev/null
+  # GNU first: on GNU coreutils `stat -f` does not fail — it prints filesystem
+  # status — so the BSD-first order silently returns garbage on Linux.
+  stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null
 }
 
 run_tick() {
@@ -1388,7 +1390,11 @@ case_push_exec_format_error_redacts_argv0_e2e() {
   ws=$(cd "$ws" && pwd -P)
   copy_task "$FIX_BASIC" "$ws" tr-basic
   bad_bin="$ws/bad-push-bin"
-  printf '\177ELF' >"$bad_bin"
+  # NUL bytes are required: without them bash 3.2's ENOEXEC fallback runs the
+  # stub as a shell script (rc 127, child-shell diagnostic) instead of the
+  # invoking shell's rc-126 "cannot execute binary file" — measured on 3.2.57
+  # vs 5.3. The NUL trips bash's binary detection on both.
+  printf '\177ELF\0\0\0\0' >"$bad_bin"
   chmod 0755 "$bad_bin"
 
   set +e
@@ -1517,17 +1523,19 @@ case_push_does_not_expand_tilde() {
   set -e
   dest="$ws/loop/tasks/dlq/tr-basic"
   push_log="$dest/push.log"
+  # Portability: BSD ls exits 1 on a missing operand, GNU ls exits 2 — require
+  # nonzero, and require the recorded push rc to equal the directly measured one.
   if [[ "$baseline_rc" -eq 0 ]] \
     && [[ "$shell_expanded_rc" -eq 0 ]] \
-    && [[ "$literal_argv_rc" -eq 1 ]] \
+    && [[ "$literal_argv_rc" -ne 0 ]] \
     && [[ "$rc" -eq "$baseline_rc" ]] \
     && [[ -f "$dest/push-failed" ]] \
-    && grep -Eq '^push: rc=1 [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$push_log" \
+    && grep -Eq "^push: rc=$literal_argv_rc [0-9]{4}-[0-9]{2}-[0-9]{2}T" "$push_log" \
     && ! grep -Fq "$literal_tilde" "$push_log" \
     && ! grep -Fq "$literal_tilde" <<<"$output"; then
     pass "$name"
   else
-    fail "$name" "expected shell-tilde rc0, literal-argv rc1, and push rc1 without literal-tilde artifacts: baseline=$baseline_rc shell=$shell_expanded_rc literal=$literal_argv_rc rc=$rc output=$output"
+    fail "$name" "expected shell-tilde rc0, literal-argv nonzero rc, and matching recorded push rc without literal-tilde artifacts: baseline=$baseline_rc shell=$shell_expanded_rc literal=$literal_argv_rc rc=$rc output=$output"
   fi
 }
 
