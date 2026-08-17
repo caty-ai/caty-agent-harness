@@ -41,6 +41,7 @@ SCOPE_DIRS = [
     "tasks",
     "pilot-tasks",
     "tools/validate-logs",
+    "tools/analyze",
 ]
 # Inside sealed dirs, these are excluded (transient/editor artifacts only — never content).
 EXCLUDE_NAMES = {".DS_Store"}

@@ -17,7 +17,9 @@ import ctypes
 import dataclasses
 import datetime as dt
 import errno
+import gzip
 import hashlib
+import io
 import json
 import math
 import os
@@ -43,6 +45,7 @@ PRIVATE_ROOT = Path("/run/ev005-private")
 PRIVATE_AUDIT_PATH = PRIVATE_ROOT / "audit.jsonl"
 PRIVATE_STREAM_PATH = PRIVATE_ROOT / "agent-output.stream"
 PRIVATE_MESSAGES_PATH = PRIVATE_ROOT / "messages"
+PRIVATE_SNAPSHOTS_PATH = PRIVATE_ROOT / "snapshots"
 CGROUP_ROOT = Path("/sys/fs/cgroup")
 TRACE_EVENT_WAIT_S = 0.002
 OBSERVATION_MECHANISM = "ptrace-descendant-exec-exit-v3"
@@ -191,10 +194,18 @@ GIT_ENV = {
     "GIT_COMMITTER_NAME": "ev005",
     "GIT_COMMITTER_EMAIL": "ev005@local",
 }
+SNAPSHOT_INDEX_FIELDS = {"protocol", "run_id", "entries"}
+SNAPSHOT_ENTRY_FIELDS = {
+    "seq", "marker", "snapshot_sha", "archive", "archive_sha256",
+}
 
 
 class InfraIntegrity(RuntimeError):
     pass
+
+
+class RetentionFailure(RuntimeError):
+    """Post-measurement snapshot archive retention failed."""
 
 
 class PtraceCallError(InfraIntegrity):
@@ -927,6 +938,113 @@ def snapshot(
         if isinstance(exc, InfraIntegrity):
             raise
         raise InfraIntegrity(f"snapshot failure: {exc}") from exc
+
+
+def _full_git_sha(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 40
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def export_scored_snapshots(
+    repo: Path, snapshots_path: Path, run_id: str,
+    declarations: list[dict[str, Any]], *, agent_uid: int, agent_gid: int,
+) -> dict[str, Any]:
+    """Export scored declaration commits without adding audit events."""
+    try:
+        if not isinstance(run_id, str) or not run_id:
+            raise ValueError("run_id is missing")
+        if len(declarations) > 5:
+            raise ValueError("more than five scored declarations")
+        previous_seq = 0
+        for declaration in declarations:
+            if set(declaration) != {"seq", "marker", "snapshot_sha"}:
+                raise ValueError("invalid scored declaration fields")
+            seq = declaration["seq"]
+            marker = declaration["marker"]
+            sha = declaration["snapshot_sha"]
+            if type(seq) is not int or seq <= previous_seq:
+                raise ValueError("scored declaration seq is not strictly increasing")
+            if marker not in {"DONE-DECLARE", "deliver"}:
+                raise ValueError("invalid scored declaration marker")
+            if not _full_git_sha(sha):
+                raise ValueError("scored declaration snapshot_sha is missing or not full SHA-1")
+            previous_seq = seq
+
+        snapshots_path.mkdir(mode=0o700, parents=False, exist_ok=False)
+        entries: list[dict[str, Any]] = []
+        for declaration in declarations:
+            seq = declaration["seq"]
+            sha = declaration["snapshot_sha"]
+            archive_name = f"decl-{seq}-{sha[:12]}.tar.gz"
+            tar_bytes = _git(
+                repo, ["archive", "--format=tar", sha],
+                agent_uid=agent_uid, agent_gid=agent_gid,
+            ).stdout
+            compressed = io.BytesIO()
+            with gzip.GzipFile(
+                filename="", mode="wb", fileobj=compressed, mtime=0,
+            ) as gzip_file:
+                gzip_file.write(tar_bytes)
+            expected_archive = compressed.getvalue()
+            expected_digest = sha256_bytes(expected_archive)
+            archive_path = snapshots_path / archive_name
+            archive_path.write_bytes(expected_archive)
+            archive_path.chmod(0o600)
+            archive_bytes = archive_path.read_bytes()
+            if sha256_bytes(archive_bytes) != expected_digest:
+                raise ValueError(f"archive re-read digest mismatch: {archive_name}")
+            entries.append({
+                "seq": seq,
+                "marker": declaration["marker"],
+                "snapshot_sha": sha,
+                "archive": archive_name,
+                "archive_sha256": expected_digest,
+            })
+
+        index = {"protocol": 1, "run_id": run_id, "entries": entries}
+        index_path = snapshots_path / "index.json"
+        index_path.write_text(
+            json.dumps(index, sort_keys=True, separators=(",", ":")) + "\n",
+        )
+        index_path.chmod(0o600)
+        reread = json.loads(index_path.read_text())
+        if reread != index:
+            raise ValueError("snapshot index re-read differs from written index")
+        return index
+    except Exception as exc:
+        raise RetentionFailure(f"snapshot archive failure: {exc}") from exc
+
+
+def write_retention_error(
+    snapshots_path: Path, run_id: str, stage: str, error: str,
+) -> dict[str, Any]:
+    """Best-effort loud marker for post-measurement retention instrumentation.
+
+    Archive retention happens only after the terminal condition and frozen audit
+    trailer.  Under the registered A-6/A-7 principle, an instrumentation failure
+    after measurement must not destroy or recode the measured run.  The fatal
+    "snapshot failure" in runner-spec §7 refers to the declaration snapshot that
+    defines the measurement, not this later archive-retention copy.
+    """
+    payload = {
+        "protocol": 1,
+        "run_id": run_id,
+        "stage": stage,
+        "error": str(error),
+    }
+    try:
+        snapshots_path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        error_path = snapshots_path / "export-error.json"
+        error_path.write_text(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n",
+        )
+        error_path.chmod(0o600)
+    except (OSError, TypeError, ValueError):
+        pass
+    return payload
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -2416,6 +2534,7 @@ class RunController:
         self.budget = DeclarationBudget()
         self.declaration_seq = 0
         self.scored_snapshots: list[str | None] = []
+        self.scored_declarations: list[dict[str, Any]] = []
         self.delivery_claimed: set[str] = set()
         self.delivered_sha: str | None = None
         self.pause = PauseLedger()
@@ -2553,6 +2672,10 @@ class RunController:
         )
         if scored:
             self.scored_snapshots.append(sha)
+            if sha is not None:
+                self.scored_declarations.append({
+                    "seq": self.audit.seq, "marker": marker, "snapshot_sha": sha,
+                })
         return sha, scored
 
     def _log_donecheck(self, invoker: str, tree_sha: str | None, result: DonecheckResult,
@@ -2812,6 +2935,22 @@ class RunController:
         if sha:
             self._run_gate(sha, "pipeline")
 
+    def _export_scored_snapshots(self) -> dict[str, Any]:
+        if self.end_reason is None:
+            raise InfraIntegrity("cannot export snapshots before end_reason is set")
+        if len(self.scored_snapshots) != self.budget.scored:
+            raise InfraIntegrity("scored snapshots do not match declaration budget")
+        if len(self.scored_declarations) != sum(
+            snapshot_sha is not None for snapshot_sha in self.scored_snapshots
+        ):
+            raise InfraIntegrity("successful declaration records do not match scored snapshots")
+        return export_scored_snapshots(
+            self.replica, self.private / "snapshots", self.cfg["run_id"],
+            self.scored_declarations,
+            agent_uid=int(self.cfg["agent_uid"]),
+            agent_gid=int(self.cfg["agent_gid"]),
+        )
+
     def _handle_controller_exit(self, row: dict[str, Any]) -> None:
         returncode = row.get("returncode")
         if returncode != 0:
@@ -2822,6 +2961,12 @@ class RunController:
         self._terminate_agent()
 
     def _finalize_run(self) -> int:
+        """Freeze and audit the measured outcome before retaining snapshot archives.
+
+        Retention is post-measurement instrumentation.  A retention failure is
+        therefore published through ``snapshots/export-error.json`` but cannot
+        rewrite the already measured terminal state as an operator abort.
+        """
         self._handle_supervisor_errors()
         self._handle_untrusted_gate_executions()
         self._handle_agent_donechecks()
@@ -2848,6 +2993,13 @@ class RunController:
             ),
             **self.provider_metrics,
         )
+        try:
+            self._export_scored_snapshots()
+        except Exception as exc:
+            write_retention_error(
+                self.private / "snapshots", str(self.cfg.get("run_id", "")),
+                "export", str(exc),
+            )
         return INFRASTRUCTURE_VOID_EXIT if self.infrastructure_void else 0
 
     def execute(self) -> int:
@@ -3471,6 +3623,142 @@ def checkpoint_audit(
     return channel
 
 
+def validate_snapshot_archives(
+    snapshots_path: Path, audit_path: Path,
+) -> dict[str, Any]:
+    """Validate the copied snapshot set against the final recovered audit."""
+    try:
+        audit_rows = [
+            json.loads(line) for line in audit_path.read_text().splitlines()
+        ]
+        if len(audit_rows) < 2 or not all(isinstance(row, dict) for row in audit_rows):
+            raise ValueError("audit is missing header or trailer")
+        header = audit_rows[0]
+        trailer = audit_rows[-1]
+        if set(header) != HEADER_FIELDS:
+            raise ValueError("audit header schema mismatch")
+        if set(trailer) != TRAILER_FIELDS:
+            raise ValueError("audit trailer schema mismatch")
+        run_id = header["run_id"]
+        if not isinstance(run_id, str) or not run_id:
+            raise ValueError("audit run_id is invalid")
+        declarations = [row for row in audit_rows if row.get("event") == "declaration"]
+        if any(row.get("scored") is not True for row in declarations):
+            raise ValueError("audit declaration has invalid scored status")
+        if len(declarations) > 5:
+            raise ValueError("audit contains more than five scored declarations")
+        if trailer["declarations_scored"] != len(declarations):
+            raise ValueError("audit scored declaration count mismatch")
+        successful_declarations = []
+        for declaration in declarations:
+            if declaration.get("marker") not in {"DONE-DECLARE", "deliver"}:
+                raise ValueError("audit declaration marker is invalid")
+            sha = declaration.get("snapshot_sha")
+            failure = declaration.get("snapshot_failure")
+            if failure is None:
+                if not _full_git_sha(sha):
+                    raise ValueError("audit declaration snapshot SHA is invalid")
+                successful_declarations.append(declaration)
+            elif not isinstance(failure, str) or not failure or sha is not None:
+                raise ValueError("audit declaration snapshot failure is invalid")
+
+        index_path = snapshots_path / "index.json"
+        if snapshots_path.is_symlink() or index_path.is_symlink() or not index_path.is_file():
+            raise ValueError("snapshot index is missing or unsafe")
+        index = json.loads(index_path.read_text())
+        if not isinstance(index, dict) or set(index) != SNAPSHOT_INDEX_FIELDS:
+            raise ValueError("snapshot index schema mismatch")
+        if type(index["protocol"]) is not int or index["protocol"] != 1:
+            raise ValueError("snapshot index protocol mismatch")
+        if index["run_id"] != run_id:
+            raise ValueError("snapshot index run_id mismatch")
+        entries = index["entries"]
+        if not isinstance(entries, list) or len(entries) != len(successful_declarations):
+            raise ValueError("snapshot index entry count mismatch")
+
+        expected_names = {"index.json"}
+        previous_seq = 0
+        for declaration, entry in zip(successful_declarations, entries):
+            if not isinstance(entry, dict) or set(entry) != SNAPSHOT_ENTRY_FIELDS:
+                raise ValueError("snapshot entry schema mismatch")
+            seq = entry["seq"]
+            marker = entry["marker"]
+            sha = entry["snapshot_sha"]
+            digest = entry["archive_sha256"]
+            if type(seq) is not int or seq <= previous_seq:
+                raise ValueError("snapshot entry seq is not strictly increasing")
+            if seq != declaration.get("seq"):
+                raise ValueError("snapshot entry seq does not match audit")
+            if marker not in {"DONE-DECLARE", "deliver"} or marker != declaration.get("marker"):
+                raise ValueError("snapshot entry marker does not match audit")
+            if not _full_git_sha(sha) or sha != declaration.get("snapshot_sha"):
+                raise ValueError("snapshot entry SHA does not match audit")
+            archive_name = f"decl-{seq}-{sha[:12]}.tar.gz"
+            if entry["archive"] != archive_name:
+                raise ValueError("snapshot archive name mismatch")
+            if (
+                not isinstance(digest, str)
+                or len(digest) != 64
+                or any(character not in "0123456789abcdef" for character in digest)
+            ):
+                raise ValueError("snapshot archive digest is invalid")
+            archive_path = snapshots_path / archive_name
+            if archive_path.is_symlink() or not archive_path.is_file():
+                raise ValueError(f"snapshot archive is missing or unsafe: {archive_name}")
+            if sha256_bytes(archive_path.read_bytes()) != digest:
+                raise ValueError(f"snapshot archive digest mismatch: {archive_name}")
+            expected_names.add(archive_name)
+            previous_seq = seq
+
+        actual_names = {path.name for path in snapshots_path.iterdir()}
+        if actual_names != expected_names:
+            raise ValueError("snapshot directory contains missing or extra files")
+        return index
+    except Exception as exc:
+        raise RetentionFailure(f"snapshot archive validation failure: {exc}") from exc
+
+
+def copy_and_validate_snapshot_archives(
+    container: str, out: Path,
+) -> dict[str, Any]:
+    destination = out / "snapshots"
+    run_id = "unknown"
+    try:
+        first_line = (out / "audit.jsonl").read_text().splitlines()[0]
+        parsed_header = json.loads(first_line)
+        if isinstance(parsed_header, dict) and isinstance(parsed_header.get("run_id"), str):
+            run_id = parsed_header["run_id"]
+    except (OSError, IndexError, json.JSONDecodeError):
+        pass
+    try:
+        if destination.exists():
+            raise RetentionFailure("snapshot archive destination already exists")
+        cp = subprocess.run(
+            ["docker", "cp", f"{container}:{PRIVATE_SNAPSHOTS_PATH}", str(destination)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+        )
+        if cp.returncode != 0:
+            error = cp.stderr.decode(errors="replace").strip()
+            raise RetentionFailure(f"snapshot archive docker cp failed: {error}")
+    except Exception as exc:
+        return write_retention_error(destination, run_id, "copy", str(exc))
+
+    export_error = destination / "export-error.json"
+    if export_error.is_file() and not export_error.is_symlink():
+        try:
+            payload = json.loads(export_error.read_text())
+            return payload if isinstance(payload, dict) else {
+                "protocol": 1, "run_id": run_id, "stage": "export",
+                "error": "container export-error.json is not an object",
+            }
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            return write_retention_error(destination, run_id, "validate", str(exc))
+    try:
+        return validate_snapshot_archives(destination, out / "audit.jsonl")
+    except Exception as exc:
+        return write_retention_error(destination, run_id, "validate", str(exc))
+
+
 def _wait_for_control(
     docker: subprocess.Popen[bytes], reader: ContainerLogReader, kind: str,
     *, timeout_s: float,
@@ -3595,6 +3883,7 @@ def _execute_host_run(
     container_log = None
     agent: subprocess.Popen[bytes] | None = None
     returncode = 2
+    cleanup_error: InfraIntegrity | None = None
     try:
         for volume in (replica_volume, runtime_volume):
             run_cmd(["docker", "volume", "create", volume])
@@ -3833,14 +4122,18 @@ def _execute_host_run(
                 except subprocess.TimeoutExpired:
                     docker.kill()
                     docker.wait()
+            final_checkpoint_ok = False
             try:
                 checkpoint_audit(
                     container_name, wiring.audit_source, out, final=True,
                     allow_divergence=wiring.allow_audit_divergence,
                 )
-            except InfraIntegrity:
-                if returncode == 0:
-                    raise
+                final_checkpoint_ok = True
+            except InfraIntegrity as exc:
+                if returncode == 0 and cleanup_error is None:
+                    cleanup_error = exc
+            if final_checkpoint_ok:
+                copy_and_validate_snapshot_archives(container_name, out)
             infra_tmp = out / ".infra-error.tmp"
             infra_tmp.unlink(missing_ok=True)
             cp = subprocess.run(
@@ -3859,6 +4152,8 @@ def _execute_host_run(
             run_cmd(["docker", "volume", "rm", "-f", volume], check=False)
         if wiring.restore_output_mode:
             out.chmod(0o755)
+        if cleanup_error is not None:
+            raise cleanup_error
     return returncode
 
 

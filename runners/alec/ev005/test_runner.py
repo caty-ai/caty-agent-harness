@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import tarfile
 import types
 import unittest
 from dataclasses import replace
@@ -23,6 +24,28 @@ import mcp_exec_server
 
 
 class RunnerUnitTests(unittest.TestCase):
+    def write_audit_header(self, log: runner.AuditLog, run_id: str, replica_sha: str) -> None:
+        log.header(
+            run_id=run_id, task_id="p01", arm="B", cell="main-vps",
+            model_id="model", harness_version="version", operator="Alec",
+            replica_sha=replica_sha, env_fingerprint="env", start_ts="start",
+            worker_id="worker", account_id="seat", block_id="block", slot_index=0,
+            agent_argv={"argv": ["agent"], "stdin_path": "/prompt"},
+            mcp_config_digest="mcp",
+            observation_config_digest=runner.observation_config_digest(),
+            controller_config_digest="controller",
+        )
+
+    def write_audit_trailer(self, log: runner.AuditLog, declarations_scored: int) -> None:
+        log.trailer(
+            end_ts="end", end_reason="session_end",
+            declarations_scored=declarations_scored,
+            wallclock_s=1.0, paused_s=0.0, elapsed_s=1.0,
+            provider_wait_s=None, provider_retry_count=None,
+            provider_throttle_count=None, provider_longest_stall_s=None,
+            infrastructure_void=False, infrastructure_void_reason=None,
+        )
+
     def run_linux_supervisor(
         self, replica: Path, messages: Path, command: str, *,
         basename_mutation: bool = False, trusted_recorder: bool = False,
@@ -207,7 +230,12 @@ class RunnerUnitTests(unittest.TestCase):
             root = Path(td)
             messages = root / "messages"
             messages.mkdir()
-            controller = runner.RunController({"arm": "B"})
+            controller = runner.RunController({
+                "arm": "B", "run_id": "session-end-run",
+                "agent_uid": os.getuid(), "agent_gid": os.getgid(),
+            })
+            controller.private = root / "private"
+            controller.private.mkdir()
             controller.messages = messages
             controller.audit = runner.AuditLog(
                 root / "audit.jsonl", mirror_stdout=False,
@@ -244,6 +272,10 @@ class RunnerUnitTests(unittest.TestCase):
                 provider_metrics,
             )
             self.assertFalse(any(row.get("event") == "operator_intervention" for row in rows))
+            self.assertEqual(
+                json.loads((controller.private / "snapshots" / "index.json").read_text()),
+                {"protocol": 1, "run_id": "session-end-run", "entries": []},
+            )
 
             ledger_row = orchestrate.make_ledger_row(
                 assignment=assignment, arm="B", slot=0, cell="main-vps",
@@ -262,7 +294,12 @@ class RunnerUnitTests(unittest.TestCase):
             root = Path(td)
             messages = root / "messages"
             messages.mkdir()
-            controller = runner.RunController({"arm": "B"})
+            controller = runner.RunController({
+                "arm": "B", "run_id": "declared-session-end-run",
+                "agent_uid": os.getuid(), "agent_gid": os.getgid(),
+            })
+            controller.private = root / "private"
+            controller.private.mkdir()
             controller.messages = messages
             controller.audit = runner.AuditLog(
                 root / "audit.jsonl", mirror_stdout=False,
@@ -270,6 +307,10 @@ class RunnerUnitTests(unittest.TestCase):
             controller.start_mono = runner.time.monotonic()
             self.assertTrue(controller.budget.claim())
             controller.scored_snapshots.append("declaration-snapshot")
+            controller.scored_declarations.append({
+                "seq": 1, "marker": "DONE-DECLARE",
+                "snapshot_sha": "0" * 40,
+            })
 
             def pipeline_gate(tree_sha: str, invoker: str) -> runner.DonecheckResult:
                 result = runner.DonecheckResult(1, b"not done\n", b"", 0.01, False)
@@ -282,10 +323,12 @@ class RunnerUnitTests(unittest.TestCase):
             with (
                 mock.patch.object(controller, "_run_canary_checks") as canary_checks,
                 mock.patch.object(controller, "_run_gate", side_effect=pipeline_gate) as gate,
+                mock.patch.object(controller, "_export_scored_snapshots") as export,
             ):
                 self.assertEqual(controller._finalize_run(), 0)
             canary_checks.assert_called_once_with()
             gate.assert_called_once_with("declaration-snapshot", "pipeline")
+            export.assert_called_once_with()
 
             rows = [json.loads(line) for line in controller.audit.path.read_text().splitlines()]
             adjudication = next(
@@ -297,6 +340,44 @@ class RunnerUnitTests(unittest.TestCase):
             self.assertEqual(rows[-1]["end_reason"], "session_end")
             self.assertEqual(rows[-1]["declarations_scored"], 1)
             self.assertFalse(any(row.get("event") == "operator_intervention" for row in rows))
+
+    def test_retention_export_failure_preserves_measured_trailer(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            private = root / "private"
+            private.mkdir()
+            log = runner.AuditLog(private / "audit.jsonl", mirror_stdout=False)
+            self.write_audit_header(log, "retention-export-run", "a" * 40)
+            controller = runner.RunController({
+                "arm": "B", "run_id": "retention-export-run",
+                "agent_uid": os.getuid(), "agent_gid": os.getgid(),
+            })
+            controller.private = private
+            controller.audit = log
+            controller.end_reason = "session_end"
+            controller.start_mono = runner.time.monotonic()
+
+            with (
+                mock.patch.object(controller, "_run_canary_checks"),
+                mock.patch.object(controller, "_posthoc"),
+                mock.patch.object(
+                    controller, "_export_scored_snapshots",
+                    side_effect=runner.RetentionFailure("forced export failure"),
+                ),
+            ):
+                self.assertEqual(controller._finalize_run(), 0)
+
+            rows = [json.loads(line) for line in log.path.read_text().splitlines()]
+            self.assertEqual(rows[-1]["end_reason"], "session_end")
+            self.assertEqual(set(rows[-1]), runner.TRAILER_FIELDS)
+            self.assertFalse(any(row.get("event") == "operator_intervention" for row in rows))
+            self.assertEqual(
+                json.loads((private / "snapshots" / "export-error.json").read_text()),
+                {
+                    "protocol": 1, "run_id": "retention-export-run",
+                    "stage": "export", "error": "forced export failure",
+                },
+            )
 
     def test_nonzero_controller_exit_remains_infrastructure(self):
         controller = runner.RunController({"arm": "B"})
@@ -2453,6 +2534,325 @@ class RunnerUnitTests(unittest.TestCase):
                 (1, "B+"), (1, "W"), (2, "B"), (2, "B+"), (2, "W"),
             ])
             self.assertEqual(len(rows), 6)
+
+    def test_scored_snapshot_archives_are_exact_deterministic_host_validated_without_audit_changes(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo = root / "repo"
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.name", "ev005"], check=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.email", "ev005@local"], check=True)
+            (repo / "base.txt").write_text("base\n")
+            (repo / ".ev005-donecheck.sh").write_text("#!/bin/sh\nexit 0\n")
+            subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "-qm", "base"], check=True)
+            base_sha = subprocess.check_output(
+                ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
+            ).strip()
+            private = root / "private"
+            private.mkdir()
+            log = runner.AuditLog(private / "audit.jsonl", mirror_stdout=False)
+            self.write_audit_header(log, "archive-run", base_sha)
+            controller = runner.RunController({
+                "arm": "B", "run_id": "archive-run",
+                "agent_uid": os.getuid(), "agent_gid": os.getgid(),
+            })
+            controller.private = private
+            controller.replica = repo
+            controller.audit = log
+            controller.end_reason = "session_end"
+
+            (repo / ".ev005").mkdir()
+            (repo / ".ev005" / "private").write_text("excluded\n")
+            (repo / "first.txt").write_text("first\n")
+            first_sha, first_scored = controller._snapshot_declaration("DONE-DECLARE")
+            self.assertTrue(first_scored)
+            (repo / "base.txt").write_text("changed\n")
+            (repo / "second.txt").write_text("second\n")
+            second_sha, second_scored = controller._snapshot_declaration("deliver")
+            self.assertTrue(second_scored)
+            audit_before = log.path.read_bytes()
+
+            index = controller._export_scored_snapshots()
+            self.assertEqual(log.path.read_bytes(), audit_before)
+            self.assertEqual(set(index), {"protocol", "run_id", "entries"})
+            self.assertEqual(index["protocol"], 1)
+            self.assertEqual(index["run_id"], "archive-run")
+            self.assertEqual([entry["seq"] for entry in index["entries"]], [1, 2])
+            self.assertEqual([entry["marker"] for entry in index["entries"]], [
+                "DONE-DECLARE", "deliver",
+            ])
+            self.assertEqual([entry["snapshot_sha"] for entry in index["entries"]], [
+                first_sha, second_sha,
+            ])
+
+            snapshots = private / "snapshots"
+            expected_trees = [
+                {".ev005-donecheck.sh", "base.txt", "first.txt"},
+                {".ev005-donecheck.sh", "base.txt", "first.txt", "second.txt"},
+            ]
+            for entry, expected_tree in zip(index["entries"], expected_trees):
+                self.assertEqual(
+                    entry["archive"],
+                    f"decl-{entry['seq']}-{entry['snapshot_sha'][:12]}.tar.gz",
+                )
+                archive = snapshots / entry["archive"]
+                archive_bytes = archive.read_bytes()
+                self.assertEqual(hashlib.sha256(archive_bytes).hexdigest(), entry["archive_sha256"])
+                self.assertEqual(archive_bytes[4:8], b"\0\0\0\0")
+                expected_tar = subprocess.check_output([
+                    "git", "-C", str(repo), "archive", "--format=tar",
+                    entry["snapshot_sha"],
+                ])
+                self.assertEqual(runner.gzip.decompress(archive_bytes), expected_tar)
+                with tarfile.open(archive, "r:gz") as tar:
+                    files = {member.name for member in tar.getmembers() if member.isfile()}
+                self.assertEqual(files, expected_tree)
+                self.assertNotIn(".ev005/private", files)
+
+            duplicate = root / "snapshots-duplicate"
+            duplicate_index = runner.export_scored_snapshots(
+                repo, duplicate, "archive-run", controller.scored_declarations,
+                agent_uid=os.getuid(), agent_gid=os.getgid(),
+            )
+            self.assertEqual(duplicate_index, index)
+            for entry in index["entries"]:
+                self.assertEqual(
+                    (snapshots / entry["archive"]).read_bytes(),
+                    (duplicate / entry["archive"]).read_bytes(),
+                )
+
+            self.write_audit_trailer(log, 2)
+            self.assertEqual(
+                runner.validate_snapshot_archives(snapshots, log.path), index,
+            )
+            index_path = snapshots / "index.json"
+            mutations = {
+                "schema": lambda row: row.update({"extra": True}),
+                "run_id": lambda row: row.update({"run_id": "wrong-run"}),
+                "count": lambda row: row["entries"].pop(),
+                "seq": lambda row: row["entries"][0].update({"seq": 99}),
+                "name": lambda row: row["entries"][0].update({"archive": "wrong.tar.gz"}),
+                "hash": lambda row: row["entries"][0].update({"archive_sha256": "0" * 64}),
+            }
+            for failure, mutate in mutations.items():
+                with self.subTest(host_validation=failure):
+                    altered = json.loads(json.dumps(index))
+                    mutate(altered)
+                    index_path.write_text(json.dumps(altered) + "\n")
+                    with self.assertRaises(runner.RetentionFailure):
+                        runner.validate_snapshot_archives(snapshots, log.path)
+            index_path.write_text(json.dumps(index) + "\n")
+            first_archive = snapshots / index["entries"][0]["archive"]
+            original_archive = first_archive.read_bytes()
+            first_archive.write_bytes(original_archive + b"corrupt")
+            with self.assertRaisesRegex(runner.RetentionFailure, "digest mismatch"):
+                runner.validate_snapshot_archives(snapshots, log.path)
+            first_archive.write_bytes(original_archive)
+            (snapshots / "extra").write_text("unexpected\n")
+            with self.assertRaisesRegex(runner.RetentionFailure, "missing or extra"):
+                runner.validate_snapshot_archives(snapshots, log.path)
+
+    def test_zero_declaration_export_writes_only_the_exact_empty_index(self):
+        with tempfile.TemporaryDirectory() as td:
+            snapshots = Path(td) / "snapshots"
+            with mock.patch.object(runner, "_git") as git:
+                index = runner.export_scored_snapshots(
+                    Path(td), snapshots, "zero-run", [],
+                    agent_uid=os.getuid(), agent_gid=os.getgid(),
+                )
+            git.assert_not_called()
+            self.assertEqual(
+                index, {"protocol": 1, "run_id": "zero-run", "entries": []},
+            )
+            self.assertEqual({path.name for path in snapshots.iterdir()}, {"index.json"})
+            self.assertEqual(json.loads((snapshots / "index.json").read_text()), index)
+
+    def test_snapshot_archives_exclude_excess_declarations_beyond_five(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo = root / "repo"
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            (repo / "work.txt").write_text("base\n")
+            subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+            subprocess.run([
+                "git", "-C", str(repo), "-c", "user.name=ev005", "-c",
+                "user.email=ev005@local", "commit", "-qm", "base",
+            ], check=True)
+            private = root / "private"
+            private.mkdir()
+            controller = runner.RunController({
+                "arm": "B", "run_id": "excess-run",
+                "agent_uid": os.getuid(), "agent_gid": os.getgid(),
+            })
+            controller.private = private
+            controller.replica = repo
+            controller.audit = runner.AuditLog(private / "audit.jsonl", mirror_stdout=False)
+            controller.end_reason = "session_end"
+            for declaration in range(1, 7):
+                (repo / "work.txt").write_text(f"declaration {declaration}\n")
+                controller._snapshot_declaration("DONE-DECLARE")
+
+            index = controller._export_scored_snapshots()
+            self.assertEqual(controller.budget.scored, 5)
+            self.assertEqual(len(index["entries"]), 5)
+            self.assertEqual(len(list((private / "snapshots").glob("*.tar.gz"))), 5)
+            rows = [json.loads(line) for line in controller.audit.path.read_text().splitlines()]
+            self.assertEqual(rows[-1]["event"], "declaration_excess")
+            self.assertFalse(rows[-1]["scored"])
+            self.assertEqual(rows[-1]["seq"], 6)
+
+    def test_snapshot_archive_export_failure_is_retention_failure(self):
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaisesRegex(runner.RetentionFailure, "snapshot_sha is missing"):
+                runner.export_scored_snapshots(
+                    Path(td), Path(td) / "missing-sha", "failed-run",
+                    [{"seq": 1, "marker": "DONE-DECLARE", "snapshot_sha": None}],
+                    agent_uid=os.getuid(), agent_gid=os.getgid(),
+                )
+            with (
+                mock.patch.object(
+                    runner, "_git", side_effect=runner.InfraIntegrity("forced archive failure"),
+                ),
+                self.assertRaisesRegex(runner.RetentionFailure, "forced archive failure"),
+            ):
+                runner.export_scored_snapshots(
+                    Path(td), Path(td) / "snapshots", "failed-run",
+                    [{
+                        "seq": 1, "marker": "DONE-DECLARE",
+                        "snapshot_sha": "a" * 40,
+                    }],
+                    agent_uid=os.getuid(), agent_gid=os.getgid(),
+                )
+
+    def test_scored_snapshot_failure_is_omitted_and_host_validation_accepts_it(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            repo = root / "repo"
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            (repo / "work.txt").write_text("base\n")
+            subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+            subprocess.run([
+                "git", "-C", str(repo), "-c", "user.name=ev005", "-c",
+                "user.email=ev005@local", "commit", "-qm", "base",
+            ], check=True)
+            base_sha = subprocess.check_output(
+                ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
+            ).strip()
+            private = root / "private"
+            private.mkdir()
+            log = runner.AuditLog(private / "audit.jsonl", mirror_stdout=False)
+            self.write_audit_header(log, "snapshot-failure-run", base_sha)
+            controller = runner.RunController({
+                "arm": "B", "run_id": "snapshot-failure-run",
+                "agent_uid": os.getuid(), "agent_gid": os.getgid(),
+            })
+            controller.private = private
+            controller.replica = repo
+            controller.audit = log
+            controller.end_reason = "session_end"
+
+            with mock.patch.object(
+                runner, "snapshot", side_effect=runner.InfraIntegrity("unfixable"),
+            ):
+                failed_sha, failed_scored = controller._snapshot_declaration("DONE-DECLARE")
+            (repo / "work.txt").write_text("successful\n")
+            successful_sha, successful_scored = controller._snapshot_declaration("deliver")
+
+            self.assertIsNone(failed_sha)
+            self.assertTrue(failed_scored)
+            self.assertTrue(successful_scored)
+            self.assertEqual(controller.budget.scored, 2)
+            self.assertEqual(controller.scored_snapshots, [None, successful_sha])
+            index = controller._export_scored_snapshots()
+            self.assertEqual(len(index["entries"]), 1)
+            self.assertEqual(index["entries"][0]["seq"], 2)
+            self.assertEqual(index["entries"][0]["snapshot_sha"], successful_sha)
+
+            self.write_audit_trailer(log, 2)
+            rows = [json.loads(line) for line in log.path.read_text().splitlines()]
+            self.assertTrue(rows[1]["scored"])
+            self.assertIsNone(rows[1]["snapshot_sha"])
+            self.assertEqual(rows[1]["snapshot_failure"], "unfixable")
+            self.assertEqual(
+                runner.validate_snapshot_archives(private / "snapshots", log.path), index,
+            )
+
+    def test_host_copies_private_snapshots_then_validates_them(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            out = root / "out"
+            out.mkdir()
+            source = root / "container-snapshots"
+            expected = runner.export_scored_snapshots(
+                root, source, "copy-run", [],
+                agent_uid=os.getuid(), agent_gid=os.getgid(),
+            )
+            log = runner.AuditLog(out / "audit.jsonl", mirror_stdout=False)
+            self.write_audit_header(log, "copy-run", "a" * 40)
+            self.write_audit_trailer(log, 0)
+            calls: list[list[str]] = []
+
+            def docker_cp(argv, **_kwargs):
+                calls.append(argv)
+                runner.shutil.copytree(source, Path(argv[-1]))
+                return subprocess.CompletedProcess(argv, 0, b"", b"")
+
+            with mock.patch.object(runner.subprocess, "run", side_effect=docker_cp):
+                actual = runner.copy_and_validate_snapshot_archives("sandbox", out)
+            self.assertEqual(actual, expected)
+            self.assertEqual(calls, [[
+                "docker", "cp",
+                "sandbox:/run/ev005-private/snapshots",
+                str(out / "snapshots"),
+            ]])
+
+    def test_host_snapshot_copy_failure_is_recorded_without_rewriting_audit(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td)
+            log = runner.AuditLog(out / "audit.jsonl", mirror_stdout=False)
+            self.write_audit_header(log, "copy-failure-run", "a" * 40)
+            self.write_audit_trailer(log, 0)
+            audit_before = log.path.read_bytes()
+            with mock.patch.object(
+                runner.subprocess, "run", side_effect=OSError("forced host copy error"),
+            ):
+                result = runner.copy_and_validate_snapshot_archives("sandbox", out)
+            self.assertEqual(result["stage"], "copy")
+            self.assertIn("forced host copy error", result["error"])
+            self.assertEqual(log.path.read_bytes(), audit_before)
+            self.assertFalse(any(
+                row.get("event") == "operator_intervention"
+                for row in map(json.loads, log.path.read_text().splitlines())
+            ))
+            self.assertEqual(
+                json.loads((out / "snapshots" / "export-error.json").read_text()), result,
+            )
+
+    def test_host_snapshot_validation_failure_is_recorded_and_archives_remain(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            out = root / "out"
+            out.mkdir()
+            source = root / "container-snapshots"
+            source.mkdir()
+            (source / "index.json").write_text("{}\n")
+            (source / "copied.tar.gz").write_bytes(b"retained")
+            log = runner.AuditLog(out / "audit.jsonl", mirror_stdout=False)
+            self.write_audit_header(log, "validate-failure-run", "a" * 40)
+            self.write_audit_trailer(log, 0)
+
+            def docker_cp(argv, **_kwargs):
+                runner.shutil.copytree(source, Path(argv[-1]))
+                return subprocess.CompletedProcess(argv, 0, b"", b"")
+
+            with mock.patch.object(runner.subprocess, "run", side_effect=docker_cp):
+                result = runner.copy_and_validate_snapshot_archives("sandbox", out)
+            self.assertEqual(result["stage"], "validate")
+            self.assertTrue((out / "snapshots" / "copied.tar.gz").is_file())
+            self.assertEqual(
+                json.loads((out / "snapshots" / "export-error.json").read_text()), result,
+            )
 
     def test_snapshot_pathspec_excludes_ev005_directory(self):
         with tempfile.TemporaryDirectory() as td:
