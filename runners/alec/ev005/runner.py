@@ -42,10 +42,12 @@ CELLS_PATH = HERE / "cells.json"
 OPERATOR = "Alec"
 RUNTIME_ROOT = Path("/runner-runtime")
 PRIVATE_ROOT = Path("/run/ev005-private")
+# tmpfs is unreadable via docker cp once the container stops;
+# the layer path survives to the stopped container.
+SNAPSHOT_EXPORT_ROOT = Path("/var/ev005-snapshots")
 PRIVATE_AUDIT_PATH = PRIVATE_ROOT / "audit.jsonl"
 PRIVATE_STREAM_PATH = PRIVATE_ROOT / "agent-output.stream"
 PRIVATE_MESSAGES_PATH = PRIVATE_ROOT / "messages"
-PRIVATE_SNAPSHOTS_PATH = PRIVATE_ROOT / "snapshots"
 CGROUP_ROOT = Path("/sys/fs/cgroup")
 TRACE_EVENT_WAIT_S = 0.002
 OBSERVATION_MECHANISM = "ptrace-descendant-exec-exit-v3"
@@ -2526,6 +2528,7 @@ class RunController:
     def __init__(self, cfg: dict[str, Any]):
         self.cfg = cfg
         self.private = PRIVATE_ROOT
+        self.snapshot_export_root = SNAPSHOT_EXPORT_ROOT
         self.messages = PRIVATE_MESSAGES_PATH
         self.sealed_donecheck = self.private / "donecheck.sh"
         self.audit_path = Path(cfg.get("audit_path", str(PRIVATE_AUDIT_PATH)))
@@ -2945,7 +2948,7 @@ class RunController:
         ):
             raise InfraIntegrity("successful declaration records do not match scored snapshots")
         return export_scored_snapshots(
-            self.replica, self.private / "snapshots", self.cfg["run_id"],
+            self.replica, self.snapshot_export_root, self.cfg["run_id"],
             self.scored_declarations,
             agent_uid=int(self.cfg["agent_uid"]),
             agent_gid=int(self.cfg["agent_gid"]),
@@ -2997,7 +3000,7 @@ class RunController:
             self._export_scored_snapshots()
         except Exception as exc:
             write_retention_error(
-                self.private / "snapshots", str(self.cfg.get("run_id", "")),
+                self.snapshot_export_root, str(self.cfg.get("run_id", "")),
                 "export", str(exc),
             )
         return INFRASTRUCTURE_VOID_EXIT if self.infrastructure_void else 0
@@ -3734,7 +3737,7 @@ def copy_and_validate_snapshot_archives(
         if destination.exists():
             raise RetentionFailure("snapshot archive destination already exists")
         cp = subprocess.run(
-            ["docker", "cp", f"{container}:{PRIVATE_SNAPSHOTS_PATH}", str(destination)],
+            ["docker", "cp", f"{container}:{SNAPSHOT_EXPORT_ROOT}", str(destination)],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
         )
         if cp.returncode != 0:

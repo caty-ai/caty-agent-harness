@@ -236,6 +236,7 @@ class RunnerUnitTests(unittest.TestCase):
             })
             controller.private = root / "private"
             controller.private.mkdir()
+            controller.snapshot_export_root = controller.private / "snapshots"
             controller.messages = messages
             controller.audit = runner.AuditLog(
                 root / "audit.jsonl", mirror_stdout=False,
@@ -273,7 +274,7 @@ class RunnerUnitTests(unittest.TestCase):
             )
             self.assertFalse(any(row.get("event") == "operator_intervention" for row in rows))
             self.assertEqual(
-                json.loads((controller.private / "snapshots" / "index.json").read_text()),
+                json.loads((controller.snapshot_export_root / "index.json").read_text()),
                 {"protocol": 1, "run_id": "session-end-run", "entries": []},
             )
 
@@ -353,6 +354,7 @@ class RunnerUnitTests(unittest.TestCase):
                 "agent_uid": os.getuid(), "agent_gid": os.getgid(),
             })
             controller.private = private
+            controller.snapshot_export_root = private / "snapshots"
             controller.audit = log
             controller.end_reason = "session_end"
             controller.start_mono = runner.time.monotonic()
@@ -372,7 +374,7 @@ class RunnerUnitTests(unittest.TestCase):
             self.assertEqual(set(rows[-1]), runner.TRAILER_FIELDS)
             self.assertFalse(any(row.get("event") == "operator_intervention" for row in rows))
             self.assertEqual(
-                json.loads((private / "snapshots" / "export-error.json").read_text()),
+                json.loads((controller.snapshot_export_root / "export-error.json").read_text()),
                 {
                     "protocol": 1, "run_id": "retention-export-run",
                     "stage": "export", "error": "forced export failure",
@@ -2558,6 +2560,7 @@ class RunnerUnitTests(unittest.TestCase):
                 "agent_uid": os.getuid(), "agent_gid": os.getgid(),
             })
             controller.private = private
+            controller.snapshot_export_root = private / "snapshots"
             controller.replica = repo
             controller.audit = log
             controller.end_reason = "session_end"
@@ -2586,7 +2589,7 @@ class RunnerUnitTests(unittest.TestCase):
                 first_sha, second_sha,
             ])
 
-            snapshots = private / "snapshots"
+            snapshots = controller.snapshot_export_root
             expected_trees = [
                 {".ev005-donecheck.sh", "base.txt", "first.txt"},
                 {".ev005-donecheck.sh", "base.txt", "first.txt", "second.txt"},
@@ -2686,6 +2689,7 @@ class RunnerUnitTests(unittest.TestCase):
                 "agent_uid": os.getuid(), "agent_gid": os.getgid(),
             })
             controller.private = private
+            controller.snapshot_export_root = private / "snapshots"
             controller.replica = repo
             controller.audit = runner.AuditLog(private / "audit.jsonl", mirror_stdout=False)
             controller.end_reason = "session_end"
@@ -2696,7 +2700,7 @@ class RunnerUnitTests(unittest.TestCase):
             index = controller._export_scored_snapshots()
             self.assertEqual(controller.budget.scored, 5)
             self.assertEqual(len(index["entries"]), 5)
-            self.assertEqual(len(list((private / "snapshots").glob("*.tar.gz"))), 5)
+            self.assertEqual(len(list(controller.snapshot_export_root.glob("*.tar.gz"))), 5)
             rows = [json.loads(line) for line in controller.audit.path.read_text().splitlines()]
             self.assertEqual(rows[-1]["event"], "declaration_excess")
             self.assertFalse(rows[-1]["scored"])
@@ -2748,6 +2752,7 @@ class RunnerUnitTests(unittest.TestCase):
                 "agent_uid": os.getuid(), "agent_gid": os.getgid(),
             })
             controller.private = private
+            controller.snapshot_export_root = private / "snapshots"
             controller.replica = repo
             controller.audit = log
             controller.end_reason = "session_end"
@@ -2775,8 +2780,13 @@ class RunnerUnitTests(unittest.TestCase):
             self.assertIsNone(rows[1]["snapshot_sha"])
             self.assertEqual(rows[1]["snapshot_failure"], "unfixable")
             self.assertEqual(
-                runner.validate_snapshot_archives(private / "snapshots", log.path), index,
+                runner.validate_snapshot_archives(controller.snapshot_export_root, log.path), index,
             )
+
+    def test_snapshot_export_root_is_outside_tmpfs_mounts(self):
+        for tmpfs_root in (Path("/run"), Path("/work"), Path("/home")):
+            with self.subTest(tmpfs_root=tmpfs_root):
+                self.assertFalse(runner.SNAPSHOT_EXPORT_ROOT.is_relative_to(tmpfs_root))
 
     def test_host_copies_private_snapshots_then_validates_them(self):
         with tempfile.TemporaryDirectory() as td:
@@ -2803,7 +2813,7 @@ class RunnerUnitTests(unittest.TestCase):
             self.assertEqual(actual, expected)
             self.assertEqual(calls, [[
                 "docker", "cp",
-                "sandbox:/run/ev005-private/snapshots",
+                "sandbox:/var/ev005-snapshots",
                 str(out / "snapshots"),
             ]])
 
