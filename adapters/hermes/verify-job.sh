@@ -14,7 +14,24 @@ infra_fail() {
 }
 
 trim_line() {
-  printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+  printf '%s' "$1" \
+    | LC_ALL=C tr -d '\001-\010\013-\037\177' \
+    | LC_ALL=C sed 's/[[:space:]]*$//'
+}
+
+reason_is_empty() {
+  local scratch
+
+  scratch=$(trim_line "$1")
+  scratch=$(printf '%s' "$scratch" | LC_ALL=C tr -d '[:space:]' | LC_ALL=C awk '
+    {
+      gsub(/\302\240/, "")
+      gsub(/\343\200\200/, "")
+      gsub(/\342\200\213/, "")
+      printf "%s", $0
+    }
+  ')
+  [[ -z "$scratch" ]]
 }
 
 ensure_log() {
@@ -351,7 +368,7 @@ else
     verdict=${verdict_line#VERDICT: }
     case "$verdict" in
       pass|fail|inconclusive|rubric-invalid|needs-human|blocked-missing-artifact)
-        if [[ -z "$(trim_line "$reason")" ]]; then
+        if reason_is_empty "$reason"; then
           reason="verifier response missing one-line reason"
         fi
         ;;

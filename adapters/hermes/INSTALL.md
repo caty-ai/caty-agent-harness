@@ -189,11 +189,15 @@ The rules there apply in addition to the Hermes-specific wiring below.
 
    Operational contract: the example providers and wrapper forward only the validated
    verdict and reason lines. They normalize each model-reply line by removing a trailing
-   carriage return and trailing whitespace, require exactly one anchored allowed verdict
-   line anywhere in the reply, and require exactly one `VERDICT:` occurrence across the
-   entire model reply. Before line parsing or normalization, they reject any NUL byte
-   anywhere in the provider/model reply. The reason is the first nonempty normalized line
-   after the verdict. Missing or ambiguous verdicts and missing reasons fail closed.
+   carriage return and trailing ASCII whitespace, and remove DEL plus all C0 controls
+   except TAB from the emitted reason; a mid-line TAB is preserved. They require exactly
+   one anchored allowed verdict line anywhere in the reply and exactly one `VERDICT:`
+   occurrence across the entire model reply; before line parsing or normalization, they
+   reject any NUL byte
+   anywhere in the provider/model reply. The reason is the first line after the verdict
+   that is nonempty after ignoring ASCII whitespace and the explicit U+00A0, U+3000, and
+   U+200B sequences; those Unicode sequences remain byte-preserved in an accepted nonempty
+   reason, while missing or ambiguous verdicts and missing reasons fail closed.
    Findings before the verdict and
    content after the selected reason are intentionally discarded to remove an injection
    surface; that body cannot be recovered from these examples. The provider prompts align

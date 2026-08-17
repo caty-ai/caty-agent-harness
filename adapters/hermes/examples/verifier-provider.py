@@ -17,11 +17,30 @@ SYSTEM_PROMPT = """You are an independent artifact verifier. The user message co
 VERDICT_PATTERN = re.compile(
     r"^VERDICT: (pass|fail|inconclusive|rubric-invalid|needs-human|blocked-missing-artifact)$"
 )
+REASON_CONTROL_PATTERN = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+EMPTY_REASON_BYTES = (
+    b" ",
+    b"\t",
+    b"\v",
+    b"\f",
+    b"\r",
+    b"\xc2\xa0",
+    b"\xe3\x80\x80",
+    b"\xe2\x80\x8b",
+)
 
 
 def fail(message: str) -> NoReturn:
     print(message, file=sys.stderr)
     raise SystemExit(1)
+
+
+def normalize_reason(line: str) -> str:
+    reason = REASON_CONTROL_PATTERN.sub("", line).rstrip("\r\t\v\f ")
+    scratch = reason.encode("utf-8")
+    for empty_bytes in EMPTY_REASON_BYTES:
+        scratch = scratch.replace(empty_bytes, b"")
+    return "" if not scratch else reason
 
 
 class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -131,10 +150,11 @@ if marker_count != 1 or len(verdict_indexes) != 1:
     fail("provider returned malformed output")
 
 verdict_index = verdict_indexes[0]
-reason = next(
-    (line for line in normalized_lines[verdict_index + 1 :] if line),
-    "",
-)
+reason = ""
+for line in normalized_lines[verdict_index + 1 :]:
+    reason = normalize_reason(line)
+    if reason:
+        break
 if not reason:
     fail("provider returned malformed output")
 

@@ -494,6 +494,72 @@ else
     'one or more ambiguous model replies escaped validation'
 fi
 
+reason_parity_ok=1
+for parity_case in \
+  'nbsp-only|reject|VERDICT: pass\n\302\240\n|' \
+  'ideographic-space-only|reject|VERDICT: pass\n\343\200\200\n|' \
+  'zwsp-only|reject|VERDICT: pass\n\342\200\213\n|' \
+  'unicode-ascii-space-only|reject|VERDICT: pass\n\302\240\t \302\240\n|' \
+  'japanese|accept|VERDICT: pass\n\346\227\245\346\234\254\350\252\236\343\201\256\347\220\206\347\224\261\n|VERDICT: pass\n\346\227\245\346\234\254\350\252\236\343\201\256\347\220\206\347\224\261' \
+  'unicode-spaces-between|accept|VERDICT: pass\nleft\302\240middle\343\200\200right\342\200\213end\n|VERDICT: pass\nleft\302\240middle\343\200\200right\342\200\213end' \
+  'midline-tab|accept|VERDICT: pass\nvisible\treason\n|VERDICT: pass\nvisible\treason' \
+  'trailing-nbsp|accept|VERDICT: pass\nreason\302\240\n|VERDICT: pass\nreason\302\240' \
+  'embedded-sgr|accept|VERDICT: pass\nvisible\033[31m reason\177\n|VERDICT: pass\nvisible[31m reason' \
+  'control-only|reject|VERDICT: pass\n\033\007\177\n|' \
+  'unicode-blank-before-reason|accept|VERDICT: pass\n\302\240\t\343\200\200\n\346\227\245\346\234\254\350\252\236\343\201\256\347\220\206\347\224\261\n|VERDICT: pass\n\346\227\245\346\234\254\350\252\236\343\201\256\347\220\206\347\224\261'; do
+  parity_name=${parity_case%%|*}
+  parity_rest=${parity_case#*|}
+  parity_outcome=${parity_rest%%|*}
+  parity_rest=${parity_rest#*|}
+  parity_reply_encoded=${parity_rest%%|*}
+  parity_expected_encoded=${parity_rest#*|}
+  parity_reply_with_sentinel=$(printf '%b_' "$parity_reply_encoded")
+  parity_reply=${parity_reply_with_sentinel%_}
+  printf '%s' "$parity_reply" >"$TMP_ROOT/parity-$parity_name.fixture"
+  printf '%b' "$parity_reply_encoded" >"$TMP_ROOT/parity-$parity_name.fixture-expected"
+  printf '%b\n' "$parity_expected_encoded" >"$TMP_ROOT/parity-$parity_name.expected"
+
+  set +e
+  FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" \
+    PROVIDER_MARKER="$provider_marker" PROVIDER_OUTPUT="$parity_reply" \
+    VERIFIER_BUNDLE_MIN_BYTES=64 "$WRAPPER" "$bundle" \
+    >"$TMP_ROOT/wrapper-parity-$parity_name.out" \
+    2>"$TMP_ROOT/wrapper-parity-$parity_name.err"
+  wrapper_parity_rc=$?
+  VERIFIER_API_KEY=fixture STUB_REPLY_TEXT="$parity_reply" \
+    REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+    REQUEST_COUNT_MARKER="$request_count_marker" \
+    python3 "$opener_stub" "$PROVIDER" "$bundle" \
+    >"$TMP_ROOT/api-parity-$parity_name.out" \
+    2>"$TMP_ROOT/api-parity-$parity_name.err"
+  api_parity_rc=$?
+  set -e
+
+  if ! cmp -s "$TMP_ROOT/parity-$parity_name.fixture" \
+    "$TMP_ROOT/parity-$parity_name.fixture-expected"; then
+    reason_parity_ok=0
+  fi
+  if [ "$parity_outcome" = accept ]; then
+    if [ "$wrapper_parity_rc" -ne 0 ] || [ "$api_parity_rc" -ne 0 ] \
+      || ! cmp -s "$TMP_ROOT/wrapper-parity-$parity_name.out" \
+        "$TMP_ROOT/api-parity-$parity_name.out" \
+      || ! cmp -s "$TMP_ROOT/wrapper-parity-$parity_name.out" \
+        "$TMP_ROOT/parity-$parity_name.expected"; then
+      reason_parity_ok=0
+    fi
+  elif [ "$wrapper_parity_rc" -ne 65 ] || [ "$api_parity_rc" -ne 1 ] \
+    || [ -s "$TMP_ROOT/wrapper-parity-$parity_name.out" ] \
+    || [ -s "$TMP_ROOT/api-parity-$parity_name.out" ]; then
+    reason_parity_ok=0
+  fi
+done
+if [ "$reason_parity_ok" -eq 1 ]; then
+  pass '[11cb] wrapper awk and API python have byte-identical Unicode-empty and C0/DEL reason semantics'
+else
+  fail_case '[11cb] wrapper awk and API python have byte-identical Unicode-empty and C0/DEL reason semantics' \
+    'one or more shared byte fixtures produced divergent outcomes or normalized bytes'
+fi
+
 api_nul_matrix_ok=1
 for api_nul_mode in nul-before-anchor nul-after-verdict nul-inside-anchor \
   nul-in-reason nul-trailing; do

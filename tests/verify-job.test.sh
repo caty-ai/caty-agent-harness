@@ -51,6 +51,41 @@ SH
   chmod +x "$path"
 }
 
+write_reason_hygiene_verifier() {
+  path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' 'VERDICT: pass'
+case "${VERIFY_REASON_MODE:-japanese}" in
+  unicode-empty)
+    printf '\302\240\t \343\200\200\342\200\213\n'
+    ;;
+  nbsp-only)
+    printf '\302\240\n'
+    ;;
+  ideographic-space-only)
+    printf '\343\200\200\n'
+    ;;
+  zwsp-only)
+    printf '\342\200\213\n'
+    ;;
+  japanese)
+    printf '\346\227\245\346\234\254\350\252\236\343\201\256\347\220\206\347\224\261\n'
+    ;;
+  embedded-controls)
+    printf '  visible\033[31m reason\007\177   \n'
+    ;;
+  control-only)
+    printf '\033\007\177\n'
+    ;;
+  *)
+    exit 98
+    ;;
+esac
+SH
+  chmod +x "$path"
+}
+
 write_auth_failure_verifier() {
   path=$1
   cat >"$path" <<'SH'
@@ -126,6 +161,86 @@ if [ "$(sed -n '1p' "$TMP_ROOT/ws-pass/loop/VERIFY.log.md")" = "$VERIFY_HEADER" 
 else
   fail_case "verify-job creates the append-only verifier history header" \
     "header=$(sed -n '1p' "$TMP_ROOT/ws-pass/loop/VERIFY.log.md")"
+fi
+
+reason_hygiene_verifier=$TMP_ROOT/reason-hygiene-verifier.sh
+write_reason_hygiene_verifier "$reason_hygiene_verifier"
+attest_verifier_wrapper "$reason_hygiene_verifier" reason-hygiene
+
+bundle=$(make_bundle unicode-empty-reason)
+unicode_empty_log=$TMP_ROOT/ws-unicode-empty-reason/loop/VERIFY.log.md
+output=$(VERIFY_REASON_MODE=unicode-empty VERIFIER_CMD="$reason_hygiene_verifier" \
+  VERIFIER_ID=reason-hygiene bash "$SCRIPT" "$bundle" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] \
+  && grep -Fq 'verdict=pass | verifier response missing one-line reason' "$unicode_empty_log"; then
+  pass "Unicode-space-only verifier reasons log the explicit missing-reason fallback"
+else
+  fail_case "Unicode-space-only verifier reasons log the explicit missing-reason fallback" \
+    "rc=$rc output=$output log=$(cat "$unicode_empty_log" 2>/dev/null)"
+fi
+
+single_unicode_empty_ok=1
+for unicode_empty_case in nbsp-only ideographic-space-only zwsp-only; do
+  bundle=$(make_bundle "$unicode_empty_case-reason")
+  single_unicode_empty_log=$TMP_ROOT/ws-$unicode_empty_case-reason/loop/VERIFY.log.md
+  output=$(VERIFY_REASON_MODE="$unicode_empty_case" VERIFIER_CMD="$reason_hygiene_verifier" \
+    VERIFIER_ID=reason-hygiene bash "$SCRIPT" "$bundle" 2>&1)
+  rc=$?
+  if [ "$rc" -ne 0 ] \
+    || ! grep -Fq 'verdict=pass | verifier response missing one-line reason' \
+      "$single_unicode_empty_log"; then
+    single_unicode_empty_ok=0
+  fi
+done
+if [ "$single_unicode_empty_ok" -eq 1 ]; then
+  pass "NBSP-only, U+3000-only, and ZWSP-only reasons each log the missing-reason fallback"
+else
+  fail_case "NBSP-only, U+3000-only, and ZWSP-only reasons each log the missing-reason fallback" \
+    "one or more single-sequence reasons escaped the empty-reason check"
+fi
+
+bundle=$(make_bundle japanese-reason)
+japanese_log=$TMP_ROOT/ws-japanese-reason/loop/VERIFY.log.md
+japanese_reason=$(printf '\346\227\245\346\234\254\350\252\236\343\201\256\347\220\206\347\224\261')
+output=$(VERIFY_REASON_MODE=japanese VERIFIER_CMD="$reason_hygiene_verifier" \
+  VERIFIER_ID=reason-hygiene bash "$SCRIPT" "$bundle" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] && grep -Fq "verdict=pass | $japanese_reason" "$japanese_log"; then
+  pass "fully Japanese verifier reasons reach the log unchanged"
+else
+  fail_case "fully Japanese verifier reasons reach the log unchanged" \
+    "rc=$rc output=$output log=$(cat "$japanese_log" 2>/dev/null)"
+fi
+
+bundle=$(make_bundle embedded-control-reason)
+embedded_control_log=$TMP_ROOT/ws-embedded-control-reason/loop/VERIFY.log.md
+embedded_control_clean=$TMP_ROOT/embedded-control-clean.log
+output=$(VERIFY_REASON_MODE=embedded-controls VERIFIER_CMD="$reason_hygiene_verifier" \
+  VERIFIER_ID=reason-hygiene bash "$SCRIPT" "$bundle" 2>&1)
+rc=$?
+LC_ALL=C tr -d '\000-\010\013-\037\177' \
+  <"$embedded_control_log" >"$embedded_control_clean"
+if [ "$rc" -eq 0 ] \
+  && grep -Fq 'verdict=pass |   visible[31m reason' "$embedded_control_log" \
+  && cmp -s "$embedded_control_log" "$embedded_control_clean"; then
+  pass "reason logging removes C0 and DEL bytes, preserves printable SGR suffixes, and keeps leading space"
+else
+  fail_case "reason logging removes C0 and DEL bytes, preserves printable SGR suffixes, and keeps leading space" \
+    "rc=$rc output=$output log=$(cat "$embedded_control_log" 2>/dev/null)"
+fi
+
+bundle=$(make_bundle control-only-reason)
+control_only_log=$TMP_ROOT/ws-control-only-reason/loop/VERIFY.log.md
+output=$(VERIFY_REASON_MODE=control-only VERIFIER_CMD="$reason_hygiene_verifier" \
+  VERIFIER_ID=reason-hygiene bash "$SCRIPT" "$bundle" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] \
+  && grep -Fq 'verdict=pass | verifier response missing one-line reason' "$control_only_log"; then
+  pass "control-only verifier reasons become empty and log the missing-reason fallback"
+else
+  fail_case "control-only verifier reasons become empty and log the missing-reason fallback" \
+    "rc=$rc output=$output log=$(cat "$control_only_log" 2>/dev/null)"
 fi
 
 bundle=$(make_bundle existing-log)
