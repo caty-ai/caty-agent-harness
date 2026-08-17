@@ -647,6 +647,50 @@ with tag `ev-005-sealed-v6`; file count unchanged (sentence-level edits only).
 
 ---
 
+## A-6 — Agent behavior must never be an infrastructure failure (2026-08-17)
+
+**Who.** Author: Alpha. Found by the second real pilot batch (the first at the A-5 runner):
+45/45 audits complete, 5 W runs reached `verified_pass` end-to-end — and **37 runs died as
+`operator_abort`** on three supervisor defects, all executed evidence from the pilot ledger.
+
+**What was wrong, in three parts.**
+
+1. An agent that executed the visible gate via an unregistered interpreter tripped
+   `exact gate operand executed by an untrusted process identity` — a fatal attribution error —
+   and the whole run died. But which interpreter an agent picks is *agent behavior*, part of the
+   phenomenon under measurement; encoding it as infrastructure integrity turned ordinary agent
+   variation into run loss, asymmetrically against agents that touch the gate at all (W most).
+2. A ptrace resume against a process that had already exited (`No such process`) was fatal.
+   Real agents spawn and kill processes constantly; the race is ordinary.
+3. The per-invocation gate bound — registered as the task's `timeout_s` — was plumbed as a
+   global 1800 s: p03 (`timeout_s = 180`) had gate invocations killed at ~1800 s. The kill
+   mechanism worked; the number was wrong, and it silently stole paused-clock time.
+
+**Remedy.** (1) A new registered audit event `gate_execution_untrusted` (runner-spec §5):
+recorded with argv and executable identity, not counted, not budget-paused, run continues;
+fatal attribution stays fatal only *inside counted executions*. (2) ESRCH on resume paths for
+an already-exited pid is benign; it remains fatal only where it would make a counted gate's
+attribution ambiguous. (3) The orchestrator passes each task's `timeout_s` as the invocation
+bound; a missing bound fails closed at startup — never a silent 1800.
+
+**Alternative rejected.** Adding every plausible interpreter to the trusted-shell set — the
+trusted set exists to attribute *counted* executions to identities whose semantics the G2 table
+was validated against; widening it dilutes that evidence. Unregistered interpreters are
+recorded, visible, and analyzable instead.
+
+**Verification performed at sealing.** Both-direction unit tests (untrusted-interpreter
+execution → recorded + run continues + no pause; counted-execution ambiguity → still fatal;
+ESRCH vanish-race → supervision completes; task-meta bound plumbed end-to-end, missing bound
+fail-closed), suite green docker-backed on both hosts. **Operational acceptance, recorded after
+sealing:** the third pilot batch completing with a normal outcome distribution is the
+confirmation in operation, posted with the pilot report.
+
+**Manifest.** Before: `6018082bab203d5bcb524074f4960af023a9536c8f0ffce03ae5f8ecf154a8f9`
+(tag `ev-005-sealed-v6`, commit `9abbc0f`, 265 files). After: recorded in the v7 re-seal record
+with tag `ev-005-sealed-v7`; file count unchanged.
+
+---
+
 **Note for the results report.** A-1 and A-2 were each a single defect found by contact with
 reality. A-3 is different in kind: it is what a deliberate, whole-corpus sweep found once the
 author stopped adjudicating defects one at a time. Five of its six items were invisible to review

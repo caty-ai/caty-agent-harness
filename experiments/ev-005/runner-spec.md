@@ -184,6 +184,15 @@ Event records (`ts` monotonic + wall, `seq`):
   therefore statements about *operand executions*; a run that only ever sources the gate
   contributes to `donecheck_read` coverage (best-effort), not to invocation counts. This is a
   measurement-boundary registration, symmetric across arms, made before any data exists.
+- `gate_execution_untrusted` (amendment A-6) — a traced process executed the exact replica gate
+  operand under an executable identity outside the trusted-shell set (an agent invoking the gate
+  via an unregistered interpreter). Recorded with argv, executable identity and pid; **not
+  counted** as a `donecheck_invocation`, **not budget-paused** (§1.6's carve-out is for counted
+  invocations only, symmetric across arms), and the run continues — agent behavior is never an
+  infrastructure failure. The first real pilot proved the earlier posture wrong: treating this
+  as a fatal attribution error let the agent's choice of interpreter kill runs. Fail-closed
+  attribution errors *inside counted executions* (overlapping gates, ambiguous output
+  attribution) remain fatal.
 - `donecheck_read` — best-effort observable reads of `donecheck.sh` (wrapper-observed file
   opens where the cell's sandbox exposes them); **coverage is best-effort and stated as such**
   (limitation recorded; the H-2 stratification uses `donecheck_invocation`, which is reliable,
