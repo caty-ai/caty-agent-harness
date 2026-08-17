@@ -180,6 +180,9 @@ TRAILER_FIELDS = {
     "provider_throttle_count", "provider_longest_stall_s",
     "infrastructure_void", "infrastructure_void_reason",
 }
+TRAILER_END_REASONS = frozenset({
+    "delivered", "wallclock", "abandon", "session_end", "operator",
+})
 GIT_ENV = {
     "GIT_CONFIG_GLOBAL": "/dev/null",
     "GIT_CONFIG_SYSTEM": "/dev/null",
@@ -860,6 +863,8 @@ class AuditLog:
     def trailer(self, **fields: Any) -> None:
         if set(fields) != TRAILER_FIELDS:
             raise InfraIntegrity(f"bad audit trailer fields: {sorted(set(fields) ^ TRAILER_FIELDS)}")
+        if fields["end_reason"] not in TRAILER_END_REASONS:
+            raise InfraIntegrity(f"bad audit trailer end_reason: {fields['end_reason']!r}")
         self._append(fields)
 
 
@@ -2807,6 +2812,44 @@ class RunController:
         if sha:
             self._run_gate(sha, "pipeline")
 
+    def _handle_controller_exit(self, row: dict[str, Any]) -> None:
+        returncode = row.get("returncode")
+        if returncode != 0:
+            raise InfraIntegrity(
+                f"host model/controller exited before a terminal condition rc={returncode}"
+            )
+        self.end_reason = "session_end"
+        self._terminate_agent()
+
+    def _finalize_run(self) -> int:
+        self._handle_supervisor_errors()
+        self._handle_untrusted_gate_executions()
+        self._handle_agent_donechecks()
+        self._handle_supervisor_errors()
+        self._handle_donecheck_reads()
+        self._run_canary_checks()
+        self._posthoc()
+        self._handle_untrusted_gate_executions()
+        self._handle_supervisor_errors()
+        end_mono = time.monotonic()
+        paused = self.pause.paused_at(end_mono)
+        wallclock = max(0.0, end_mono - self.start_mono - paused)
+        elapsed = wallclock + paused
+        assert self.audit
+        self.audit.trailer(
+            end_ts=utc_now(), end_reason=self.end_reason,
+            declarations_scored=self.budget.scored,
+            wallclock_s=round(wallclock, 6), paused_s=round(paused, 6),
+            elapsed_s=round(elapsed, 6),
+            infrastructure_void=self.infrastructure_void,
+            infrastructure_void_reason=(
+                "; ".join(self.infrastructure_void_reasons)
+                if self.infrastructure_void_reasons else None
+            ),
+            **self.provider_metrics,
+        )
+        return INFRASTRUCTURE_VOID_EXIT if self.infrastructure_void else 0
+
     def execute(self) -> int:
         private_stat = self.private.stat()
         if (
@@ -2907,34 +2950,10 @@ class RunController:
             exit_path = self.messages / "agent-exit.json"
             if exit_path.exists() and not self.end_reason:
                 row = json.loads(exit_path.read_text())
-                raise InfraIntegrity(f"host model/controller exited before a terminal condition rc={row.get('returncode')}")
+                self._handle_controller_exit(row)
+                break
             time.sleep(0.01)
-        self._handle_supervisor_errors()
-        self._handle_untrusted_gate_executions()
-        self._handle_agent_donechecks()
-        self._handle_supervisor_errors()
-        self._handle_donecheck_reads()
-        self._run_canary_checks()
-        self._posthoc()
-        self._handle_untrusted_gate_executions()
-        self._handle_supervisor_errors()
-        end_mono = time.monotonic()
-        paused = self.pause.paused_at(end_mono)
-        wallclock = max(0.0, end_mono - self.start_mono - paused)
-        elapsed = wallclock + paused
-        self.audit.trailer(
-            end_ts=utc_now(), end_reason=self.end_reason,
-            declarations_scored=self.budget.scored,
-            wallclock_s=round(wallclock, 6), paused_s=round(paused, 6),
-            elapsed_s=round(elapsed, 6),
-            infrastructure_void=self.infrastructure_void,
-            infrastructure_void_reason=(
-                "; ".join(self.infrastructure_void_reasons)
-                if self.infrastructure_void_reasons else None
-            ),
-            **self.provider_metrics,
-        )
-        return INFRASTRUCTURE_VOID_EXIT if self.infrastructure_void else 0
+        return self._finalize_run()
 
 
 def image_id(image: str) -> str:

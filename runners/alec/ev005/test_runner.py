@@ -197,6 +197,120 @@ class RunnerUnitTests(unittest.TestCase):
         self.assertIn("wall", rows[1]["ts"])
         self.assertEqual(set(rows[2]), runner.TRAILER_FIELDS)
 
+    def test_clean_controller_exit_is_normal_session_end_and_completed_ledger_attempt(self):
+        assignment = orchestrate.BlockAssignment(
+            series="main", task_id="t01", replicate=1, rank=0, seat="seat-01",
+            arms=(("B", 0), ("B+", 1), ("W", 2)),
+        )
+        worker = orchestrate.WorkerAllocation("worker-00", ((0,),), (0,))
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            messages = root / "messages"
+            messages.mkdir()
+            controller = runner.RunController({"arm": "B"})
+            controller.messages = messages
+            controller.audit = runner.AuditLog(
+                root / "audit.jsonl", mirror_stdout=False,
+            )
+            controller.start_mono = runner.time.monotonic()
+            provider_metrics = {
+                "provider_wait_s": 1.25,
+                "provider_retry_count": 2,
+                "provider_throttle_count": 1,
+                "provider_longest_stall_s": 0.75,
+            }
+
+            def terminate() -> None:
+                controller.provider_metrics = provider_metrics
+
+            with mock.patch.object(controller, "_terminate_agent", side_effect=terminate) as terminated:
+                controller._handle_controller_exit({"returncode": 0})
+            terminated.assert_called_once_with()
+            with (
+                mock.patch.object(controller, "_run_canary_checks") as canary_checks,
+                mock.patch.object(controller, "_posthoc") as posthoc,
+            ):
+                exit_status = controller._finalize_run()
+            canary_checks.assert_called_once_with()
+            posthoc.assert_called_once_with()
+
+            rows = [json.loads(line) for line in controller.audit.path.read_text().splitlines()]
+            trailer = rows[-1]
+            self.assertEqual(exit_status, 0)
+            self.assertEqual(trailer["end_reason"], "session_end")
+            self.assertEqual(trailer["declarations_scored"], 0)
+            self.assertEqual(
+                {field: trailer[field] for field in runner.PROVIDER_METRIC_FIELDS},
+                provider_metrics,
+            )
+            self.assertFalse(any(row.get("event") == "operator_intervention" for row in rows))
+
+            ledger_row = orchestrate.make_ledger_row(
+                assignment=assignment, arm="B", slot=0, cell="main-vps",
+                blocks_concurrent=1, worker=worker, run_id="session-end-run",
+                attempt=1, started="start", ended="end", exit_status=exit_status,
+                trailer=trailer, output=root, dry_run=False, is_void_retry=False,
+                recovered_after_restart=False,
+            )
+            self.assertTrue(ledger_row["completed"])
+            self.assertTrue(ledger_row["scoring_attempt"])
+            self.assertEqual(ledger_row["exit_status"], 0)
+            self.assertTrue(orchestrate.successful(ledger_row))
+
+    def test_clean_controller_exit_after_declaration_runs_pipeline_adjudication(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            messages = root / "messages"
+            messages.mkdir()
+            controller = runner.RunController({"arm": "B"})
+            controller.messages = messages
+            controller.audit = runner.AuditLog(
+                root / "audit.jsonl", mirror_stdout=False,
+            )
+            controller.start_mono = runner.time.monotonic()
+            self.assertTrue(controller.budget.claim())
+            controller.scored_snapshots.append("declaration-snapshot")
+
+            def pipeline_gate(tree_sha: str, invoker: str) -> runner.DonecheckResult:
+                result = runner.DonecheckResult(1, b"not done\n", b"", 0.01, False)
+                controller._log_donecheck(invoker, tree_sha, result)
+                return result
+
+            with mock.patch.object(controller, "_terminate_agent") as terminated:
+                controller._handle_controller_exit({"returncode": 0})
+            terminated.assert_called_once_with()
+            with (
+                mock.patch.object(controller, "_run_canary_checks") as canary_checks,
+                mock.patch.object(controller, "_run_gate", side_effect=pipeline_gate) as gate,
+            ):
+                self.assertEqual(controller._finalize_run(), 0)
+            canary_checks.assert_called_once_with()
+            gate.assert_called_once_with("declaration-snapshot", "pipeline")
+
+            rows = [json.loads(line) for line in controller.audit.path.read_text().splitlines()]
+            adjudication = next(
+                row for row in rows
+                if row.get("event") == "donecheck_invocation" and row.get("invoker") == "pipeline"
+            )
+            self.assertEqual(adjudication["tree_sha"], "declaration-snapshot")
+            self.assertEqual(adjudication["exit"], 1)
+            self.assertEqual(rows[-1]["end_reason"], "session_end")
+            self.assertEqual(rows[-1]["declarations_scored"], 1)
+            self.assertFalse(any(row.get("event") == "operator_intervention" for row in rows))
+
+    def test_nonzero_controller_exit_remains_infrastructure(self):
+        controller = runner.RunController({"arm": "B"})
+        with (
+            mock.patch.object(controller, "_terminate_agent") as terminated,
+            self.assertRaisesRegex(
+                runner.InfraIntegrity,
+                "host model/controller exited before a terminal condition rc=1",
+            ),
+        ):
+            controller._handle_controller_exit({"returncode": 1})
+        terminated.assert_not_called()
+        self.assertIsNone(controller.end_reason)
+
     def test_audit_dual_channel_and_hard_kill_recovery(self):
         self.assertEqual(str(runner.PRIVATE_AUDIT_PATH), "/run/ev005-private/audit.jsonl")
         self.assertNotIn("runner-private", str(runner.PRIVATE_AUDIT_PATH))
