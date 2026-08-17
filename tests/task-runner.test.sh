@@ -116,6 +116,10 @@ print("" if value is None else value)
 PY
 }
 
+file_mode() {
+  stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1" 2>/dev/null
+}
+
 run_tick() {
   local ws=$1
   shift
@@ -1111,6 +1115,53 @@ case_crash_dlq_terminal_reconcile() {
   fi
 }
 
+case_push_refusal_standalone_operator() {
+  local name=push-refusal-standalone-operator
+  local baseline_ws ws helper push_command dest report push_log baseline_rc rc output
+  baseline_ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$baseline_ws" tr-basic
+  set +e
+  run_tick "$baseline_ws" TR_MOCK_BEHAVIOR=auth-error >/dev/null 2>&1
+  baseline_rc=$?
+  set -e
+
+  ws=$(make_ws)
+  ws=$(cd "$ws" && pwd -P)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  helper="$ws/plain-push-helper.sh"
+  push_command="$helper | $helper"
+  cat >"$helper" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'unexpected push helper invocation\n' >>"$PUSH_MARKER"
+exit 0
+SH
+  chmod +x "$helper"
+
+  set +e
+  output=$(run_tick "$ws" TR_MOCK_BEHAVIOR=auth-error \
+    TR_PUSH_CMD="$push_command" PUSH_MARKER="$ws/push-marker" 2>&1)
+  rc=$?
+  set -e
+  dest="$ws/loop/tasks/dlq/tr-basic"
+  report="$dest/REPORT.md"
+  push_log="$dest/push.log"
+  if [[ "$baseline_rc" -eq 0 ]] \
+    && [[ "$rc" -eq "$baseline_rc" ]] \
+    && [[ -f "$dest/push-failed" ]] \
+    && grep -Fq 'push: TR_PUSH_CMD refused: standalone-operator' "$push_log" \
+    && grep -Eq '^push: rc=126 [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z dest=' "$push_log" \
+    && grep -Eq '^push: failed rc=126 [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$report" \
+    && ! grep -Fq "$push_command" "$push_log" \
+    && ! grep -Fq "$push_command" "$report" \
+    && ! grep -Fq "$push_command" <<<"$output" \
+    && [[ ! -e "$ws/push-marker" ]]; then
+    pass "$name"
+  else
+    fail "$name" "expected push-time standalone-operator refusal without helper execution: baseline_rc=$baseline_rc rc=$rc output=$output"
+  fi
+}
+
 case_dlq_push_failure_visible_and_retried() {
   local name=dlq-push-failure-visible-and-retried
   local baseline_ws ws push_helper allow_file credential push_command dest report push_log
@@ -1129,15 +1180,16 @@ case_dlq_push_failure_visible_and_retried() {
   allow_file="$ws/push-allowed"
   credential='credential-sentinel-22'
   push_command="$push_helper $credential"
-  cat >"$push_helper" <<'EOF'
+  cat >"$push_helper" <<'SH'
 #!/usr/bin/env bash
+set -euo pipefail
 if [[ ! -e "$PUSH_ALLOW_FILE" ]]; then
   printf 'push helper stdout\n'
   printf 'push helper stderr\n' >&2
   exit 7
 fi
 printf 'push helper success for %s\n' "$2"
-EOF
+SH
   chmod +x "$push_helper"
 
   set +e
@@ -1155,7 +1207,7 @@ EOF
     || ! grep -Fq 'push helper stdout' "$push_log" \
     || ! grep -Fq 'push helper stderr' "$push_log" \
     || ! grep -Eq '^push: failed rc=7 [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$report" \
-    || grep -R -Fq -- "$push_command" "$ws"; then
+    || grep -R -Fq -- "$credential" "$ws"; then
     fail "$name" "failed push contract mismatch: baseline_rc=$baseline_rc failure_rc=$failure_rc warnings=$warning_count output=$output"
     return
   fi
@@ -1171,7 +1223,7 @@ EOF
     && [[ "$(grep -Fc '== push attempt ' "$push_log")" -eq 2 ]] \
     && grep -Fq "push helper success for $report" "$push_log" \
     && ! grep -Fq 'warning: push failed' <<<"$retry_output" \
-    && ! grep -R -Fq -- "$push_command" "$ws" \
+    && ! grep -R -Fq -- "$credential" "$ws" \
     && [[ "$(state_value "$ws" tr-basic status)" = dlq ]]; then
     pass "$name"
   else
@@ -1179,34 +1231,412 @@ EOF
   fi
 }
 
-case_dlq_push_bash_error_is_redacted() {
-  local name=dlq-push-bash-error-is-redacted
-  local ws leak_marker dest report push_log output code push_log_mode
+case_push_accepts_credential_metacharacters() {
+  local name=push-accepts-credential-metacharacters
+  local ws helper credential dest report push_log rc
   ws=$(make_ws)
   ws=$(cd "$ws" && pwd -P)
   copy_task "$FIX_BASIC" "$ws" tr-basic
-  # Deliberately fake credential marker; named/sized to stay clear of secret-scanner patterns.
-  leak_marker='LEAKMARK9xyz'
+  helper="$ws/push-helper.sh"
+  credential='p@ssw0rd!#$*?'
+  cat >"$helper" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" != "$EXPECTED_CREDENTIAL" ]]; then
+  printf 'wrong credential\n' >&2
+  exit 8
+fi
+if [[ ! -f "$2" ]]; then
+  printf 'missing report\n' >&2
+  exit 9
+fi
+printf 'push accepted %s\n' "$2"
+SH
+  chmod +x "$helper"
 
   set +e
-  output=$(run_tick "$ws" TR_MOCK_BEHAVIOR=auth-error \
-    TR_PUSH_CMD="nonexistent-push-$leak_marker --auth" 2>&1)
-  code=$?
+  run_tick "$ws" TR_MOCK_BEHAVIOR=auth-error \
+    TR_PUSH_CMD="$helper $credential" EXPECTED_CREDENTIAL="$credential" >/dev/null 2>&1
+  rc=$?
   set -e
   dest="$ws/loop/tasks/dlq/tr-basic"
   report="$dest/REPORT.md"
   push_log="$dest/push.log"
-  push_log_mode=$(stat -c '%a' "$push_log" 2>/dev/null || stat -f '%Lp' "$push_log" 2>/dev/null)
-  if [[ "$code" -eq 0 ]] \
-    && [[ -f "$dest/push-failed" ]] \
-    && grep -Fqx '[bash-level error suppressed]' "$push_log" \
-    && grep -Eq '^push: rc=127 [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z dest=' "$push_log" \
-    && grep -Eq '^push: failed rc=127 [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$report" \
-    && [[ "$push_log_mode" = 600 ]] \
-    && ! grep -R -Fq -- "$leak_marker" "$ws"; then
+  if [[ "$rc" -eq 0 ]] \
+    && [[ ! -e "$dest/push-failed" ]] \
+    && grep -Fq "push accepted $report" "$push_log" \
+    && grep -Eq '^push: rc=0 [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z dest=' "$push_log" \
+    && ! grep -Fq 'push: failed rc=' "$report"; then
     pass "$name"
   else
-    fail "$name" "bash error redaction mismatch: rc=$code mode=$push_log_mode output=$output"
+    fail "$name" "expected credential-bearing argv push to succeed: rc=$rc"
+  fi
+}
+
+case_push_leak_redacts_credential_and_records_failure() {
+  local name=push-leak-redacts-credential-and-records-failure
+  local baseline_ws ws credential dest report push_log output baseline_rc rc push_log_mode
+  baseline_ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$baseline_ws" tr-basic
+  set +e
+  run_tick "$baseline_ws" TR_MOCK_BEHAVIOR=auth-error >/dev/null 2>&1
+  baseline_rc=$?
+  set -e
+
+  ws=$(make_ws)
+  ws=$(cd "$ws" && pwd -P)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  credential='credential!#sentinel$*?'
+  set +e
+  output=$(run_tick "$ws" TR_MOCK_BEHAVIOR=auth-error \
+    TR_PUSH_CMD="missing-push-helper $credential" 2>&1)
+  rc=$?
+  set -e
+  dest="$ws/loop/tasks/dlq/tr-basic"
+  report="$dest/REPORT.md"
+  push_log="$dest/push.log"
+  push_log_mode=$(file_mode "$push_log")
+  if [[ "$baseline_rc" -eq 0 ]] \
+    && [[ "$rc" -eq "$baseline_rc" ]] \
+    && [[ -f "$dest/push-failed" ]] \
+    && [[ "$push_log_mode" = 600 ]] \
+    && grep -Fqx '[push command refused before exec]' "$push_log" \
+    && grep -Eq '^push: rc=127 [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$push_log" \
+    && grep -Eq '^push: failed rc=127 [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$report" \
+    && ! grep -Fq "$credential" <<<"$output" \
+    && ! grep -R -Fq -- "$credential" "$ws"; then
+    pass "$name"
+  else
+    fail "$name" "expected redacted push failure without credential leakage: baseline_rc=$baseline_rc rc=$rc mode=$push_log_mode output=$output"
+  fi
+}
+
+case_push_redaction_unit_suppresses_runner_shell_diagnostics() {
+  local name=push-redaction-unit-suppresses-runner-shell-diagnostics
+  local ws src dest
+  ws=$(make_ws)
+  src="$ws/push-output"
+  dest="$ws/push-log"
+  {
+    printf '%s\n' '_: /x/y'
+    printf '%s\n' 'task-runner.sh: line 11: /x/y: command not found'
+    printf '%s\n' '/tmp/task-runner.sh: line 12: /x/y: command not found'
+    printf '%s\n' '/tmp/task-runner.sh: line 12: /x/y: Permission denied'
+    printf '%s\n' '/tmp/task-runner.sh: line 12: /x/y: No such file or directory'
+    printf '%s\n' '/tmp/task-runner.sh: line 12: /x/y: is a directory'
+    printf '%s\n' '/tmp/task-runner.sh: line 12: /x/y: cannot execute binary file: Exec format error'
+    printf '%s\n' '/tmp/my-task-runner.sh: line 12: helper context should survive'
+    printf '%s\n' 'ordinary helper prose survives unchanged'
+  } >"$src"
+  : >"$dest"
+
+  (
+    source "$ROOT/scripts/lib-command-argv.sh"
+    append_redacted_push_output "$src" "$dest"
+  )
+
+  if [[ "$(grep -Fxc '[bash-level error suppressed]' "$dest")" = 1 ]] \
+    && [[ "$(grep -Fxc '[task-runner shell diagnostic redacted]' "$dest")" = 6 ]] \
+    && grep -Fqx '/tmp/my-task-runner.sh: line 12: helper context should survive' "$dest" \
+    && grep -Fqx 'ordinary helper prose survives unchanged' "$dest" \
+    && [[ "$(wc -l <"$dest" | tr -d '[:space:]')" = 9 ]]; then
+    pass "$name"
+  else
+    fail "$name" "expected all synthetic shell diagnostics to redact: $(cat "$dest")"
+  fi
+}
+
+case_resolve_cmd_argv0_allow_empty_strict_mode_safe() {
+  local name=resolve-cmd-argv0-allow-empty-strict-mode-safe
+  local output rc
+  set +e
+  output=$(
+    bash -c '
+      set -euo pipefail
+      source "$1/scripts/lib-command-argv.sh"
+      validate_cmd_argv TEST_CMD $'"'"' \t '"'"' allow-empty
+      if resolve_cmd_argv0 TEST_CMD; then
+        resolve_rc=0
+      else
+        resolve_rc=$?
+      fi
+      printf "resolve_rc=%s\nreason=%s\n" "$resolve_rc" "$_validated_reason"
+    ' _ "$ROOT" 2>&1
+  )
+  rc=$?
+  set -e
+  if [[ "$rc" -eq 0 ]] \
+    && grep -Fqx 'resolve_rc=1' <<<"$output" \
+    && grep -Fqx 'reason=empty-after-split' <<<"$output"; then
+    pass "$name"
+  else
+    fail "$name" "expected strict-mode empty argv0 guard to return normally: rc=$rc output=$output"
+  fi
+}
+
+case_push_exec_format_error_redacts_argv0_e2e() {
+  local name=push-exec-format-error-redacts-argv0-e2e
+  local baseline_ws ws bad_bin dest report push_log output baseline_rc rc
+  baseline_ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$baseline_ws" tr-basic
+  set +e
+  run_tick "$baseline_ws" TR_MOCK_BEHAVIOR=auth-error >/dev/null 2>&1
+  baseline_rc=$?
+  set -e
+
+  ws=$(make_ws)
+  ws=$(cd "$ws" && pwd -P)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  bad_bin="$ws/bad-push-bin"
+  printf '\177ELF' >"$bad_bin"
+  chmod 0755 "$bad_bin"
+
+  set +e
+  output=$(run_tick "$ws" TR_MOCK_BEHAVIOR=auth-error TR_PUSH_CMD="$bad_bin" 2>&1)
+  rc=$?
+  set -e
+  dest="$ws/loop/tasks/dlq/tr-basic"
+  report="$dest/REPORT.md"
+  push_log="$dest/push.log"
+  if [[ "$baseline_rc" -eq 0 ]] \
+    && [[ "$rc" -eq "$baseline_rc" ]] \
+    && [[ -f "$dest/push-failed" ]] \
+    && grep -Fqx '[task-runner shell diagnostic redacted]' "$push_log" \
+    && grep -Eq '^push: rc=126 [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$push_log" \
+    && grep -Eq '^push: failed rc=126 [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$report" \
+    && ! grep -Fq "$bad_bin" "$push_log" \
+    && ! grep -Fq "$bad_bin" "$report" \
+    && ! grep -Fq "$bad_bin" <<<"$output"; then
+    pass "$name"
+  else
+    fail "$name" "expected exec-format push failure to redact argv0: baseline_rc=$baseline_rc rc=$rc output=$output"
+  fi
+}
+
+case_push_refuses_raw_newline_and_carriage_return() {
+  local name=push-refuses-raw-newline-and-carriage-return
+  local ws_lf ws_cr helper dest_lf dest_cr push_log_lf push_log_cr rc_lf rc_cr
+  ws_lf=$(make_ws)
+  copy_task "$FIX_BASIC" "$ws_lf" tr-basic
+  helper="$ws_lf/push-helper.sh"
+  cat >"$helper" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'unexpected helper invocation\n' >>"$PUSH_MARKER"
+exit 0
+SH
+  chmod +x "$helper"
+  set +e
+  run_tick "$ws_lf" TR_MOCK_BEHAVIOR=auth-error \
+    TR_PUSH_CMD="$helper"$'\n'"$helper" PUSH_MARKER="$ws_lf/push-marker" >/dev/null 2>&1
+  rc_lf=$?
+  set -e
+  dest_lf="$ws_lf/loop/tasks/dlq/tr-basic"
+  push_log_lf="$dest_lf/push.log"
+
+  ws_cr=$(make_ws)
+  copy_task "$FIX_BASIC" "$ws_cr" tr-basic
+  set +e
+  run_tick "$ws_cr" TR_MOCK_BEHAVIOR=auth-error \
+    TR_PUSH_CMD="$helper"$'\r'" --flag" PUSH_MARKER="$ws_cr/push-marker" >/dev/null 2>&1
+  rc_cr=$?
+  set -e
+  dest_cr="$ws_cr/loop/tasks/dlq/tr-basic"
+  push_log_cr="$dest_cr/push.log"
+
+  if [[ "$rc_lf" -eq 0 ]] \
+    && [[ "$rc_cr" -eq 0 ]] \
+    && grep -Fq 'push: TR_PUSH_CMD refused: raw-newline-or-carriage-return' "$push_log_lf" \
+    && grep -Fq 'push: TR_PUSH_CMD refused: raw-newline-or-carriage-return' "$push_log_cr" \
+    && [[ ! -e "$ws_lf/push-marker" ]] \
+    && [[ ! -e "$ws_cr/push-marker" ]]; then
+    pass "$name"
+  else
+    fail "$name" "expected raw LF/CR refusal before splitting: rc_lf=$rc_lf rc_cr=$rc_cr"
+  fi
+}
+
+case_push_whitespace_only_is_noop() {
+  local name=push-whitespace-only-is-noop
+  local baseline_ws ws dest baseline_rc rc
+  baseline_ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$baseline_ws" tr-basic
+  set +e
+  run_tick "$baseline_ws" TR_MOCK_BEHAVIOR=auth-error >/dev/null 2>&1
+  baseline_rc=$?
+  set -e
+
+  ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  set +e
+  run_tick "$ws" TR_MOCK_BEHAVIOR=auth-error TR_PUSH_CMD=$' \t ' >/dev/null 2>&1
+  rc=$?
+  set -e
+  dest="$ws/loop/tasks/dlq/tr-basic"
+  if [[ "$baseline_rc" -eq 0 ]] \
+    && [[ "$rc" -eq "$baseline_rc" ]] \
+    && [[ ! -e "$dest/push-failed" ]] \
+    && [[ ! -e "$dest/push.log" ]]; then
+    pass "$name"
+  else
+    fail "$name" "expected whitespace-only push command to be treated as unset: baseline_rc=$baseline_rc rc=$rc"
+  fi
+}
+
+case_push_does_not_expand_tilde() {
+  local name=push-does-not-expand-tilde
+  local baseline_ws ws dest push_log output baseline_rc rc shell_expanded_rc literal_argv_rc literal_tilde
+  baseline_ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$baseline_ws" tr-basic
+  set +e
+  run_tick "$baseline_ws" TR_MOCK_BEHAVIOR=auth-error >/dev/null 2>&1
+  baseline_rc=$?
+  set -e
+
+  ws=$(make_ws)
+  ws=$(cd "$ws" && pwd -P)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  literal_tilde="$ws/~"
+  if [[ -e "$literal_tilde" ]]; then
+    fail "$name" "expected no literal tilde entry in workspace before push"
+    return
+  fi
+  set +e
+  (
+    cd "$ws"
+    sh -c '/bin/ls ~ >/dev/null 2>&1'
+  )
+  shell_expanded_rc=$?
+  (
+    cd "$ws"
+    /bin/ls '~' >/dev/null 2>&1
+  )
+  literal_argv_rc=$?
+  output=$(cd "$ws" && run_tick "$ws" TR_MOCK_BEHAVIOR=auth-error TR_PUSH_CMD='/bin/ls ~' 2>&1)
+  rc=$?
+  set -e
+  dest="$ws/loop/tasks/dlq/tr-basic"
+  push_log="$dest/push.log"
+  if [[ "$baseline_rc" -eq 0 ]] \
+    && [[ "$shell_expanded_rc" -eq 0 ]] \
+    && [[ "$literal_argv_rc" -eq 1 ]] \
+    && [[ "$rc" -eq "$baseline_rc" ]] \
+    && [[ -f "$dest/push-failed" ]] \
+    && grep -Eq '^push: rc=1 [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$push_log" \
+    && ! grep -Fq "$literal_tilde" "$push_log" \
+    && ! grep -Fq "$literal_tilde" <<<"$output"; then
+    pass "$name"
+  else
+    fail "$name" "expected shell-tilde rc0, literal-argv rc1, and push rc1 without literal-tilde artifacts: baseline=$baseline_rc shell=$shell_expanded_rc literal=$literal_argv_rc rc=$rc output=$output"
+  fi
+}
+
+case_push_env_assignment_prefix_reports_127() {
+  local name=push-env-assignment-prefix-reports-127
+  local baseline_ws ws helper marker dest push_log output baseline_rc rc
+  baseline_ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$baseline_ws" tr-basic
+  set +e
+  run_tick "$baseline_ws" TR_MOCK_BEHAVIOR=auth-error >/dev/null 2>&1
+  baseline_rc=$?
+  set -e
+
+  ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  helper="$ws/helper"
+  marker="$ws/helper-invoked"
+  cat >"$helper" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "${FOO:-missing}" >"$HELPER_MARKER"
+exit 0
+SH
+  chmod +x "$helper"
+  set +e
+  output=$(PATH="$ws:$PATH" HELPER_MARKER="$marker" \
+    run_tick "$ws" TR_MOCK_BEHAVIOR=auth-error TR_PUSH_CMD='FOO=bar helper' 2>&1)
+  rc=$?
+  set -e
+  dest="$ws/loop/tasks/dlq/tr-basic"
+  push_log="$dest/push.log"
+  if [[ "$baseline_rc" -eq 0 ]] \
+    && [[ "$rc" -eq "$baseline_rc" ]] \
+    && [[ -f "$dest/push-failed" ]] \
+    && grep -Fq 'push: TR_PUSH_CMD refused: not-found' "$push_log" \
+    && grep -Eq '^push: rc=127 [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$push_log" \
+    && ! grep -Fq 'FOO=bar helper' "$push_log" \
+    && ! grep -Fq 'FOO=bar helper' <<<"$output" \
+    && [[ ! -e "$marker" ]]; then
+    pass "$name"
+  else
+    fail "$name" "expected env-assignment prefix to be unresolved argv0 with rc=127: baseline=$baseline_rc rc=$rc output=$output"
+  fi
+}
+
+case_push_multiword_command_succeeds() {
+  local name=push-multiword-command-succeeds
+  local ws helper dest report push_log rc
+  ws=$(make_ws)
+  ws=$(cd "$ws" && pwd -P)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  helper="$ws/push-helper.sh"
+  cat >"$helper" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" != upload ]]; then
+  printf 'wrong subcommand\n' >&2
+  exit 8
+fi
+printf 'multiword push %s\n' "$2"
+SH
+  chmod +x "$helper"
+
+  set +e
+  run_tick "$ws" TR_MOCK_BEHAVIOR=auth-error TR_PUSH_CMD="$helper upload" >/dev/null 2>&1
+  rc=$?
+  set -e
+  dest="$ws/loop/tasks/dlq/tr-basic"
+  report="$dest/REPORT.md"
+  push_log="$dest/push.log"
+  if [[ "$rc" -eq 0 ]] \
+    && [[ ! -e "$dest/push-failed" ]] \
+    && grep -Fq "multiword push $report" "$push_log" \
+    && grep -Eq '^push: rc=0 [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$push_log"; then
+    pass "$name"
+  else
+    fail "$name" "expected multiword argv push command to succeed: rc=$rc"
+  fi
+}
+
+case_probe_resolution_failure_does_not_leak_value() {
+  local name=probe-resolution-failure-does-not-leak-value
+  local ws output rc stderr_file marker true_bin i
+  ws=$(make_ws)
+  ws=$(cd "$ws" && pwd -P)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  marker='probe-leak-sentinel-77'
+  true_bin=$(command -v true)
+  output=''
+  rc=0
+  for i in 1 2 3 4; do
+    set +e
+    output="$output"$'\n'"$(env TR_SPAWN_STEP="$ROOT/adapters/hermes/spawn_step.sh" \
+      HERMES_STEP_CMD="$true_bin" \
+      HERMES_PROBE_CMD="$ws/missing-probe-$marker" \
+      bash "$RUNNER" "$ws" 2>&1)"
+    rc=$?
+    set -e
+  done
+  stderr_file="$ws/loop/artifacts/tr-basic/attempts/001/model.stderr"
+  if [[ "$rc" -eq 0 ]] \
+    && [[ -f "$stderr_file" ]] \
+    && [[ "$(driver_value "$ws" tr-basic exit_code)" = 111 ]] \
+    && grep -Fq 'HERMES_PROBE_CMD: not-found' "$stderr_file" \
+    && ! grep -Fq "$marker" "$stderr_file" \
+    && ! grep -Fq "$marker" <<<"$output"; then
+    pass "$name"
+  else
+    fail "$name" "expected probe resolution failure without value leak: rc=$rc output=$output stderr=$(cat "$stderr_file" 2>/dev/null)"
   fi
 }
 
@@ -2167,6 +2597,39 @@ case_files_created_enforced() {
   fi
 }
 
+case_artifact_modes_restrictive() {
+  local name=artifact-modes-restrictive
+  local ws root task_dir attempt_dir root_mode task_mode attempt_mode stdout_mode stderr_mode prompt_mode
+  ws=$(make_ws)
+  mkdir -p "$ws/loop/artifacts/tr-basic/attempts/001"
+  chmod 0755 "$ws/loop/artifacts" "$ws/loop/artifacts/tr-basic" "$ws/loop/artifacts/tr-basic/attempts/001"
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  (
+    umask 022
+    run_tick "$ws" TR_MOCK_BEHAVIOR=success
+  )
+  root="$ws/loop/artifacts"
+  task_dir="$root/tr-basic"
+  attempt_dir="$task_dir/attempts/001"
+  root_mode=$(file_mode "$root")
+  task_mode=$(file_mode "$task_dir")
+  attempt_mode=$(file_mode "$attempt_dir")
+  stdout_mode=$(file_mode "$attempt_dir/model.stdout")
+  stderr_mode=$(file_mode "$attempt_dir/model.stderr")
+  prompt_mode=$(file_mode "$attempt_dir/prompt.md")
+  if [[ "$(state_value "$ws" tr-basic status)" = delivered ]] \
+    && [[ "$root_mode" = 755 ]] \
+    && [[ "$task_mode" = 700 ]] \
+    && [[ "$attempt_mode" = 700 ]] \
+    && [[ "$stdout_mode" = 600 ]] \
+    && [[ "$stderr_mode" = 600 ]] \
+    && [[ "$prompt_mode" = 600 ]]; then
+    pass "$name"
+  else
+    fail "$name" "expected restrictive artifact modes: root=$root_mode task=$task_mode attempt=$attempt_mode stdout=$stdout_mode stderr=$stderr_mode prompt=$prompt_mode"
+  fi
+}
+
 case_crash_verifying_terminal_rederive() {
   # Regression guard (GLM review 2026-07-04, defect 1): a crash inside the
   # verifying window must not lose persistent-failure — recovery re-derives
@@ -2233,6 +2696,7 @@ case_prior_attempt_result_edge_classes
 case_prompt_render_fallback_substitutes_contract_tokens
 case_files_created_enforced
 case_plain_persistent_failure_dlq
+case_artifact_modes_restrictive
 case_crash_verifying_terminal_rederive
 case_crash_spawn
 case_crash_stamp
@@ -2244,8 +2708,19 @@ case_crash_stamp_deterministic_auth_recovery
 case_crash_donecheck
 case_crash_deliver_terminal_reconcile
 case_crash_dlq_terminal_reconcile
+case_push_refusal_standalone_operator
 case_dlq_push_failure_visible_and_retried
-case_dlq_push_bash_error_is_redacted
+case_push_accepts_credential_metacharacters
+case_push_leak_redacts_credential_and_records_failure
+case_push_redaction_unit_suppresses_runner_shell_diagnostics
+case_resolve_cmd_argv0_allow_empty_strict_mode_safe
+case_push_exec_format_error_redacts_argv0_e2e
+case_push_refuses_raw_newline_and_carriage_return
+case_push_whitespace_only_is_noop
+case_push_does_not_expand_tilde
+case_push_env_assignment_prefix_reports_127
+case_push_multiword_command_succeeds
+case_probe_resolution_failure_does_not_leak_value
 case_stale_lease_reap
 case_future_lease_reap_bounded
 case_attempts_exhaustion

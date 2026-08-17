@@ -25,6 +25,7 @@ scripts/family-updater	exempt	none	not-applicable	harness-clone-updater-not-memb
 scripts/updater-bootstrap	exempt	none	not-applicable	out-of-band-updater-trust-bootstrap	-	-
 scripts/lib-updater-verify.sh	exempt	none	not-applicable	sourced-updater-verification-library	-	-
 scripts/lib-bounded.sh	exempt	none	not-applicable	sourced-library	-	-
+scripts/lib-command-argv.sh	exempt	none	not-applicable	sourced-library	-	-
 scripts/lib-classify.sh	exempt	none	not-applicable	sourced-library	-	-
 scripts/lib-donecheck.sh	exempt	none	not-applicable	sourced-library	-	-
 scripts/lib-pause.sh	exempt	explicit-function-argument	not-applicable	sourced-library	-	-
