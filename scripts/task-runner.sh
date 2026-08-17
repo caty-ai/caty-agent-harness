@@ -43,10 +43,12 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd "$script_dir/.." && pwd)
 source "$repo_root/scripts/lib-pause.sh"
 source "$repo_root/scripts/lib-donecheck.sh"
+source "$repo_root/scripts/lib-command-argv.sh"
 workspace=$(caty_pause_canonical_workspace "$workspace" 2>/dev/null) || {
   printf 'invalid workspace: %s\n' "$workspace" >&2
   exit 2
 }
+umask 077
 pause_state=$(caty_pause_workspace_state "$workspace")
 if [[ "$pause_state" != enabled ]]; then
   caty_pause_status_record "$workspace" task-runner
@@ -58,11 +60,16 @@ if [[ -z "$TR_SPAWN_STEP" ]]; then
   exit 2
 fi
 if [[ "$TR_SPAWN_STEP" != /* ]] || [[ ! -f "$TR_SPAWN_STEP" ]] || [[ ! -x "$TR_SPAWN_STEP" ]]; then
-  printf 'TR_SPAWN_STEP must be an absolute executable file: value=%s\n' "$TR_SPAWN_STEP" >&2
+  printf 'TR_SPAWN_STEP must be an absolute executable file\n' >&2
   exit 2
 fi
 if ! caty_load_interpreters "$workspace"; then
   exit 2
+fi
+if [[ -n "$TR_PUSH_CMD" ]]; then
+  if ! validate_cmd_argv TR_PUSH_CMD "$TR_PUSH_CMD" allow-empty; then
+    printf 'warning: TR_PUSH_CMD refused: %s\n' "$_validated_reason" >&2
+  fi
 fi
 
 source "$repo_root/scripts/lib-classify.sh"
@@ -960,7 +967,7 @@ ERR_TRAP
   [[ ${LANG+x} ]] && donecheck_env+=("LANG=$LANG")
   [[ ${LC_ALL+x} ]] && donecheck_env+=("LC_ALL=$LC_ALL")
   [[ ${TZ+x} ]] && donecheck_env+=("TZ=$TZ")
-  "${donecheck_env[@]}" \
+  "${donecheck_env[@]+"${donecheck_env[@]}"}" \
     "$TR_PERL" -MPOSIX=setsid -e 'setsid() or die "setsid: $!"; chdir $ENV{TR_DC_CWD} or die "chdir: $!"; exec @ARGV or die "exec: $!"' \
     "$TR_BASH" -euo pipefail "$wrapped_file" >"$log_file" 2>&1 &
   local pid=$!
@@ -1411,18 +1418,38 @@ push_dlq_report() {
   local dest=$1
   local report_file="$dest/REPORT.md"
   local push_log="$dest/push.log"
-  local push_output attempted_at push_rc
+  local push_output attempted_at push_rc push_reason
+  local push_argv=()
   attempted_at=$(utc_now)
+
+  if ! validate_cmd_argv TR_PUSH_CMD "$TR_PUSH_CMD" allow-empty; then
+    push_reason=$_validated_reason
+    push_rc=126
+  elif ((${#_validated_argv[@]} == 0)); then
+    return 0
+  elif ! resolve_cmd_argv0 TR_PUSH_CMD; then
+    push_reason=$_validated_reason
+    push_rc=$_validated_status_code
+  else
+    push_argv=("${_validated_argv[@]+"${_validated_argv[@]}"}")
+  fi
 
   ( umask 077; : >>"$push_log" ) || true
   push_output=$(mktemp "$dest/.push-output.XXXXXX")
   printf '\n== push attempt %s dest=%s ==\n' "$attempted_at" "$dest" >>"$push_log" || true
-  if "$TR_BASH" -c "$TR_PUSH_CMD \"\$1\"" _ "$report_file" >"$push_output" 2>&1; then
-    push_rc=0
+  if [[ -n "${push_reason:-}" ]]; then
+    printf 'push: TR_PUSH_CMD refused: %s\n' "$push_reason" >"$push_output"
+    if [[ "$push_reason" = not-found || "$push_reason" = not-executable ]]; then
+      printf '[push command refused before exec]\n' >>"$push_output"
+    fi
   else
-    push_rc=$?
+    if "${push_argv[@]+"${push_argv[@]}"}" "$report_file" >"$push_output" 2>&1; then
+      push_rc=0
+    else
+      push_rc=$?
+    fi
   fi
-  sed 's/^_: .*/[bash-level error suppressed]/' "$push_output" >>"$push_log" || true
+  append_redacted_push_output "$push_output" "$push_log" || true
   rm -f "$push_output" || true
   printf 'push: rc=%d %s dest=%s\n' "$push_rc" "$attempted_at" "$dest" >>"$push_log" || true
 
@@ -1791,6 +1818,7 @@ reap_running() {
         nnn=$(printf '%03d' $(( attempts_used + 1 )))
         attempt_dir="$artifact_dir/attempts/$nnn"
         mkdir -p "$attempt_dir"
+        chmod 0700 "$attempt_dir"
         driver_write "$attempt_dir/driver.json" "${lease_started:-$(utc_now)}" "$(utc_now)" 0 manual-recovery "" unproven-pgid
         if [[ -f "$task_file" ]]; then
           dlq_task "$task_file" "$artifact_dir" unproven-pgid
@@ -1808,6 +1836,7 @@ reap_running() {
     nnn=$(printf '%03d' $(( attempts_used + 1 )))
     local attempt_dir="$artifact_dir/attempts/$nnn"
     mkdir -p "$attempt_dir"
+    chmod 0700 "$attempt_dir"
     if [[ -f "$attempt_dir/driver.json" ]]; then
       local recovered_class
       recovered_class=$(python3 - "$attempt_dir/driver.json" <<'PY'
@@ -1963,6 +1992,10 @@ run_one_attempt() {
   local artifact_dir="$artifacts_root/$task_id"
   local attempts_dir="$artifact_dir/attempts"
   local state_file="$artifact_dir/state.json"
+  mkdir -p "$artifact_dir"
+  if [[ ! -e "$state_file" ]]; then
+    chmod 0700 "$artifact_dir"
+  fi
   mkdir -p "$attempts_dir" "$artifact_dir/out"
   init_state_if_missing "$state_file"
   if ! load_state "$state_file"; then
@@ -1979,6 +2012,7 @@ run_one_attempt() {
   nnn=$(printf '%03d' $(( attempts_used + 1 )))
   local attempt_dir="$attempts_dir/$nnn"
   mkdir -p "$attempt_dir"
+  chmod 0700 "$attempt_dir"
   render_prompt "$task_file" "$artifact_dir" "$attempt_dir" "$current_step"
 
   local started_at

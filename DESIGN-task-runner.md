@@ -280,6 +280,18 @@ attempt consumes budget; identical-error fast-DLQ; infra failures held separatel
 12. `TR_SPAWN_STEP` misconfiguration is operator-level by design. Startup rejects
     non-absolute, non-regular, or non-executable values, but does not attest provider
     contents or constrain what an intentionally configured provider can do.
+    `TR_SPAWN_STEP` remains the single absolute-path contract.
+
+    The other command knobs follow the same no-shell boundary but different
+    resolution rules: `HERMES_STEP_CMD`, `HERMES_PROBE_CMD`, and `TR_PUSH_CMD` are
+    parsed as whitespace-split argv arrays, reject raw CR/LF before splitting, and
+    refuse only exact standalone operator tokens after splitting. Glued fragments
+    such as `echo x|wc`, `2>`, `&>`, `|&`, and `<<` are literal arguments. The
+    runner resolves push argv0 to a regular executable file before exec so the shell
+    never emits a path diagnostic, and the artifact permission boundary is
+    creation-time only: `loop/artifacts/` stays at the install-time mode, while
+    task/attempt directories and sensitive files are narrowed for new writes without
+    retroactively changing existing ones.
 
 ## 8. Cross-cutting contracts (grok-build study, Issue #43 → #49)
 

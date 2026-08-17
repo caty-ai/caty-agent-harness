@@ -358,9 +358,63 @@ path replacement race. `install.sh --check` remains read-only: its Hermes confor
 row reads and hashes the configured wrapper, provider, probe, and evidence files
 without executing them.
 
-When configured, `push.log` persists the push command's combined output; bash-level
-errors are redacted. Keep secrets out of command-name position and out of helper output.
-`push.log` is append-only, with one block per tick while failing, and operator-trimmed.
+Command knobs execute directly as argv with no shell re-expansion. Quotes are not
+honored. `TR_SPAWN_STEP` stays on the runner side as one absolute executable-file
+path; `HERMES_STEP_CMD` and `HERMES_PROBE_CMD` are owned by
+`adapters/hermes/spawn_step.sh`; and `TR_PUSH_CMD` is owned by the runner's DLQ push
+path. The Hermes and push command vars are whitespace-split into argv arrays. Raw
+CR/LF values are rejected before splitting. The standalone-token check is a migration
+diagnostic, not a safety barrier: it refuses only exact tokens `;`, `&`, `|`, `<`,
+`>`, `>>`, `||`, `&&`, `;;`, and backtick. Characters inside a token are not
+inspected, so glued operator fragments stay literal arguments and are not diagnosed.
+Accepted glued gaps include `echo x|wc`, `2>`, `&>`, `|&`, and `<<`. `TR_PUSH_CMD`'s
+move to argv is a breaking contract change, so shell snippets must move into a wrapper
+script with explicit arguments.
+
+When configured, `push.log` persists the push command's combined output. Only shell
+diagnostics whose basename is exactly `task-runner.sh` and that match
+`^(.*/)?task-runner\.sh: line N: ...` are rewritten to
+`[task-runner shell diagnostic redacted]`; the legacy `_: ...` line is still folded
+to `[bash-level error suppressed]`; and a pre-exec `not-found` / `not-executable`
+refusal adds `[push command refused before exec]`. The credential value itself is not
+filtered. Argument position is supported, so keep secrets out of command-name position
+and out of helper output. `push.log` is append-only, with one block per tick while
+failing, and operator-trimmed.
+
+## Compatibility
+
+A malformed `TR_PUSH_CMD` value is warned about by name and reason only; startup
+keeps running and the refusal is enforced when the runner reaches the push path.
+
+- Accepted: a command plus arguments, including arguments containing `! # $ * ? ~ [ ] { }`
+  and `&`/`?` inside URLs.
+- Refused: raw newline/CR, and any standalone operator token (`a | b`, `a && b`,
+  `a ; b`).
+- Silently changed: a multi-line value previously ran every line under `bash -c` and
+  now refuses; a word that exists only as a shell builtin or function (for example
+  `export`) no longer resolves, while a word that also exists as a real binary (for
+  example `echo`) resolves to that binary; an env-assignment prefix
+  (`FOO=bar helper`) previously worked and now fails with 127; glued operators
+  (`echo x|wc`) are not diagnosed and become literal arguments.
+
+Push-time execution resolves `TR_PUSH_CMD` argv0 to a regular executable file before
+exec (`-f` and `-x`), using `type -P`. A name therefore resolves if and only if a real
+executable file for it exists on `PATH`; directories, and words that exist only as
+shell builtins or functions, are not accepted. A refused push command writes a
+redacted failure reason, adds `push-failed`, and returns 0 so the tick continues.
+
+## Artifact permissions
+
+- Leave `loop/artifacts/` at the mode created by `loop-init`; the runner does not
+  re-chmod the root directory.
+- Create each task artifact directory with `0700` on first creation. Each attempt
+  directory is forced back to `0700` whenever the runner materializes or reopens it.
+- Create sensitive files such as `prompt.md`, `model.stdout`, `model.stderr`, and
+  `push.log` with `0600`.
+- The runner's `umask 077` crosses the `exec` boundary into the step provider and
+  affects files the provider creates anywhere, including outside the workspace.
+- The seam-2 results contract is read-only and same-uid only: a plugin can consume
+  `loop/artifacts/<task-id>/` only when it runs as the same uid as the runner.
 
 ## Destructive-command policy
 

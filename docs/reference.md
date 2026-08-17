@@ -77,8 +77,13 @@ The flush intake consumer's accounting ledger is `loop/pending/intake-runs.log`.
   donecheck depends on `python3` there; macOS ships `/usr/bin/python3`, while Linux
   distributions may not. Other inherited variables disappear and dependent checks
   fail loudly.
-- `TR_SPAWN_STEP` is one argv word and must be an absolute executable-file path.
-  Migrate relative or PATH-resolved provider configurations before running the runner.
+- `TR_SPAWN_STEP`, `HERMES_STEP_CMD`, `HERMES_PROBE_CMD`, and `TR_PUSH_CMD` are
+  executed directly as argv with no shell re-expansion. `TR_SPAWN_STEP` remains one
+  absolute argv word and still additionally must be an absolute executable-file
+  path, so relative or PATH-resolved `TR_SPAWN_STEP` configurations must migrate
+  before running the runner. `HERMES_STEP_CMD`, `HERMES_PROBE_CMD`, and
+  `TR_PUSH_CMD` are whitespace-split into argv arrays and may use PATH-resolved
+  regular executable names.
 
 ---
 

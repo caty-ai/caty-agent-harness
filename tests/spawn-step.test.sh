@@ -155,17 +155,22 @@ case_step_runs_in_workspace() {
 
 case_probe_cmd_nonexistent() {
   local name=probe-cmd-nonexistent
-  local dir code
+  local dir code output marker
   dir=$(make_case_dir)
   write_success_cli "$dir/fake-hermes"
+  marker='probe-path-sentinel-44'
   set +e
-  HERMES_STEP_CMD="$dir/fake-hermes" HERMES_PROBE_CMD="$dir/missing-probe" run_adapter "$dir" >/dev/null 2>&1
+  output=$(HERMES_STEP_CMD="$dir/fake-hermes" \
+    HERMES_PROBE_CMD="$dir/missing-probe-$marker" \
+    run_adapter "$dir" 2>&1)
   code=$?
   set -e
-  if [[ "$code" -eq 111 ]]; then
+  if [[ "$code" -eq 111 ]] \
+    && grep -Fq 'HERMES_PROBE_CMD: not-found' <<<"$output" \
+    && ! grep -Fq "$marker" <<<"$output"; then
     pass "$name"
   else
-    fail "$name" "expected exit 111, got $code"
+    fail "$name" "expected exit 111 with redacted not-found reason, got rc=$code output=$output"
   fi
 }
 
@@ -188,6 +193,104 @@ SH
     pass "$name"
   else
     fail "$name" "expected exit 111 without invoking step command"
+  fi
+}
+
+case_probe_does_not_expand_tilde() {
+  local name=probe-does-not-expand-tilde
+  local dir code shell_expanded_rc literal_argv_rc sentinel literal_tilde workspace
+  dir=$(make_case_dir)
+  sentinel="$dir/invoked"
+  workspace=$(cd "$dir/ws" && pwd -P)
+  literal_tilde="$workspace/~"
+  cat >"$dir/fake-hermes" <<SH
+#!/usr/bin/env bash
+touch "$sentinel"
+printf '{"step_complete":true}\n' >"\$2/step-result.json"
+SH
+  chmod +x "$dir/fake-hermes"
+  if [[ -e "$literal_tilde" ]]; then
+    fail "$name" "expected no literal tilde entry in workspace before probe"
+    return
+  fi
+  set +e
+  (
+    cd "$workspace"
+    sh -c '/bin/ls ~ >/dev/null 2>&1'
+  )
+  shell_expanded_rc=$?
+  (
+    cd "$workspace"
+    /bin/ls '~' >/dev/null 2>&1
+  )
+  literal_argv_rc=$?
+  set -e
+  set +e
+  HERMES_STEP_CMD="$dir/fake-hermes" HERMES_PROBE_CMD='/bin/ls ~' run_adapter "$dir" >/dev/null 2>&1
+  code=$?
+  set -e
+  # Portability: BSD ls exits 1 on a missing operand, GNU ls exits 2 — assert
+  # nonzero rather than a specific code. The discriminating guard is the
+  # sentinel/111 pair, not this premise arm.
+  if [[ "$shell_expanded_rc" -eq 0 ]] \
+    && [[ "$literal_argv_rc" -ne 0 ]] \
+    && [[ "$code" -eq 111 ]] \
+    && [[ ! -e "$sentinel" ]] \
+    && [[ ! -e "$literal_tilde" ]]; then
+    pass "$name"
+  else
+    fail "$name" "expected shell-tilde rc0, literal-argv nonzero rc, and adapter rc111 without step launch: shell=$shell_expanded_rc literal=$literal_argv_rc adapter=$code"
+  fi
+}
+
+case_probe_refuses_standalone_operator() {
+  local name=probe-refuses-standalone-operator
+  local dir code output sentinel
+  dir=$(make_case_dir)
+  sentinel="$dir/invoked"
+  cat >"$dir/fake-hermes" <<SH
+#!/usr/bin/env bash
+touch "$sentinel"
+printf '{"step_complete":true}\n' >"\$2/step-result.json"
+SH
+  chmod +x "$dir/fake-hermes"
+  write_exit_cli "$dir/probe-ok" 0
+  set +e
+  output=$(HERMES_STEP_CMD="$dir/fake-hermes" \
+    HERMES_PROBE_CMD="$dir/probe-ok | $dir/probe-ok" \
+    run_adapter "$dir" 2>&1)
+  code=$?
+  set -e
+  if [[ "$code" -eq 111 ]] \
+    && grep -Fq 'HERMES_PROBE_CMD: standalone-operator' <<<"$output" \
+    && ! grep -Fq "$dir/probe-ok | $dir/probe-ok" <<<"$output" \
+    && [[ ! -e "$sentinel" ]]; then
+    pass "$name"
+  else
+    fail "$name" "expected standalone-operator refusal before step launch: rc=$code output=$output"
+  fi
+}
+
+case_probe_resolution_failure_does_not_leak_value() {
+  local name=probe-resolution-failure-does-not-leak-value
+  local dir code output_file marker
+  dir=$(make_case_dir)
+  marker='probe-path-sentinel-81'
+  write_success_cli "$dir/fake-hermes"
+  output_file="$dir/captured.stderr"
+  set +e
+  HERMES_STEP_CMD="$dir/fake-hermes" \
+    HERMES_PROBE_CMD="$dir/missing-probe-$marker" \
+    "$ADAPTER" "$dir/task.md" "$dir/ws" "$dir/attempt" 1 \
+    2>"$output_file"
+  code=$?
+  set -e
+  if [[ "$code" -eq 111 ]] \
+    && grep -Fq 'HERMES_PROBE_CMD: not-found' "$output_file" \
+    && ! grep -Fq "$marker" "$output_file"; then
+    pass "$name"
+  else
+    fail "$name" "expected rc=111 without leaking probe value into captured stderr: rc=$code output=$(cat "$output_file" 2>/dev/null)"
   fi
 }
 
@@ -384,10 +487,12 @@ case_runner_rejects_relative_spawn_step() {
   output=$(TR_SPAWN_STEP=relative-spawn bash "$RUNNER" "$dir/ws" 2>&1)
   code=$?
   set -e
-  if [[ "$code" -eq 2 ]] && grep -Fq 'value=relative-spawn' <<<"$output"; then
+  if [[ "$code" -eq 2 ]] \
+    && grep -Fq 'TR_SPAWN_STEP must be an absolute executable file' <<<"$output" \
+    && ! grep -Fq 'relative-spawn' <<<"$output"; then
     pass "$name"
   else
-    fail "$name" "expected exit 2 naming relative-spawn, got rc=$code output=$output"
+    fail "$name" "expected exit 2 with redacted TR_SPAWN_STEP validation, got rc=$code output=$output"
   fi
 }
 
@@ -402,10 +507,12 @@ case_runner_rejects_nonexecutable_spawn_step() {
   output=$(TR_SPAWN_STEP="$path" bash "$RUNNER" "$dir/ws" 2>&1)
   code=$?
   set -e
-  if [[ "$code" -eq 2 ]] && grep -Fq "value=$path" <<<"$output"; then
+  if [[ "$code" -eq 2 ]] \
+    && grep -Fq 'TR_SPAWN_STEP must be an absolute executable file' <<<"$output" \
+    && ! grep -Fq "$path" <<<"$output"; then
     pass "$name"
   else
-    fail "$name" "expected exit 2 naming $path, got rc=$code output=$output"
+    fail "$name" "expected exit 2 with redacted non-executable TR_SPAWN_STEP validation, got rc=$code output=$output"
   fi
 }
 
@@ -415,6 +522,9 @@ case_step_cmd_nonexistent
 case_step_runs_in_workspace
 case_probe_cmd_nonexistent
 case_probe_failure_skips_step
+case_probe_does_not_expand_tilde
+case_probe_refuses_standalone_operator
+case_probe_resolution_failure_does_not_leak_value
 case_step_exit_passthrough
 case_missing_prompt
 case_timeout_quarantines_partial_output_and_kills_group

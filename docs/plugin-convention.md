@@ -13,7 +13,7 @@ attached and detached without touching this repo.
 | # | Seam | Direction | Form |
 |---|---|---|---|
 | 1 | **Enqueue** | plugin → engine | `scripts/tr-enqueue <task-file> <workspace>` — task file per `templates/TASK.tmpl.md` with embedded ```donecheck``` block. This is the ONLY write a plugin makes into an engine workspace. |
-| 2 | **Results** | engine → plugin | Read-only consumption of `loop/artifacts/<task-id>/` (`state.json`, `attempts/`, `out/`) and terminal dirs `loop/tasks/{delivered,dlq}/`. |
+| 2 | **Results** | engine → plugin | Read-only consumption of `loop/artifacts/<task-id>/` (`state.json`, `attempts/`, `out/`) and terminal dirs `loop/tasks/{delivered,dlq}/`. Supported only when the plugin runs as the same uid as the runner; there is no cross-uid read contract. |
 | 3 | **Templates/contract files** | engine → plugin | `templates/TASK.tmpl.md` + `templates/STEP-PROMPT.tmpl.md` placeholder contract. Plugins render task files against a **pinned engine version** (see rules). |
 | 4 | **Data plane** | plugin ↔ plugin | Plugin state (ledgers, proposals, council verdicts) lives OUTSIDE engine workspaces — in the operator's shared store (family deployment: the shared vault). The engine never reads plugin state. |
 
@@ -63,6 +63,8 @@ Anything not listed above is engine-internal and may change without notice.
   break loudly at their next run.
 - `TR_SPAWN_STEP` must be an absolute path to an executable file. PATH-resolved
   command names and relative configurations must migrate to an absolute provider path.
+- The runner's `umask 077` crosses the `exec` boundary into the step provider and
+  affects any file it creates anywhere, including outside the workspace.
 - Workspace initialization records the absolute Bash and Perl used for validation
   and execution in `loop/.tr-interpreters`. Existing workspaces self-heal this record
   on first enqueue or runner use; invalid recorded paths fail closed.

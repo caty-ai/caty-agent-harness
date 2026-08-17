@@ -77,8 +77,12 @@ flush intake consumer の会計 ledger は `loop/pending/intake-runs.log` です
   同梱の `templates/examples/img-pilot.task.md` の donecheck はこの `PATH` 内の `python3` に
   依存します。macOS には `/usr/bin/python3` がありますが、Linux distribution にはない場合が
   あります。それ以外の継承変数は消え、依存していた check は次回実行時に明示的に失敗します。
-- `TR_SPAWN_STEP` は1個の argv として実行され、実行可能な通常ファイルへの絶対パスが必須です。
-  relative または PATH lookup 前提の provider 設定は runner 実行前に移行してください。
+- `TR_SPAWN_STEP`、`HERMES_STEP_CMD`、`HERMES_PROBE_CMD`、`TR_PUSH_CMD` は shell を介さず
+  argv として直接実行されます。`TR_SPAWN_STEP` は引き続き 1 個の絶対 argv word で、かつ
+  実行可能な通常ファイルへの絶対パスである必要があるため、`TR_SPAWN_STEP` の relative
+  または PATH lookup 前提の設定は runner 実行前に移行してください。`HERMES_STEP_CMD`、
+  `HERMES_PROBE_CMD`、`TR_PUSH_CMD` は whitespace で分割して argv 配列にし、PATH 解決される
+  通常の実行可能ファイル名も使えます。
 
 ---
 

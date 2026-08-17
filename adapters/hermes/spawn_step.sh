@@ -27,8 +27,9 @@ set -euo pipefail
 #     exits 143; this script's EXIT trap quarantines any canonical partial
 #     result left by that forwarded-signal path.
 #
-# Command env vars should prefer a single wrapper-script path. Multi-token
-# strings are whitespace-split; quotes are NOT honored.
+# Command env vars are whitespace-split argv strings. Quotes are NOT honored, raw
+# newline/CR is refused before splitting, standalone operator tokens are refused
+# after splitting, and no command string is ever re-expanded through `sh -c`.
 #
 # Exit 111 is reserved for pre-flight infra failures only. Once the Hermes
 # session command launches, its exit code is passed through unchanged.
@@ -43,36 +44,6 @@ infra_fail() {
   exit 111
 }
 
-validate_cmd_argv0() {
-  local env_name=$1
-  local cmd=$2
-  local bin
-  local resolved_bin
-
-  read -r -a _validated_argv <<<"$cmd"
-  if ((${#_validated_argv[@]} == 0)); then
-    infra_fail "$env_name is required"
-  fi
-
-  bin=${_validated_argv[0]}
-  if [[ "$bin" == */* ]]; then
-    if [[ ! -e "$bin" ]]; then
-      infra_fail "$env_name not found: $bin"
-    fi
-    if [[ ! -x "$bin" ]]; then
-      infra_fail "$env_name not executable: $bin"
-    fi
-  else
-    resolved_bin=$(command -v "$bin" 2>/dev/null || true)
-    if [[ -z "$resolved_bin" ]]; then
-      infra_fail "$env_name not found: $bin"
-    fi
-    if [[ ! -x "$resolved_bin" ]]; then
-      infra_fail "$env_name not executable: $bin"
-    fi
-  fi
-}
-
 if (($# != 4)); then
   usage
   exit 2
@@ -85,6 +56,7 @@ step_k=$4
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 source "$repo_root/scripts/lib-classify.sh"
 source "$repo_root/scripts/lib-bounded.sh"
+source "$repo_root/scripts/lib-command-argv.sh"
 source "$repo_root/scripts/lib-pause.sh"
 prompt_file="$attempt_dir/prompt.md"
 
@@ -114,13 +86,25 @@ if [[ -z "${HERMES_STEP_CMD:-}" ]]; then
   infra_fail 'HERMES_STEP_CMD is required'
 fi
 
-validate_cmd_argv0 HERMES_STEP_CMD "$HERMES_STEP_CMD"
-step_argv=("${_validated_argv[@]}")
+if ! validate_cmd_argv HERMES_STEP_CMD "$HERMES_STEP_CMD"; then
+  infra_fail "HERMES_STEP_CMD: $_validated_reason"
+fi
+if ! resolve_cmd_argv0 HERMES_STEP_CMD; then
+  infra_fail "HERMES_STEP_CMD: $_validated_reason"
+fi
+step_argv=("${_validated_argv[@]+"${_validated_argv[@]}"}")
 
+probe_argv=()
 if [[ -n "${HERMES_PROBE_CMD:-}" ]]; then
-  validate_cmd_argv0 HERMES_PROBE_CMD "$HERMES_PROBE_CMD"
+  if ! validate_cmd_argv HERMES_PROBE_CMD "$HERMES_PROBE_CMD"; then
+    infra_fail "HERMES_PROBE_CMD: $_validated_reason"
+  fi
+  if ! resolve_cmd_argv0 HERMES_PROBE_CMD; then
+    infra_fail "HERMES_PROBE_CMD: $_validated_reason"
+  fi
+  probe_argv=("${_validated_argv[@]+"${_validated_argv[@]}"}")
   cd "$workspace"
-  if ! sh -c "$HERMES_PROBE_CMD"; then
+  if ! "${probe_argv[@]+"${probe_argv[@]}"}"; then
     infra_fail 'HERMES_PROBE_CMD failed'
   fi
 fi
@@ -151,7 +135,7 @@ _spawn_step_exit_quarantine() {
 }
 trap _spawn_step_exit_quarantine EXIT
 set +e
-run_bounded "$HERMES_STEP_TIMEOUT_S" "$HERMES_STEP_GRACE_S" "${step_argv[@]}" "$prompt_file" "$attempt_dir" 2>"$step_stderr"
+run_bounded "$HERMES_STEP_TIMEOUT_S" "$HERMES_STEP_GRACE_S" "${step_argv[@]+"${step_argv[@]}"}" "$prompt_file" "$attempt_dir" 2>"$step_stderr"
 step_status=$?
 set -e
 step_call_finished=1
