@@ -16,6 +16,7 @@ import base64
 import ctypes
 import dataclasses
 import datetime as dt
+import errno
 import hashlib
 import json
 import math
@@ -44,7 +45,7 @@ PRIVATE_STREAM_PATH = PRIVATE_ROOT / "agent-output.stream"
 PRIVATE_MESSAGES_PATH = PRIVATE_ROOT / "messages"
 CGROUP_ROOT = Path("/sys/fs/cgroup")
 TRACE_EVENT_WAIT_S = 0.002
-OBSERVATION_MECHANISM = "ptrace-descendant-exec-exit-v2"
+OBSERVATION_MECHANISM = "ptrace-descendant-exec-exit-v3"
 AUDIT_STDOUT_PREFIX = b"EV005_AUDIT "
 CONTROL_STDOUT_PREFIX = b"EV005_CONTROL "
 PIPE_ATOMIC_LIMIT = 4096
@@ -65,6 +66,7 @@ LOCAL_VALIDATION_IMAGE_TAGS = {
 
 PTRACE_TRACEME = 0
 PTRACE_CONT = 7
+PTRACE_DETACH = 17
 PTRACE_SETOPTIONS = 0x4200
 PTRACE_GETEVENTMSG = 0x4201
 PTRACE_O_TRACEFORK = 1 << 1
@@ -191,6 +193,16 @@ class InfraIntegrity(RuntimeError):
     pass
 
 
+class PtraceCallError(InfraIntegrity):
+    def __init__(self, request: int, pid: int, error: int):
+        self.request = request
+        self.pid = pid
+        self.errno = error
+        super().__init__(
+            f"ptrace request {request:#x} failed for pid {pid}: {os.strerror(error)}"
+        )
+
+
 @dataclasses.dataclass(frozen=True)
 class CpuStatSample:
     nr_throttled: int | None
@@ -256,6 +268,17 @@ def validate_account_id(account_id: str) -> None:
     lowered = account_id.lower()
     if not account_id or "sk-" in lowered or "@" in account_id or len(account_id) > 64:
         raise InfraIntegrity("account_id must be a non-secret provider-seat label of at most 64 characters")
+
+
+def validate_donecheck_timeout_s(value: Any) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise InfraIntegrity("donecheck timeout must be a number")
+    timeout_s = float(value)
+    if not math.isfinite(timeout_s) or timeout_s <= 0 or timeout_s > 1800:
+        raise InfraIntegrity(
+            "donecheck timeout must be finite and satisfy 0 < timeout_s <= 1800"
+        )
+    return timeout_s
 
 
 def parse_agent_env_overrides(raw: str, cell: CellRegistration) -> dict[str, str]:
@@ -1008,6 +1031,8 @@ def observation_config() -> dict[str, Any]:
         "shell_identity": "trusted-dev-inode-or-sha256-v1",
         "bash_long_options_with_argument": sorted(BASH_LONG_OPTIONS_WITH_ARGUMENT),
         "content_interpretation_boundary": "source-and-stdin-not-counted",
+        "untrusted_executor_policy": "audit-only-not-counted-not-paused",
+        "ptrace_esrch_policy": "benign-before-count-fatal-during-counted-gate",
         "fork_parent_scheduling": "hold-through-child-exec-or-gate-exit",
         "clone_parent_scheduling": "never-held",
         "trace_options": ["fork", "vfork", "clone", "exec", "exit", "exitkill"],
@@ -1433,6 +1458,23 @@ def _executable_identity(path: Path) -> ExecutableIdentity:
     return ExecutableIdentity(file_stat.st_dev, file_stat.st_ino, digest.hexdigest())
 
 
+def _observed_executable_identity(observation: ProcessObservation) -> dict[str, Any]:
+    identity: dict[str, Any] = {
+        "path": observation.executable,
+        "device": None,
+        "inode": None,
+        "sha256": None,
+        "observation_error": None,
+    }
+    try:
+        measured = _executable_identity(Path("/proc") / str(observation.pid) / "exe")
+    except OSError as exc:
+        identity["observation_error"] = f"{type(exc).__name__}: {exc}"
+    else:
+        identity.update(dataclasses.asdict(measured))
+    return identity
+
+
 def trusted_shell_identities() -> dict[str, ExecutableIdentity]:
     try:
         return {path: _executable_identity(Path(path)) for path in TRUSTED_SHELL_PATHS}
@@ -1496,10 +1538,31 @@ def _ptrace(request: int, pid: int, address: int = 0, data: int = 0) -> int:
     )
     if result == -1:
         error = ctypes.get_errno()
-        raise InfraIntegrity(
-            f"ptrace request {request:#x} failed for pid {pid}: {os.strerror(error)}"
-        )
+        raise PtraceCallError(request, pid, error)
     return int(result)
+
+
+def _ptrace_tracee(
+    request: int, pid: int, *, data: int = 0, counted_gate: bool,
+    ptrace_call: Callable[..., int] | None = None,
+) -> bool:
+    """Apply a tracee lifecycle request, tolerating post-exit ESRCH only.
+
+    CONT, DETACH, and SETOPTIONS operate on a pid whose stop was already
+    observed by this supervisor. ESRCH therefore means the non-counted tracee
+    vanished before the request completed; waitpid remains responsible for
+    reaping it. Once a gate is counted, the same loss would make its exit/output
+    interval ambiguous and must remain fatal.
+    """
+    if request not in {PTRACE_CONT, PTRACE_DETACH, PTRACE_SETOPTIONS}:
+        raise ValueError(f"unsupported tracee lifecycle request: {request:#x}")
+    try:
+        (ptrace_call or _ptrace)(request, pid, data=data)
+    except PtraceCallError as exc:
+        if exc.errno == errno.ESRCH and not counted_gate:
+            return False
+        raise
+    return True
 
 
 def _ptrace_event_message(pid: int) -> int:
@@ -1547,6 +1610,7 @@ def supervise_sandbox_command(
     drop_privileges: bool = True, passthrough: bool = True,
     message_writer: Callable[[str, dict[str, Any]], None] | None = None,
     basename_substring_mutation: bool = False,
+    test_ptrace_esrch_once: bool = False,
 ) -> int:
     """Trace descendants and attribute exact gate exec/exit events and output."""
     if not argv:
@@ -1588,6 +1652,19 @@ def supervise_sandbox_command(
     root_returncode: int | None = None
     timed_out = False
     attribution_failure: str | None = None
+    ptrace_esrch_injected = False
+
+    def lifecycle_ptrace_call(
+        request: int, pid: int, address: int = 0, data: int = 0,
+    ) -> int:
+        nonlocal ptrace_esrch_injected
+        result = _ptrace(request, pid, address=address, data=data)
+        if test_ptrace_esrch_once and not ptrace_esrch_injected and request == PTRACE_CONT:
+            ptrace_esrch_injected = True
+            # The real CONT already succeeded; surface the same ESRCH observed
+            # when a tracee vanishes before the wrapper returns.
+            raise PtraceCallError(request, pid, errno.ESRCH)
+        return result
 
     def pump(timeout: float) -> bool:
         read_any = False
@@ -1624,7 +1701,10 @@ def supervise_sandbox_command(
         if parent_pid is None:
             return
         if parent_pid in traced:
-            _ptrace(PTRACE_CONT, parent_pid)
+            _ptrace_tracee(
+                PTRACE_CONT, parent_pid, counted_gate=parent_pid in active,
+                ptrace_call=lifecycle_ptrace_call,
+            )
 
     def start_gate(row: ProcessObservation, now: float) -> None:
         non_ancestors = {
@@ -1693,7 +1773,12 @@ def supervise_sandbox_command(
         event = (status >> 16) & 0xFFFF
         stop_signal = os.WSTOPSIG(status)
         if pid not in initialized:
-            _ptrace(PTRACE_SETOPTIONS, pid, data=PTRACE_OPTIONS)
+            if not _ptrace_tracee(
+                PTRACE_SETOPTIONS, pid, data=PTRACE_OPTIONS,
+                counted_gate=pid in active,
+                ptrace_call=lifecycle_ptrace_call,
+            ):
+                return
             initialized.add(pid)
         hold_current = False
         if event in {PTRACE_EVENT_FORK, PTRACE_EVENT_VFORK, PTRACE_EVENT_CLONE}:
@@ -1729,9 +1814,21 @@ def supervise_sandbox_command(
                     except InfraIntegrity as exc:
                         attribution_failure = attribution_failure or str(exc)
                 elif classification == GATE_UNKNOWN_EXECUTOR:
-                    attribution_failure = attribution_failure or (
-                        "exact gate operand executed by an untrusted process identity"
-                    )
+                    bounded_argv = [value[:256] for value in row.argv[:16]]
+                    write_message(f"untrusted-gate-{uuid.uuid4().hex}", {
+                        "pid": row.pid,
+                        "argv": bounded_argv,
+                        "argv_truncated": (
+                            len(row.argv) > len(bounded_argv)
+                            or any(len(value) > 256 for value in row.argv[:16])
+                        ),
+                        "argv_digest": sha256_bytes(
+                            b"\0".join(
+                                value.encode(errors="surrogateescape") for value in row.argv
+                            )
+                        ),
+                        "executable_identity": _observed_executable_identity(row),
+                    })
             if event == PTRACE_EVENT_EXEC and not gate_started:
                 # Non-gate children need no longer serialize their fork parent.
                 # clone/thread parents were never held.
@@ -1747,7 +1844,11 @@ def supervise_sandbox_command(
         if event == 0 and stop_signal not in {signal.SIGTRAP, signal.SIGSTOP}:
             delivered_signal = stop_signal
         if not hold_current:
-            _ptrace(PTRACE_CONT, pid, data=delivered_signal)
+            _ptrace_tracee(
+                PTRACE_CONT, pid, data=delivered_signal,
+                counted_gate=pid in active,
+                ptrace_call=lifecycle_ptrace_call,
+            )
 
     initial_pid, initial_status = os.waitpid(proc.pid, PTRACE_WAIT_ALL)
     if initial_pid != proc.pid or not os.WIFSTOPPED(initial_status):
@@ -2164,7 +2265,10 @@ def check_controller_subprocesses(
         event = (status >> 16) & 0xFFFF
         stop_signal = os.WSTOPSIG(status)
         if pid not in initialized:
-            _ptrace(PTRACE_SETOPTIONS, pid, data=PTRACE_OPTIONS)
+            if not _ptrace_tracee(
+                PTRACE_SETOPTIONS, pid, data=PTRACE_OPTIONS, counted_gate=False,
+            ):
+                return
             initialized.add(pid)
         if event in {PTRACE_EVENT_FORK, PTRACE_EVENT_VFORK, PTRACE_EVENT_CLONE}:
             traced.add(_ptrace_event_message(pid))
@@ -2175,7 +2279,9 @@ def check_controller_subprocesses(
         delivered_signal = 0
         if event == 0 and stop_signal not in {signal.SIGTRAP, signal.SIGSTOP}:
             delivered_signal = stop_signal
-        _ptrace(PTRACE_CONT, pid, data=delivered_signal)
+        _ptrace_tracee(
+            PTRACE_CONT, pid, data=delivered_signal, counted_gate=False,
+        )
 
     initial_pid, initial_status = os.waitpid(proc.pid, PTRACE_WAIT_ALL)
     if initial_pid != proc.pid or not os.WIFSTOPPED(initial_status):
@@ -2261,6 +2367,7 @@ class RunController:
         self.pause = PauseLedger()
         self.agent_done_seen: set[str] = set()
         self.agent_start_seen: set[str] = set()
+        self.untrusted_gate_seen: set[str] = set()
         self.supervisor_errors_seen: set[str] = set()
         self.end_reason: str | None = None
         self.output_canary_hit: bool | None = None
@@ -2517,6 +2624,36 @@ class RunController:
             if row.get("timed_out"):
                 raise InfraIntegrity("agent donecheck timeout")
 
+    def _handle_untrusted_gate_executions(self) -> None:
+        """Audit agent-chosen gate executors without counting or pausing them."""
+        assert self.audit
+        for path in sorted(self.messages.glob("untrusted-gate-*.json")):
+            if path.name in self.untrusted_gate_seen:
+                continue
+            try:
+                row = json.loads(path.read_text())
+                pid = int(row["pid"])
+                argv = row["argv"]
+                executable_identity = row["executable_identity"]
+                if (
+                    pid <= 0
+                    or not isinstance(argv, list)
+                    or not all(isinstance(value, str) for value in argv)
+                    or not isinstance(executable_identity, dict)
+                ):
+                    raise ValueError("invalid untrusted gate observation fields")
+            except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise InfraIntegrity(f"malformed trusted untrusted-gate record: {exc}") from exc
+            self.audit.event(
+                "gate_execution_untrusted",
+                pid=pid,
+                argv=argv,
+                argv_truncated=bool(row.get("argv_truncated")),
+                argv_digest=str(row["argv_digest"]),
+                executable_identity=executable_identity,
+            )
+            self.untrusted_gate_seen.add(path.name)
+
     def _handle_supervisor_errors(self) -> None:
         for path in sorted(self.messages.glob("supervisor-error-*.json")):
             if path.name in self.supervisor_errors_seen:
@@ -2666,6 +2803,7 @@ class RunController:
         while self.end_reason is None:
             self._handle_deliveries()
             self._handle_supervisor_errors()
+            self._handle_untrusted_gate_executions()
             self._handle_agent_donechecks()
             self._handle_donecheck_reads()
             self._handle_host_markers()
@@ -2682,11 +2820,13 @@ class RunController:
                 raise InfraIntegrity(f"host model/controller exited before a terminal condition rc={row.get('returncode')}")
             time.sleep(0.01)
         self._handle_supervisor_errors()
+        self._handle_untrusted_gate_executions()
         self._handle_agent_donechecks()
         self._handle_supervisor_errors()
         self._handle_donecheck_reads()
         self._run_canary_checks()
         self._posthoc()
+        self._handle_untrusted_gate_executions()
         self._handle_supervisor_errors()
         end_mono = time.monotonic()
         paused = self.pause.paused_at(end_mono)
@@ -3270,6 +3410,7 @@ def _execute_host_run(
     wiring_factory: Callable[..., HostRunWiring],
 ) -> int:
     validate_account_id(ns.account_id)
+    donecheck_timeout_s = validate_donecheck_timeout_s(ns.donecheck_timeout_s)
     if cell.cell_id != ns.cell:
         raise InfraIntegrity("selected cell id does not match its registration")
     agent_env_overrides = parse_agent_env_overrides(ns.agent_env_json, cell)
@@ -3286,7 +3427,6 @@ def _execute_host_run(
     prompt = assemble_prompt((task / "task.md").read_bytes(), ns.arm)
     prompt_path = out / "controller-prompt.bin"
     prompt_path.write_bytes(prompt)
-    donecheck_timeout_s = ns.donecheck_timeout_s or meta.get("timeout_s", 120)
     container_name = f"ev005-{ns.run_id}-{uuid.uuid4().hex[:10]}".lower()
     replica_volume = f"{container_name}-replica"
     runtime_volume = f"{container_name}-runtime"
@@ -3315,7 +3455,7 @@ def _execute_host_run(
     infrastructure_signal_path = controller_dir / "mcp-infrastructure.jsonl"
     mcp_config_sha256 = write_mcp_config(
         mcp_config, container_name=container_name,
-        donecheck_timeout_s=float(donecheck_timeout_s),
+        donecheck_timeout_s=donecheck_timeout_s,
         exec_audit_path=exec_audit_path,
         infrastructure_signal_path=infrastructure_signal_path,
     )
@@ -3682,6 +3822,7 @@ def container_supervise(
     timeout_s: float, command: list[str], *, test_no_drop: bool = False,
     test_basename_substring_mutation: bool = False,
     test_observer_no_drop: bool = False,
+    test_ptrace_esrch_once: bool = False,
 ) -> int:
     os.write(2, SUPERVISOR_READY)
     if command and command[0] == "--":
@@ -3692,6 +3833,7 @@ def container_supervise(
             command, timeout_s=timeout_s, target=target,
             messages=PRIVATE_MESSAGES_PATH, drop_privileges=False,
             basename_substring_mutation=test_basename_substring_mutation,
+            test_ptrace_esrch_once=test_ptrace_esrch_once,
         )
 
     # The observer must share the agent uid to read descendant /proc metadata
@@ -3726,6 +3868,7 @@ def container_supervise(
                 command, timeout_s=timeout_s, target=target,
                 messages=PRIVATE_MESSAGES_PATH, drop_privileges=False,
                 message_writer=pipe_writer,
+                test_ptrace_esrch_once=test_ptrace_esrch_once,
             )
             pipe_writer("__supervisor_result__", {
                 "supervision_ok": True,
@@ -3929,7 +4072,7 @@ def _add_run_arguments(
     parser.add_argument("--preflight-controller-config-digest", required=True)
     parser.add_argument("--agent-env-json", default="{}")
     parser.add_argument("--budget-s", type=float, default=2700.0)
-    parser.add_argument("--donecheck-timeout-s", type=float)
+    parser.add_argument("--donecheck-timeout-s", type=float, required=True)
     parser.add_argument("--term-grace-s", type=float, default=30.0)
     parser.add_argument("--operator", default=OPERATOR)
     parser.add_argument("--wrapper-sha", default="WORKTREE")
@@ -3961,6 +4104,9 @@ def build_parser() -> argparse.ArgumentParser:
     supervise.add_argument(
         "--test-basename-substring-mutation", action="store_true", help=argparse.SUPPRESS,
     )
+    supervise.add_argument(
+        "--test-ptrace-esrch-once", action="store_true", help=argparse.SUPPRESS,
+    )
     supervise.add_argument("supervised_command", nargs=argparse.REMAINDER)
     controller_check = sub.add_parser("_selftest-host-subproc")
     controller_check.add_argument("--timeout-s", type=float, required=True)
@@ -3990,6 +4136,7 @@ def main(argv: list[str] | None = None) -> int:
                 test_no_drop=ns.test_no_drop,
                 test_basename_substring_mutation=ns.test_basename_substring_mutation,
                 test_observer_no_drop=ns.test_observer_no_drop,
+                test_ptrace_esrch_once=ns.test_ptrace_esrch_once,
             )
         if ns.command == "_selftest-host-subproc":
             return controller_subprocess_command(

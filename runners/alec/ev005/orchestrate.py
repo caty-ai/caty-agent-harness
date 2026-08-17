@@ -288,7 +288,9 @@ def build_runner_command(
     *, assignment: BlockAssignment, arm: str, slot: int,
     task_dir: Path, source_repo: Path, output: Path, cell: str,
     worker: WorkerAllocation, run_id: str, controller_config_digest: str,
+    donecheck_timeout_s: float,
 ) -> list[str]:
+    donecheck_timeout_s = runner_module.validate_donecheck_timeout_s(donecheck_timeout_s)
     return [
         sys.executable, str(RUNNER), "run",
         "--run-id", run_id,
@@ -303,6 +305,7 @@ def build_runner_command(
         "--slot-index", str(slot),
         "--cpuset-cpus", worker.cpuset,
         "--memory-bytes", str(REGISTERED_MEMORY_BYTES),
+        "--donecheck-timeout-s", str(donecheck_timeout_s),
         "--preflight-controller-config-digest", controller_config_digest,
     ]
 
@@ -478,7 +481,14 @@ def run_arm(
     blocks_concurrent: int, dry_run: bool, dry_run_delay_s: float,
     preflight_controller_config_digest: str | None = None,
     block_attempt: int = 1,
+    donecheck_timeout_s: float | None = None,
 ) -> bool:
+    if donecheck_timeout_s is None:
+        try:
+            meta = json.loads((task_dir / "meta.json").read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"cannot load task metadata from {task_dir}: {exc}") from exc
+        donecheck_timeout_s = task_donecheck_timeout_s(meta, task_dir)
     recover_unledgered_outputs(
         assignment=assignment, arm=arm, slot=slot, cell=cell,
         blocks_concurrent=blocks_concurrent, worker=worker, out_root=out_root,
@@ -509,6 +519,7 @@ def run_arm(
                 if preflight_controller_config_digest is not None
                 else runner_module.controller_config_digest(seat_dir)
             ),
+            donecheck_timeout_s=donecheck_timeout_s,
         )
         env = os.environ.copy()
         env["CLAUDE_CONFIG_DIR"] = str(seat_dir)
@@ -559,6 +570,7 @@ def execute_arm_attempt(
     worker: WorkerAllocation, out_root: Path, blocks_concurrent: int,
     dry_run: bool, dry_run_delay_s: float, history: list[dict[str, Any]],
     block_attempt: int, preflight_controller_config_digest: str,
+    donecheck_timeout_s: float,
 ) -> dict[str, Any]:
     attempt, output = next_attempt_directory(
         out_root / "runs" / assignment.block_id / arm_slug(arm), len(history) + 1,
@@ -572,6 +584,7 @@ def execute_arm_attempt(
         task_dir=task_dir, source_repo=source_repo, output=output,
         cell=cell, worker=worker, run_id=run_id,
         controller_config_digest=preflight_controller_config_digest,
+        donecheck_timeout_s=donecheck_timeout_s,
     )
     env = os.environ.copy()
     env["CLAUDE_CONFIG_DIR"] = str(seat_dir)
@@ -607,6 +620,7 @@ def run_block(
     cell: str, out_root: Path, ledger_path: Path, ledger_lock: threading.Lock,
     ledger_rows: list[dict[str, Any]], dry_run: bool, dry_run_delay_s: float,
     blocks_concurrent: int,
+    task_timeouts: dict[str, float],
     preflight_controller_config_digests: dict[str, str] | None = None,
 ) -> bool:
     persisted_run_ids = {str(row.get("run_id")) for row in ledger_rows}
@@ -655,6 +669,7 @@ def run_block(
                     dry_run_delay_s=dry_run_delay_s, history=histories[arm],
                     block_attempt=number,
                     preflight_controller_config_digest=digest,
+                    donecheck_timeout_s=task_timeouts[assignment.task_id],
                 )))
         new_rows = {arm: future.result() for arm, _, future in pending}
         combined = {**existing, **new_rows}
@@ -703,9 +718,21 @@ def load_json_map(path: Path, description: str) -> dict[str, Path]:
     return {key: Path(value).expanduser().resolve() for key, value in raw.items()}
 
 
-def load_tasks(tasks_dir: Path, series: str, repos: dict[str, Path]) -> tuple[dict[str, Path], dict[str, Path]]:
+def task_donecheck_timeout_s(meta: dict[str, Any], task_dir: Path) -> float:
+    if "timeout_s" not in meta:
+        raise RuntimeError(f"task metadata has no timeout_s: {task_dir / 'meta.json'}")
+    try:
+        return runner_module.validate_donecheck_timeout_s(meta["timeout_s"])
+    except runner_module.InfraIntegrity as exc:
+        raise RuntimeError(f"invalid task timeout_s in {task_dir / 'meta.json'}: {exc}") from exc
+
+
+def load_tasks(
+    tasks_dir: Path, series: str, repos: dict[str, Path],
+) -> tuple[dict[str, Path], dict[str, Path], dict[str, float]]:
     task_dirs: dict[str, Path] = {}
     source_repos: dict[str, Path] = {}
+    task_timeouts: dict[str, float] = {}
     for task_dir in sorted(path for path in tasks_dir.iterdir() if path.is_dir()):
         meta_path = task_dir / "meta.json"
         if not meta_path.is_file():
@@ -721,10 +748,11 @@ def load_tasks(tasks_dir: Path, series: str, repos: dict[str, Path]) -> tuple[di
             raise RuntimeError(f"mapped source repository is not a local clone: {repos[source_name]}")
         task_dirs[task_id] = task_dir.resolve()
         source_repos[task_id] = repos[source_name]
+        task_timeouts[task_id] = task_donecheck_timeout_s(meta, task_dir)
     expected = SERIES_TASK_COUNTS[series]
     if len(task_dirs) != expected:
         raise RuntimeError(f"{series} requires exactly {expected} tasks; found {len(task_dirs)}")
-    return task_dirs, source_repos
+    return task_dirs, source_repos, task_timeouts
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -775,7 +803,9 @@ def main(argv: list[str] | None = None) -> int:
     preflight_controller_config_digests = {
         label: runner_module.controller_config_digest(path) for label, path in seats.items()
     }
-    task_dirs, source_repos = load_tasks(ns.tasks_dir.resolve(), ns.series, repos)
+    task_dirs, source_repos, task_timeouts = load_tasks(
+        ns.tasks_dir.resolve(), ns.series, repos,
+    )
     rows = schedule(ns.series, task_dirs, SEAT_POOL)
     assignments = block_assignments(rows, ns.series)
     physical_cores = read_physical_cores(ns.sysfs_cpu_root)
@@ -805,6 +835,7 @@ def main(argv: list[str] | None = None) -> int:
                     ledger_lock=ledger_lock, ledger_rows=ledger_rows,
                     blocks_concurrent=ns.blocks_concurrent,
                     dry_run=ns.dry_run, dry_run_delay_s=ns.dry_run_delay_s,
+                    task_timeouts=task_timeouts,
                     preflight_controller_config_digests=preflight_controller_config_digests,
                 )
                 active[future] = (bundle_index, assignment.seat)

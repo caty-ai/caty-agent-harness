@@ -11,7 +11,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from local_exec import ExecInfrastructureError, run_shell, validate_timeout_s
+from local_exec import ExecInfrastructureError, bounded_timeout_s
+from local_exec import run_shell
 
 
 TOOL = {
@@ -98,7 +99,7 @@ def handle(row: dict[str, Any]) -> None:
                 raise ValueError("tool arguments contain unregistered fields")
             if not isinstance(args.get("command"), str):
                 raise ValueError("command must be a string")
-            timeout = validate_timeout_s(args.get("timeout_s", 1800))
+            timeout = bounded_timeout_s(args.get("timeout_s"))
             result = run_shell(args["command"], timeout_s=timeout)
             audit_exec_result(result.stdout, result.stderr)
             text = (result.stdout + result.stderr).decode(errors="replace")

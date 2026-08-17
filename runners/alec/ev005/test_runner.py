@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import types
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -25,6 +26,7 @@ class RunnerUnitTests(unittest.TestCase):
     def run_linux_supervisor(
         self, replica: Path, messages: Path, command: str, *,
         basename_mutation: bool = False, trusted_recorder: bool = False,
+        ptrace_esrch_once: bool = False,
     ) -> int:
         messages.mkdir()
         image = runner.local_validation_image()["image_tag"]
@@ -37,6 +39,8 @@ class RunnerUnitTests(unittest.TestCase):
         ]
         if basename_mutation:
             argv.append("--test-basename-substring-mutation")
+        if ptrace_esrch_once:
+            argv.append("--test-ptrace-esrch-once")
         if not trusted_recorder:
             argv.append("--test-no-drop")
         else:
@@ -253,6 +257,7 @@ class RunnerUnitTests(unittest.TestCase):
                 "--slot-index", "0",
                 "--cpuset-cpus", "0-3",
                 "--memory-bytes", str(runner.REGISTERED_MEMORY_BYTES),
+                "--donecheck-timeout-s", "180",
                 "--preflight-controller-config-digest", "0" * 64,
                 "--selftest-probe-json", "{}",
             ],
@@ -1130,11 +1135,88 @@ class RunnerUnitTests(unittest.TestCase):
                 "./modified-shell .ev005-donecheck.sh",
                 trusted_recorder=True,
             )
-            self.assertEqual(rc, 125)
+            self.assertEqual(rc, 17)
             self.assertEqual(list(messages.glob("observation-*-done.json")), [])
-            errors = list(messages.glob("supervisor-error-*.json"))
-            self.assertEqual(len(errors), 1)
-            self.assertIn("untrusted process identity", errors[0].read_text())
+            untrusted = list(messages.glob("untrusted-gate-*.json"))
+            self.assertEqual(len(untrusted), 1)
+            row = json.loads(untrusted[0].read_text())
+            self.assertEqual(row["pid"] > 0, True)
+            self.assertIn(".ev005-donecheck.sh", row["argv"])
+            self.assertEqual(row["executable_identity"]["path"].endswith("modified-shell"), True)
+            self.assertEqual(list(messages.glob("supervisor-error-*.json")), [])
+
+    def test_ptrace_esrch_after_non_gate_continue_is_benign(self):
+        with tempfile.TemporaryDirectory() as td:
+            replica = Path(td) / "replica"
+            replica.mkdir()
+            (replica / ".ev005-donecheck.sh").write_text("#!/bin/sh\nexit 0\n")
+            messages = Path(td) / "messages"
+            rc = self.run_linux_supervisor(
+                replica, messages, "true", ptrace_esrch_once=True,
+            )
+            self.assertEqual(rc, 0)
+            self.assertEqual(list(messages.glob("supervisor-error-*.json")), [])
+
+    def test_concurrent_gate_attempts_are_serialized_not_overlapping(self):
+        with tempfile.TemporaryDirectory() as td:
+            replica = Path(td) / "replica"
+            replica.mkdir()
+            gate = replica / ".ev005-donecheck.sh"
+            gate.write_text("#!/bin/sh\nsleep 0.15\nexit 0\n")
+            gate.chmod(0o755)
+            messages = Path(td) / "messages"
+            rc = self.run_linux_supervisor(
+                replica, messages,
+                "bash .ev005-donecheck.sh & bash .ev005-donecheck.sh & wait",
+                trusted_recorder=True,
+            )
+            self.assertEqual(rc, 0)
+            done = sorted(messages.glob("observation-*-done.json"))
+            self.assertEqual(len(done), 2)
+            observations = sorted(
+                (json.loads(path.read_text()) for path in done),
+                key=lambda row: row["first_seen_monotonic_s"],
+            )
+            self.assertTrue(all(row["observation_error"] is None for row in observations))
+            self.assertLessEqual(
+                observations[0]["end_bound_monotonic_s"],
+                observations[1]["first_seen_monotonic_s"],
+            )
+
+    def test_start_gate_raises_on_active_overlap_synthetically(self):
+        start_gate_code = next(
+            constant
+            for constant in runner.supervise_sandbox_command.__code__.co_consts
+            if isinstance(constant, types.CodeType) and constant.co_name == "start_gate"
+        )
+
+        def closure_cell(value):
+            return (lambda: value).__closure__[0]
+
+        closure_values = {
+            "active": {1001: {}},
+            "is_descendant": lambda _pid, _ancestor: False,
+            "stderr": bytearray(),
+            "stdout": bytearray(),
+            "traced": {1002},
+            "write_message": lambda _name, _row: None,
+        }
+        start_gate = types.FunctionType(
+            start_gate_code,
+            runner.__dict__,
+            closure=tuple(
+                closure_cell(closure_values[name]) for name in start_gate_code.co_freevars
+            ),
+        )
+        row = runner.ProcessObservation(
+            pid=1002, ppid=1001, executable="/bin/bash",
+            argv=("/bin/bash", ".ev005-donecheck.sh"), cwd="/work/replica",
+        )
+        with self.assertRaisesRegex(
+            runner.InfraIntegrity,
+            "overlapping exact gate executions make output attribution ambiguous",
+        ):
+            start_gate(row, 1.0)
 
     def test_ancestor_builtin_output_is_outside_gate_interval(self):
         with tempfile.TemporaryDirectory() as td:
@@ -1166,7 +1248,7 @@ class RunnerUnitTests(unittest.TestCase):
 
     def test_observation_config_digest_registers_ptrace_contract(self):
         config = runner.observation_config()
-        self.assertEqual(config["mechanism"], "ptrace-descendant-exec-exit-v2")
+        self.assertEqual(config["mechanism"], "ptrace-descendant-exec-exit-v3")
         self.assertEqual(config["event_wait_ms"], 2.0)
         self.assertNotIn("poll_interval_ms", config)
         self.assertEqual(config["short_invocation_residual"], "none-after-successful-trace-attachment")
@@ -1177,6 +1259,12 @@ class RunnerUnitTests(unittest.TestCase):
         self.assertEqual(config["shell_identity"], "trusted-dev-inode-or-sha256-v1")
         self.assertEqual(config["bash_long_options_with_argument"], ["--init-file", "--rcfile"])
         self.assertEqual(config["content_interpretation_boundary"], "source-and-stdin-not-counted")
+        self.assertEqual(
+            config["untrusted_executor_policy"], "audit-only-not-counted-not-paused",
+        )
+        self.assertEqual(
+            config["ptrace_esrch_policy"], "benign-before-count-fatal-during-counted-gate",
+        )
         self.assertEqual(config["fork_parent_scheduling"], "hold-through-child-exec-or-gate-exit")
         self.assertEqual(config["clone_parent_scheduling"], "never-held")
         self.assertEqual(config["observer_dumpable"], 0)
@@ -1198,6 +1286,47 @@ class RunnerUnitTests(unittest.TestCase):
             controller.messages = messages
             with self.assertRaisesRegex(runner.InfraIntegrity, "observer killed"):
                 controller._handle_supervisor_errors()
+
+    def test_untrusted_gate_is_audited_without_count_or_pause(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            messages = root / "messages"
+            messages.mkdir()
+            (messages / "untrusted-gate-test.json").write_text(json.dumps({
+                "pid": 4321,
+                "argv": ["/usr/bin/python3", ".ev005-donecheck.sh"],
+                "argv_truncated": False,
+                "argv_digest": "a" * 64,
+                "executable_identity": {
+                    "path": "/usr/bin/python3", "device": 1, "inode": 2,
+                    "sha256": "b" * 64, "observation_error": None,
+                },
+            }) + "\n")
+            controller = runner.RunController({"arm": "B"})
+            controller.messages = messages
+            controller.audit = runner.AuditLog(root / "audit.jsonl", mirror_stdout=False)
+            controller.start_mono = 10.0
+            controller._handle_untrusted_gate_executions()
+            controller._handle_untrusted_gate_executions()
+            rows = [json.loads(line) for line in controller.audit.path.read_text().splitlines()]
+            self.assertEqual([row["event"] for row in rows], ["gate_execution_untrusted"])
+            self.assertEqual(rows[0]["pid"], 4321)
+            self.assertEqual(rows[0]["argv"][0], "/usr/bin/python3")
+            self.assertIn("ts", rows[0])
+            self.assertEqual(controller.pause.paused_at(20.0), 0.0)
+
+    def test_ptrace_esrch_is_tolerated_only_outside_counted_gate(self):
+        failure = runner.PtraceCallError(runner.PTRACE_CONT, 4321, runner.errno.ESRCH)
+        for request in (runner.PTRACE_CONT, runner.PTRACE_DETACH, runner.PTRACE_SETOPTIONS):
+            with self.subTest(request=request, counted=False), mock.patch.object(
+                runner, "_ptrace", side_effect=failure,
+            ):
+                self.assertFalse(runner._ptrace_tracee(
+                    request, 4321, counted_gate=False,
+                ))
+        with mock.patch.object(runner, "_ptrace", side_effect=failure):
+            with self.assertRaises(runner.PtraceCallError):
+                runner._ptrace_tracee(runner.PTRACE_CONT, 4321, counted_gate=True)
 
     def test_observer_nondumpable_failure_is_infrastructure_failure(self):
         fake_libc = mock.Mock()
@@ -1494,6 +1623,7 @@ class RunnerUnitTests(unittest.TestCase):
                     ledger_lock=threading.Lock(), history=history,
                     blocks_concurrent=2,
                     dry_run=False, dry_run_delay_s=0,
+                    donecheck_timeout_s=180,
                 )
             self.assertTrue(ok)
             rows = orchestrate.read_ledger(ledger)
@@ -1516,6 +1646,7 @@ class RunnerUnitTests(unittest.TestCase):
                     ledger_lock=threading.Lock(), history=rows,
                     blocks_concurrent=2,
                     dry_run=False, dry_run_delay_s=0,
+                    donecheck_timeout_s=180,
                 ))
                 resumed.assert_not_called()
 
@@ -1554,6 +1685,7 @@ class RunnerUnitTests(unittest.TestCase):
                     ledger_lock=threading.Lock(), history=incomplete,
                     blocks_concurrent=3,
                     dry_run=False, dry_run_delay_s=0,
+                    donecheck_timeout_s=180,
                 ))
                 retried.assert_called_once()
             row = orchestrate.read_ledger(root / "out" / "ledger.jsonl")[-1]
@@ -1610,6 +1742,7 @@ class RunnerUnitTests(unittest.TestCase):
                     worker=replacement_worker, out_root=root / "out",
                     ledger_path=ledger, ledger_lock=threading.Lock(), history=history,
                     blocks_concurrent=3, dry_run=False, dry_run_delay_s=0,
+                    donecheck_timeout_s=180,
                 ))
                 rerun.assert_not_called()
             row = orchestrate.read_ledger(ledger)[0]
@@ -1635,7 +1768,7 @@ class RunnerUnitTests(unittest.TestCase):
                 task = tasks / task_id
                 task.mkdir()
                 (task / "meta.json").write_text(json.dumps({
-                    "id": task_id, "source_repo": "local/repo",
+                    "id": task_id, "source_repo": "local/repo", "timeout_s": 180,
                 }))
             repos_json = root / "repos.json"
             repos_json.write_text(json.dumps({"local/repo": str(repo)}))
@@ -1804,9 +1937,64 @@ class RunnerUnitTests(unittest.TestCase):
                     self.assertEqual(json.loads(output.getvalue())["error"]["code"], -32602)
         self.assertIn("1800.0", local_exec.docker_exec_argv("valid", ["true"], 1800))
 
+    def test_task_timeout_is_mandatory_and_plumbed_as_registered_bound(self):
+        with self.assertRaisesRegex(ValueError, "EV005_DONECHECK_TIMEOUT_S is required"):
+            local_exec.registered_timeout_s({})
+        self.assertEqual(
+            local_exec.bounded_timeout_s(None, {"EV005_DONECHECK_TIMEOUT_S": "180"}),
+            180.0,
+        )
+        self.assertEqual(
+            local_exec.bounded_timeout_s(300, {"EV005_DONECHECK_TIMEOUT_S": "180"}),
+            180.0,
+        )
+        assignment = orchestrate.BlockAssignment(
+            series="pilot", task_id="p03", replicate=1, rank=0, seat="seat-01",
+            arms=(("B", 0), ("B+", 1), ("W", 2)),
+        )
+        worker = orchestrate.WorkerAllocation("worker-00", ((0,), (1,)), (0, 1))
+        command = orchestrate.build_runner_command(
+            assignment=assignment, arm="W", slot=2,
+            task_dir=Path("/tasks/p03"), source_repo=Path("/repos/p03"),
+            output=Path("/out/p03"), cell="main-vps", worker=worker,
+            run_id="p03-timeout", controller_config_digest="0" * 64,
+            donecheck_timeout_s=180.0,
+        )
+        self.assertEqual(command[command.index("--donecheck-timeout-s") + 1], "180.0")
+        with self.assertRaisesRegex(RuntimeError, "has no timeout_s"):
+            orchestrate.task_donecheck_timeout_s({"id": "p03"}, Path("/tasks/p03"))
+        parser_args = [
+            "run", "--run-id", "missing-bound", "--arm", "B",
+            "--task-dir", "/task", "--source-repo", "/source", "--output", "/out",
+            "--cell", "main-vps", "--worker-id", "worker-00", "--account-id", "seat-01",
+            "--block-id", "p03-k1", "--slot-index", "0", "--cpuset-cpus", "0-1",
+            "--memory-bytes", str(runner.REGISTERED_MEMORY_BYTES),
+            "--preflight-controller-config-digest", "0" * 64,
+        ]
+        with self.assertRaises(SystemExit):
+            runner.build_parser().parse_args(parser_args)
+
+        result = local_exec.ExecResult(["docker"], 0, b"ok\n", b"")
+        for requested, expected in ((None, 180.0), (300, 180.0), (30, 30.0)):
+            arguments = {"command": "true"}
+            if requested is not None:
+                arguments["timeout_s"] = requested
+            with (
+                mock.patch.dict(os.environ, {"EV005_DONECHECK_TIMEOUT_S": "180"}),
+                mock.patch.object(mcp_exec_server, "run_shell", return_value=result) as called,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                mcp_exec_server.handle({
+                    "id": 1, "method": "tools/call",
+                    "params": {"name": "sandbox_exec", "arguments": arguments},
+                })
+            called.assert_called_once_with("true", timeout_s=expected)
+
     def test_mcp_task_failure_is_result_but_infrastructure_is_signaled(self):
         task_result = local_exec.ExecResult(["docker"], 7, b"ordinary\n", b"")
-        with mock.patch.object(mcp_exec_server, "run_shell", return_value=task_result):
+        with mock.patch.dict(os.environ, {"EV005_DONECHECK_TIMEOUT_S": "180"}), mock.patch.object(
+            mcp_exec_server, "run_shell", return_value=task_result,
+        ):
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
                 mcp_exec_server.handle({"id": 1, "method": "tools/call", "params": {
@@ -1817,6 +2005,7 @@ class RunnerUnitTests(unittest.TestCase):
             self.assertEqual(row["result"]["structuredContent"]["exit_code"], 7)
         with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {
             "EV005_INFRA_SIGNAL_PATH": str(Path(td) / "infra.jsonl"),
+            "EV005_DONECHECK_TIMEOUT_S": "180",
         }), mock.patch.object(
             mcp_exec_server, "run_shell",
             side_effect=local_exec.ExecInfrastructureError("container gone"),
@@ -1897,6 +2086,7 @@ class RunnerUnitTests(unittest.TestCase):
         self.assertFalse(any(part.startswith("--test-") for part in argv[:separator]))
         parsed = runner.build_parser().parse_args(argv[argv.index("_container-supervise"):])
         self.assertFalse(parsed.test_no_drop)
+        self.assertFalse(parsed.test_ptrace_esrch_once)
         self.assertEqual(parsed.supervised_command, ["--", "/bin/echo", "--test-no-drop"])
 
     def test_preflight_controller_digest_match_and_planted_drift(self):
@@ -1974,6 +2164,7 @@ class RunnerUnitTests(unittest.TestCase):
                     out_root=root / "out", ledger_path=ledger,
                     ledger_lock=threading.Lock(), ledger_rows=ledger_rows,
                     dry_run=False, dry_run_delay_s=0, blocks_concurrent=1,
+                    task_timeouts={"p01": 180.0},
                     preflight_controller_config_digests={"seat-01": runner.controller_config_digest(root / "seat")},
                 )
             return ok, calls, orchestrate.read_ledger(ledger)

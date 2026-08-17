@@ -61,9 +61,10 @@ comes only from the image files captured before command launch—not agent stdin
 command text, PATH, or an agent-writable declaration. Image-owned identities
 for `/bin/cat`, `/bin/head`, and `/bin/grep` are also captured as explicit
 non-executing readers, so their gate operands do not count. Any other process
-identity presenting the exact gate as its path operand is UNKNOWN and fails
-closed; a modified-but-still-functional shell copy therefore cannot create a
-silent miss. Consequently `cat`, `head`, and `grep` reads do not count, while direct, nested-shell, subshell,
+identity presenting the exact gate as its path operand is agent behavior: it
+emits `gate_execution_untrusted` with the pid, bounded argv, and measured
+executable identity, but is neither counted nor paused and does not abort the
+run. Consequently `cat`, `head`, and `grep` reads do not count, while direct, nested-shell, subshell,
 `env`, wrapper-script, and background execution do. The pause interval is the gate's exec-stop through exit-stop;
 short executions are observed at their kernel exec event rather than sampled.
 The audit header binds the ptrace options, event-drain rule, and interval semantics via
@@ -98,6 +99,9 @@ Yama or `suid_dumpable` settings. Frames are
 bounded to the platform atomic-pipe limit and carry a final trusted result. A
 missing, malformed, stalled, signalled, or status-mismatched observer creates a
 root-owned supervisor error and terminates the run as infrastructure failure.
+An ESRCH race from CONT, DETACH, or SETOPTIONS is tolerated while the tracee is
+not a counted gate and left for `waitpid` to reap. The same loss during a
+counted gate remains fatal because it makes exit/output attribution ambiguous.
 
 Delivery request nonces are claimed only in runner-private memory. The
 agent-visible `handled-*` file is notification-only; deleting or recreating it
@@ -173,6 +177,9 @@ python3 runners/alec/ev005/orchestrate.py \
 `repos.json` maps each `meta.json` `source_repo` value to a local clone path. `seats.json` maps
 the five sealed seat labels to their isolated `CLAUDE_CONFIG_DIR` paths. Their configuration
 digests are recorded before scheduling and rechecked immediately before each controller launch.
+Every task `meta.json` must contain a finite `timeout_s` in `(0, 1800]`; orchestration passes it
+as the mandatory `--donecheck-timeout-s`, and the MCP execution channel uses it as the maximum
+for every sandbox command instead of supplying a global fallback.
 Pass `--resume` after an interruption. If any arm is infrastructure-void, the complete three-arm
 block is executed once more under the same seat, slots, and physical-core assignment policy; the
 second block attempt scores all arms, and a second void stops the block without a third attempt.

@@ -43,6 +43,26 @@ def validate_timeout_s(timeout_s: float | int) -> float:
     return value
 
 
+def registered_timeout_s(env: dict[str, str] | None = None) -> float:
+    source = os.environ if env is None else env
+    raw = source.get("EV005_DONECHECK_TIMEOUT_S")
+    if raw is None:
+        raise ValueError("EV005_DONECHECK_TIMEOUT_S is required")
+    try:
+        return validate_timeout_s(float(raw))
+    except ValueError as exc:
+        raise ValueError(f"invalid EV005_DONECHECK_TIMEOUT_S: {exc}") from exc
+
+
+def bounded_timeout_s(
+    requested_timeout_s: float | int | None, env: dict[str, str] | None = None,
+) -> float:
+    registered = registered_timeout_s(env)
+    if requested_timeout_s is None:
+        return registered
+    return min(validate_timeout_s(requested_timeout_s), registered)
+
+
 def docker_exec_argv(container: str, argv: Sequence[str], timeout_s: float) -> list[str]:
     if not container or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-" for ch in container):
         raise ValueError("invalid EV-005 container name")
@@ -61,7 +81,9 @@ def run_in_sandbox(
     timeout_s: float | None = None,
 ) -> ExecResult:
     name = container or os.environ.get("EV005_CONTAINER_NAME", "")
-    effective_timeout = validate_timeout_s(1800.0 if timeout_s is None else timeout_s)
+    effective_timeout = (
+        registered_timeout_s() if timeout_s is None else validate_timeout_s(timeout_s)
+    )
     command = docker_exec_argv(name, argv, effective_timeout)
     try:
         cp = subprocess.run(
