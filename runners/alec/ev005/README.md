@@ -80,8 +80,14 @@ claiming an exit or stdout digest it cannot attribute to a gate process.
 The gate PID's kernel wait status supplies `exit`; `stdout_digest` covers only
 the captured stdout bytes between its exec-stop and exit-stop, excluding
 supervised-command output before or after the gate. Output from processes spawned
-by the gate is part of that interval. Overlapping gates or concurrent non-gate
-descendants make shared-pipe attribution ambiguous and fail closed. Root shell
+by the gate is part of that interval. Concurrent non-gate descendants degrade
+only stdout attribution: the invocation remains counted and paused with its real
+exit, while `stdout_digest` is null and `observation_error` is
+`concurrent-descendants-stdout-unattributable`. True overlapping counted gates
+still fail closed because the gate exit itself is ambiguous. A per-invocation
+agent gate timeout kills and records that invocation with `timed_out: true`, then
+unpauses the budget and lets the run continue; pipeline gate timeouts remain
+infrastructure-fatal. Root shell
 exit does not end tracing while a background descendant remains. At fork/vfork
 events the parent stays ptrace-stopped until the child execs; when that child is
 the gate, its parent remains stopped through the gate exit-stop. This keeps
@@ -106,6 +112,13 @@ counted gate remains fatal because it makes exit/output attribution ambiguous.
 Delivery request nonces are claimed only in runner-private memory. The
 agent-visible `handled-*` file is notification-only; deleting or recreating it
 cannot create another declaration or consume declaration budget again.
+
+Declaration Git plumbing runs as the registered agent uid so agent-owned private
+paths and object directories remain traversable without controller capabilities.
+If a snapshot still cannot be created, the declaration consumes its normal score
+slot and records `snapshot_sha: null` plus `snapshot_failure`; no older tree is
+substituted for adjudication, and an explicit delivery receives a conservative
+nonzero result without terminating the run.
 
 ## Unit tests
 

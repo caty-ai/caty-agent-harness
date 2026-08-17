@@ -27,6 +27,7 @@ class RunnerUnitTests(unittest.TestCase):
         self, replica: Path, messages: Path, command: str, *,
         basename_mutation: bool = False, trusted_recorder: bool = False,
         ptrace_esrch_once: bool = False,
+        timeout_s: float = 5,
     ) -> int:
         messages.mkdir()
         image = runner.local_validation_image()["image_tag"]
@@ -45,11 +46,11 @@ class RunnerUnitTests(unittest.TestCase):
             argv.append("--test-no-drop")
         else:
             argv.append("--test-observer-no-drop")
-        argv.extend(["--timeout-s", "5", "--", "/bin/bash", "-lc", command])
+        argv.extend(["--timeout-s", str(timeout_s), "--", "/bin/bash", "-lc", command])
         cp = subprocess.run(
             argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
         )
-        if cp.returncode not in {0, 2, 17, 125}:
+        if cp.returncode not in {0, 2, 17, 124, 125}:
             self.fail(
                 f"Linux supervisor failed rc={cp.returncode}: "
                 f"{cp.stderr.decode(errors='replace')}"
@@ -1108,6 +1109,44 @@ class RunnerUnitTests(unittest.TestCase):
                 observed["stdout_digest"], hashlib.sha256(b"BACKGROUND-GATE\n").hexdigest()
             )
 
+    def test_agent_gate_timeout_records_kill_status_and_timed_out(self):
+        with tempfile.TemporaryDirectory() as td:
+            replica = Path(td) / "replica"
+            replica.mkdir()
+            gate = replica / ".ev005-donecheck.sh"
+            gate.write_text("#!/bin/sh\nsleep 5\n")
+            gate.chmod(0o755)
+            messages = Path(td) / "messages"
+            rc = self.run_linux_supervisor(
+                replica, messages, "bash .ev005-donecheck.sh", timeout_s=0.1,
+            )
+            self.assertEqual(rc, 124)
+            observed = json.loads(next(messages.glob("observation-*-done.json")).read_text())
+            self.assertEqual(observed["exit"], -9)
+            self.assertTrue(observed["timed_out"])
+            self.assertIsNone(observed["observation_error"])
+
+    def test_concurrent_non_gate_descendant_degrades_only_stdout_attribution(self):
+        with tempfile.TemporaryDirectory() as td:
+            replica = Path(td) / "replica"
+            replica.mkdir()
+            gate = replica / ".ev005-donecheck.sh"
+            gate.write_text("#!/bin/sh\necho GATE-OUTPUT\nexit 17\n")
+            gate.chmod(0o755)
+            messages = Path(td) / "messages"
+            rc = self.run_linux_supervisor(
+                replica, messages,
+                "sleep 0.3 & bash .ev005-donecheck.sh; rc=$?; wait; exit $rc",
+            )
+            self.assertEqual(rc, 17)
+            observed = json.loads(next(messages.glob("observation-*-done.json")).read_text())
+            self.assertEqual(observed["exit"], 17)
+            self.assertIsNone(observed["stdout_digest"])
+            self.assertEqual(
+                observed["observation_error"],
+                runner.CONCURRENT_DESCENDANTS_STDOUT_ERROR,
+            )
+
     def test_trusted_shell_identity_accepts_renamed_copy(self):
         with tempfile.TemporaryDirectory() as td:
             replica = Path(td) / "replica"
@@ -1267,6 +1306,13 @@ class RunnerUnitTests(unittest.TestCase):
         )
         self.assertEqual(config["fork_parent_scheduling"], "hold-through-child-exec-or-gate-exit")
         self.assertEqual(config["clone_parent_scheduling"], "never-held")
+        self.assertEqual(
+            config["concurrent_descendants_stdout_policy"],
+            runner.CONCURRENT_DESCENDANTS_STDOUT_ERROR,
+        )
+        self.assertEqual(
+            config["agent_invocation_timeout_policy"], "kill-record-unpause-continue",
+        )
         self.assertEqual(config["observer_dumpable"], 0)
         self.assertEqual(config["observer_dumpable_policy"], "explicit-prctl-fail-closed")
         self.assertEqual(
@@ -1286,6 +1332,91 @@ class RunnerUnitTests(unittest.TestCase):
             controller.messages = messages
             with self.assertRaisesRegex(runner.InfraIntegrity, "observer killed"):
                 controller._handle_supervisor_errors()
+
+    def test_agent_timeout_and_stdout_degradation_are_nonfatal_audited_outcomes(self):
+        def exercise(root: Path, *, timed_out: bool, observation_error: str | None):
+            replica = root / "replica"
+            subprocess.run(["git", "init", "-q", str(replica)], check=True)
+            (replica / "tracked").write_text("base\n")
+            subprocess.run(["git", "-C", str(replica), "add", "-A"], check=True)
+            subprocess.run(
+                ["git", "-C", str(replica), "-c", "user.name=ev005", "-c",
+                 "user.email=ev005@local", "commit", "-qm", "base"],
+                check=True,
+            )
+            messages = root / "messages"
+            messages.mkdir()
+            sample = runner.CpuStatSample(1, 100, oom=0, oom_kill=0).as_dict()
+            row = {
+                "key": "fixed", "pause_start_bound_monotonic_s": 1.0,
+                "start_bound_monotonic_s": 1.1,
+                "pause_end_bound_monotonic_s": 1.3,
+                "end_bound_monotonic_s": 1.2,
+                "exit": -9 if timed_out else 17,
+                "stdout_digest": None if observation_error else "a" * 64,
+                "duration_ms": 100, "timed_out": timed_out,
+                "attribution": "ptrace-exec-exit-gate-interval",
+                "observation_error": observation_error,
+                "resource_before": sample, "resource_after": sample,
+            }
+            (messages / "observation-fixed-done.json").write_text(json.dumps(row))
+            controller = runner.RunController({
+                "arm": "B", "agent_uid": os.getuid(), "agent_gid": os.getgid(),
+            })
+            controller.replica = replica
+            controller.messages = messages
+            controller.audit = runner.AuditLog(root / "audit.jsonl", mirror_stdout=False)
+            controller._handle_agent_donechecks()
+            return [
+                json.loads(line)
+                for line in controller.audit.path.read_text().splitlines()
+            ]
+
+        with tempfile.TemporaryDirectory() as td:
+            rows = exercise(Path(td), timed_out=True, observation_error=None)
+            invocation = next(row for row in rows if row["event"] == "donecheck_invocation")
+            self.assertEqual(invocation["exit"], -9)
+            self.assertTrue(invocation["timed_out"])
+            self.assertIsNone(invocation["observation_error"])
+        with tempfile.TemporaryDirectory() as td:
+            rows = exercise(
+                Path(td), timed_out=False,
+                observation_error=runner.CONCURRENT_DESCENDANTS_STDOUT_ERROR,
+            )
+            invocation = next(row for row in rows if row["event"] == "donecheck_invocation")
+            self.assertEqual(invocation["exit"], 17)
+            self.assertIsNone(invocation["stdout_digest"])
+            self.assertEqual(
+                invocation["observation_error"],
+                runner.CONCURRENT_DESCENDANTS_STDOUT_ERROR,
+            )
+
+    def test_pipeline_gate_timeout_remains_fatal_after_audit(self):
+        with tempfile.TemporaryDirectory() as td:
+            controller = runner.RunController({
+                "arm": "B", "agent_uid": os.getuid(), "agent_gid": os.getgid(),
+                "donecheck_timeout_s": 0.1,
+            })
+            controller.replica = Path(td) / "replica"
+            controller.audit = runner.AuditLog(
+                Path(td) / "audit.jsonl", mirror_stdout=False,
+            )
+            timed_out = runner.DonecheckResult(124, b"partial\n", b"", 0.1, True)
+            sample = runner.CpuStatSample(1, 100, oom=0, oom_kill=0)
+            with (
+                mock.patch.object(runner, "make_snapshot_tree", return_value=Path(td)),
+                mock.patch.object(runner, "execute_donecheck", return_value=timed_out),
+                mock.patch.object(controller, "_sample_resource", return_value=sample),
+                self.assertRaisesRegex(runner.InfraIntegrity, "pipeline donecheck timeout"),
+            ):
+                controller._run_gate("a" * 40, "pipeline")
+            rows = [
+                json.loads(line)
+                for line in controller.audit.path.read_text().splitlines()
+            ]
+            invocation = next(row for row in rows if row["event"] == "donecheck_invocation")
+            self.assertEqual(invocation["exit"], 124)
+            self.assertTrue(invocation["timed_out"])
 
     def test_untrusted_gate_is_audited_without_count_or_pause(self):
         with tempfile.TemporaryDirectory() as td:
@@ -2231,6 +2362,133 @@ class RunnerUnitTests(unittest.TestCase):
             adjudication = runner.make_snapshot_tree(repo, sha, Path(td) / "adjudication")
             self.assertEqual((adjudication / "work.txt").read_text(), "after\n")
             self.assertFalse((adjudication / ".ev005").exists())
+
+    def test_snapshot_runs_as_agent_identity_over_agent_private_modes(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td) / "repo"
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            (repo / "base").write_text("base\n")
+            subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+            subprocess.run(
+                ["git", "-C", str(repo), "-c", "user.name=ev005", "-c",
+                 "user.email=ev005@local", "commit", "-qm", "base"],
+                check=True,
+            )
+            private = repo / "agent-private"
+            private.mkdir(mode=0o700)
+            (private / "result").write_text("agent-created\n")
+            (private / "result").chmod(0o600)
+            for path in (repo / ".git" / "objects").rglob("*"):
+                path.chmod(0o700 if path.is_dir() else 0o600)
+            (repo / ".git" / "objects").chmod(0o700)
+
+            sha = runner.snapshot(
+                repo, 1, agent_uid=os.getuid(), agent_gid=os.getgid(),
+            )
+
+            names = subprocess.check_output(
+                ["git", "-C", str(repo), "ls-tree", "-r", "--name-only", sha],
+                text=True,
+            ).splitlines()
+            self.assertIn("agent-private/result", names)
+
+    def test_snapshot_as_agent_uid_without_dac_override(self):
+        image = runner.local_validation_image()["image_tag"]
+        agent_script = (
+            "from pathlib import Path\n"
+            "repo = Path('/tmp/repo')\n"
+            "private = repo / 'agent-private'\n"
+            "private.mkdir(mode=0o700)\n"
+            "(private / 'result').write_text('agent-created\\n')\n"
+            "(private / 'result').chmod(0o600)\n"
+            "for path in (repo / '.git' / 'objects').rglob('*'):\n"
+            "    path.chmod(0o700 if path.is_dir() else 0o600)\n"
+            "(repo / '.git' / 'objects').chmod(0o700)\n"
+        )
+        script = (
+            "import os, subprocess, sys\n"
+            "from pathlib import Path\n"
+            "sys.path.insert(0, '/runner-runtime')\n"
+            "import runner\n"
+            "repo = Path('/tmp/repo')\n"
+            "subprocess.run(['git', 'init', '-q', str(repo)], check=True)\n"
+            "(repo / 'base').write_text('base\\n')\n"
+            "subprocess.run(['git', '-C', str(repo), 'add', '-A'], check=True)\n"
+            "subprocess.run(['git', '-C', str(repo), '-c', 'user.name=ev005', "
+            "'-c', 'user.email=ev005@local', 'commit', '-qm', 'base'], check=True)\n"
+            "for root, dirs, files in os.walk(repo):\n"
+            "    for name in dirs + files:\n"
+            "        os.chown(Path(root) / name, 1000, 1000)\n"
+            "os.chown(repo, 1000, 1000)\n"
+            "def drop():\n"
+            "    os.setgroups([]); os.setgid(1000); os.setuid(1000)\n"
+            f"agent = {agent_script!r}\n"
+            "subprocess.run([sys.executable, '-c', agent], preexec_fn=drop, check=True)\n"
+            "sha = runner.snapshot(repo, 1, agent_uid=1000, agent_gid=1000)\n"
+            "assert 'agent-private/result' in subprocess.check_output("
+            "['git', '-C', str(repo), 'ls-tree', '-r', '--name-only', sha], "
+            "preexec_fn=drop, text=True).splitlines()\n"
+        )
+        cp = subprocess.run(
+            [
+                "docker", "run", "--rm", "--network", "none",
+                "--cap-drop", "ALL", "--cap-add", "CHOWN",
+                "--cap-add", "SETUID", "--cap-add", "SETGID",
+                "--security-opt", "no-new-privileges",
+                "-v", f"{HERE / 'runner.py'}:/runner-runtime/runner.py:ro",
+                image, "python3", "-c", script,
+            ],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+        )
+        self.assertEqual(cp.returncode, 0, cp.stdout.decode(errors="replace"))
+
+    def test_unfixable_snapshot_failure_is_scored_and_does_not_adjudicate_old_tree(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            controller = runner.RunController({
+                "arm": "B", "agent_uid": os.getuid(), "agent_gid": os.getgid(),
+            })
+            controller.audit = runner.AuditLog(
+                root / "audit.jsonl", mirror_stdout=False,
+            )
+            with mock.patch.object(
+                runner, "snapshot", side_effect=runner.InfraIntegrity("unfixable"),
+            ):
+                sha, scored = controller._snapshot_declaration("DONE-DECLARE")
+            self.assertIsNone(sha)
+            self.assertTrue(scored)
+            self.assertEqual(controller.budget.scored, 1)
+            self.assertEqual(controller.scored_snapshots, [None])
+            row = json.loads(controller.audit.path.read_text().splitlines()[-1])
+            self.assertEqual(row["event"], "declaration")
+            self.assertIsNone(row["snapshot_sha"])
+            self.assertEqual(row["snapshot_failure"], "unfixable")
+            with mock.patch.object(controller, "_run_gate") as gate:
+                controller._posthoc()
+            gate.assert_not_called()
+
+    def test_delivery_snapshot_failure_returns_conservative_failure_without_run_death(self):
+        with tempfile.TemporaryDirectory() as td:
+            replica = Path(td)
+            requests = replica / ".ev005"
+            requests.mkdir()
+            request = requests / "request-failed"
+            request.write_text("deliver\n")
+            controller = runner.RunController({
+                "arm": "W", "agent_uid": os.getuid(), "agent_gid": os.getgid(),
+            })
+            controller.replica = replica
+            with (
+                mock.patch.object(
+                    controller, "_snapshot_declaration", return_value=(None, True),
+                ),
+                mock.patch.object(controller, "_run_gate") as gate,
+            ):
+                controller._handle_deliveries()
+            gate.assert_not_called()
+            self.assertEqual((requests / "response-failed.rc").read_text(), "1\n")
+            self.assertIn("snapshot failed", (requests / "response-failed.out").read_text())
+            self.assertIsNone(controller.end_reason)
 
 
 if __name__ == "__main__":
