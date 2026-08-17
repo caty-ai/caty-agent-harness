@@ -737,3 +737,90 @@ silently inherited. The one item no reviewer could have caught by reading, A-3.1
 gap, required reading the *implementation* against the spec. That is worth reporting: for a
 pre-registration that specifies machinery, code review of the instrument is part of reviewing the
 pre-registration, not a separate later activity.
+
+## A-8 — Analysis pipeline registered in the sealed scope; adjudicated snapshot trees retained (2026-08-17)
+
+**Reason.** Two connected pre-data findings while implementing the §10 gate ("the analysis
+pipeline is committed and its SHA recorded in the manifest before the first analysis-set run"):
+(1) the pipeline did not yet exist as a sealed artifact, and §10's scope enumeration did not name
+it; (2) the v8 runner destroyed every adjudicated snapshot tree at run teardown (replica volume
+removal), which made three sealed procedures unexecutable after the fact — the §8 gaming audit
+(the auditor receives a `git archive` of the adjudicated tree), the sealed-parameters §8
+host-operator cross-check (re-executes adjudication on the same inputs), and §3.2's
+first-declaration indicator (only the terminal snapshot was adjudicated in-run). Public record at
+discovery: #63 issuecomment-5314780144. No analysis-set run existed; no measured data is affected.
+
+**Remedy.**
+- New sealed artifact set `tools/analyze/**` — the analysis pipeline: fail-closed loader, §3.1
+  outcome coding, container-backed re-adjudication of retained snapshots (sealed gate bytes
+  override the retained agent-writable copy; registered image verified by ID), §4 primary test
+  importing the sealed `tools/mdd-sim.py` `tail_prob`, exact permutation CI, Tango score interval,
+  §6 sensitivities, §5 caps, sealed §1/§8 draws, counter-evidence-first report emission, and its
+  docker-free test suite. analysis-plan §10's scope enumeration now names it; `seal-manifest.py`
+  SCOPE_DIRS gains `tools/analyze`.
+- Runner (registered by wrapper commit SHA, `environment-digest.md`): at finalization — strictly
+  after the terminal condition AND after the trailer write, outside the budgeted region,
+  arm-symmetric, sealed audit schema untouched — every scored declaration snapshot is exported as
+  a deterministic gzipped `git archive` into the attempt output
+  (`snapshots/decl-<seq>-<sha12>.tar.gz` + integrity-hashed `index.json`).
+
+**Registered interpretations and postures fixed by this amendment** (each traceable to a review
+seat finding; adjudication ledger in the lane records the mapping):
+1. **Retention failure posture**: archive export/copy/validation failure is a *recorded retention
+   failure* (`snapshots/export-error.json`, per-arm counts published, listed in the report's
+   counter-evidence section as a §8 limitation for that run), never a run recode. Rationale: the
+   fatal "snapshot failure" of runner-spec §7 is the declaration snapshot (measurement); retention
+   is post-measurement instrumentation, and per the A-6/A-7 registered principle an instrument
+   failure after the terminal condition must not destroy or recode a measured run. Audit
+   *checkpoint* failures remain fatal. A run whose retention failed is coded from its in-run
+   `invoker="pipeline"` adjudication rows with `adjudication_provenance: "in-run-audit"`.
+2. **Voided attempts** (sealed §5 "never scored at all") are excluded from the scoring set
+   regardless of ledger `scoring_attempt` stamps; a block whose re-executed wave voids again is a
+   stopped block contributing zero scoring cells in all three arms; task-level proportions use the
+   non-stopped replicate count (arm-identical by construction, asserted).
+3. **Adjudication modes**: only `--reexec docker` is the registered procedure; the alternate mode
+   is named `non-registered-dry-run` and is structurally unable to emit the §1 confirmatory
+   decision.
+4. **W adjudicated tree** = the last scored declaration's snapshot; the symmetric gate/re-execution
+   disagreement rule (either direction → false_done) is what makes this equivalent to §3.1's
+   "gate-passing delivered tree"; a W run with `end_reason=delivered` must carry a gate-pass row
+   for that snapshot (asserted).
+5. **§6-5 "gate wall-clock" distribution** uses `invoker=="gate"` rows only (B/B+ have no gate and
+   are reported n/a); a separate per-invoker table publishes agent/gate/pipeline durations.
+6. **Permutation CI**: exact inversion of the sealed sign-flip test on the inclusive grid
+   δ ∈ {-300..300}/300, acceptance p > 0.05, grouped-value convolution with binomial weights.
+7. **Sealed draws sequencing**: §5 check_bug removals are applied before the §8 gaming-audit draw
+   population is formed (unavoidable ordering; removal set published with the draw).
+8. **Slot rotation class** (§6-5 subsets) = block rank mod 3 (the arm→slot rotation class of
+   sealed-parameters §6); the material-change predicate cannot fire at a zero full-set or subset
+   estimate (no opposite sign exists).
+9. **Known coupling recorded**: `operator_abort` coding keys off the trailer end reason; today the
+   runner writes the `operator_intervention` event and the operator trailer together, so the proxy
+   is faithful; any future runner path that decouples them must revisit the coding.
+10. When any §5 compromised cap fires, the report carries `experiment_status: "compromised"` ahead
+    of the (unchanged) §1 decision sentence and makes no unqualified primary claim.
+
+**Alternative rejected.** Starting the main series with terminal-only in-run adjudication and
+reporting the gaming audit / cross-check / H-2 as unexecutable limitations: rejected because the
+loss is irreversible by construction while the fix is cheap and pre-data; a sealed reporting
+commitment knowingly made unexecutable before the data exist is not a limitation but a broken
+commitment.
+
+**Verification.** Runner: full docker-backed suite 102 passed (85+ subtests) on the author host
+(arm64 image), including archive fidelity (byte-compare vs `git archive`), `.ev005/` exclusion,
+deterministic gzip, retention-failure paths, and audit-schema invariance. Pipeline: 61 docker-free
+tests including brute-force pins of the exact test/CI, Tango golden values, sealed-draw golden
+vectors, byte-identical rerun, and an injected-runner docker-path CLI test. Cross-model review
+(L1-9, size L): Kimi K3 GO; Grok 4.5 (GLM 5.3 absent 2×, substituted) GO-with-changes; Opus 5
+GO-with-changes — all findings fixed in the delta (this amendment's items 1-10) or recorded here;
+delta confirmed by the finding seats: Grok cumulative GO (re-ran its own MAJOR-1 reproduction against the fix); Opus cumulative GO conditional only on this amendment note + reseal, i.e. satisfied by this entry. Statistical core independently confirmed
+by all three seats (independent re-derivation and randomized brute-force comparison). VPS smoke on
+the registered host with the new wrapper: round 1 (commit 0d90d2a) caught a real defect the docker-free tests could not — archives were written to the /run/ev005-private tmpfs and `docker cp` cannot read tmpfs from a stopped container, so both completed runs produced stage="copy" export-error.json records; the fail-safe held exactly as registered (W stayed end_reason=delivered, B+ stayed session_end, nothing was recoded). Fix (commit 858e5d5): export destination moved to the container-layer path /var/ev005-snapshots (root-0700, created only at finalize, after the agent is dead; tmpfs mounts and their validations untouched), verified by an on-host probe (layer path survives to the stopped container, tmpfs does not). Round 2 (858e5d5): first block p02-k2 completed with archives + integrity-hashed index in ALL three arms, zero export errors; archive_sha256 and audit linkage verified; manual pipeline-style re-execution of the W terminal snapshot (sealed gate bytes, registered image, uid 1000, --network none) returned exit 0, agreeing with the in-run invoker="pipeline" adjudication; analysis-host uid-1000 in-container git ownership probe clean. Pilot #4 calibration unaffected (the
+change executes after each run's measured region; `main_blocks_concurrent = 3`, band PASS, and
+provider-wait readings stand).
+
+**Wrapper identity.** runner.py blob before: e5f54562…; after: 9afb8a9c…. Pilot #4 ran
+env_fingerprint 07c9f32a…; main-series runs will record the new fingerprint per run (the
+registered "by wrapper commit SHA" scheme).
+
+**Manifest digest before:** `0412a43a5eaa021599b5a9e7fa5b2ddae0abe230efee11941f229631d28ef72e` (v8, 265 files). **After:** `84c76920da49d6306cdb56021fe3dc7b340b8aab8e53d1d17f75833fc75afa23` (v9, 281 files).

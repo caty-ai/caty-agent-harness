@@ -1,8 +1,8 @@
 # EV-005 sealed manifest — metadata
 
-- Files sealed: **265**
-- Manifest digest (SHA-256 of `MANIFEST.sha256`): `0412a43a5eaa021599b5a9e7fa5b2ddae0abe230efee11941f229631d28ef72e`
-- Git commit at generation: `8c0b895db53e7bdb416f8e3473943ff1d5bd94fe`
+- Files sealed: **281**
+- Manifest digest (SHA-256 of `MANIFEST.sha256`): `84c76920da49d6306cdb56021fe3dc7b340b8aab8e53d1d17f75833fc75afa23`
+- Git commit at generation: `858e5d5a6e9e22f39436ff58a99c97b32cf811e1`
 - Generator: `tools/seal-manifest.py` (stdlib only, deterministic, fail-closed on
   a missing scope entry or a symlink inside the scope).
 
