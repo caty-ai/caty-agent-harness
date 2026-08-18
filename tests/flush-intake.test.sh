@@ -488,6 +488,17 @@ printf '%s\n' \
   '- Keep literal provenance (source: user) suffix' \
   '- Keep literal provenance suffix (source: flush-intake)' >"$ws/loop/pending/flush-2026-07-14.md"
 run_intake "$ws"
+anchor_ws=$ws
+unicode_ws=$(new_ws case-26-unicode-key)
+{
+  printf '%s\n' '<!-- flush ts=2026-07-20T01:02:03Z outcome=ok -->'
+  printf '%s\n' \
+    '- Don’t retry Job A until “ready now”.' \
+    "- Don't retry Job A until \"ready now\"." \
+    $'- Don\'t retry Job\u00a0A until "ready now".' \
+    '- Ｄｏｎ'\''ｔ ｒｅｔｒｙ Ｊｏｂ Ａ ｕｎｔｉｌ "ｒｅａｄｙ ｎｏｗ"．'
+} >"$unicode_ws/loop/pending/flush-2026-07-20.md"
+run_intake "$unicode_ws"
 parenthetical_fixture="$ROOT/tests/fixtures/flush/normalization-parenthetical.md"
 parenthetical_normalized="$TMP_ROOT/normalization-parenthetical.txt"
 mech_normalized="$TMP_ROOT/normalization-mech.txt"
@@ -510,15 +521,20 @@ bash -c '
 ' _ "$ROOT/scripts/lib-state-fold.sh" "$mech_normalized_input" >"$mech_normalized"
 hash_plain=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$ROOT/scripts/lib-state-fold.sh" '- 2026-07-14 Keep a repeated route identity. (source: distill-audit)')
 hash_mech=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$ROOT/scripts/lib-state-fold.sh" '- 2026-07-14 Keep a repeated route identity. (source: distill-audit) [mech_check: no]')
-if [ "$(grep -Fc 'Keep literal provenance' "$ws/STATE.md")" -eq 2 ] \
+if [ "$(grep -Fc 'Keep literal provenance' "$anchor_ws/STATE.md")" -eq 2 ] \
   && grep -Fqx -- 'Keep a distinct local annotation. (some note)' "$parenthetical_normalized" \
   && [ "$(LC_ALL=C sort -u "$parenthetical_normalized" | wc -l | tr -d '[:space:]')" -eq 2 ] \
   && [ "$(LC_ALL=C sort -u "$mech_normalized" | wc -l | tr -d '[:space:]')" -eq 1 ] \
-  && [ "$hash_plain" = "$hash_mech" ]; then
-  pass '[26] normalization strips only the anchored consumer source marker and preserves other parentheticals'
+  && [ "$hash_plain" = "$hash_mech" ] \
+  && grep -Fqx -- '- 2026-07-20 Don’t retry Job A until “ready now”. (source: flush-intake)' "$unicode_ws/STATE.md" \
+  && [ "$(grep -Fc 'retry Job' "$unicode_ws/STATE.md")" -eq 1 ] \
+  && [ "$(receipt_value "$unicode_ws" candidates)" -eq 4 ] \
+  && [ "$(receipt_value "$unicode_ws" folded)" -eq 1 ] \
+  && [ "$(receipt_value "$unicode_ws" deduped)" -eq 3 ]; then
+  pass '[26] normalization is anchored, mech-check invariant, and key-only across Unicode variants'
 else
-  fail_case '[26] normalization strips only the anchored consumer source marker and preserves other parentheticals' \
-    "parenthetical=$(cat "$parenthetical_normalized" 2>/dev/null | tr '\n' ';') mech=$(cat "$mech_normalized" 2>/dev/null | tr '\n' ';') hashes=$hash_plain/$hash_mech"
+  fail_case '[26] normalization is anchored, mech-check invariant, and key-only across Unicode variants' \
+    "parenthetical=$(cat "$parenthetical_normalized" 2>/dev/null | tr '\n' ';') mech=$(cat "$mech_normalized" 2>/dev/null | tr '\n' ';') hashes=$hash_plain/$hash_mech receipt=$(tail -n1 "$unicode_ws/loop/pending/intake-runs.log")"
 fi
 
 if grep -Fq 'state_fold_candidate_is_duplicate' "$ROOT/adapters/openclaw/distill-audit.sh" \

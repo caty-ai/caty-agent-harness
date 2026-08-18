@@ -68,7 +68,6 @@ annotate_reply_dedup_keys() {
   local line
   local stripped_line
   local source_anchored_line
-  local normalized
   local lesson_hash
 
   state_fold_trace annotate
@@ -97,8 +96,7 @@ annotate_reply_dedup_keys() {
     if [[ "$section" != other && -n "$section" \
       && "$source_anchored_line" =~ ^-\ [0-9]{4}-[0-9]{2}-[0-9]{2}\  \
       && "$source_anchored_line" == *" $source_marker" ]]; then
-      normalized=$(normalize_state_candidate "$stripped_line")
-      lesson_hash=$(sha256_text "$normalized")
+      lesson_hash=$(candidate_lesson_hash "$stripped_line")
       printf '%s [dedup_key: %s:%s]\n' "$stripped_line" "$task_id" "$lesson_hash" >>"$annotated_reply"
     else
       printf '%s\n' "$stripped_line" >>"$annotated_reply"
@@ -119,9 +117,39 @@ normalize_state_candidate() {
   '
 }
 
-candidate_lesson_hash() {
+normalize_state_candidate_key_text() {
   local normalized
   normalized=$(normalize_state_candidate "$1")
+
+  # NFKC supplies the compatibility folds required for NBSP and fullwidth
+  # ASCII. Curly quotes are deliberately mapped separately because NFKC keeps
+  # them distinct. Do not add case folding or broad confusable stripping here:
+  # this representation is used only for dedup keys/comparisons, never storage.
+  python3 -B - "$normalized" <<'PY'
+import re
+import sys
+import unicodedata
+
+SMART_QUOTES = str.maketrans({
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+})
+
+value = unicodedata.normalize("NFKC", sys.argv[1]).translate(SMART_QUOTES)
+# Compatibility spaces introduced by NFKC join the existing whitespace fold.
+value = re.sub(r" +", " ", value).strip(" ")
+sys.stdout.write(value + "\n")
+PY
+}
+
+# Append-only compatibility: historical [dedup_key: ...] annotations are not
+# recomputed or rewritten. A pre-rollout key can therefore admit one duplicate
+# before a newly normalized key is recorded for later folds.
+candidate_lesson_hash() {
+  local normalized
+  normalized=$(normalize_state_candidate_key_text "$1")
   sha256_text "$normalized"
 }
 
@@ -193,7 +221,7 @@ snapshot_state_normalized_candidates() {
 
   : >"$output"
   while IFS= read -r line || [[ -n "$line" ]]; do
-    normalize_state_candidate "$line" >>"$output"
+    normalize_state_candidate_key_text "$line" >>"$output"
   done <"$raw_file"
   rm -f "$raw_file"
 }
@@ -210,7 +238,7 @@ state_fold_candidate_is_duplicate() {
 
   state_fold_trace dedup
 
-  normalized=$(normalize_state_candidate "$candidate_line")
+  normalized=$(normalize_state_candidate_key_text "$candidate_line")
   grep -Fqx -- "$lesson_hash" "$prior_hashes" \
     || grep -Fqx -- "$lesson_hash" "$batch_hashes" \
     || grep -Fqx -- "$normalized" "$normalized_state" \
