@@ -117,7 +117,7 @@ def code_run(
     contaminated = any(
         e.get("event") == "canary_check" and e.get("hit") is True for e in record.events
     )
-    operator_reason = next(
+    operator_reason = record.audit_fallback_reason or next(
         (str(e.get("reason")) for e in record.events if e.get("event") == "operator_intervention"),
         None,
     )

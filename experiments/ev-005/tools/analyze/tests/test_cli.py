@@ -161,6 +161,47 @@ def test_two_non_registered_dry_run_invocations_are_byte_identical(fixture_tree,
     assert markdown.index("## Counter-evidence first") < markdown.index("## Primary W vs B+")
 
 
+def test_incomplete_operator_run_is_reported_and_counts_toward_cap(fixture_tree, tmp_path):
+    target = fixture_tree["ledger"][0]
+    target["completed"] = False
+    target["status_reason"] = "quota abort before ledger completion marker"
+    audit_path = _attempt_dir(fixture_tree, target) / "audit.jsonl"
+    audit = [json.loads(line) for line in audit_path.read_text().splitlines()]
+    audit[-1]["end_reason"] = "operator"
+    write_jsonl(audit_path, audit)
+    write_jsonl(fixture_tree["out"] / "ledger.jsonl", fixture_tree["ledger"])
+
+    report_dir = tmp_path / "ledger-incomplete-report"
+    assert main([
+        "--pack", str(PACK), "--series", "main",
+        "--out-root", str(fixture_tree["out"]),
+        "--tasks-dir", str(fixture_tree["tasks"]),
+        "--report-dir", str(report_dir),
+        "--reexec", "non-registered-dry-run",
+    ]) == 0
+
+    report = json.loads((report_dir / "analysis-report.json").read_text())
+    outcome = next(row for row in report["outcome_rows"] if row["run_id"] == target["run_id"])
+    assert len(report["outcome_rows"]) == 18
+    assert outcome["outcome"] == "operator_abort"
+    assert outcome["ledger_incomplete"] is True
+    assert report["caps"]["operator_abort_rates"][target["arm"]] == 1 / 6
+    assert report["caps"]["compromised_flags"]["operator_abort_over_10pct_any_arm"] is True
+    assert report["ledger_incomplete"] == [{
+        "run_id": target["run_id"],
+        "seat": target["seat"],
+        "arm": target["arm"],
+        "ledger_status_reason": target["status_reason"],
+        "coded_as": "operator_abort",
+        "how_coded": "operator_abort (audit end_reason='operator')",
+    }]
+    markdown = (report_dir / "analysis-report.md").read_text()
+    assert "### Ledger-incomplete scoring runs" in markdown
+    assert target["run_id"] in markdown
+    assert target["status_reason"] in markdown
+    assert "operator_abort (audit end_reason='operator')" in markdown
+
+
 def test_report_dir_inside_out_root_is_rejected(fixture_tree):
     result = main([
         "--pack", str(PACK), "--series", "main",

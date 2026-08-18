@@ -824,3 +824,47 @@ env_fingerprint 07c9f32a…; main-series runs will record the new fingerprint pe
 registered "by wrapper commit SHA" scheme).
 
 **Manifest digest before:** `0412a43a5eaa021599b5a9e7fa5b2ddae0abe230efee11941f229631d28ef72e` (v8, 265 files). **After:** `84c76920da49d6306cdb56021fe3dc7b340b8aab8e53d1d17f75833fc75afa23` (v9, 281 files).
+
+## A-9 — Loader ingestion aligned to real evidence shapes (2026-08-18)
+
+**Reason.** The sealed pipeline's first execution against the completed 270-run main series
+failed closed at the loader (registered behavior: enumerate every anomaly, emit nothing). Both
+error classes were benign, already-registered evidence shapes that the docker-free fixtures had
+never produced: (1) ten `donecheck_invocation` rows across seven runs carrying
+`stdout_digest: null` with `observation_error: "concurrent-descendants-stdout-unattributable"` —
+the A-6 observation-degradation shape (all `invoker: "agent"`; runner-spec §5 publishes
+unobservable values as null, never fabricated); (2) fifteen ledger rows with
+`scoring_attempt: true, completed: false` (the 2026-08-17/18 seat-quota and CLI-crash aborts,
+plus one run — ev005-074-t07-k1-bplus-a1 — whose audit is complete and coherent through a
+`wallclock` trailer and which merely lost the orchestrator's exit marker), which the loader
+dropped entirely, leaving the expected grid unfillable. No outcome had been computed; no data
+was affected. Analysis of the main series had not begun (the abort IS the record of that).
+
+**Remedy (code, `tools/analyze/` — statistics, coding priority, caps, draws, re-execution and
+determinism untouched).**
+1. `stdout_digest: null` is accepted on `donecheck_invocation` rows iff `invoker == "agent"`
+   and `observation_error` is a non-empty string; `gate`/`pipeline` rows retain the strict
+   64-hex requirement (fail-closed).
+2. A `scoring_attempt` ledger row with `completed: false` is ingested, never dropped: with a
+   coherent audit trailer it is coded from the audit per §3.1 exactly like a completed run;
+   with a missing/unparsable/trailer-less audit it codes `operator_abort` (reason
+   "infra-integrity: ledger-recorded abort, audit trailer unavailable" — runner-spec §7
+   posture). Every such run carries a published `ledger_incomplete: true` marker and appears in
+   a dedicated infrastructure table; they feed the §5 caps exactly as coded.
+
+**Alternative rejected.** Editing the ledger or excluding the aborted runs from the grid:
+rejected — §5 pre-registers aborted runs as ITT non-successes and the cap must count them; a
+grid that silently sheds failed runs is the fail-open shape this pipeline exists to prevent.
+
+**Verification.** 73 docker-free tests (10 new covering both tolerances, their strict
+complements, and the published table); byte-identity rerun green; cross-model delta
+confirmation: Opus 5 delta verdict GO (verified against code: all three tolerance conjuncts
+required; gate/pipeline nulls and malformed digests still abort; full-grid completeness and the
+C6 exact schema checks unchanged; F1 void gates untouched; cap counting confirmed; determinism
+intact). Observed effect on the §5 cap, recorded per the seat's note: of the fifteen ingested
+incomplete rows, fourteen code operator_abort (per arm: W 5, B+ 4, B 5 of 90 each — max 5.6%,
+under the 10% trigger) and one codes timeout from its coherent wallclock audit. Full seat review
+of the surrounding machinery was completed under A-8; this change alters ingestion tolerance
+only.
+
+**Manifest digest before:** `84c76920…` (v9, 281 files). **After:** `29c300b9b5dbdf002187ed19104d64041595cb4d5cdc0d34c2c33c72626365a9` (v10, 281 files).

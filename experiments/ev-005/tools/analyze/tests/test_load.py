@@ -8,8 +8,20 @@ import sys
 
 import pytest
 
+from coding import audit_adjudications, code_run
 from conftest import write_jsonl
-from load import InputValidationError, load_analysis_data, resolve_attempt_dir
+from load import (
+    LEDGER_ABORT_AUDIT_UNAVAILABLE_REASON,
+    InputValidationError,
+    load_analysis_data,
+    resolve_attempt_dir,
+)
+
+
+def _audit_path(fixture_tree, row: dict) -> Path:
+    parts = Path(row["output"]).parts
+    suffix = parts[parts.index(fixture_tree["out"].name) + 1:]
+    return fixture_tree["out"].joinpath(*suffix) / "audit.jsonl"
 
 
 def _write_all_snapshot_indexes(fixture_tree) -> None:
@@ -205,6 +217,152 @@ def test_extra_audit_header_field_aborts_exact_schema_check(fixture_tree):
         load_analysis_data(
             fixture_tree["out"], fixture_tree["tasks"], "main", require_snapshots=False,
         )
+
+
+def test_agent_null_digest_with_observation_error_is_accepted(fixture_tree):
+    target = fixture_tree["ledger"][1]
+    audit_path = _audit_path(fixture_tree, target)
+    audit = [json.loads(line) for line in audit_path.read_text().splitlines()]
+    invocation = next(row for row in audit if row.get("event") == "donecheck_invocation")
+    invocation["invoker"] = "agent"
+    invocation["stdout_digest"] = None
+    invocation["observation_error"] = "concurrent-descendants-stdout-unattributable"
+    write_jsonl(audit_path, audit)
+
+    loaded = load_analysis_data(
+        fixture_tree["out"], fixture_tree["tasks"], "main", require_snapshots=False,
+    )
+    assert len(loaded.runs) == 18
+
+
+@pytest.mark.parametrize("invoker", ["gate", "pipeline"])
+def test_runner_invoker_null_digest_still_aborts(fixture_tree, invoker):
+    target = next(
+        row for row in fixture_tree["ledger"]
+        if row["arm"] == "W" or invoker == "pipeline"
+    )
+    audit_path = _audit_path(fixture_tree, target)
+    audit = [json.loads(line) for line in audit_path.read_text().splitlines()]
+    invocation = next(
+        row for row in audit
+        if row.get("event") == "donecheck_invocation" and row.get("invoker") == invoker
+    )
+    invocation["stdout_digest"] = None
+    invocation["observation_error"] = "synthetic runner observation loss"
+    write_jsonl(audit_path, audit)
+
+    with pytest.raises(InputValidationError, match="invalid stdout_digest"):
+        load_analysis_data(
+            fixture_tree["out"], fixture_tree["tasks"], "main", require_snapshots=False,
+        )
+
+
+@pytest.mark.parametrize("observation_error", [None, ""])
+def test_agent_null_digest_requires_nonempty_observation_error(
+    fixture_tree, observation_error,
+):
+    target = fixture_tree["ledger"][1]
+    audit_path = _audit_path(fixture_tree, target)
+    audit = [json.loads(line) for line in audit_path.read_text().splitlines()]
+    invocation = next(row for row in audit if row.get("event") == "donecheck_invocation")
+    invocation["invoker"] = "agent"
+    invocation["stdout_digest"] = None
+    invocation["observation_error"] = observation_error
+    write_jsonl(audit_path, audit)
+
+    with pytest.raises(InputValidationError, match="invalid stdout_digest"):
+        load_analysis_data(
+            fixture_tree["out"], fixture_tree["tasks"], "main", require_snapshots=False,
+        )
+
+
+def test_incomplete_ledger_row_with_operator_trailer_is_coded_from_audit(fixture_tree):
+    target = fixture_tree["ledger"][0]
+    target["completed"] = False
+    target["status_reason"] = "quota abort"
+    audit_path = _audit_path(fixture_tree, target)
+    audit = [json.loads(line) for line in audit_path.read_text().splitlines()]
+    audit[-1]["end_reason"] = "operator"
+    write_jsonl(audit_path, audit)
+    write_jsonl(fixture_tree["out"] / "ledger.jsonl", fixture_tree["ledger"])
+
+    loaded = load_analysis_data(
+        fixture_tree["out"], fixture_tree["tasks"], "main", require_snapshots=False,
+    )
+    record = next(run for run in loaded.runs if run.run_id == target["run_id"])
+    terminal, first = audit_adjudications(record)
+    coded = code_run(record, terminal, first, removed_tasks=set())
+    assert len(loaded.runs) == 18
+    assert record.ledger_incomplete is True
+    assert record.audit_fallback_reason is None
+    assert coded.outcome == "operator_abort"
+
+
+def test_incomplete_ledger_row_with_trailer_keeps_strict_audit_validation(fixture_tree):
+    target = fixture_tree["ledger"][0]
+    target["completed"] = False
+    target["status_reason"] = "quota abort"
+    audit_path = _audit_path(fixture_tree, target)
+    audit = [json.loads(line) for line in audit_path.read_text().splitlines()]
+    del audit[0]["model_id"]
+    write_jsonl(audit_path, audit)
+    write_jsonl(fixture_tree["out"] / "ledger.jsonl", fixture_tree["ledger"])
+
+    with pytest.raises(InputValidationError, match="audit header schema mismatch"):
+        load_analysis_data(
+            fixture_tree["out"], fixture_tree["tasks"], "main", require_snapshots=False,
+        )
+
+
+def test_incomplete_ledger_row_with_wallclock_trailer_is_coded_from_audit(fixture_tree):
+    target = fixture_tree["ledger"][1]
+    target["completed"] = False
+    target["status_reason"] = "exit marker lost"
+    audit_path = _audit_path(fixture_tree, target)
+    audit = [json.loads(line) for line in audit_path.read_text().splitlines()]
+    trailer = audit[-1]
+    trailer["end_reason"] = "wallclock"
+    trailer["declarations_scored"] = 0
+    write_jsonl(audit_path, [
+        audit[0],
+        {"event": "canary_check", "seq": 1, "ts": "x", "rule_id": "r",
+         "hit": False, "scope": "output"},
+        trailer,
+    ])
+    write_jsonl(fixture_tree["out"] / "ledger.jsonl", fixture_tree["ledger"])
+
+    loaded = load_analysis_data(
+        fixture_tree["out"], fixture_tree["tasks"], "main", require_snapshots=False,
+    )
+    record = next(run for run in loaded.runs if run.run_id == target["run_id"])
+    terminal, first = audit_adjudications(record)
+    coded = code_run(record, terminal, first, removed_tasks=set())
+    assert len(loaded.runs) == 18
+    assert record.ledger_incomplete is True
+    assert record.audit_fallback_reason is None
+    assert coded.outcome == "timeout"
+
+
+def test_incomplete_ledger_row_without_trailer_uses_operator_abort_fallback(fixture_tree):
+    target = fixture_tree["ledger"][2]
+    target["completed"] = False
+    target["status_reason"] = "CLI crash"
+    audit_path = _audit_path(fixture_tree, target)
+    audit = [json.loads(line) for line in audit_path.read_text().splitlines()]
+    write_jsonl(audit_path, audit[:-1])
+    write_jsonl(fixture_tree["out"] / "ledger.jsonl", fixture_tree["ledger"])
+
+    loaded = load_analysis_data(
+        fixture_tree["out"], fixture_tree["tasks"], "main", require_snapshots=False,
+    )
+    record = next(run for run in loaded.runs if run.run_id == target["run_id"])
+    terminal, first = audit_adjudications(record)
+    coded = code_run(record, terminal, first, removed_tasks=set())
+    assert len(loaded.runs) == 18
+    assert record.ledger_incomplete is True
+    assert record.audit_fallback_reason == LEDGER_ABORT_AUDIT_UNAVAILABLE_REASON
+    assert coded.outcome == "operator_abort"
+    assert coded.operator_reason == LEDGER_ABORT_AUDIT_UNAVAILABLE_REASON
 
 
 def test_retention_failure_marker_is_accepted_and_archives_are_ignored(fixture_tree):

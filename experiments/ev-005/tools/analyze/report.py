@@ -260,6 +260,26 @@ def _adjudication_provenance(run: CodedRun) -> str:
     return "not-applicable"
 
 
+def _ledger_incomplete_rows(coded: list[CodedRun]) -> list[dict[str, Any]]:
+    rows = []
+    for run in sorted(coded, key=lambda item: item.record.run_id):
+        if not run.record.ledger_incomplete:
+            continue
+        if run.record.audit_fallback_reason is not None:
+            basis = run.record.audit_fallback_reason
+        else:
+            basis = f"audit end_reason={run.record.trailer.get('end_reason')!r}"
+        rows.append({
+            "run_id": run.record.run_id,
+            "seat": run.record.ledger.get("seat"),
+            "arm": run.record.arm,
+            "ledger_status_reason": run.record.ledger.get("status_reason"),
+            "coded_as": run.outcome,
+            "how_coded": f"{run.outcome} ({basis})",
+        })
+    return rows
+
+
 def build_report(
     *, data: LoadedData, coded: list[CodedRun], pack: Path, out_root: Path,
     series: str, mode: str, image: str, image_id: str | None,
@@ -450,6 +470,7 @@ def build_report(
             ),
         } for arm in ARMS
     }
+    ledger_incomplete = _ledger_incomplete_rows(coded)
     attempt_structure: dict[str, Any] = {}
     by_block: dict[str, list[dict[str, Any]]] = defaultdict(list)
     scoring_run_ids = {run.run_id for run in data.runs}
@@ -511,6 +532,9 @@ def build_report(
                 "outcome": run.outcome,
                 "adjudication_provenance": _adjudication_provenance(run),
                 "terminal_adjudication_available": run.terminal is not None,
+                "ledger_incomplete": run.record.ledger_incomplete,
+                "ledger_status_reason": run.record.ledger.get("status_reason"),
+                "operator_reason": run.operator_reason,
                 "check_bug_candidate": bool(run.candidate_reasons),
                 "excluded_by_check_bug_removal": run.record.task_id in removed_tasks,
             }
@@ -531,6 +555,7 @@ def build_report(
         "h3": _h3(data, coded, removed_tasks),
         "sensitivity": sensitivity,
         "caps": caps,
+        "ledger_incomplete": ledger_incomplete,
         "retention_failures": retention_failures,
         "evidence_counters": counters,
         "block_reexecution_structure": attempt_structure,
@@ -707,6 +732,18 @@ def markdown_report(report: dict[str, Any]) -> str:
             lines.append(
                 f"| {arm} | {invoker} | `{json.dumps(by_invoker[invoker], sort_keys=True)}` |"
             )
+    lines += [
+        "", "### Ledger-incomplete scoring runs", "",
+        "| run | seat | arm | ledger status_reason | how coded |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for run in report["ledger_incomplete"]:
+        lines.append(
+            f"| {run['run_id']} | {run['seat']} | {run['arm']} | "
+            f"`{run['ledger_status_reason']}` | `{run['how_coded']}` |"
+        )
+    if not report["ledger_incomplete"]:
+        lines.append("| — | — | — | — | none |")
     lines += [
         "", "## Caps, voids, excess declarations, and untrusted executions", "",
         "| compromised flag | fired |",

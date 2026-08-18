@@ -31,6 +31,9 @@ TRAILER_FIELDS = {
     "infrastructure_void_reason",
 }
 END_REASONS = {"delivered", "wallclock", "abandon", "session_end", "operator"}
+LEDGER_ABORT_AUDIT_UNAVAILABLE_REASON = (
+    "infra-integrity: ledger-recorded abort, audit trailer unavailable"
+)
 
 
 class InputValidationError(ValueError):
@@ -58,6 +61,8 @@ class RunRecord:
     declarations: list[dict[str, Any]]
     snapshot_entries: dict[int, dict[str, Any]]
     retention_failure: dict[str, Any] | None = None
+    ledger_incomplete: bool = False
+    audit_fallback_reason: str | None = None
 
     @property
     def run_id(self) -> str:
@@ -110,6 +115,31 @@ def _read_jsonl(path: Path, label: str, errors: list[str]) -> list[dict[str, Any
             continue
         rows.append(row)
     return rows
+
+
+def _read_incomplete_audit(path: Path) -> list[dict[str, Any]] | None:
+    """Return a fully parseable incomplete-run audit, without widening normal tolerance."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError):
+        return None
+    if not lines:
+        return None
+    rows: list[dict[str, Any]] = []
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(row, dict):
+            return None
+        rows.append(row)
+    return rows
+
+
+def _has_trailer_candidate(rows: list[dict[str, Any]]) -> bool:
+    """Distinguish trailer-less audits from present-but-invalid trailers."""
+    return len(rows) >= 2 and "end_reason" in rows[-1]
 
 
 def load_tasks(tasks_dir: Path, errors: list[str]) -> dict[str, Task]:
@@ -314,6 +344,7 @@ def load_analysis_data(
         relevant.append(row)
     expected = {(task, replicate, arm) for task in tasks for replicate in (1, 2, 3) for arm in ARMS}
     audit_cache: dict[str, tuple[Path, list[dict[str, Any]]]] = {}
+    unavailable_incomplete_audits: set[str] = set()
     void_run_ids: set[str] = set()
     voided_attempts: list[dict[str, Any]] = []
     by_block: dict[str, list[dict[str, Any]]] = {}
@@ -342,9 +373,18 @@ def load_analysis_data(
         run_id = row.get("run_id")
         trailer_void = False
         trailer_reason = None
-        # Completed non-void ledger rows must be inspectable so a trailer-level
-        # infrastructure void can never slip into the scoring set.
-        if row.get("void") is not True and row.get("completed") is True and isinstance(run_id, str):
+        # Completed non-void rows remain strictly inspectable.  A scoring row
+        # whose ledger completion marker was lost may use the evidence-backed
+        # incomplete-audit fallback, but only when its audit/trailer cannot be
+        # parsed coherently.
+        inspect_incomplete = (
+            row.get("scoring_attempt") is True and row.get("completed") is False
+        )
+        if (
+            row.get("void") is not True
+            and (row.get("completed") is True or inspect_incomplete)
+            and isinstance(run_id, str)
+        ):
             label = f"run {run_id}"
             try:
                 attempt_dir = resolve_attempt_dir(out_root, row.get("output"))
@@ -352,14 +392,23 @@ def load_analysis_data(
                 errors.append(f"{label}: {exc}")
             else:
                 audit_path = attempt_dir / "audit.jsonl"
-                if not audit_path.is_file():
+                if inspect_incomplete:
+                    audit_rows = (
+                        _read_incomplete_audit(audit_path) if audit_path.is_file() else None
+                    )
+                    if audit_rows is None or not _has_trailer_candidate(audit_rows):
+                        unavailable_incomplete_audits.add(run_id)
+                    else:
+                        audit_cache[run_id] = (attempt_dir, audit_rows)
+                elif not audit_path.is_file():
                     errors.append(f"{label}: completed attempt audit.jsonl missing at {attempt_dir}")
                 else:
                     audit_rows = _read_jsonl(audit_path, f"{label} audit", errors)
                     audit_cache[run_id] = (attempt_dir, audit_rows)
-                    if len(audit_rows) >= 2:
-                        trailer_void = audit_rows[-1].get("infrastructure_void") is True
-                        trailer_reason = audit_rows[-1].get("infrastructure_void_reason")
+                cached_audit = audit_cache.get(run_id)
+                if cached_audit is not None and len(cached_audit[1]) >= 2:
+                    trailer_void = cached_audit[1][-1].get("infrastructure_void") is True
+                    trailer_reason = cached_audit[1][-1].get("infrastructure_void_reason")
         if row.get("void") is True or trailer_void:
             if isinstance(run_id, str):
                 void_run_ids.add(run_id)
@@ -419,7 +468,7 @@ def load_analysis_data(
         if (
             key in scoring
             and row.get("scoring_attempt") is True
-            and row.get("completed") is True
+            and type(row.get("completed")) is bool
             and row.get("run_id") not in void_run_ids
         ):
             scoring[key].append(row)
@@ -434,8 +483,20 @@ def load_analysis_data(
             continue
         row = scoring[key][0]
         label = f"run {row.get('run_id')}"
+        ledger_incomplete = row.get("completed") is False
         cached = audit_cache.get(str(row.get("run_id")))
         if cached is None:
+            if ledger_incomplete and str(row.get("run_id")) in unavailable_incomplete_audits:
+                try:
+                    attempt_dir = resolve_attempt_dir(out_root, row.get("output"))
+                except ValueError as exc:
+                    errors.append(f"{label}: {exc}")
+                    continue
+                records.append(RunRecord(
+                    row, attempt_dir, {}, [], {"end_reason": "operator"}, [], {},
+                    None, True, LEDGER_ABORT_AUDIT_UNAVAILABLE_REASON,
+                ))
+                continue
             errors.append(f"{label}: scoring attempt audit was not loaded")
             continue
         attempt_dir, audit_rows = cached
@@ -481,7 +542,13 @@ def load_analysis_data(
                 if type(event.get("timed_out")) is not bool:
                     errors.append(f"{label}: donecheck event {seq} has non-boolean timed_out")
                 digest = event.get("stdout_digest")
-                if (
+                degraded_agent_observation = (
+                    digest is None
+                    and event.get("invoker") == "agent"
+                    and isinstance(event.get("observation_error"), str)
+                    and bool(event.get("observation_error"))
+                )
+                if not degraded_agent_observation and (
                     not isinstance(digest, str) or len(digest) != 64
                     or any(character not in "0123456789abcdef" for character in digest)
                 ):
@@ -515,7 +582,7 @@ def load_analysis_data(
         )
         records.append(RunRecord(
             row, attempt_dir, header, events, trailer, declarations, entries,
-            retention_failure,
+            retention_failure, ledger_incomplete,
         ))
     if errors:
         raise InputValidationError(errors)
