@@ -27,6 +27,17 @@ fail_case() {
   printf 'FAIL %s: %s\n' "$1" "$2"
 }
 
+verify_json_field() {
+  python3 - "$1" "$2" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    value = json.load(f).get(sys.argv[2])
+print("" if value is None else value)
+PY
+}
+
 make_bundle() {
   ws=$TMP_ROOT/ws-$1
   bundle=$ws/loop/artifacts/task-one
@@ -109,13 +120,61 @@ write_large_output_verifier() {
   path=$1
   cat >"$path" <<'SH'
 #!/usr/bin/env bash
+printf '%s\n' 'VERDICT: pass'
+printf '%s\n' 'large output fixture pass'
 i=0
 while [ "$i" -lt 4000 ]; do
   printf '%080d\n' "$i"
   i=$((i + 1))
 done
+SH
+  chmod +x "$path"
+}
+
+write_confusable_duplicate_verifier() {
+  path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
 printf '%s\n' 'VERDICT: pass'
-printf '%s\n' 'large output fixture pass'
+printf '%s\n' 'confusable duplicate fixture'
+printf '%s\n' 'VERDICT： fail'
+printf '%s\n' 'smuggled duplicate'
+SH
+  chmod +x "$path"
+}
+
+write_nbsp_duplicate_verifier() {
+  path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' 'VERDICT: pass'
+printf '%s\n' 'nbsp duplicate fixture'
+printf 'VERDICT:\302\240fail\n'
+printf '%s\n' 'smuggled duplicate'
+SH
+  chmod +x "$path"
+}
+
+write_verdict_last_verifier() {
+  path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' 'finding line before verdict'
+printf '%s\n' 'VERDICT: fail'
+printf '%s\n' 'old behavior reason'
+SH
+  chmod +x "$path"
+}
+
+write_timeout_tail_verifier() {
+  path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' 'timeout-stdout-01'
+printf '%s\n' 'timeout-stdout-02'
+printf '%s\n' 'timeout-stderr-01' >&2
+printf '%s\n' 'timeout-stderr-02' >&2
+sleep 60
 SH
   chmod +x "$path"
 }
@@ -150,10 +209,23 @@ output=$(VERIFIER_CMD="$verifier" VERIFIER_ID=fake bash "$SCRIPT" "$bundle" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] \
   && printf '%s\n' "$output" | grep -q 'VERDICT: pass' \
-  && grep -q 'verifier=fake | verdict=pass | fixture pass' "$TMP_ROOT/ws-pass/loop/VERIFY.log.md"; then
+  && grep -q 'verifier=fake | verdict=pass | fixture pass' "$TMP_ROOT/ws-pass/loop/VERIFY.log.md" \
+  && [ "$(verify_json_field "$TMP_ROOT/ws-pass/loop/artifacts/task-one/verify.json" verdict)" = pass ] \
+  && [ "$(verify_json_field "$TMP_ROOT/ws-pass/loop/artifacts/task-one/verify.json" reason)" = 'fixture pass' ]; then
   pass "valid verifier command runs and logs verdict"
 else
   fail_case "valid verifier command runs and logs verdict" "rc=$rc output=$output"
+fi
+
+source_grep_ok=1
+grep -Fq 'write_record "$verify_record_path"' "$SCRIPT" || source_grep_ok=0
+grep -Fq 'emit_record "$verify_record_path"' "$SCRIPT" || source_grep_ok=0
+grep -Fq 'record_exit_code "$verify_record_path"' "$SCRIPT" || source_grep_ok=0
+if [ "$source_grep_ok" -eq 1 ]; then
+  pass "verify-job source routes log/stdout/exit through the canonical record helper"
+else
+  fail_case "verify-job source routes log/stdout/exit through the canonical record helper" \
+    "source grep did not find the canonical record flow"
 fi
 
 if [ "$(sed -n '1p' "$TMP_ROOT/ws-pass/loop/VERIFY.log.md")" = "$VERIFY_HEADER" ]; then
@@ -172,11 +244,12 @@ unicode_empty_log=$TMP_ROOT/ws-unicode-empty-reason/loop/VERIFY.log.md
 output=$(VERIFY_REASON_MODE=unicode-empty VERIFIER_CMD="$reason_hygiene_verifier" \
   VERIFIER_ID=reason-hygiene bash "$SCRIPT" "$bundle" 2>&1)
 rc=$?
-if [ "$rc" -eq 0 ] \
-  && grep -Fq 'verdict=pass | verifier response missing one-line reason' "$unicode_empty_log"; then
-  pass "Unicode-space-only verifier reasons log the explicit missing-reason fallback"
+if [ "$rc" -eq 6 ] \
+  && printf '%s\n' "$output" | grep -Fq 'VERDICT: contract-violation' \
+  && grep -Fq 'verdict=contract-violation | call-site=verifier class=contract-violation; provider output line 2 reason is empty' "$unicode_empty_log"; then
+  pass "Unicode-space-only verifier reasons become contract violations"
 else
-  fail_case "Unicode-space-only verifier reasons log the explicit missing-reason fallback" \
+  fail_case "Unicode-space-only verifier reasons become contract violations" \
     "rc=$rc output=$output log=$(cat "$unicode_empty_log" 2>/dev/null)"
 fi
 
@@ -187,16 +260,16 @@ for unicode_empty_case in nbsp-only ideographic-space-only zwsp-only; do
   output=$(VERIFY_REASON_MODE="$unicode_empty_case" VERIFIER_CMD="$reason_hygiene_verifier" \
     VERIFIER_ID=reason-hygiene bash "$SCRIPT" "$bundle" 2>&1)
   rc=$?
-  if [ "$rc" -ne 0 ] \
-    || ! grep -Fq 'verdict=pass | verifier response missing one-line reason' \
+  if [ "$rc" -ne 6 ] \
+    || ! grep -Fq 'verdict=contract-violation | call-site=verifier class=contract-violation; provider output line 2 reason is empty' \
       "$single_unicode_empty_log"; then
     single_unicode_empty_ok=0
   fi
 done
 if [ "$single_unicode_empty_ok" -eq 1 ]; then
-  pass "NBSP-only, U+3000-only, and ZWSP-only reasons each log the missing-reason fallback"
+  pass "NBSP-only, U+3000-only, and ZWSP-only reasons each contract-violate"
 else
-  fail_case "NBSP-only, U+3000-only, and ZWSP-only reasons each log the missing-reason fallback" \
+  fail_case "NBSP-only, U+3000-only, and ZWSP-only reasons each contract-violate" \
     "one or more single-sequence reasons escaped the empty-reason check"
 fi
 
@@ -222,6 +295,7 @@ rc=$?
 LC_ALL=C tr -d '\000-\010\013-\037\177' \
   <"$embedded_control_log" >"$embedded_control_clean"
 if [ "$rc" -eq 0 ] \
+  && printf '%s\n' "$output" | sed -n '2p' | grep -Fq '  visible[31m reason' \
   && grep -Fq 'verdict=pass |   visible[31m reason' "$embedded_control_log" \
   && cmp -s "$embedded_control_log" "$embedded_control_clean"; then
   pass "reason logging removes C0 and DEL bytes, preserves printable SGR suffixes, and keeps leading space"
@@ -235,15 +309,18 @@ control_only_log=$TMP_ROOT/ws-control-only-reason/loop/VERIFY.log.md
 output=$(VERIFY_REASON_MODE=control-only VERIFIER_CMD="$reason_hygiene_verifier" \
   VERIFIER_ID=reason-hygiene bash "$SCRIPT" "$bundle" 2>&1)
 rc=$?
-if [ "$rc" -eq 0 ] \
-  && grep -Fq 'verdict=pass | verifier response missing one-line reason' "$control_only_log"; then
-  pass "control-only verifier reasons become empty and log the missing-reason fallback"
+if [ "$rc" -eq 6 ] \
+  && printf '%s\n' "$output" | grep -Fq 'VERDICT: contract-violation' \
+  && grep -Fq 'verdict=contract-violation | call-site=verifier class=contract-violation; provider output line 2 reason is empty' "$control_only_log"; then
+  pass "control-only verifier reasons become contract violations"
 else
-  fail_case "control-only verifier reasons become empty and log the missing-reason fallback" \
+  fail_case "control-only verifier reasons become contract violations" \
     "rc=$rc output=$output log=$(cat "$control_only_log" 2>/dev/null)"
 fi
 
 bundle=$(make_bundle existing-log)
+write_verifier "$verifier"
+attest_verifier_wrapper "$verifier" fake-existing
 existing_log=$TMP_ROOT/ws-existing-log/loop/VERIFY.log.md
 existing_snapshot=$TMP_ROOT/existing-log.snapshot
 existing_prefix=$TMP_ROOT/existing-log.prefix
@@ -254,13 +331,13 @@ printf '%s\n' \
   >"$existing_log"
 cp "$existing_log" "$existing_snapshot"
 existing_lines=$(wc -l <"$existing_snapshot" | tr -d '[:space:]')
-output=$(VERIFIER_CMD="$verifier" VERIFIER_ID=fake bash "$SCRIPT" "$bundle" 2>&1)
+output=$(VERIFIER_CMD="$verifier" VERIFIER_ID=fake-existing bash "$SCRIPT" "$bundle" 2>&1)
 rc=$?
 head -n "$existing_lines" "$existing_log" >"$existing_prefix"
 if [ "$rc" -eq 0 ] \
   && cmp -s "$existing_snapshot" "$existing_prefix" \
   && [ "$(wc -l <"$existing_log" | tr -d '[:space:]')" -eq "$((existing_lines + 1))" ] \
-  && grep -q 'task=task-one | verifier=fake | verdict=pass | fixture pass' "$existing_log"; then
+  && grep -q 'task=task-one | verifier=fake-existing | verdict=pass | fixture pass' "$existing_log"; then
   pass "verify-job appends without changing an existing log body"
 else
   fail_case "verify-job appends without changing an existing log body" \
@@ -304,10 +381,26 @@ rc=$?
 set -e
 if [ "$rc" -eq 4 ] \
   && printf '%s\n' "$output" | grep -q 'VERDICT: inconclusive' \
-  && grep -q 'verifier=hanging | verdict=inconclusive | call-site=verifier class=transient; wall-clock timeout after 2s' "$TMP_ROOT/ws-timeout/loop/VERIFY.log.md"; then
+  && grep -q 'verifier=hanging | verdict=inconclusive | call-site=verifier class=transient; wall-clock timeout after 2s; stdout_tail=<empty>; stderr_tail=<empty>' "$TMP_ROOT/ws-timeout/loop/VERIFY.log.md"; then
   pass "timed out verifier is inconclusive and transient"
 else
   fail_case "timed out verifier is inconclusive and transient" "rc=$rc output=$output"
+fi
+
+bundle=$(make_bundle timeout-tail)
+verifier=$TMP_ROOT/timeout-tail-verifier.sh
+write_timeout_tail_verifier "$verifier"
+attest_verifier_wrapper "$verifier" timeout-tail
+set +e
+output=$(VERIFY_TIMEOUT_S=2 VERIFY_GRACE_S=1 VERIFIER_CMD="$verifier" VERIFIER_ID=timeout-tail bash "$SCRIPT" "$bundle" 2>&1)
+rc=$?
+set -e
+if [ "$rc" -eq 4 ] \
+  && grep -Fq 'stdout_tail=timeout-stdout-01 || timeout-stdout-02' "$TMP_ROOT/ws-timeout-tail/loop/VERIFY.log.md" \
+  && grep -Fq 'stderr_tail=timeout-stderr-01 || timeout-stderr-02' "$TMP_ROOT/ws-timeout-tail/loop/VERIFY.log.md"; then
+  pass "timeout reasons include a capped stdout/stderr tail"
+else
+  fail_case "timeout reasons include a capped stdout/stderr tail" "rc=$rc output=$output"
 fi
 
 bundle=$(make_bundle signal-death)
@@ -340,10 +433,78 @@ rc=$?
 set -e
 if [ "$rc" -eq 0 ] \
   && printf '%s\n' "$output" | grep -q 'VERDICT: pass' \
-  && grep -q 'verifier=large-output | verdict=pass | large output fixture pass' "$TMP_ROOT/ws-large-output/loop/VERIFY.log.md"; then
+  && grep -q 'verifier=large-output | verdict=pass | large output fixture pass' "$TMP_ROOT/ws-large-output/loop/VERIFY.log.md" \
+  && [ "$(verify_json_field "$TMP_ROOT/ws-large-output/loop/artifacts/task-one/verify.json" reason)" = 'large output fixture pass' ]; then
   pass "large verifier output is parsed from temp file"
 else
   fail_case "large verifier output is parsed from temp file" "rc=$rc output=$output"
+fi
+
+bundle=$(make_bundle attempts-record)
+mkdir -p "$bundle/attempts/001"
+verifier=$TMP_ROOT/attempts-record-verifier.sh
+write_verifier "$verifier"
+attest_verifier_wrapper "$verifier" attempts-record
+output=$(VERIFY_STEP=2 VERIFIER_CMD="$verifier" VERIFIER_ID=attempts-record bash "$SCRIPT" "$bundle" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] \
+  && [ -f "$bundle/attempts/001/verify.json" ] \
+  && [ ! -f "$bundle/verify.json" ] \
+  && [ "$(verify_json_field "$bundle/attempts/001/verify.json" step)" = 2 ]; then
+  pass "verify-job persists verify.json to the current numeric attempt when present"
+else
+  fail_case "verify-job persists verify.json to the current numeric attempt when present" \
+    "rc=$rc output=$output"
+fi
+
+bundle=$(make_bundle confusable-duplicate)
+verifier=$TMP_ROOT/confusable-duplicate-verifier.sh
+write_confusable_duplicate_verifier "$verifier"
+attest_verifier_wrapper "$verifier" confusable-duplicate
+set +e
+output=$(VERIFIER_CMD="$verifier" VERIFIER_ID=confusable-duplicate bash "$SCRIPT" "$bundle" 2>&1)
+rc=$?
+set -e
+if [ "$rc" -eq 6 ] \
+  && printf '%s\n' "$output" | grep -Fq 'VERDICT: contract-violation' \
+  && grep -Fq 'multiple verdict markers after normalization' "$TMP_ROOT/ws-confusable-duplicate/loop/VERIFY.log.md"; then
+  pass "ASCII plus confusable duplicate verdict markers contract-violate"
+else
+  fail_case "ASCII plus confusable duplicate verdict markers contract-violate" \
+    "rc=$rc output=$output"
+fi
+
+bundle=$(make_bundle nbsp-duplicate)
+verifier=$TMP_ROOT/nbsp-duplicate-verifier.sh
+write_nbsp_duplicate_verifier "$verifier"
+attest_verifier_wrapper "$verifier" nbsp-duplicate
+set +e
+output=$(VERIFIER_CMD="$verifier" VERIFIER_ID=nbsp-duplicate bash "$SCRIPT" "$bundle" 2>&1)
+rc=$?
+set -e
+if [ "$rc" -eq 6 ] \
+  && printf '%s\n' "$output" | grep -Fq 'VERDICT: contract-violation' \
+  && grep -Fq 'multiple verdict markers after normalization' "$TMP_ROOT/ws-nbsp-duplicate/loop/VERIFY.log.md"; then
+  pass "ASCII plus NBSP duplicate verdict markers contract-violate"
+else
+  fail_case "ASCII plus NBSP duplicate verdict markers contract-violate" \
+    "rc=$rc output=$output"
+fi
+
+bundle=$(make_bundle old-behavior-red)
+verifier=$TMP_ROOT/verdict-last-verifier.sh
+write_verdict_last_verifier "$verifier"
+attest_verifier_wrapper "$verifier" verdict-last
+set +e
+output=$(VERIFIER_CMD="$verifier" VERIFIER_ID=verdict-last bash "$SCRIPT" "$bundle" 2>&1)
+rc=$?
+set -e
+if [ "$rc" -eq 6 ] \
+  && grep -Fq 'provider output placed the verdict marker outside line 1' "$TMP_ROOT/ws-old-behavior-red/loop/VERIFY.log.md"; then
+  pass "T-2 old verdict-last behavior is rejected as a contract violation"
+else
+  fail_case "T-2 old verdict-last behavior is rejected as a contract violation" \
+    "rc=$rc output=$output"
 fi
 
 bundle=$(make_bundle step-field)
@@ -457,13 +618,14 @@ attest_verifier_wrapper "$verifier" prompt-contract
 output=$(PROMPT_DUMP="$prompt_dump" VERIFIER_CMD="$verifier" bash "$SCRIPT" "$bundle" 2>&1)
 rc=$?
 if [ "$rc" -eq 0 ] \
-  && grep -qi 'findings first' "$prompt_dump" \
+  && grep -qi 'first two lines of your reply MUST be' "$prompt_dump" \
   && grep -qi 'residual risks' "$prompt_dump" \
   && grep -Fqi 'must NOT be pass' "$prompt_dump" \
+  && grep -qi 'report findings after those first two lines' "$prompt_dump" \
   && grep -qi 'uncertain or indirect evidence as incomplete' "$prompt_dump"; then
-  pass "verifier prompt has findings-first and completion-audit contract"
+  pass "verifier prompt has the first-two-lines contract and completion audit guidance"
 else
-  fail_case "verifier prompt has findings-first and completion-audit contract" "rc=$rc output=$output"
+  fail_case "verifier prompt has the first-two-lines contract and completion audit guidance" "rc=$rc output=$output"
 fi
 
 bundle=$(make_bundle verbatim-request-rubric)

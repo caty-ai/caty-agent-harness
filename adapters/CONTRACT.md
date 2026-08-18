@@ -122,8 +122,42 @@ cannot infer a provider's persistence or tool policy.
 ### Verifier fork
 
 The verifier may consume only artifact-bundle content inlined by the trusted host. It
-returns verdict text to that host, which may persist it only in the designated verdict
-file `loop/VERIFY.log.md`; this does not grant the verifier read or write tools.
+returns verdict text to that host. The trusted host canonicalizes that result into the
+authoritative `verify.json` record and may derive human stdout plus `loop/VERIFY.log.md`
+from that record; this does not grant the verifier read or write tools.
+
+The verifier provider reply contract is positional: after removing `\r` and applying
+Unicode NFKC to each candidate line, line 1 must exactly match the ASCII form
+`VERDICT: <allowed-provider-value>`, line 2 must be one concise nonempty reason, and
+any optional body or findings may appear only from line 3 onward. This normalization
+rule is intentional: it folds `U+00A0` into a regular space and `U+FF1A` into `:`
+before marker counting and line-1 matching, so the host still uses one parser rather
+than separate "literal" and "normalized" paths.
+
+The verifier provider's allowed reply vocabulary is exactly:
+`pass`, `fail`, `inconclusive`, `rubric-invalid`, `needs-human`, and
+`blocked-missing-artifact`. `contract-violation` is host-only. A provider must not emit
+it. When provider output is malformed, the trusted Hermes host canonicalizes that
+failure into `verify.json` with `verdict=contract-violation`, emits the derived human
+`VERDICT: contract-violation` plus reason lines, appends the derived record to
+`loop/VERIFY.log.md`, and exits 6.
+
+`verify-job` canonicalizes every verifier result into one JSON record named
+`verify.json` with these fields:
+
+```json
+{
+  "verdict": "<value>",
+  "reason": "<canonical reason>",
+  "verifier_id": "<host-selected verifier id>",
+  "step": 1,
+  "ts": "<UTC timestamp>"
+}
+```
+
+`step` may also be `null` when the verifier result is not bound to a specific positive
+step. The human `VERDICT:` stdout line and `loop/VERIFY.log.md` entry are derived views
+of that canonical record, not separate parser outputs.
 
 #### Verifier bundle assembly
 

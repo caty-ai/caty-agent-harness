@@ -24,6 +24,7 @@ case "$(sed -n '1p' "$probe_output")" in
   *) exit 1 ;;
 esac
 [[ -n "$(sed -n '2p' "$probe_output" | tr -d '[:space:]')" ]]
+[[ "$(awk 'END { print NR + 0 }' "$probe_output")" -eq 2 ]]
 
 printf '%s\n' \
   'provider_id=anthropic-messages' \

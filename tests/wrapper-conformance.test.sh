@@ -93,6 +93,17 @@ SH
   chmod +x "$path"
 }
 
+write_verdict_last_verifier_wrapper() {
+  path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' 'analysis before the verdict is malformed'
+printf '%s\n' 'VERDICT: pass'
+printf '%s\n' 'late reason that must not escape'
+SH
+  chmod +x "$path"
+}
+
 write_distiller_wrapper() {
   path=$1
   cat >"$path" <<'SH'
@@ -313,6 +324,43 @@ else
   fail_case "valid conformance evidence allows verifier execution" "rc=$rc output=$output"
 fi
 expect_library_success "library accepts explicit evidence path" verifier "$wrapper" "$evidence"
+
+bundle=$(make_bundle malformed-provider-output)
+wrapper=$TMP_ROOT/malformed-provider-output-wrapper.sh
+write_verdict_last_verifier_wrapper "$wrapper"
+attest_route_fixture verifier malformed-provider-output "$wrapper"
+set +e
+output=$(VERIFIER_CMD="$wrapper" bash "$VERIFY_SCRIPT" "$bundle" 2>&1)
+rc=$?
+set -e
+reason='call-site=verifier class=contract-violation; provider output placed the verdict marker outside line 1'
+verify_json=$TMP_ROOT/ws-malformed-provider-output/loop/artifacts/task-one/verify.json
+verify_verdict=$(python3 - "$verify_json" <<'PY'
+import json
+import sys
+
+print(json.load(open(sys.argv[1], encoding="utf-8"))["verdict"])
+PY
+)
+verify_reason=$(python3 - "$verify_json" <<'PY'
+import json
+import sys
+
+print(json.load(open(sys.argv[1], encoding="utf-8"))["reason"])
+PY
+)
+if [ "$rc" -eq 6 ] \
+  && [ "$output" = "VERDICT: contract-violation
+$reason" ] \
+  && [ "$verify_verdict" = contract-violation ] \
+  && [ "$verify_reason" = "$reason" ] \
+  && grep -Fq "verdict=contract-violation | $reason" \
+    "$TMP_ROOT/ws-malformed-provider-output/loop/VERIFY.log.md"; then
+  pass "malformed verifier output canonicalizes to verify.json, derived VERIFY.log, and exit 6"
+else
+  fail_case "malformed verifier output canonicalizes to verify.json, derived VERIFY.log, and exit 6" \
+    "rc=$rc output=$output verdict=$verify_verdict reason=$verify_reason"
+fi
 
 ws=$(make_distill_ws valid-distiller)
 distiller=$TMP_ROOT/valid-distiller-wrapper.sh

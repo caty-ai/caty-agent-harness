@@ -34,7 +34,7 @@ set -euo pipefail
 # Exit 111 is reserved for pre-flight infra failures only. Once the Hermes
 # session command launches, its exit code is passed through unchanged.
 # Adapters SHOULD duplicate fatal pre-flight CLI errors to stderr; the driver captures both streams as attempt evidence.
-
+#
 usage() {
   printf 'Usage: spawn_step.sh <task-file> <workspace> <attempt-dir> <step-k>\n' >&2
 }

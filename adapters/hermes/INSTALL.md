@@ -58,11 +58,15 @@ The rules there apply in addition to the Hermes-specific wiring below.
    DESIGN.md §4.2, do not extend agjob to perform cross-model dispatch itself.
 
    Exit-code mapping for the job wrapper: exit 0/1/4 mean the verification RAN and
-   returned a verdict (pass / fail-or-rubric-invalid / inconclusive-or-needs-human) —
-   treat the job as succeeded and read the verdict from stdout or VERIFY.log.md; a
-   fail verdict routes the TASK back to PLAN/ACT, it is not an infra failure. Exit 2
-   (usage), 3 (blocked-missing-artifact), and 5 (infrastructure/configuration,
-   including wrapper-conformance failure) are job errors eligible for agjob retry/DLQ.
+   returned a legitimate verifier verdict (pass / fail-or-rubric-invalid /
+   inconclusive-or-needs-human). Exit 6 means the verification RAN but the provider
+   broke the reply contract, so Hermes canonicalized that outcome to the host-only
+   `contract-violation` verdict. In all four cases, read the authoritative result from
+   `verify.json`; stdout `VERDICT:` lines and `loop/VERIFY.log.md` entries are derived
+   diagnostics. A fail verdict still routes the TASK back to PLAN/ACT; it is not an
+   infra failure. Exit 2 (usage), 3 (blocked-missing-artifact), and 5
+   (infrastructure/configuration, including wrapper-conformance failure) are job
+   errors eligible for agjob retry/DLQ.
 
 5. Set the verifier environment.
 
@@ -188,25 +192,36 @@ The rules there apply in addition to the Hermes-specific wiring below.
    evidence record.
 
    Operational contract: the example providers and wrapper forward only the validated
-   verdict and reason lines. They normalize each model-reply line by removing a trailing
-   carriage return and trailing ASCII whitespace, and remove DEL plus all C0 controls
-   except TAB from the emitted reason; a mid-line TAB is preserved. They require exactly
-   one anchored allowed verdict line anywhere in the reply and exactly one `VERDICT:`
-   occurrence across the entire model reply; before line parsing or normalization, they
-   reject any NUL byte
-   anywhere in the provider/model reply. The reason is the first line after the verdict
-   that is nonempty after ignoring ASCII whitespace and the explicit U+00A0, U+3000, and
-   U+200B sequences; those Unicode sequences remain byte-preserved in an accepted nonempty
-   reason, while missing or ambiguous verdicts and missing reasons fail closed.
-   Findings before the verdict and
-   content after the selected reason are intentionally discarded to remove an injection
-   surface; that body cannot be recovered from these examples. The provider prompts align
-   with the bundle's last-two-lines instruction while the parser also accepts a valid
-   verdict-first reply. A reply containing solely one quoted or injected anchored marker
-   and a following reason, with no additional `VERDICT:` text, is indistinguishable from
-   an authentic decision and is adopted; uniqueness is the defense against ambiguity, not
-   proof of provenance. When using an example as a production `VERIFIER_CMD`, operators
-   must monitor the `needs-human` rate for formatting flakiness and anomalous replacement.
+   verdict and reason lines. Line 1 must be exactly `VERDICT: <allowed-provider-value>`
+   after candidate-line normalization, line 2 must be one concise nonempty reason, and
+   any optional findings/body may appear only from line 3 onward. The allowed provider
+   vocabulary is exactly `pass`, `fail`, `inconclusive`, `rubric-invalid`, `needs-human`,
+   and `blocked-missing-artifact`; `contract-violation` is host-only and must never be
+   emitted by the provider.
+
+   Candidate-line normalization is intentionally the same shape the Hermes host uses:
+   each line is checked after removing `\r` and applying Unicode NFKC, so U+00A0 folds
+   to a regular space and U+FF1A folds to `:` before marker counting and line-1 verdict
+   matching. This keeps one machine parser contract instead of an examples-only variant.
+   After line selection, the examples emit exactly two lines by removing DEL plus all C0
+   controls except TAB from the emitted reason and trimming trailing ASCII whitespace; a
+   mid-line TAB is preserved. They require exactly one normalized `VERDICT:` marker
+   across the entire provider/model reply and reject any NUL byte anywhere in that reply.
+   Missing line-1 verdicts, verdict-last replies, preamble-before-verdict replies,
+   repeated/smuggled verdict markers, host-only verdicts, and empty line-2 reasons fail
+   closed. Content after line 2 is intentionally discarded to remove an injection
+   surface; that body cannot be recovered from these examples.
+
+   The prompts also require the verdict on line 1 because that is the frozen
+   authoritative placement used by deployed wrappers and probes. Keeping the provider
+   contract verdict-first minimizes wrapper/probe breakage and avoids ambiguity between
+   "search anywhere" and "trust only the first line" interpretations.
+
+   A reply containing solely one quoted or injected normalized marker and a following
+   reason, with no additional `VERDICT:` text, is indistinguishable from an authentic
+   decision and is adopted; uniqueness is the defense against ambiguity, not proof of
+   provenance. When using an example as a production `VERIFIER_CMD`, operators must
+   monitor the `needs-human` rate for formatting flakiness and anomalous replacement.
    `VERIFIER_TEMPERATURE` is sent as given, so a model that constrains temperature may
    reject the request; this normalizes to wrapper exit 70 and `needs-human`. Model id
    and temperature are therefore coupled configuration.

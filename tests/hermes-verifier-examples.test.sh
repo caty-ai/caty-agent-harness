@@ -80,20 +80,19 @@ else
 fi
 
 valid_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
-  PROVIDER_OUTPUT='No defects found. All three rubric criteria are satisfied by the supplied evidence.\r\n- Request coverage: the result addresses the requested behavior.   \r\n- Manifest consistency: the declared boundaries match the result.\r\n- Evidence sufficiency: the inlined evidence directly supports the result.\r\nResidual risks not ruled out: evidence outside the bounded excerpts was not inspected.   \r\n\r\nVERDICT: pass \t\r\nNo findings; residual risk is limited to evidence outside the bounded excerpts. \t\r\n' \
+  PROVIDER_OUTPUT='VERDICT: pass\nline-2 reason wins\nignored trailing finding\n' \
   VERIFIER_BUNDLE_MIN_BYTES=64 "$WRAPPER" "$bundle")
 valid_rc=$?
 valid_first=$(printf '%s\n' "$valid_output" | sed -n '1p')
 if [ "$valid_rc" -eq 0 ] \
   && [ "$valid_first" = 'VERDICT: pass' ] \
   && [ "$(printf '%s\n' "$valid_output" | wc -l | tr -d '[:space:]')" -eq 2 ] \
-  && [ "$(printf '%s\n' "$valid_output" | sed -n '2p')" = \
-    'No findings; residual risk is limited to evidence outside the bounded excerpts.' ] \
-  && ! printf '%s\n' "$valid_output" | grep -Fq 'All three rubric criteria' \
+  && [ "$(printf '%s\n' "$valid_output" | sed -n '2p')" = 'line-2 reason wins' ] \
+  && ! printf '%s\n' "$valid_output" | grep -Fq 'ignored trailing finding' \
   && [ "$(cat "$provider_marker")" = "$bundle" ]; then
-  pass '[3] wrapper accepts the production-shaped verdict-last reply and forwards two normalized lines'
+  pass '[3] wrapper requires verdict on line 1, reason on line 2, and discards later body'
 else
-  fail_case '[3] wrapper accepts the production-shaped verdict-last reply and forwards two normalized lines' \
+  fail_case '[3] wrapper requires verdict on line 1, reason on line 2, and discards later body' \
     "rc=$valid_rc output=$valid_output"
 fi
 
@@ -135,9 +134,9 @@ contract reason for $verdict" ]; then
   fi
 done
 if [ "$verdict_matrix_ok" -eq 1 ]; then
-  pass '[5] wrapper accepts verdict-first replies for all six host verdicts'
+  pass '[5] wrapper accepts line-1 verdict replies for all six provider verdicts'
 else
-  fail_case '[5] wrapper accepts verdict-first replies for all six host verdicts' \
+  fail_case '[5] wrapper accepts line-1 verdict replies for all six provider verdicts' \
     'one or more contract verdicts were rejected'
 fi
 
@@ -148,10 +147,14 @@ for invalid_case in \
   'anchored-extra|VERDICT: pass\nreason repeats VERDICT: fail\n' \
   'extra-before-anchor|analysis quotes VERDICT: fail\nVERDICT: pass\nreason\n' \
   'same-line-double|VERDICT: pass VERDICT: fail\ncombined reason\n' \
+  'verdict-last|No defects found.\r\nVERDICT: pass\r\nlate reason\r\n' \
+  'blank-before-reason|VERDICT: pass\n\nreason on line three\n' \
   'no-following-reason|VERDICT: pass\n \t \n' \
+  'host-contract-violation|VERDICT: contract-violation\nprovider must not emit host-only verdicts\n' \
   'lowercase-anchor|verdict: pass\nreason\n' \
   'malformed-anchor|VERDICT: PASS\nreason\n' \
   'malformed-spacing-anchor|VERDICT : pass\nreason\n' \
+  'nbsp-before-colon|VERDICT\302\240: pass\nreason\n' \
   'leading-space-anchor| VERDICT: pass\nreason\n'; do
   invalid_name=${invalid_case%%|*}
   invalid_reply=${invalid_case#*|}
@@ -175,10 +178,26 @@ set -e
 if [ "$invalid_wrapper_matrix_ok" -eq 1 ] \
   && [ "$provider_124_rc" -eq 70 ] && [ -z "$provider_124_output" ] \
   && grep -Fqx 'provider exited 124' "$TMP_ROOT/provider-124.err"; then
-  pass '[6] wrapper maps every malformed reply to 65 and provider failures to 70'
+  pass '[6] wrapper rejects misplaced or host-only verdicts with 65 and maps provider failures to 70'
 else
-  fail_case '[6] wrapper maps every malformed reply to 65 and provider failures to 70' \
+  fail_case '[6] wrapper rejects misplaced or host-only verdicts with 65 and maps provider failures to 70' \
     "invalid_matrix=$invalid_wrapper_matrix_ok provider124=$provider_124_rc"
+fi
+
+set +e
+fullwidth_output=$(FABLE_CONFORMING_PROVIDER_PATH="$fake_provider" \
+  PROVIDER_MARKER="$provider_marker" \
+  PROVIDER_OUTPUT='VERDICT： pass\nfullwidth colon normalizes to the canonical verdict line\n' \
+  VERIFIER_BUNDLE_MIN_BYTES=64 "$WRAPPER" "$bundle" 2>"$TMP_ROOT/fullwidth.err")
+fullwidth_rc=$?
+set -e
+if [ "$fullwidth_rc" -eq 0 ] \
+  && [ "$fullwidth_output" = 'VERDICT: pass
+fullwidth colon normalizes to the canonical verdict line' ]; then
+  pass '[6a] wrapper accepts a fullwidth-colon candidate line and emits the canonical verdict line'
+else
+  fail_case '[6a] wrapper accepts a fullwidth-colon candidate line and emits the canonical verdict line' \
+    "rc=$fullwidth_rc output=$fullwidth_output"
 fi
 
 nul_wrapper_matrix_ok=1
@@ -270,7 +289,7 @@ if grep -Fq '"$FABLE_CONFORMING_PROVIDER_PATH" "$bundle"' "$CANONICAL_WRAPPER" \
   && grep -Fq 'secrets.token_hex' "$PROVIDER" \
   && grep -Fq 'VERIFIER_TEMPERATURE' "$PROVIDER" \
   && grep -Fq '"temperature": temperature' "$PROVIDER" \
-  && grep -Fq 'End the reply with exactly two lines' "$PROVIDER" \
+  && grep -Fq 'Start the reply with exactly two required lines' "$PROVIDER" \
   && python3 -c 'import sys; compile(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1], "exec")' "$PROVIDER" \
   && bash -n "$CANONICAL_WRAPPER" "$PROBE"; then
   pass '[9] examples pin the staged path and implement syntax-valid prompt/API hygiene'
@@ -432,8 +451,8 @@ fi
 
 api_acceptance_ok=1
 for api_case in \
-  'verdict-last|No defects found. All three rubric criteria are satisfied by the supplied evidence.\r\n- Request coverage: the result addresses the requested behavior.   \r\n- Manifest consistency: the declared boundaries match the result.\r\n- Evidence sufficiency: the inlined evidence directly supports the result.\r\nResidual risks not ruled out: evidence outside the bounded excerpts was not inspected.   \r\n\r\nVERDICT: pass \t\r\nNo findings; residual risk is limited to evidence outside the bounded excerpts. \t\r\n|VERDICT: pass\nNo findings; residual risk is limited to evidence outside the bounded excerpts.' \
-  'verdict-first|VERDICT: fail \t\r\nfirst nonempty reason wins \t\r\nignored trailing finding\r\n|VERDICT: fail\nfirst nonempty reason wins'; do
+  'line-two-reason|VERDICT: fail\r\nfirst line-2 reason wins \t\r\nignored trailing finding\r\n|VERDICT: fail\nfirst line-2 reason wins' \
+  'fullwidth-colon|VERDICT\357\274\232 pass\nfullwidth colon normalizes to the canonical verdict line\n|VERDICT: pass\nfullwidth colon normalizes to the canonical verdict line'; do
   api_case_name=${api_case%%|*}
   api_case_rest=${api_case#*|}
   api_reply_encoded=${api_case_rest%%|*}
@@ -453,9 +472,9 @@ for api_case in \
   fi
 done
 if [ "$api_acceptance_ok" -eq 1 ]; then
-  pass '[11b] API provider accepts verdict-last and verdict-first shapes and emits normalized verdict plus reason'
+  pass '[11b] API provider accepts line-1 verdict replies, line-2 reasons, and fullwidth-colon normalization'
 else
-  fail_case '[11b] API provider accepts verdict-last and verdict-first shapes and emits normalized verdict plus reason' \
+  fail_case '[11b] API provider accepts line-1 verdict replies, line-2 reasons, and fullwidth-colon normalization' \
     'an accepted model-reply shape did not normalize to exactly two lines'
 fi
 
@@ -466,10 +485,14 @@ for api_invalid_case in \
   'anchored-extra|VERDICT: pass\nreason repeats VERDICT: fail\n' \
   'extra-before-anchor|analysis quotes VERDICT: fail\nVERDICT: pass\nreason\n' \
   'same-line-double|VERDICT: pass VERDICT: fail\ncombined reason\n' \
+  'verdict-last|No defects found.\r\nVERDICT: pass\r\nlate reason\r\n' \
+  'blank-before-reason|VERDICT: pass\n\nreason on line three\n' \
   'no-following-reason|VERDICT: pass\n \t \n' \
+  'host-contract-violation|VERDICT: contract-violation\nprovider must not emit host-only verdicts\n' \
   'lowercase-anchor|verdict: pass\nreason\n' \
   'malformed-anchor|VERDICT: PASS\nreason\n' \
   'malformed-spacing-anchor|VERDICT : pass\nreason\n' \
+  'nbsp-before-colon|VERDICT\302\240: pass\nreason\n' \
   'leading-space-anchor| VERDICT: pass\nreason\n'; do
   api_invalid_name=${api_invalid_case%%|*}
   api_invalid_reply=$(printf '%b' "${api_invalid_case#*|}")
@@ -488,9 +511,9 @@ for api_invalid_case in \
   fi
 done
 if [ "$api_invalid_matrix_ok" -eq 1 ]; then
-  pass '[11c] API provider rejects zero/duplicate anchors, extra markers, missing reasons, and malformed anchors'
+  pass '[11c] API provider rejects misplaced, host-only, duplicate, and malformed verdict markers'
 else
-  fail_case '[11c] API provider rejects zero/duplicate anchors, extra markers, missing reasons, and malformed anchors' \
+  fail_case '[11c] API provider rejects misplaced, host-only, duplicate, and malformed verdict markers' \
     'one or more ambiguous model replies escaped validation'
 fi
 
@@ -506,7 +529,7 @@ for parity_case in \
   'trailing-nbsp|accept|VERDICT: pass\nreason\302\240\n|VERDICT: pass\nreason\302\240' \
   'embedded-sgr|accept|VERDICT: pass\nvisible\033[31m reason\177\n|VERDICT: pass\nvisible[31m reason' \
   'control-only|reject|VERDICT: pass\n\033\007\177\n|' \
-  'unicode-blank-before-reason|accept|VERDICT: pass\n\302\240\t\343\200\200\n\346\227\245\346\234\254\350\252\236\343\201\256\347\220\206\347\224\261\n|VERDICT: pass\n\346\227\245\346\234\254\350\252\236\343\201\256\347\220\206\347\224\261'; do
+  'unicode-blank-before-reason|reject|VERDICT: pass\n\302\240\t\343\200\200\n\346\227\245\346\234\254\350\252\236\343\201\256\347\220\206\347\224\261\n|'; do
   parity_name=${parity_case%%|*}
   parity_rest=${parity_case#*|}
   parity_outcome=${parity_rest%%|*}
