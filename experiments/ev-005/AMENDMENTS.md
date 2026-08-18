@@ -868,3 +868,35 @@ of the surrounding machinery was completed under A-8; this change alters ingesti
 only.
 
 **Manifest digest before:** `84c76920…` (v9, 281 files). **After:** `29c300b9b5dbdf002187ed19104d64041595cb4d5cdc0d34c2c33c72626365a9` (v10, 281 files).
+
+## A-10 — Registered crossover cell cancelled by owner decision (2026-08-18)
+
+**What.** The registered descriptive crossover cell (Opus 5 on the 10 designated tasks × 3 arms,
+analysis-plan §2; descriptive only, no α, no pooling) will not be executed. No crossover run ever
+started; this entry is the public record of that deviation from the registered design, made after
+the main series was analyzed and before any crossover data existed.
+
+**Why (owner decision, 2026-08-18).** (1) The main-series result made the cell's expected
+information low: with Sonnet 5, 20 of 30 tasks produced identical outcomes in all three arms
+(14 all-pass, 6 all-fail), and the primary contrast was null (+0.056, p = 0.234) — a stronger
+model on the same task list would most likely compress the variance band further. (2) **The owner
+additionally records that the task set itself may not have been calibrated to the model tier: the
+bundle was probably not high-load enough for Sonnet-class models, so the crossover would have
+compared two models on tasks that discriminate for neither.** (3) Resource constraints (the
+crossover would have consumed a quota-limited provider seat for ~18 Opus runs per seat); the owner
+chose to redirect that budget to a successor experiment with difficulty-calibrated tasks.
+
+**What this does and does not touch.** The confirmatory claim is untouched: it lives entirely in
+the main-series cell, was computed under seal v10 before this decision, and the crossover was
+registered as unpoolable and α-free from the start (§2, §4). The results report will state
+plainly that the registered crossover was not run, citing this entry. Cancelling future data
+collection cannot bias data already collected and locked; the deviation is recorded rather than
+silent, which is the pre-registration obligation.
+
+**Alternative rejected.** Running the cell anyway "for completeness": rejected — spending a
+constrained seat on a cell expected to discriminate nothing, purely to avoid recording a
+deviation, optimizes for appearance over information; the honest record costs nothing and says
+more.
+
+**Verification.** No code or sealed file changed (this log is deliberately outside the manifest);
+manifest remains v10 `29c300b9…`, 281 files, `--check` green.
