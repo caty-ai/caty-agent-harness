@@ -152,6 +152,9 @@ write_skill_drafts() {
         print "name: " name >> skill_file
         print "description: " description >> skill_file
         print "trigger: " trigger >> skill_file
+        if (mechanically_checkable != "") {
+          print "mechanically_checkable: " mechanically_checkable >> skill_file
+        }
         print "status: draft" >> skill_file
         print "source: distill-audit " date_stamp >> skill_file
         print "---" >> skill_file
@@ -170,6 +173,7 @@ write_skill_drafts() {
       close_skill()
       name = substr($0, 5)
       trigger = ""
+      mechanically_checkable = ""
       procedure = ""
       first_proc = ""
       saw_trigger = 0
@@ -179,6 +183,13 @@ write_skill_drafts() {
       trigger = $0
       sub(/^trigger:[[:space:]]*/, "", trigger)
       saw_trigger = 1
+      next
+    }
+    in_skills && name != "" && saw_trigger && /^mechanically_checkable:[[:space:]]*/ {
+      mechanically_checkable = $0
+      sub(/^mechanically_checkable:[[:space:]]*/, "", mechanically_checkable)
+      gsub(/^[[:space:]]+/, "", mechanically_checkable)
+      gsub(/[[:space:]]+$/, "", mechanically_checkable)
       next
     }
     in_skills && name != "" && saw_trigger && /^(source_task_id|target_skill|files_created):[[:space:]]*/ {next}
@@ -242,7 +253,7 @@ check_draft_integrity() {
     /^## / {in_skills = 0; name = ""; saw_trigger = 0; next}
     in_skills && /^### / {name = substr($0, 5); saw_trigger = 0; next}
     in_skills && name != "" && /^trigger:[[:space:]]*/ {saw_trigger = 1; next}
-    in_skills && name != "" && saw_trigger && /^(source_task_id|target_skill|files_created):[[:space:]]*/ {
+    in_skills && name != "" && saw_trigger && /^(source_task_id|target_skill|files_created|mechanically_checkable):[[:space:]]*/ {
       field = $0
       sub(/:.*/, "", field)
       value = $0
@@ -256,6 +267,11 @@ check_draft_integrity() {
     matched=1
 
     case "$field" in
+      mechanically_checkable)
+        if [[ ! "$value" =~ ^(yes|no)[[:space:]]+—[[:space:]]+[^[:space:]].*$ ]]; then
+          matched=0
+        fi
+        ;;
       files_created)
         compact_value=${value//[[:space:]]/}
         if [[ -z "$compact_value" \
@@ -526,7 +542,9 @@ prompt_file="$work_dir/prompt.md"
   printf '%s\n' 'Forbid any other top-level sections.'
   printf '%s\n' 'LESSONS and OPEN_FAILURES: each line must be a dated one-line bullet of the form:'
   printf '%s\n' "- YYYY-MM-DD <one fact> (source: distill-audit)"
-  printf '%s\n' 'SKILL_DRAFTS: zero or more blocks, each starting with ### <kebab-case-name>, followed by a trigger: line, followed by a short procedure. After trigger:, a block may optionally declare source_task_id: <value>, target_skill: <kebab-name>, and/or files_created: <ws-relative path>[, <ws-relative path>...].'
+  printf '%s\n' 'LESSONS may optionally append [mech_check: yes] or [mech_check: no] after the source marker.'
+  printf '%s\n' 'SKILL_DRAFTS: zero or more blocks, each starting with ### <kebab-case-name>, followed by a trigger: line, followed by a short procedure. After trigger:, a block may optionally declare mechanically_checkable: yes|no — <one-phrase rationale>, source_task_id: <value>, target_skill: <kebab-name>, and/or files_created: <ws-relative path>[, <ws-relative path>...].'
+  printf '%s\n' 'Use mechanically_checkable: yes only for deterministic, uniquely answerable checks that are likely to recur. Use no for judgment calls, ambiguous diagnoses, or one-off context. If unsure, omit the field or mark the lesson [mech_check: no].'
   printf '%s\n' 'These declarations are verified against reality. A block declaring a reference that does not exist is not turned into a skill and goes to Open failures; if unsure, omit declaration fields because omission is safe and has no effect.'
   printf '%s\n' 'If there is no content for a section, leave the section header present with no bullets or blocks.'
   if [[ "$dropped_count" -gt 0 ]]; then

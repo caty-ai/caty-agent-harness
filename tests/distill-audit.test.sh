@@ -280,6 +280,14 @@ else
   fail_case "Claire-style non-JSONL transcript input remains eligible" "rc=$rc output=$output"
 fi
 
+if grep -Fq 'LESSONS may optionally append [mech_check: yes] or [mech_check: no] after the source marker.' "$prompt_dump" \
+  && grep -Fq 'mechanically_checkable: yes|no — <one-phrase rationale>' "$prompt_dump" \
+  && grep -Fq 'Use mechanically_checkable: yes only for deterministic, uniquely answerable checks that are likely to recur.' "$prompt_dump"; then
+  pass "prompt documents mechanically checkable lesson and draft grammar"
+else
+  fail_case "prompt documents mechanically checkable lesson and draft grammar" "prompt=$(cat "$prompt_dump" 2>/dev/null)"
+fi
+
 ws=$(make_ws input-filter-similar-names)
 rm "$ws/input/session.log"
 printf '%s\n' 'TRAJECTORY_NOTES_CONVERSATION' >"$ws/input/trajectory-notes.jsonl"
@@ -664,6 +672,62 @@ if [ "$rc" -eq 0 ] && [ -f "$ws/skills/_staging/valid-file-reference/SKILL.md" ]
   pass "integrity gate accepts existing files_created references"
 else
   fail_case "integrity gate accepts existing files_created references" "rc=$rc output=$output"
+fi
+
+ws=$(make_ws integrity-mechanically-checkable)
+reply='## LESSONS
+## OPEN_FAILURES
+## SKILL_DRAFTS
+### mechanized-proof
+trigger: test
+mechanically_checkable: yes — deterministic fixture replay
+Use the existing transcript.'
+output=$(DISTILL_REPLY="$reply" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+skill_file=$ws/skills/_staging/mechanized-proof/SKILL.md
+if [ "$rc" -eq 0 ] \
+  && [ -f "$skill_file" ] \
+  && grep -Fq 'mechanically_checkable: yes — deterministic fixture replay' "$skill_file" \
+  && ! grep -Fq 'distill integrity mismatch: skill mechanized-proof' "$ws/STATE.md"; then
+  pass "mechanically_checkable survives integrity and is written to draft front matter"
+else
+  fail_case "mechanically_checkable survives integrity and is written to draft front matter" "rc=$rc output=$output skill=$(cat "$skill_file" 2>/dev/null)"
+fi
+
+ws=$(make_ws integrity-mechanically-checkable-bad-vocab)
+reply='## LESSONS
+## OPEN_FAILURES
+## SKILL_DRAFTS
+### impossible-proof
+trigger: test
+mechanically_checkable: maybe — uncertain category
+Do not create this skill.'
+output=$(DISTILL_REPLY="$reply" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] \
+  && [ ! -e "$ws/skills/_staging/impossible-proof/SKILL.md" ] \
+  && grep -Fq 'distill integrity mismatch: skill impossible-proof declares mechanically_checkable=maybe — uncertain category not found' "$ws/STATE.md"; then
+  pass "bad mechanically_checkable vocab is rejected through Open failures"
+else
+  fail_case "bad mechanically_checkable vocab is rejected through Open failures" "rc=$rc output=$output state=$(cat "$ws/STATE.md" 2>/dev/null)"
+fi
+
+ws=$(make_ws integrity-mechanically-checkable-empty-rationale)
+reply='## LESSONS
+## OPEN_FAILURES
+## SKILL_DRAFTS
+### missing-proof-rationale
+trigger: test
+mechanically_checkable: yes —
+Do not create this skill.'
+output=$(DISTILL_REPLY="$reply" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] \
+  && [ ! -e "$ws/skills/_staging/missing-proof-rationale/SKILL.md" ] \
+  && grep -Fq 'distill integrity mismatch: skill missing-proof-rationale declares mechanically_checkable=yes — not found' "$ws/STATE.md"; then
+  pass "empty mechanically_checkable rationale is rejected through Open failures"
+else
+  fail_case "empty mechanically_checkable rationale is rejected through Open failures" "rc=$rc output=$output state=$(cat "$ws/STATE.md" 2>/dev/null)"
 fi
 
 outside_file=$TMP_ROOT/outside-proof.txt

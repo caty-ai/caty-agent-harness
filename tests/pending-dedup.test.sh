@@ -124,6 +124,22 @@ else
   fail_case "whitespace-normalized lesson text has a deterministic hash across invocations" "keys=$key_normal/$key_spaced"
 fi
 
+hash_plain=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$ROOT/scripts/lib-state-fold.sh" '- 2026-07-06 normalized lesson (source: distill-audit)')
+hash_mech=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$ROOT/scripts/lib-state-fold.sh" '- 2026-07-06 normalized lesson (source: distill-audit) [mech_check: yes]')
+rm -f "$ws/loop/.distill-last-run"
+reply_mech=$'## LESSONS\n- 2026-07-06 normalized lesson (source: distill-audit) [mech_check: yes]\n## OPEN_FAILURES\n## SKILL_DRAFTS'
+DISTILL_REPLY="$reply_mech" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" >/dev/null 2>&1
+key_mech=$(sed -n 's/.*\[dedup_key: \([^]]*\)\]$/\1/p' "$ws/loop/pending/distill-$utc_date.md" | sed -n '1p')
+state_lines=$(grep -F 'normalized lesson' "$ws/STATE.md" 2>/dev/null | tr '\n' ';')
+if [ "$hash_plain" = "$hash_mech" ] \
+  && [ "$key_normal" = "$key_mech" ] \
+  && [ "$(grep -Fc 'normalized lesson' "$ws/STATE.md")" -eq 1 ] \
+  && grep -Fq -- '- 2026-07-06 normalized lesson (source: distill-audit) [mech_check: yes] [dedup_key: ' "$ws/loop/pending/distill-$utc_date.md"; then
+  pass "mech-check lessons keep the same candidate hash and dedup key as plain lessons"
+else
+  fail_case "mech-check lessons keep the same candidate hash and dedup key as plain lessons" "hashes=$hash_plain/$hash_mech keys=$key_normal/$key_mech state=$state_lines"
+fi
+
 # A malformed legacy annotation must not suppress a new valid key for the same text.
 ws=$(make_ws malformed)
 cat >"$ws/loop/pending/distill-legacy.md" <<'OUT'
