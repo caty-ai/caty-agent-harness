@@ -3,6 +3,7 @@ set -u
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 SCRIPT=$ROOT/adapters/openclaw/distill-audit.sh
+STATE_FOLD_LIB=${STATE_FOLD_LIB_UNDER_TEST:-$ROOT/scripts/lib-state-fold.sh}
 TMP_ROOT=${TMPDIR:-/tmp}/pending-dedup-test.$$
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -122,6 +123,47 @@ if [ "$key_normal" = "$key_spaced" ] \
   pass "whitespace-normalized lesson text has a deterministic hash across invocations"
 else
   fail_case "whitespace-normalized lesson text has a deterministic hash across invocations" "keys=$key_normal/$key_spaced"
+fi
+
+hash_plain=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$ROOT/scripts/lib-state-fold.sh" '- 2026-07-06 normalized lesson (source: distill-audit)')
+hash_mech=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$ROOT/scripts/lib-state-fold.sh" '- 2026-07-06 normalized lesson (source: distill-audit) [mech_check: yes]')
+rm -f "$ws/loop/.distill-last-run"
+reply_mech=$'## LESSONS\n- 2026-07-06 normalized lesson (source: distill-audit) [mech_check: yes]\n## OPEN_FAILURES\n## SKILL_DRAFTS'
+DISTILL_REPLY="$reply_mech" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" >/dev/null 2>&1
+key_mech=$(sed -n 's/.*\[dedup_key: \([^]]*\)\]$/\1/p' "$ws/loop/pending/distill-$utc_date.md" | sed -n '1p')
+state_lines=$(grep -F 'normalized lesson' "$ws/STATE.md" 2>/dev/null | tr '\n' ';')
+if [ "$hash_plain" = "$hash_mech" ] \
+  && [ "$key_normal" = "$key_mech" ] \
+  && [ "$(grep -Fc 'normalized lesson' "$ws/STATE.md")" -eq 1 ] \
+  && grep -Fq -- '- 2026-07-06 normalized lesson (source: distill-audit) [mech_check: yes] [dedup_key: ' "$ws/loop/pending/distill-$utc_date.md"; then
+  pass "mech-check lessons keep the same candidate hash and dedup key as plain lessons"
+else
+  fail_case "mech-check lessons keep the same candidate hash and dedup key as plain lessons" "hashes=$hash_plain/$hash_mech keys=$key_normal/$key_mech state=$state_lines"
+fi
+
+split_reply=$TMP_ROOT/split-mech-check.reply.md
+split_lessons=$TMP_ROOT/split-mech-check.lessons.txt
+split_failures=$TMP_ROOT/split-mech-check.failures.txt
+split_key=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+split_line='- 2026-07-06 independently observed lesson (source: distill-audit) [mech_check: yes]'
+printf '## LESSONS\n%s [dedup_key: %s]\n## OPEN_FAILURES\n## SKILL_DRAFTS\n' \
+  "$split_line" "$split_key" >"$split_reply"
+: >"$split_lessons"
+: >"$split_failures"
+bash -c '
+  source "$1"
+  split_annotated_reply_sections "$2" "$3" "$4" \
+    "(source: distill-audit)" "LESSONS|OPEN_FAILURES"
+' _ "$STATE_FOLD_LIB" "$split_reply" "$split_lessons" "$split_failures"
+split_rc=$?
+if [ "$split_rc" -eq 0 ] \
+  && grep -Fqx -- "$split_key"$'\t'"$split_line" "$split_lessons" \
+  && [ "$(wc -l <"$split_lessons" | tr -d '[:space:]')" -eq 1 ] \
+  && [ ! -s "$split_failures" ]; then
+  pass "split keeps a mech-check lesson and its dedup key in LESSONS"
+else
+  fail_case "split keeps a mech-check lesson and its dedup key in LESSONS" \
+    "rc=$split_rc lessons=$(tr '\n' ';' <"$split_lessons")"
 fi
 
 # A malformed legacy annotation must not suppress a new valid key for the same text.

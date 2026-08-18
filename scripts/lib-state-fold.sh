@@ -67,6 +67,7 @@ annotate_reply_dedup_keys() {
   local section=
   local line
   local stripped_line
+  local source_anchored_line
   local normalized
   local lesson_hash
 
@@ -89,9 +90,13 @@ annotate_reply_dedup_keys() {
       stripped_line=${BASH_REMATCH[1]}
     fi
 
+    source_anchored_line=$stripped_line
+    if [[ "$source_anchored_line" =~ ^(.*)[[:space:]]+\[mech_check:\ (yes|no)\]$ ]]; then
+      source_anchored_line=${BASH_REMATCH[1]}
+    fi
     if [[ "$section" != other && -n "$section" \
-      && "$stripped_line" =~ ^-\ [0-9]{4}-[0-9]{2}-[0-9]{2}\  \
-      && "$stripped_line" == *" $source_marker" ]]; then
+      && "$source_anchored_line" =~ ^-\ [0-9]{4}-[0-9]{2}-[0-9]{2}\  \
+      && "$source_anchored_line" == *" $source_marker" ]]; then
       normalized=$(normalize_state_candidate "$stripped_line")
       lesson_hash=$(sha256_text "$normalized")
       printf '%s [dedup_key: %s:%s]\n' "$stripped_line" "$task_id" "$lesson_hash" >>"$annotated_reply"
@@ -106,6 +111,7 @@ normalize_state_candidate() {
     {
       $1 = $1
       sub(/^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] /, "")
+      sub(/[[:space:]]+\[mech_check: (yes|no)\]$/, "")
       sub(/[[:space:]]+\(source: [a-z-]+\)$/, "")
       $1 = $1
       print
@@ -240,8 +246,10 @@ split_annotated_reply_sections() {
       if (match($0, / \[dedup_key: [^]]+\]$/)) {
         line = substr($0, 1, RSTART - 1)
         key = substr($0, RSTART + 13, RLENGTH - 14)
-        if (line ~ /^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] / &&
-            substr(line, length(line) - length(source_marker) + 1) == source_marker &&
+        normalized_line = line
+        sub(/[[:space:]]+\[mech_check: (yes|no)\]$/, "", normalized_line)
+        if (normalized_line ~ /^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] / &&
+            substr(normalized_line, length(normalized_line) - length(source_marker) + 1) == source_marker &&
             split(key, p, ":") == 2 && length(p[1]) == 64 && length(p[2]) == 64 &&
             p[1] ~ /^[0-9a-f]+$/ && p[2] ~ /^[0-9a-f]+$/) {
           if (section == "LESSONS") {

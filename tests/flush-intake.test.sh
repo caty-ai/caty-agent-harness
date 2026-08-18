@@ -490,18 +490,35 @@ printf '%s\n' \
 run_intake "$ws"
 parenthetical_fixture="$ROOT/tests/fixtures/flush/normalization-parenthetical.md"
 parenthetical_normalized="$TMP_ROOT/normalization-parenthetical.txt"
+mech_normalized="$TMP_ROOT/normalization-mech.txt"
+mech_normalized_input="$TMP_ROOT/normalization-mech.input"
 bash -c '
   source "$1"
   while IFS= read -r line || [[ -n "$line" ]]; do
     normalize_state_candidate "$line"
   done <"$2"
 ' _ "$ROOT/scripts/lib-state-fold.sh" "$parenthetical_fixture" >"$parenthetical_normalized"
+cat >"$mech_normalized_input" <<'OUT'
+- 2026-07-14 Keep a repeated route identity. (source: distill-audit)
+- 2026-07-14 Keep a repeated route identity. (source: distill-audit) [mech_check: no]
+OUT
+bash -c '
+  source "$1"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    normalize_state_candidate "$line"
+  done <"$2"
+' _ "$ROOT/scripts/lib-state-fold.sh" "$mech_normalized_input" >"$mech_normalized"
+hash_plain=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$ROOT/scripts/lib-state-fold.sh" '- 2026-07-14 Keep a repeated route identity. (source: distill-audit)')
+hash_mech=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$ROOT/scripts/lib-state-fold.sh" '- 2026-07-14 Keep a repeated route identity. (source: distill-audit) [mech_check: no]')
 if [ "$(grep -Fc 'Keep literal provenance' "$ws/STATE.md")" -eq 2 ] \
   && grep -Fqx -- 'Keep a distinct local annotation. (some note)' "$parenthetical_normalized" \
-  && [ "$(LC_ALL=C sort -u "$parenthetical_normalized" | wc -l | tr -d '[:space:]')" -eq 2 ]; then
+  && [ "$(LC_ALL=C sort -u "$parenthetical_normalized" | wc -l | tr -d '[:space:]')" -eq 2 ] \
+  && [ "$(LC_ALL=C sort -u "$mech_normalized" | wc -l | tr -d '[:space:]')" -eq 1 ] \
+  && [ "$hash_plain" = "$hash_mech" ]; then
   pass '[26] normalization strips only the anchored consumer source marker and preserves other parentheticals'
 else
-  fail_case '[26] normalization strips only the anchored consumer source marker and preserves other parentheticals' 'legitimate parenthetical was stripped'
+  fail_case '[26] normalization strips only the anchored consumer source marker and preserves other parentheticals' \
+    "parenthetical=$(cat "$parenthetical_normalized" 2>/dev/null | tr '\n' ';') mech=$(cat "$mech_normalized" 2>/dev/null | tr '\n' ';') hashes=$hash_plain/$hash_mech"
 fi
 
 if grep -Fq 'state_fold_candidate_is_duplicate' "$ROOT/adapters/openclaw/distill-audit.sh" \

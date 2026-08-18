@@ -168,6 +168,12 @@ degraded no-template fallback does not render this block.
   and accepts only non-empty workspace-relative paths that resolve to regular files. Any
   mismatch rejects that draft and creates a dated Open failures entry; it never silently
   promotes. Omitted declaration fields preserve the legacy draft path.
+- OpenClaw distillation may also emit `mechanically_checkable` on draft skills and
+  `[mech_check: yes|no]` on lesson bullets. The harness records that routing signal, but
+  any consumption or manual promotion of that signal happens outside this repo. This
+  repo does not use it to route, consume, or promote anything by itself; that boundary
+  is tracked in the learning-loop responsibility map (workspace research memo
+  2026-08-18).
 - **Rollback**: a wrong fact/rule/skill is never edited away silently — it gets
   `status: deprecated` or an `invalidated-by:` pointer plus an Open failures entry
   explaining what the verifier missed.
