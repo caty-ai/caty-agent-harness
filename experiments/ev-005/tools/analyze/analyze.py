@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 from pathlib import Path
 import sys
+import tempfile
 
 # Running this file directly places this directory on sys.path, which keeps the
 # package usable despite the sealed parent directory's hyphenated name.
@@ -13,8 +15,8 @@ from coding import audit_adjudications, code_run
 from draws import write_json
 from load import InputValidationError, load_analysis_data
 from reexec import (
-    CommandRunner, registered_image_id, reexecute_record, subprocess_runner,
-    verify_image, write_reexecution_log,
+    CommandRunner, provision_runner_identity, registered_image_id, reexecute_record,
+    subprocess_runner, verify_image, write_reexecution_log,
 )
 from report import build_report, write_reports
 from stats import load_sealed_tail_prob
@@ -72,16 +74,26 @@ def run(
         image_id = verify_image(ns.image, sealed_image_id, command_runner)
     reexec_rows = []
     provisional = []
-    for record in data.runs:
-        if ns.reexec == "docker" and record.retention_failure is None:
-            bundle = reexecute_record(
-                record, data.tasks[record.task_id], ns.image, command_runner,
+    with contextlib.ExitStack() as stack:
+        identity_dir = None
+        if ns.reexec == "docker":
+            identity_temp = stack.enter_context(
+                tempfile.TemporaryDirectory(prefix="ev005-analysis-identity-")
             )
-            terminal, first = bundle.terminal, bundle.first
-            reexec_rows.extend(bundle.log_rows)
-        else:
-            terminal, first = audit_adjudications(record)
-        provisional.append(code_run(record, terminal, first, removed_tasks=removed))
+            identity_dir = provision_runner_identity(
+                ns.image, Path(identity_temp), command_runner,
+            )
+        for record in data.runs:
+            if ns.reexec == "docker" and record.retention_failure is None:
+                bundle = reexecute_record(
+                    record, data.tasks[record.task_id], ns.image, command_runner,
+                    identity_dir=identity_dir,
+                )
+                terminal, first = bundle.terminal, bundle.first
+                reexec_rows.extend(bundle.log_rows)
+            else:
+                terminal, first = audit_adjudications(record)
+            provisional.append(code_run(record, terminal, first, removed_tasks=removed))
     candidate_tasks = {
         run.record.task_id for run in provisional if run.candidate_reasons
     }

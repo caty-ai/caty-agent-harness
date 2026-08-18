@@ -10,8 +10,8 @@ import pytest
 from coding import audit_adjudications, code_run
 from load import RunRecord, Task
 from reexec import (
-    build_docker_command, registered_image_id, reexecute_record,
-    verify_image,
+    build_docker_command, provision_runner_identity, registered_image_id,
+    reexecute_record, verify_image,
 )
 
 
@@ -93,6 +93,112 @@ def test_docker_command_is_unit_testable_without_docker(tmp_path):
     command = build_docker_command("ev005-validate:v3-amd64", tmp_path)
     assert command[:6] == ["docker", "run", "--rm", "--init", "--network", "none"]
     assert "GIT_CONFIG_GLOBAL=/dev/null" in command
+    assert all("/etc/passwd" not in argument for argument in command)
+    assert all("/etc/group" not in argument for argument in command)
+
+
+def test_provision_runner_identity_appends_registered_lines_deterministically(tmp_path):
+    image_files = {
+        "/etc/passwd": b"root:x:0:0:root:/root:/bin/bash\nnobody:x:65534:65534::/:/bin/false\n",
+        "/etc/group": b"root:x:0:\nnogroup:x:65534:\n",
+    }
+    calls = []
+
+    class Result:
+        returncode = 0
+        stderr = b""
+
+        def __init__(self, stdout):
+            self.stdout = stdout
+
+    def runner(command, timeout):
+        calls.append((command, timeout))
+        return Result(image_files[command[-1]])
+
+    first = provision_runner_identity("image", tmp_path / "first", runner)
+    second = provision_runner_identity("image", tmp_path / "second", runner)
+
+    assert first == tmp_path / "first"
+    assert first.joinpath("passwd").read_bytes() == (
+        image_files["/etc/passwd"]
+        + b"ev005:x:1000:1000:EV-005 agent:/home/ev005:/bin/bash\n"
+    )
+    assert first.joinpath("group").read_bytes() == (
+        image_files["/etc/group"] + b"ev005:x:1000:\n"
+    )
+    assert first.joinpath("passwd").read_bytes() == second.joinpath("passwd").read_bytes()
+    assert first.joinpath("group").read_bytes() == second.joinpath("group").read_bytes()
+    assert calls[:2] == [
+        (["docker", "run", "--rm", "--network", "none", "image", "cat", "/etc/passwd"], 30.0),
+        (["docker", "run", "--rm", "--network", "none", "image", "cat", "/etc/group"], 30.0),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("stdout", "returncode", "message"),
+    [
+        (b"root:x:0:0:root:/root:/bin/bash\n", 1, "/etc/passwd"),
+        (b"", 0, "/etc/passwd.*empty output"),
+        (b"root:x:0:0:\0/root:/bin/bash\n", 0, "/etc/passwd.*NUL"),
+    ],
+)
+def test_provision_runner_identity_rejects_unusable_image_files(
+    tmp_path, stdout, returncode, message,
+):
+    class Result:
+        stderr = b"synthetic failure"
+
+        def __init__(self):
+            self.returncode = returncode
+            self.stdout = stdout
+
+    with pytest.raises(RuntimeError, match=message):
+        provision_runner_identity("image", tmp_path / "identity", lambda command, timeout: Result())
+    assert not (tmp_path / "identity").exists()
+
+
+@pytest.mark.parametrize(
+    ("conflicting_file", "conflicting_line"),
+    [
+        ("/etc/passwd", b"ev005:x:2000:2000::/tmp:/bin/false\n"),
+        ("/etc/passwd", b"agent:x:1000:2000::/tmp:/bin/false\n"),
+        ("/etc/group", b"ev005:x:2000:\n"),
+        ("/etc/group", b"agent:x:1000:\n"),
+    ],
+)
+def test_provision_runner_identity_rejects_registered_identity_drift(
+    tmp_path, conflicting_file, conflicting_line,
+):
+    image_files = {
+        "/etc/passwd": b"root:x:0:0:root:/root:/bin/bash\n",
+        "/etc/group": b"root:x:0:\n",
+    }
+    image_files[conflicting_file] += conflicting_line
+
+    class Result:
+        returncode = 0
+        stderr = b""
+
+        def __init__(self, stdout):
+            self.stdout = stdout
+
+    def runner(command, timeout):
+        return Result(image_files[command[-1]])
+
+    with pytest.raises(RuntimeError, match=f"{conflicting_file}.*conflicts"):
+        provision_runner_identity("image", tmp_path / "identity", runner)
+    assert not (tmp_path / "identity").exists()
+
+
+def test_docker_command_mounts_identity_before_tree(tmp_path):
+    tree = tmp_path / "tree"
+    identity = tmp_path / "identity"
+    command = build_docker_command("image", tree, identity_dir=identity)
+
+    passwd_mount = f"{identity}/passwd:/etc/passwd:ro"
+    group_mount = f"{identity}/group:/etc/group:ro"
+    tree_mount = f"{tree}:/work/replica:rw"
+    assert command.index(passwd_mount) < command.index(group_mount) < command.index(tree_mount)
 
 
 def test_in_run_audit_provenance_label():

@@ -900,3 +900,61 @@ more.
 
 **Verification.** No code or sealed file changed (this log is deliberately outside the manifest);
 manifest remains v10 `29c300b9…`, 281 files, `--check` green.
+
+## A-11 — Re-execution lacked the registered run identity; pipeline aligned; reseal v11 (2026-08-18)
+
+**What.** The v10 docker-mode analysis emitted 27 pipeline disagreements ("re-execution disagrees
+with in-run pipeline adjudication") — exactly the complete run set of three tasks (t09, t12, t16:
+3 blocks × 3 arms each), perfectly arm-symmetric, all flagged as `check_bug` candidates. This
+entry records the adjudication of those 27.
+
+**Diagnosis (measured, not inferred).** The registered runner provisions a passwd-consistent run
+identity inside the agent container before any gate executes: `runners/alec/ev005/runner.py`
+appends `ev005:x:1000:` to `/etc/group` and `ev005:x:1000:1000:EV-005 agent:/home/ev005:/bin/bash`
+to `/etc/passwd` (the runner-spec §6 guarantee "Per-run HOME is run-private and passwd-consistent
+by construction" — the same guarantee the t12 REV4 isolation exemption depends on). The sealed
+re-execution command starts a fresh container from the registered image with `--user 1000:1000`
+but without those entries, so `pwd.getpwuid(1000)` raises `KeyError` inside the re-execution
+container. The three disagreeing tasks are precisely the passwd-coupled ones: t09 formats an
+owner string via `getpwuid` in the artifact-permission path; t12's full-suite checks carry the
+documented FMA#18 HOME/passwd coupling; t16's recall regression module resolves the run user's
+home. Reproduction on the registered host: the sealed command reproduces the failures verbatim
+(t09: `KeyError: 'getpwuid(): uid not found: 1000'`); re-executing **all 27** runs with the
+image's `/etc/passwd` and `/etc/group` plus exactly the two runner lines bind-mounted read-only
+yields **27/27 agreement** with the in-run terminal exits. Diagnosis artifacts retained at
+`/home/admin/ev005-diag/` (phase3.out; scripts staged from the orchestrator session).
+
+**Remedy.** `tools/analyze/reexec.py` now provisions the runner identity once per analysis
+invocation — fail-closed: the two files are read from the registered image via docker; any
+pre-existing `ev005`/uid-1000/gid-1000 line in the image aborts the run (image drift, refuse to
+guess) — and bind-mounts them read-only into every re-execution container. No other flag, mount,
+timeout, or log-schema change. Tests: 10 new docker-free tests (byte-exact registered lines;
+fail-closed on non-zero exit / empty output / NUL / conflicting uid-gid or ev005 lines; mount
+ordering before the tree mount; CLI wiring asserted through a fake runner capturing argv);
+suite 73 → 83, all green. Reseal v11; the main-series analysis re-runs
+under v11 and its report supersedes the v10 report; the 27 `check_bug` candidates are resolved as
+instrument error (no task removal, no manual recoding — the fixed instrument re-derives every
+outcome).
+
+**What this does and does not touch.** In-run adjudications, the ledger, retained snapshots, and
+every sealed statistical definition are untouched. The three affected tasks were arm-symmetric in
+v10 (within each block all three arms flipped together), so their primary sign-test units were
+d = 0 before and after; the fix affects outcome-coding fidelity, not the comparison design.
+The v11 re-analysis supersedes the v10 report; its counts and disagreement register are recorded
+in the results report on #63.
+
+**Alternative rejected.** (1) Coding the 27 as task-defect `check_bug` with symmetric removal:
+rejected — the tasks behave correctly in the registered run environment; removing three healthy
+tasks would discard real data to compensate for an instrument defect that can be fixed and
+re-run. (2) Rebuilding the container image with the user baked in: rejected — it would change the
+registered image ID in `environment-digest.md` for no behavioral gain over read-only mounts of
+image-derived files. (3) Leaving v10 as final and footnoting the disagreements: rejected — a
+known-unfaithful confirmatory instrument must not be the instrument of record when the faithful
+form is one amendment away.
+
+**Verification.** 83/83 docker-free tests green; `tools/seal-manifest.py … --check` green at the
+reseal commit; on the registered host the fixed command was pre-validated against all 27
+disagreeing runs before sealing (27/27 agreement with in-run terminal exits; diagnosis artifacts
+`/home/admin/ev005-diag/`); the sealed v11 re-analysis is the confirmatory record. Review:
+L1-9 three seats (GLM 5.3, Kimi K3, Grok 4.6), verdicts recorded in
+`_handoffs/ev005-seats-a3/adjudication-a11.md`.

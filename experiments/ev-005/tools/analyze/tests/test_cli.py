@@ -110,12 +110,26 @@ def _extend_fixture_to_six_tasks(fixture_tree):
 
 def _fake_docker_runner(calls):
     expected_image_id = registered_image_id(PACK)
+    image_passwd = b"root:x:0:0:root:/root:/bin/bash\n"
+    image_group = b"root:x:0:\n"
 
     def runner(command, timeout):
         calls.append((command, timeout))
         if command[:3] == ["docker", "image", "inspect"]:
             return FakeResult(stdout=(expected_image_id + "\n").encode())
         assert command[:2] == ["docker", "run"]
+        if command[-2:] == ["cat", "/etc/passwd"]:
+            return FakeResult(stdout=image_passwd)
+        if command[-2:] == ["cat", "/etc/group"]:
+            return FakeResult(stdout=image_group)
+        passwd_mount = next(value for value in command if value.endswith(":/etc/passwd:ro"))
+        group_mount = next(value for value in command if value.endswith(":/etc/group:ro"))
+        assert Path(passwd_mount.split(":", 1)[0]).read_bytes() == (
+            image_passwd + b"ev005:x:1000:1000:EV-005 agent:/home/ev005:/bin/bash\n"
+        )
+        assert Path(group_mount.split(":", 1)[0]).read_bytes() == (
+            image_group + b"ev005:x:1000:\n"
+        )
         return FakeResult(stdout=b"pipeline pass\n")
 
     return runner
@@ -276,7 +290,29 @@ def test_docker_cli_verifies_image_requires_archives_reexecutes_and_decides(fixt
         "docker", "image", "inspect", "ev005-validate:v3-amd64",
         "--format", "{{.Id}}",
     ]
-    assert len([command for command, _ in calls if command[:2] == ["docker", "run"]]) == 18
+    docker_runs = [command for command, _ in calls if command[:2] == ["docker", "run"]]
+    assert docker_runs[:2] == [
+        [
+            "docker", "run", "--rm", "--network", "none", "ev005-validate:v3-amd64",
+            "cat", "/etc/passwd",
+        ],
+        [
+            "docker", "run", "--rm", "--network", "none", "ev005-validate:v3-amd64",
+            "cat", "/etc/group",
+        ],
+    ]
+    reexecution_commands = docker_runs[2:]
+    assert len(reexecution_commands) == 18
+    identity_mount_pairs = {
+        tuple(value for value in command if value.endswith((":/etc/passwd:ro", ":/etc/group:ro")))
+        for command in reexecution_commands
+    }
+    assert len(identity_mount_pairs) == 1
+    for command in reexecution_commands:
+        passwd_index = next(i for i, value in enumerate(command) if value.endswith(":/etc/passwd:ro"))
+        group_index = next(i for i, value in enumerate(command) if value.endswith(":/etc/group:ro"))
+        tree_index = next(i for i, value in enumerate(command) if value.endswith(":/work/replica:rw"))
+        assert passwd_index < group_index < tree_index
     reexec_rows = [
         json.loads(line)
         for line in (report_dir / "pipeline-reexec.jsonl").read_text().splitlines()
@@ -290,6 +326,30 @@ def test_docker_cli_verifies_image_requires_archives_reexecutes_and_decides(fixt
     markdown = (report_dir / "analysis-report.md").read_text()
     assert "NON-REGISTERED DRY RUN" not in markdown.splitlines()[0]
     assert f"**{report['primary']['decision_sentence']}**" in markdown
+
+
+def test_docker_cli_identity_provision_failure_aborts_before_reexecution(fixture_tree, tmp_path):
+    _write_valid_snapshot_archives(fixture_tree)
+    calls = []
+    expected_image_id = registered_image_id(PACK)
+
+    def runner(command, timeout):
+        calls.append((command, timeout))
+        if command[:3] == ["docker", "image", "inspect"]:
+            return FakeResult(stdout=(expected_image_id + "\n").encode())
+        if command[-2:] == ["cat", "/etc/passwd"]:
+            return FakeResult(returncode=1, stderr=b"synthetic passwd failure")
+        raise AssertionError(f"unexpected command after provisioning failure: {command}")
+
+    report_dir = tmp_path / "failed-identity-report"
+    assert main([
+        "--pack", str(PACK), "--series", "main",
+        "--out-root", str(fixture_tree["out"]),
+        "--tasks-dir", str(fixture_tree["tasks"]),
+        "--report-dir", str(report_dir), "--reexec", "docker",
+    ], command_runner=runner) == 2
+    assert len(calls) == 2
+    assert not report_dir.exists()
 
 
 def test_docker_retention_failure_uses_in_run_audit_and_is_published(fixture_tree, tmp_path):
@@ -313,7 +373,7 @@ def test_docker_retention_failure_uses_in_run_audit_and_is_published(fixture_tre
         "--report-dir", str(report_dir), "--reexec", "docker",
     ], command_runner=_fake_docker_runner(calls)) == 0
 
-    assert len([command for command, _ in calls if command[:2] == ["docker", "run"]]) == 53
+    assert len([command for command, _ in calls if command[:2] == ["docker", "run"]]) == 55
     report = json.loads((report_dir / "analysis-report.json").read_text())
     outcome = next(row for row in report["outcome_rows"] if row["run_id"] == target["run_id"])
     assert outcome["adjudication_provenance"] == "in-run-audit"
@@ -348,7 +408,7 @@ def test_docker_retention_failures_over_ten_percent_compromise_experiment(fixtur
         "--report-dir", str(report_dir), "--reexec", "docker",
     ], command_runner=_fake_docker_runner(calls)) == 0
 
-    assert len([command for command, _ in calls if command[:2] == ["docker", "run"]]) == 52
+    assert len([command for command, _ in calls if command[:2] == ["docker", "run"]]) == 54
     report = json.loads((report_dir / "analysis-report.json").read_text())
     assert report["caps"]["retention_failure_rates"]["W"] == 2 / 18
     assert report["caps"]["compromised_flags"]["retention_failures_over_10pct_any_arm"] is True

@@ -18,6 +18,9 @@ from load import RunRecord, Task
 
 
 CommandRunner = Callable[[list[str], float], Any]
+# Registered literals from runners/alec/ev005/runner.py:ensure_agent_user.
+RUNNER_PASSWD_LINE = b"ev005:x:1000:1000:EV-005 agent:/home/ev005:/bin/bash\n"
+RUNNER_GROUP_LINE = b"ev005:x:1000:\n"
 GIT_ENV = {
     "GIT_CONFIG_GLOBAL": "/dev/null",
     "GIT_CONFIG_SYSTEM": "/dev/null",
@@ -35,7 +38,50 @@ def subprocess_runner(command: list[str], timeout_s: float) -> subprocess.Comple
     )
 
 
-def build_docker_command(image: str, tree: Path, cidfile: Path | None = None) -> list[str]:
+def provision_runner_identity(
+    image: str,
+    destination: Path,
+    runner: CommandRunner = subprocess_runner,
+) -> Path:
+    """Materialize the passwd-consistent identity registered by runner.py."""
+    contents: dict[str, bytes] = {}
+    for name in ("passwd", "group"):
+        source = f"/etc/{name}"
+        try:
+            result = runner(
+                ["docker", "run", "--rm", "--network", "none", image, "cat", source],
+                30.0,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise RuntimeError(f"cannot read image {source}: {exc}") from exc
+        if result.returncode != 0:
+            error = bytes(result.stderr or b"").decode(errors="replace").strip()
+            raise RuntimeError(f"cannot read image {source}: {error or 'non-zero exit'}")
+        output = bytes(result.stdout or b"")
+        if not output:
+            raise RuntimeError(f"cannot read image {source}: empty output")
+        if b"\0" in output:
+            raise RuntimeError(f"cannot read image {source}: output contains NUL")
+        for line in output.splitlines():
+            fields = line.split(b":")
+            if fields[0] == b"ev005" or (len(fields) > 2 and fields[2] == b"1000"):
+                raise RuntimeError(
+                    f"image {source} conflicts with registered ev005 uid/gid 1000"
+                )
+        contents[name] = output
+
+    destination.mkdir(parents=True, exist_ok=True)
+    (destination / "passwd").write_bytes(contents["passwd"] + RUNNER_PASSWD_LINE)
+    (destination / "group").write_bytes(contents["group"] + RUNNER_GROUP_LINE)
+    return destination
+
+
+def build_docker_command(
+    image: str,
+    tree: Path,
+    cidfile: Path | None = None,
+    identity_dir: Path | None = None,
+) -> list[str]:
     """Construct the registered networkless, unprivileged adjudication command."""
     command = [
         "docker", "run", "--rm", "--init", "--network", "none",
@@ -45,8 +91,13 @@ def build_docker_command(image: str, tree: Path, cidfile: Path | None = None) ->
         "--tmpfs", "/tmp/ev005:rw,exec,nosuid,nodev,size=1g,uid=1000,gid=1000,mode=0700",
         "-e", "HOME=/home/ev005", "-e", "TMPDIR=/tmp/ev005",
         "-e", "GIT_CONFIG_GLOBAL=/dev/null", "-e", "GIT_CONFIG_SYSTEM=/dev/null",
-        "-v", f"{tree}:/work/replica:rw", "-w", "/work/replica",
     ]
+    if identity_dir is not None:
+        command += [
+            "-v", f"{identity_dir}/passwd:/etc/passwd:ro",
+            "-v", f"{identity_dir}/group:/etc/group:ro",
+        ]
+    command += ["-v", f"{tree}:/work/replica:rw", "-w", "/work/replica"]
     if cidfile is not None:
         command += ["--cidfile", str(cidfile)]
     return command + [image, "/usr/bin/bash", "./.ev005-donecheck.sh"]
@@ -157,6 +208,7 @@ def _execute_entry(
     which: str,
     image: str,
     runner: CommandRunner,
+    identity_dir: Path | None,
 ) -> tuple[Adjudication, dict[str, Any]]:
     archive = Path(entry["path"])
     if archive.is_symlink() or not archive.is_file():
@@ -169,7 +221,7 @@ def _execute_entry(
         tree.mkdir()
         materialize_tree(archive, task, tree)
         cidfile = Path(temp) / "container.cid"
-        command = build_docker_command(image, tree, cidfile)
+        command = build_docker_command(image, tree, cidfile, identity_dir)
         try:
             result = runner(command, float(task.meta["timeout_s"]))
             exit_code = int(result.returncode)
@@ -211,6 +263,7 @@ def reexecute_record(
     task: Task,
     image: str,
     runner: CommandRunner = subprocess_runner,
+    identity_dir: Path | None = None,
 ) -> ReexecutionBundle:
     if not record.declarations:
         return ReexecutionBundle(None, None, [])
@@ -246,12 +299,16 @@ def reexecute_record(
     terminal: Adjudication | None = None
     first: Adjudication | None = None
     if terminal_entry:
-        terminal, row = _execute_entry(record, task, terminal_entry, "terminal", image, runner)
+        terminal, row = _execute_entry(
+            record, task, terminal_entry, "terminal", image, runner, identity_dir,
+        )
         rows.append(row)
     if first_decl is terminal_decl:
         first = terminal
     elif first_entry:
-        first, row = _execute_entry(record, task, first_entry, "first", image, runner)
+        first, row = _execute_entry(
+            record, task, first_entry, "first", image, runner, identity_dir,
+        )
         rows.append(row)
     return ReexecutionBundle(terminal, first, rows)
 
