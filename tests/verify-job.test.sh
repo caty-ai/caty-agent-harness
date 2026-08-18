@@ -38,6 +38,29 @@ print("" if value is None else value)
 PY
 }
 
+write_verify_json() {
+  python3 - "$1" "$2" "$3" "$4" <<'PY'
+import json
+import sys
+
+path, verdict, reason, timestamp = sys.argv[1:5]
+with open(path, "w", encoding="utf-8") as record:
+    json.dump(
+        {
+            "verdict": verdict,
+            "reason": reason,
+            "verifier_id": "history-fixture",
+            "step": 1,
+            "ts": timestamp,
+        },
+        record,
+        indent=2,
+        sort_keys=True,
+    )
+    record.write("\n")
+PY
+}
+
 make_bundle() {
   ws=$TMP_ROOT/ws-$1
   bundle=$ws/loop/artifacts/task-one
@@ -58,6 +81,39 @@ write_verifier() {
 #!/usr/bin/env bash
 printf '%s\n' 'VERDICT: pass'
 printf '%s\n' 'fixture pass'
+SH
+  chmod +x "$path"
+}
+
+write_configurable_verifier() {
+  path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+printf 'VERDICT: %s\n' "${VERIFY_TEST_VERDICT:-pass}"
+printf '%s\n' "${VERIFY_TEST_REASON:-configurable fixture}"
+SH
+  chmod +x "$path"
+}
+
+write_warning_verifier() {
+  path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' 'provider warning retained on stderr' >&2
+printf '%s\n' 'VERDICT: pass'
+printf '%s\n' 'warning fixture pass'
+SH
+  chmod +x "$path"
+}
+
+write_attempt_swap_verifier() {
+  path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+mv "$VERIFY_TEST_SWAP_FROM" "$VERIFY_TEST_SWAP_MOVED"
+ln -s "$VERIFY_TEST_SWAP_TARGET" "$VERIFY_TEST_SWAP_FROM"
+printf '%s\n' 'VERDICT: pass'
+printf '%s\n' 'attempt swap fixture pass'
 SH
   chmod +x "$path"
 }
@@ -166,12 +222,26 @@ SH
   chmod +x "$path"
 }
 
+write_unknown_verdict_verifier() {
+  path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' 'VERDICT: mystery'
+printf '%s\n' 'unknown verdict fixture'
+SH
+  chmod +x "$path"
+}
+
 write_timeout_tail_verifier() {
   path=$1
   cat >"$path" <<'SH'
 #!/usr/bin/env bash
+printf 'timeout-stdout-oldest-'
+printf '%0400d\n' 0
 printf '%s\n' 'timeout-stdout-01'
 printf '%s\n' 'timeout-stdout-02'
+printf 'timeout-stderr-oldest-' >&2
+printf '%0400d\n' 0 >&2
 printf '%s\n' 'timeout-stderr-01' >&2
 printf '%s\n' 'timeout-stderr-02' >&2
 sleep 60
@@ -215,6 +285,20 @@ if [ "$rc" -eq 0 ] \
   pass "valid verifier command runs and logs verdict"
 else
   fail_case "valid verifier command runs and logs verdict" "rc=$rc output=$output"
+fi
+
+bundle=$(make_bundle success-stderr)
+verifier=$TMP_ROOT/warning-verifier.sh
+write_warning_verifier "$verifier"
+attest_verifier_wrapper "$verifier" warning
+output=$(VERIFIER_CMD="$verifier" VERIFIER_ID=warning bash "$SCRIPT" "$bundle" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] \
+  && printf '%s\n' "$output" | grep -Fq 'provider warning retained on stderr' \
+  && printf '%s\n' "$output" | grep -Fq 'VERDICT: pass'; then
+  pass "successful verifier stderr remains operator-visible"
+else
+  fail_case "successful verifier stderr remains operator-visible" "rc=$rc output=$output"
 fi
 
 source_grep_ok=1
@@ -396,11 +480,13 @@ output=$(VERIFY_TIMEOUT_S=2 VERIFY_GRACE_S=1 VERIFIER_CMD="$verifier" VERIFIER_I
 rc=$?
 set -e
 if [ "$rc" -eq 4 ] \
-  && grep -Fq 'stdout_tail=timeout-stdout-01 || timeout-stdout-02' "$TMP_ROOT/ws-timeout-tail/loop/VERIFY.log.md" \
-  && grep -Fq 'stderr_tail=timeout-stderr-01 || timeout-stderr-02' "$TMP_ROOT/ws-timeout-tail/loop/VERIFY.log.md"; then
-  pass "timeout reasons include a capped stdout/stderr tail"
+  && grep -Fq 'timeout-stdout-01 || timeout-stdout-02' "$TMP_ROOT/ws-timeout-tail/loop/VERIFY.log.md" \
+  && grep -Fq 'timeout-stderr-01 || timeout-stderr-02' "$TMP_ROOT/ws-timeout-tail/loop/VERIFY.log.md" \
+  && ! grep -Fq 'timeout-stdout-oldest-' "$TMP_ROOT/ws-timeout-tail/loop/VERIFY.log.md" \
+  && ! grep -Fq 'timeout-stderr-oldest-' "$TMP_ROOT/ws-timeout-tail/loop/VERIFY.log.md"; then
+  pass "timeout reasons keep the newest capped stdout/stderr tail"
 else
-  fail_case "timeout reasons include a capped stdout/stderr tail" "rc=$rc output=$output"
+  fail_case "timeout reasons keep the newest capped stdout/stderr tail" "rc=$rc output=$output"
 fi
 
 bundle=$(make_bundle signal-death)
@@ -440,20 +526,94 @@ else
   fail_case "large verifier output is parsed from temp file" "rc=$rc output=$output"
 fi
 
+verifier=$TMP_ROOT/linked-attempt-verifier.sh
+write_verifier "$verifier"
+attest_verifier_wrapper "$verifier" linked-attempt
+linked_attempts_ok=1
+for linked_attempt_mode in outside inside explicit-inside attempts-root; do
+  bundle=$(make_bundle "linked-attempt-$linked_attempt_mode")
+  outside_attempt=$TMP_ROOT/linked-attempt-$linked_attempt_mode-target
+  attempt_dir_override=
+  mkdir -p "$outside_attempt"
+  case "$linked_attempt_mode" in
+    outside)
+      mkdir -p "$bundle/attempts/001"
+      ln -s "$outside_attempt" "$bundle/attempts/002"
+      ;;
+    inside)
+      mkdir -p "$bundle/attempts/001"
+      ln -s 001 "$bundle/attempts/002"
+      outside_attempt=$bundle/attempts/001
+      ;;
+    explicit-inside)
+      mkdir -p "$bundle/attempts/001"
+      ln -s 001 "$bundle/attempts/002"
+      outside_attempt=$bundle/attempts/001
+      attempt_dir_override=$bundle/attempts/./002
+      ;;
+    attempts-root)
+      mkdir -p "$outside_attempt/001"
+      ln -s "$outside_attempt" "$bundle/attempts"
+      outside_attempt=$outside_attempt/001
+      ;;
+  esac
+  set +e
+  output=$(ATTEMPT_DIR="$attempt_dir_override" VERIFIER_CMD="$verifier" \
+    VERIFIER_ID=linked-attempt bash "$SCRIPT" "$bundle" 2>&1)
+  rc=$?
+  set -e
+  if [ "$rc" -ne 5 ] \
+    || ! printf '%s\n' "$output" | grep -Fq 'unsafe verify record target' \
+    || [ -e "$outside_attempt/verify.json" ]; then
+    linked_attempts_ok=0
+  fi
+done
+if [ "$linked_attempts_ok" -eq 1 ]; then
+  pass "numeric attempt links stop verification regardless of where they point"
+else
+  fail_case "numeric attempt links stop verification regardless of where they point" \
+    "one or more linked attempt layouts did not fail closed"
+fi
+
+bundle=$(make_bundle attempt-swap-race)
+mkdir -p "$bundle/attempts/001"
+moved_attempt=$TMP_ROOT/attempt-swap-moved
+swap_target=$TMP_ROOT/attempt-swap-target
+mkdir -p "$swap_target"
+verifier=$TMP_ROOT/attempt-swap-verifier.sh
+write_attempt_swap_verifier "$verifier"
+attest_verifier_wrapper "$verifier" attempt-swap
+set +e
+output=$(VERIFY_TEST_SWAP_FROM="$bundle/attempts/001" \
+  VERIFY_TEST_SWAP_MOVED="$moved_attempt" VERIFY_TEST_SWAP_TARGET="$swap_target" \
+  VERIFIER_CMD="$verifier" VERIFIER_ID=attempt-swap bash "$SCRIPT" "$bundle" 2>&1)
+rc=$?
+set -e
+if [ "$rc" -eq 5 ] \
+  && printf '%s\n' "$output" | grep -Fq 'record target changed or is unsafe' \
+  && [ ! -e "$moved_attempt/verify.json" ] \
+  && [ ! -e "$swap_target/verify.json" ]; then
+  pass "attempt replacement between selection and write cannot redirect verify.json"
+else
+  fail_case "attempt replacement between selection and write cannot redirect verify.json" \
+    "rc=$rc output=$output moved=$(ls "$moved_attempt" 2>/dev/null) target=$(ls "$swap_target" 2>/dev/null)"
+fi
+
 bundle=$(make_bundle attempts-record)
 mkdir -p "$bundle/attempts/001"
 verifier=$TMP_ROOT/attempts-record-verifier.sh
 write_verifier "$verifier"
 attest_verifier_wrapper "$verifier" attempts-record
-output=$(VERIFY_STEP=2 VERIFIER_CMD="$verifier" VERIFIER_ID=attempts-record bash "$SCRIPT" "$bundle" 2>&1)
+output=$(ATTEMPT_DIR="$bundle/attempts/001/../001" VERIFY_STEP=2 \
+  VERIFIER_CMD="$verifier" VERIFIER_ID=attempts-record bash "$SCRIPT" "$bundle" 2>&1)
 rc=$?
 if [ "$rc" -eq 0 ] \
   && [ -f "$bundle/attempts/001/verify.json" ] \
   && [ ! -f "$bundle/verify.json" ] \
   && [ "$(verify_json_field "$bundle/attempts/001/verify.json" step)" = 2 ]; then
-  pass "verify-job persists verify.json to the current numeric attempt when present"
+  pass "verify-job accepts a contained explicit attempt path with relative components"
 else
-  fail_case "verify-job persists verify.json to the current numeric attempt when present" \
+  fail_case "verify-job accepts a contained explicit attempt path with relative components" \
     "rc=$rc output=$output"
 fi
 
@@ -499,11 +659,26 @@ set +e
 output=$(VERIFIER_CMD="$verifier" VERIFIER_ID=verdict-last bash "$SCRIPT" "$bundle" 2>&1)
 rc=$?
 set -e
+preamble_ok=0
 if [ "$rc" -eq 6 ] \
   && grep -Fq 'provider output placed the verdict marker outside line 1' "$TMP_ROOT/ws-old-behavior-red/loop/VERIFY.log.md"; then
-  pass "T-2 old verdict-last behavior is rejected as a contract violation"
+  preamble_ok=1
+fi
+bundle=$(make_bundle unknown-verdict)
+verifier=$TMP_ROOT/unknown-verdict-verifier.sh
+write_unknown_verdict_verifier "$verifier"
+attest_verifier_wrapper "$verifier" unknown-verdict
+set +e
+output=$(VERIFIER_CMD="$verifier" VERIFIER_ID=unknown-verdict bash "$SCRIPT" "$bundle" 2>&1)
+rc=$?
+set -e
+if [ "$preamble_ok" -eq 1 ] \
+  && [ "$rc" -eq 6 ] \
+  && grep -Fq 'provider output used an unknown verdict: mystery' \
+    "$TMP_ROOT/ws-unknown-verdict/loop/VERIFY.log.md"; then
+  pass "T-2 preamble and unknown verdicts are contract violations"
 else
-  fail_case "T-2 old verdict-last behavior is rejected as a contract violation" \
+  fail_case "T-2 preamble and unknown verdicts are contract violations" \
     "rc=$rc output=$output"
 fi
 
@@ -558,6 +733,34 @@ else
   fail_case "explicit VERIFY_STEP overrides state.json derivation" "rc=$rc log=$(cat "$step_log" 2>/dev/null)"
 fi
 
+verifier=$TMP_ROOT/malformed-step-verifier.sh
+write_verifier "$verifier"
+attest_verifier_wrapper "$verifier" malformed-step
+malformed_step_ok=1
+for malformed_step in abc 2.5; do
+  bundle=$(make_bundle "malformed-explicit-step-${malformed_step//./-}")
+  set +e
+  output=$(VERIFY_STEP="$malformed_step" VERIFIER_CMD="$verifier" VERIFIER_ID=malformed-step \
+    bash "$SCRIPT" "$bundle" 2>&1)
+  rc=$?
+  set -e
+  malformed_record=$bundle/verify.json
+  malformed_log=${bundle%/loop/artifacts/task-one}/loop/VERIFY.log.md
+  if [ "$rc" -ne 0 ] \
+    || ! printf '%s\n' "$output" | grep -Fq 'VERDICT: pass' \
+    || [ ! -f "$malformed_record" ] \
+    || [ -n "$(verify_json_field "$malformed_record" step 2>/dev/null)" ] \
+    || grep -Fq 'step=' "$malformed_log"; then
+    malformed_step_ok=0
+  fi
+done
+if [ "$malformed_step_ok" -eq 1 ]; then
+  pass "malformed explicit VERIFY_STEP values are treated as unset"
+else
+  fail_case "malformed explicit VERIFY_STEP values are treated as unset" \
+    "abc or 2.5 produced a non-verdict exit or a step-bound artifact"
+fi
+
 bundle=$(make_bundle malformed-state-no-step)
 printf '{not valid json\n' >"$bundle/state.json"
 output=$(env -u VERIFY_STEP VERIFIER_CMD="$verifier" bash "$SCRIPT" "$bundle" 2>&1)
@@ -608,6 +811,74 @@ if [ "$rc" -eq 0 ] \
   pass "negative current_step leaves VERIFY_STEP unset"
 else
   fail_case "negative current_step leaves VERIFY_STEP unset" "rc=$rc log=$(cat "$step_log" 2>/dev/null)"
+fi
+
+bundle=$(make_bundle interrupted-record-log)
+mkdir -p "$bundle/attempts/000" "$bundle/attempts/001"
+printf '%s\n' '{"verdict":"fail","reason":"PARTIAL-MUST-NOT-BACKFILL"' \
+  >"$bundle/attempts/000/verify.json"
+verifier=$TMP_ROOT/configurable-verifier.sh
+write_configurable_verifier "$verifier"
+attest_verifier_wrapper "$verifier" configurable
+interrupted_log=$TMP_ROOT/ws-interrupted-record-log/loop/VERIFY.log.md
+set +e
+first_output=$(HERMES_VERIFY_TEST_INTERRUPT_AFTER_RECORD=1 VERIFY_TEST_VERDICT=fail \
+  VERIFY_TEST_REASON='interrupted fail record' VERIFIER_CMD="$verifier" VERIFIER_ID=configurable \
+  bash "$SCRIPT" "$bundle" 2>&1)
+first_rc=$?
+set -e
+first_record_verdict=$(verify_json_field "$bundle/attempts/001/verify.json" verdict 2>/dev/null)
+first_log_count=$(grep -Fc 'interrupted fail record' "$interrupted_log" 2>/dev/null || true)
+second_output=$(VERIFY_TEST_VERDICT=pass VERIFY_TEST_REASON='replacement pass record' \
+  VERIFIER_CMD="$verifier" VERIFIER_ID=configurable bash "$SCRIPT" "$bundle" 2>&1)
+second_rc=$?
+fail_line=$(grep -nF 'interrupted fail record' "$interrupted_log" | cut -d: -f1)
+pass_line=$(grep -nF 'replacement pass record' "$interrupted_log" | cut -d: -f1)
+if [ "$first_rc" -eq 97 ] \
+  && [ "$first_record_verdict" = fail ] \
+  && [ "$first_log_count" -eq 0 ] \
+  && [ "$second_rc" -eq 0 ] \
+  && [ "$(grep -Fc 'interrupted fail record' "$interrupted_log")" -eq 1 ] \
+  && [ "$(grep -Fc 'replacement pass record' "$interrupted_log")" -eq 1 ] \
+  && [ "$fail_line" -lt "$pass_line" ] \
+  && ! grep -Fq 'PARTIAL-MUST-NOT-BACKFILL' "$interrupted_log"; then
+  pass "startup reconciles an interrupted record write without trusting partial records"
+else
+  fail_case "startup reconciles an interrupted record write without trusting partial records" \
+    "first_rc=$first_rc first_output=$first_output second_rc=$second_rc second_output=$second_output log=$(cat "$interrupted_log" 2>/dev/null)"
+fi
+
+bundle=$(make_bundle reconciliation-order)
+mkdir -p "$bundle/attempts/001" "$bundle/attempts/002"
+write_verify_json "$bundle/attempts/001/verify.json" fail \
+  'older missing projection' '2026-08-18T00:00:00Z'
+write_verify_json "$bundle/attempts/002/verify.json" pass \
+  'newer authoritative projection' '2026-08-18T00:00:01Z'
+write_verify_json "$bundle/verify.json" fail \
+  'STALE-ROOT-MUST-NOT-BACKFILL' '2026-08-18T00:00:02Z'
+reconciliation_order_log=$TMP_ROOT/ws-reconciliation-order/loop/VERIFY.log.md
+printf '%s\n' \
+  "$VERIFY_HEADER" \
+  '- 2026-08-18T00:00:01Z | task=task-one | step=1 | verifier=history-fixture | verdict=pass | newer authoritative projection' \
+  >"$reconciliation_order_log"
+verifier=$TMP_ROOT/reconciliation-order-verifier.sh
+write_verifier "$verifier"
+attest_verifier_wrapper "$verifier" reconciliation-order
+set +e
+output=$(HERMES_VERIFY_TEST_STOP_AFTER_RECONCILE=1 VERIFIER_CMD="$verifier" \
+  bash "$SCRIPT" "$bundle" 2>&1)
+rc=$?
+set -e
+last_task_line=$(grep -F 'task=task-one' "$reconciliation_order_log" | tail -n 1)
+if [ "$rc" -eq 98 ] \
+  && [ "$(grep -Fc 'older missing projection' "$reconciliation_order_log")" -eq 1 ] \
+  && [ "$(grep -Fc 'newer authoritative projection' "$reconciliation_order_log")" -eq 2 ] \
+  && ! grep -Fq 'STALE-ROOT-MUST-NOT-BACKFILL' "$reconciliation_order_log" \
+  && printf '%s\n' "$last_task_line" | grep -Fq 'verdict=pass | newer authoritative projection'; then
+  pass "reconciliation never leaves an older backfill after a newer record"
+else
+  fail_case "reconciliation never leaves an older backfill after a newer record" \
+    "rc=$rc output=$output log=$(cat "$reconciliation_order_log" 2>/dev/null)"
 fi
 
 bundle=$(make_bundle prompt-contract)

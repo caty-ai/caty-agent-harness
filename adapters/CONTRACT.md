@@ -156,8 +156,26 @@ failure into `verify.json` with `verdict=contract-violation`, emits the derived 
 ```
 
 `step` may also be `null` when the verifier result is not bound to a specific positive
-step. The human `VERDICT:` stdout line and `loop/VERIFY.log.md` entry are derived views
-of that canonical record, not separate parser outputs.
+step. A malformed explicit step is treated as unset; it cannot change the verdict or
+its exit mapping. The human `VERDICT:` stdout line and `loop/VERIFY.log.md` entry are
+derived views of that canonical record, not separate parser outputs.
+
+The log is an append-only, lagging projection rather than a second authority. If the
+host stops after atomically replacing `verify.json` but before appending its projection,
+the next conforming `verify-job` invocation backfills the complete record after the
+wrapper-conformance gate and before provider launch.
+Reconciliation accepts only bounded, single-link regular files with a complete valid
+record schema; a temporary, truncated, or malformed record is ignored. It appends only
+the projection of the record currently read, so recovery cannot manufacture a verdict
+that the authoritative record does not contain. If repairing an older attempt would
+place it after an already-recorded newer attempt, reconciliation reprojects the newest
+numeric attempt last rather than leaving the derived tail contradictory.
+
+An attempt-scoped record may be written only through a real numeric directory directly
+under the bundle's real `attempts` directory. Numeric symlinks are infrastructure
+errors even when they point elsewhere inside the same bundle. Selection, directory
+opening, and the atomic replacement each enforce this containment; a linked or replaced
+directory must not redirect the authoritative record.
 
 #### Verifier bundle assembly
 

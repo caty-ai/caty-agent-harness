@@ -13,12 +13,6 @@ infra_fail() {
   exit 5
 }
 
-ensure_log() {
-  if [[ ! -e "$log_path" ]]; then
-    printf '%s\n' '# VERIFY log — append-only verifier verdict history' >"$log_path"
-  fi
-}
-
 record_exit_code() {
   local record_path=$1
 
@@ -43,27 +37,184 @@ PY
 emit_record() {
   local record_path=$1
 
-  python3 - "$record_path" "$log_path" "$task_id" <<'PY'
+  python3 - "$record_path" <<'PY'
 import json
 import sys
 
-record_path, log_path, task_id = sys.argv[1:4]
+record_path = sys.argv[1]
 with open(record_path, encoding="utf-8") as f:
     record = json.load(f)
 
-step = record.get("step")
-step_field = ""
-if step not in (None, ""):
-    step_field = f" | step={step}"
+print(f"VERDICT: {record['verdict']}")
+print(record["reason"])
+PY
+}
 
-with open(log_path, "a", encoding="utf-8") as log:
-    log.write(
+reconcile_log() {
+  python3 - "$workspace_root" "$bundle_dir" "$task_id" <<'PY'
+import fcntl
+import json
+import os
+import re
+import stat
+import sys
+import unicodedata
+
+workspace_root, bundle_dir, task_id = sys.argv[1:4]
+header = "# VERIFY log — append-only verifier verdict history\n"
+allowed_verdicts = {
+    "pass",
+    "fail",
+    "rubric-invalid",
+    "blocked-missing-artifact",
+    "inconclusive",
+    "needs-human",
+    "contract-violation",
+}
+timestamp_re = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
+directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+file_nofollow = getattr(os, "O_NOFOLLOW", 0)
+
+class UnsafePath(Exception):
+    pass
+
+def same_inode(left, right):
+    return (left.st_dev, left.st_ino) == (right.st_dev, right.st_ino)
+
+def open_directory(path_or_name, parent_fd=None):
+    before = os.stat(path_or_name, dir_fd=parent_fd, follow_symlinks=False)
+    if not stat.S_ISDIR(before.st_mode):
+        raise UnsafePath(f"not a real directory: {path_or_name}")
+    fd = os.open(path_or_name, directory_flags, dir_fd=parent_fd)
+    opened = os.fstat(fd)
+    if not same_inode(before, opened):
+        os.close(fd)
+        raise UnsafePath(f"directory changed while opening: {path_or_name}")
+    return fd
+
+def safe_text(value):
+    return isinstance(value, str) and not any(
+        unicodedata.category(character) in ("Cc", "Cf") for character in value
+    )
+
+def read_complete_record(parent_fd):
+    try:
+        before = os.stat("verify.json", dir_fd=parent_fd, follow_symlinks=False)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or 65536 < before.st_size:
+            return None
+        fd = os.open("verify.json", os.O_RDONLY | file_nofollow, dir_fd=parent_fd)
+        try:
+            opened = os.fstat(fd)
+            if not same_inode(before, opened) or not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
+                return None
+            with os.fdopen(fd, "r", encoding="utf-8", closefd=False) as source:
+                record = json.load(source)
+        finally:
+            os.close(fd)
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+
+    if not isinstance(record, dict) or not {
+        "verdict", "reason", "verifier_id", "step", "ts"
+    }.issubset(record):
+        return None
+    verdict = record["verdict"]
+    reason = record["reason"]
+    verifier_id = record["verifier_id"]
+    step = record["step"]
+    timestamp = record["ts"]
+    if verdict not in allowed_verdicts:
+        return None
+    if not safe_text(reason) or not reason.strip():
+        return None
+    if not safe_text(verifier_id) or not verifier_id:
+        return None
+    if not safe_text(timestamp) or timestamp_re.fullmatch(timestamp) is None:
+        return None
+    if step is not None and (isinstance(step, bool) or not isinstance(step, int) or step <= 0):
+        return None
+    return record
+
+def project(record):
+    step_field = "" if record["step"] is None else f" | step={record['step']}"
+    return (
         f"- {record['ts']} | task={task_id}{step_field} | verifier={record['verifier_id']} | "
         f"verdict={record['verdict']} | {record['reason']}\n"
     )
 
-print(f"VERDICT: {record['verdict']}")
-print(record["reason"])
+def numeric_key(name):
+    significant = name.lstrip("0") or "0"
+    return (len(significant), significant, name)
+
+workspace_fd = bundle_fd = attempts_fd = loop_fd = None
+try:
+    workspace_fd = open_directory(workspace_root)
+    bundle_fd = open_directory(bundle_dir)
+    records = []
+    root_record = read_complete_record(bundle_fd)
+    numeric_attempt_seen = False
+
+    try:
+        attempts_before = os.stat("attempts", dir_fd=bundle_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        attempts_before = None
+    if attempts_before is not None:
+        if not stat.S_ISDIR(attempts_before.st_mode):
+            raise UnsafePath("bundle attempts entry is not a real directory")
+        attempts_fd = open_directory("attempts", bundle_fd)
+        for name in sorted(os.listdir(attempts_fd)):
+            if re.fullmatch(r"[0-9]+", name) is None:
+                continue
+            numeric_attempt_seen = True
+            attempt_fd = open_directory(name, attempts_fd)
+            try:
+                record = read_complete_record(attempt_fd)
+            finally:
+                os.close(attempt_fd)
+            if record is not None:
+                records.append((numeric_key(name), record["ts"], f"attempts/{name}/verify.json", record))
+    if not numeric_attempt_seen and root_record is not None:
+        records.append(((-1, "", ""), root_record["ts"], "verify.json", root_record))
+
+    loop_fd = open_directory("loop", workspace_fd)
+    log_flags = os.O_RDWR | os.O_CREAT | os.O_APPEND | file_nofollow
+    log_fd = os.open("VERIFY.log.md", log_flags, 0o600, dir_fd=loop_fd)
+    opened_log = os.fstat(log_fd)
+    if not stat.S_ISREG(opened_log.st_mode) or opened_log.st_nlink != 1:
+        os.close(log_fd)
+        raise UnsafePath("VERIFY.log.md is not a single-link regular file")
+    with os.fdopen(log_fd, "r+b") as log:
+        fcntl.flock(log.fileno(), fcntl.LOCK_EX)
+        existing_data = log.read()
+        existing_lines = set(existing_data.decode("utf-8").splitlines(keepends=True))
+        if not existing_data:
+            log.write(header.encode("utf-8"))
+            existing_lines.add(header)
+        elif not existing_data.endswith(b"\n"):
+            log.write(b"\n")
+        appended_lines = []
+        for _, _, _, record in sorted(records, key=lambda item: (item[1], item[2])):
+            line = project(record)
+            if line not in existing_lines:
+                log.write(line.encode("utf-8"))
+                existing_lines.add(line)
+                appended_lines.append(line)
+        if appended_lines and records:
+            latest_line = project(max(records, key=lambda item: item[0])[3])
+            if appended_lines[-1] != latest_line:
+                # Append-only repair can discover an older missing attempt after a
+                # newer projection already exists. Re-project the newest attempt so
+                # recovery never leaves an older verdict as this bundle's tail.
+                log.write(latest_line.encode("utf-8"))
+        log.flush()
+        os.fsync(log.fileno())
+except (OSError, UnicodeError, UnsafePath) as error:
+    print(f"verify-job log reconciliation error: {error}", file=sys.stderr)
+    raise SystemExit(7)
+finally:
+    for fd in (attempts_fd, bundle_fd, loop_fd, workspace_fd):
+        if fd is not None:
+            os.close(fd)
 PY
 }
 
@@ -71,48 +222,159 @@ write_record() {
   local record_path=$1
   local verdict=$2
   local reason=$3
-  local tmp="$record_path.tmp.$$"
-
-  python3 - "$tmp" "$verdict" "$reason" "$verifier_id" "${VERIFY_STEP:-}" <<'PY'
+  python3 - "$bundle_dir" "$record_path" "$verdict" "$reason" "$verifier_id" "${VERIFY_STEP:-}" <<'PY'
 import json
+import os
+import re
+import secrets
+import stat
 import sys
 import unicodedata
 from datetime import datetime, timezone
 
-tmp, verdict, reason, verifier_id, step_text = sys.argv[1:6]
+bundle_dir, record_path, verdict, reason, verifier_id, step_text = sys.argv[1:7]
+directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+file_nofollow = getattr(os, "O_NOFOLLOW", 0)
+record_name = "verify.json"
+tmp_name = f".{record_name}.tmp.{secrets.token_hex(8)}"
+
+class UnsafePath(Exception):
+    pass
+
+def same_inode(left, right):
+    return (left.st_dev, left.st_ino) == (right.st_dev, right.st_ino)
+
+def open_directory(path_or_name, parent_fd=None):
+    before = os.stat(path_or_name, dir_fd=parent_fd, follow_symlinks=False)
+    if not stat.S_ISDIR(before.st_mode):
+        raise UnsafePath(f"not a real directory: {path_or_name}")
+    fd = os.open(path_or_name, directory_flags, dir_fd=parent_fd)
+    opened = os.fstat(fd)
+    if not same_inode(before, opened):
+        os.close(fd)
+        raise UnsafePath(f"directory changed while opening: {path_or_name}")
+    return fd
+
+def validate_membership():
+    current_bundle = os.stat(bundle_dir, follow_symlinks=False)
+    if not same_inode(current_bundle, os.fstat(bundle_fd)):
+        raise UnsafePath("bundle directory changed before record replacement")
+    if attempts_fd is not None:
+        current_attempts = os.stat("attempts", dir_fd=bundle_fd, follow_symlinks=False)
+        if not same_inode(current_attempts, os.fstat(attempts_fd)):
+            raise UnsafePath("attempts directory changed before record replacement")
+        current_attempt = os.stat(attempt_name, dir_fd=attempts_fd, follow_symlinks=False)
+        if not same_inode(current_attempt, os.fstat(target_fd)):
+            raise UnsafePath("attempt directory changed before record replacement")
+
 step = None
-if step_text:
-    step = int(step_text)
+if re.fullmatch(r"[1-9][0-9]*", step_text or "") and len(step_text) <= 18:
+    try:
+        step = int(step_text)
+    except ValueError:
+        step = None
 sanitized_reason = "".join(
-    " " if ch in "\r\n" else ch
-    for ch in reason
-    if unicodedata.category(ch) not in ("Cc", "Cf")
+    character for character in reason
+    if unicodedata.category(character) not in ("Cc", "Cf")
 )
 sanitized_reason = sanitized_reason.rstrip()
-with open(tmp, "w", encoding="utf-8") as f:
-    json.dump(
+sanitized_verifier_id = "".join(
+    character for character in verifier_id
+    if unicodedata.category(character) not in ("Cc", "Cf")
+).rstrip()
+payload = (
+    json.dumps(
         {
             "verdict": verdict,
             "reason": sanitized_reason,
-            "verifier_id": verifier_id,
+            "verifier_id": sanitized_verifier_id or "unconfigured",
             "step": step,
             "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         },
-        f,
         indent=2,
         sort_keys=True,
     )
-    f.write("\n")
+    + "\n"
+).encode("utf-8")
+
+bundle_fd = attempts_fd = target_fd = None
+created_inode = None
+replaced = False
+try:
+    relative_record = os.path.relpath(record_path, bundle_dir)
+    parts = relative_record.split(os.sep)
+    bundle_fd = open_directory(bundle_dir)
+    if parts == [record_name]:
+        target_fd = os.dup(bundle_fd)
+        attempt_name = None
+    elif (
+        len(parts) == 3
+        and parts[0] == "attempts"
+        and re.fullmatch(r"[0-9]+", parts[1]) is not None
+        and parts[2] == record_name
+    ):
+        attempt_name = parts[1]
+        attempts_fd = open_directory("attempts", bundle_fd)
+        target_fd = open_directory(attempt_name, attempts_fd)
+    else:
+        raise UnsafePath("resolved record path is outside the bundle record locations")
+
+    validate_membership()
+    tmp_fd = os.open(
+        tmp_name,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | file_nofollow,
+        0o600,
+        dir_fd=target_fd,
+    )
+    with os.fdopen(tmp_fd, "wb") as output:
+        output.write(payload)
+        output.flush()
+        os.fsync(output.fileno())
+        created_inode = os.fstat(output.fileno())
+    validate_membership()
+    os.replace(tmp_name, record_name, src_dir_fd=target_fd, dst_dir_fd=target_fd)
+    replaced = True
+    validate_membership()
+    installed = os.stat(record_name, dir_fd=target_fd, follow_symlinks=False)
+    if not same_inode(installed, created_inode) or not stat.S_ISREG(installed.st_mode):
+        raise UnsafePath("installed record changed during replacement")
+    os.fsync(target_fd)
+except (OSError, UnsafePath) as error:
+    try:
+        if replaced and created_inode is not None:
+            installed = os.stat(record_name, dir_fd=target_fd, follow_symlinks=False)
+            if same_inode(installed, created_inode):
+                os.unlink(record_name, dir_fd=target_fd)
+        elif target_fd is not None:
+            os.unlink(tmp_name, dir_fd=target_fd)
+    except OSError:
+        pass
+    print(f"verify-job record write error: {error}", file=sys.stderr)
+    raise SystemExit(7)
+finally:
+    for fd in (target_fd, attempts_fd, bundle_fd):
+        if fd is not None:
+            os.close(fd)
 PY
-  mv "$tmp" "$record_path"
 }
 
 finish_with_record() {
   local verdict=$1
   local reason=$2
 
-  write_record "$verify_record_path" "$verdict" "$reason"
-  ensure_log
+  local record_status=0
+  write_record "$verify_record_path" "$verdict" "$reason" || record_status=$?
+  if ((record_status != 0)); then
+    infra_fail "record target changed or is unsafe"
+  fi
+  # Test-only crash point models termination after the authoritative rename and
+  # before projection into the lagging derived log.
+  if [[ "${HERMES_VERIFY_TEST_INTERRUPT_AFTER_RECORD:-0}" = 1 ]]; then
+    exit 97
+  fi
+  if ! reconcile_log; then
+    infra_fail "failed to reconcile VERIFY.log.md from authoritative records"
+  fi
   emit_record "$verify_record_path"
   exit "$(record_exit_code "$verify_record_path")"
 }
@@ -140,6 +402,7 @@ PY
 resolve_verify_record_path() {
   python3 - "$bundle_dir" "${ATTEMPT_DIR:-}" <<'PY'
 import os
+import re
 import sys
 
 bundle_dir = os.path.realpath(sys.argv[1])
@@ -153,25 +416,43 @@ def safe_attempt_record(candidate: str):
         real = os.path.realpath(candidate)
     except OSError:
         return None
-    if os.path.basename(real).isdigit() and os.path.isdir(real):
+    if re.fullmatch(r"[0-9]+", os.path.basename(real)) and os.path.isdir(real):
         prefix = attempts_root + os.sep
         if real.startswith(prefix):
             return os.path.join(real, "verify.json")
     return None
 
-selected = safe_attempt_record(attempt_dir)
-if selected:
+def reject(reason: str):
+    print(f"verify-job record path error: {reason}", file=sys.stderr)
+    raise SystemExit(7)
+
+if attempt_dir:
+    candidate = os.path.normpath(os.path.abspath(attempt_dir))
+    if os.path.basename(os.path.dirname(candidate)) != "attempts" or os.path.islink(candidate):
+        reject("explicit ATTEMPT_DIR contains a linked path component")
+    selected = safe_attempt_record(candidate)
+    if selected is None:
+        reject("explicit ATTEMPT_DIR is not a real numeric directory inside the bundle attempts directory")
     print(selected)
     raise SystemExit(0)
 
-if os.path.isdir(attempts_root):
+if os.path.lexists(attempts_root):
+    if os.path.islink(attempts_root) or not os.path.isdir(attempts_root):
+        reject("bundle attempts entry is not a real directory")
     numeric_dirs = []
     for entry in os.scandir(attempts_root):
-        if entry.is_dir() and entry.name.isdigit():
-            numeric_dirs.append((int(entry.name), entry.path))
+        if re.fullmatch(r"[0-9]+", entry.name) is None:
+            continue
+        if entry.is_symlink() or not entry.is_dir(follow_symlinks=False):
+            reject(f"numeric attempt entry is not a real directory: {entry.name}")
+        record_path = safe_attempt_record(entry.path)
+        if record_path is None:
+            reject(f"numeric attempt directory escaped bundle containment: {entry.name}")
+        significant = entry.name.lstrip("0") or "0"
+        numeric_dirs.append((len(significant), significant, entry.name, record_path))
     if numeric_dirs:
         numeric_dirs.sort()
-        print(os.path.join(numeric_dirs[-1][1], "verify.json"))
+        print(numeric_dirs[-1][3])
         raise SystemExit(0)
 
 print(os.path.join(bundle_dir, "verify.json"))
@@ -210,7 +491,7 @@ def summarize(path: str) -> str:
         return "<blank>"
     joined = " || ".join(cleaned)
     if len(joined) > 240:
-        joined = joined[:237] + "..."
+        joined = "..." + joined[-237:]
     return joined
 
 print(f"stdout_tail={summarize(stdout_path)}; stderr_tail={summarize(stderr_path)}")
@@ -275,8 +556,6 @@ if marker_count == 0:
     contract("provider output is missing the verdict marker")
 if marker_count > 1:
     contract("provider output contains multiple verdict markers after normalization")
-if not normalized_lines:
-    contract("provider output is empty")
 
 match = verdict_re.fullmatch(normalized_lines[0])
 if match is None:
@@ -326,7 +605,6 @@ if [[ "$pause_state" != enabled ]]; then
   caty_pause_status_record "$workspace_root" hermes-verify-job
   exit 0
 fi
-log_path="$workspace_root/loop/VERIFY.log.md"
 task_id=$(basename "$bundle_dir")
 if [[ -z "${VERIFY_STEP:-}" && -f "$bundle_dir/state.json" ]]; then
   derived_verify_step=$(resolve_verify_step_from_state "$bundle_dir/state.json")
@@ -336,7 +614,11 @@ if [[ -z "${VERIFY_STEP:-}" && -f "$bundle_dir/state.json" ]]; then
 fi
 verifier_cmd=${VERIFIER_CMD:-}
 verifier_id=${VERIFIER_ID:-unconfigured}
-verify_record_path=$(resolve_verify_record_path)
+verify_record_status=0
+verify_record_path=$(resolve_verify_record_path) || verify_record_status=$?
+if ((verify_record_status != 0)); then
+  infra_fail "unsafe verify record target"
+fi
 
 verifier_stderr=
 verifier_stdout_file=
@@ -355,6 +637,12 @@ if ! wrapper_conformance_gate verifier VERIFIER_CMD "$verifier_cmd"; then
 fi
 verifier_id=${VERIFIER_ID:-$WRAPPER_CONFORMANCE_WRAPPER_PATH}
 verifier_argv=("$WRAPPER_CONFORMANCE_STAGED_PATH")
+if ! reconcile_log; then
+  infra_fail "failed to reconcile VERIFY.log.md from authoritative records"
+fi
+if [[ "${HERMES_VERIFY_TEST_STOP_AFTER_RECONCILE:-0}" = 1 ]]; then
+  exit 98
+fi
 
 required_files=(
   request.md
@@ -519,6 +807,7 @@ run_bounded "$VERIFY_TIMEOUT_S" "$VERIFY_GRACE_S" "${verifier_argv[@]}" "$prompt
   >"$verifier_stdout_file" 2>"$verifier_stderr"
 verifier_status=$?
 set -e
+cat "$verifier_stderr" >&2
 
 if ((verifier_status == 124)); then
   timeout_tail=$(summarize_timeout_tail "$verifier_stdout_file" "$verifier_stderr")

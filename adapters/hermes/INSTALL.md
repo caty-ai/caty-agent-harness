@@ -63,8 +63,12 @@ The rules there apply in addition to the Hermes-specific wiring below.
    broke the reply contract, so Hermes canonicalized that outcome to the host-only
    `contract-violation` verdict. In all four cases, read the authoritative result from
    `verify.json`; stdout `VERDICT:` lines and `loop/VERIFY.log.md` entries are derived
-   diagnostics. A fail verdict still routes the TASK back to PLAN/ACT; it is not an
-   infra failure. Exit 2 (usage), 3 (blocked-missing-artifact), and 5
+   diagnostics. The append-only log may lag the record if the process stops between
+   those writes. After its conformance gate succeeds, every later `verify-job` start
+   reconciles complete, valid records that have no matching log line before launching
+   the provider; malformed or partial JSON is never projected. A fail verdict still
+   routes the TASK back to PLAN/ACT; it is not
+   an infra failure. Exit 2 (usage), 3 (blocked-missing-artifact), and 5
    (infrastructure/configuration, including wrapper-conformance failure) are job
    errors eligible for agjob retry/DLQ.
 
@@ -204,8 +208,12 @@ The rules there apply in addition to the Hermes-specific wiring below.
    to a regular space and U+FF1A folds to `:` before marker counting and line-1 verdict
    matching. This keeps one machine parser contract instead of an examples-only variant.
    After line selection, the examples emit exactly two lines by removing DEL plus all C0
-   controls except TAB from the emitted reason and trimming trailing ASCII whitespace; a
-   mid-line TAB is preserved. They require exactly one normalized `VERDICT:` marker
+   controls except TAB from the emitted reason and trimming trailing ASCII whitespace.
+   That examples-only boundary can retain a mid-line TAB and Unicode formatting bytes;
+   it is not an end-to-end byte-preservation promise. The Hermes host then applies NFKC
+   and removes every Cc/Cf character before writing `verify.json`: TAB and U+200B are
+   removed, while U+00A0 and U+3000 fold to ASCII space. The examples require exactly
+   one normalized `VERDICT:` marker
    across the entire provider/model reply and reject any NUL byte anywhere in that reply.
    Missing line-1 verdicts, verdict-last replies, preamble-before-verdict replies,
    repeated/smuggled verdict markers, host-only verdicts, and empty line-2 reasons fail
@@ -266,8 +274,18 @@ The rules there apply in addition to the Hermes-specific wiring below.
    that field matches the current step. For task-runner-produced artifact bundles,
    when unset, `VERIFY_STEP` is auto-derived from `state.json`'s `current_step`
    (positive integers only — zero, negative, or non-integer values are silently
-   ignored and the entry gets no step field); an explicit value still overrides it. Entries without a step field are never
+   ignored and the entry gets no step field). An explicit value overrides the derived
+   value only when it is also a positive decimal integer; malformed explicit values are
+   treated as unset, never as verdict failures. Entries without a step field are never
    re-injected.
+
+   When an attempt directory is available, `verify-job` writes the record only through
+   a real numeric directory directly under `<bundle>/attempts`. Without `ATTEMPT_DIR`,
+   it selects the highest-numbered real entry. A numeric symlink, including one whose
+   target remains inside the same bundle, is rejected as infrastructure error instead
+   of being skipped. The host reopens each directory without following links and
+   revalidates its inode immediately around the atomic record replacement, so replacing
+   the selected attempt with a link cannot redirect the write.
 
 6. Keep native skill generation staged.
 

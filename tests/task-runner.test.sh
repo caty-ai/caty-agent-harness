@@ -2374,23 +2374,20 @@ PY
 
 case_paused_step_old_behavior_red() {
   local name=paused-step-old-behavior-red
-  local ws legacy_pause_step
+  local ws paused_step
   ws=$(make_ws)
   copy_task "$FIX_BASIC" "$ws" tr-basic
-  legacy_pause_step="$ws/legacy-pause-step.sh"
-  cat >"$legacy_pause_step" <<'SH'
-#!/usr/bin/env bash
-exit 0
-SH
-  chmod +x "$legacy_pause_step"
-  run_tick_with_step "$ws" "$legacy_pause_step" >/dev/null 2>&1 || true
+  paused_step="$ws/paused-step-old-behavior-red.sh"
+  write_paused_step "$paused_step"
+  run_tick_with_step "$ws" "$paused_step" >/dev/null 2>&1 || true
   if [[ "$(state_value "$ws" tr-basic status)" = queued ]] \
-    && [[ "$(state_value "$ws" tr-basic attempts_used)" = 1 ]] \
-    && [[ "$(driver_value "$ws" tr-basic outcome)" = ok ]] \
+    && [[ "$(state_value "$ws" tr-basic attempts_used)" = 0 ]] \
+    && [[ "$(state_value "$ws" tr-basic active_seconds_used)" = 0 ]] \
+    && [[ "$(driver_value "$ws" tr-basic outcome)" = paused ]] \
     && [[ ! -f "$ws/loop/artifacts/tr-basic/attempts/001/step-result.json" ]]; then
     pass "$name"
   else
-    fail "$name" "legacy pause sentinel did not demonstrate the old charging behavior: status=$(state_value "$ws" tr-basic status) attempts=$(state_value "$ws" tr-basic attempts_used)"
+    fail "$name" "pause record was charged like the old behavior: status=$(state_value "$ws" tr-basic status) attempts=$(state_value "$ws" tr-basic attempts_used) active=$(state_value "$ws" tr-basic active_seconds_used)"
   fi
 }
 
