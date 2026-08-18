@@ -121,9 +121,15 @@ normalize_state_candidate_key_text() {
   local normalized
   normalized=$(normalize_state_candidate "$1")
 
-  # NFKC supplies the compatibility folds required for NBSP and fullwidth
-  # ASCII. Curly quotes are deliberately mapped separately because NFKC keeps
-  # them distinct. Do not add case folding or broad confusable stripping here:
+  # NFKC intentionally has a broad compatibility effect, not just the NBSP and
+  # fullwidth-ASCII folds needed here. For example, it maps x²/x₂ to x2,
+  # ①/⑴ to 1/(1), Ⅷ to VIII, 𝐀 to A, ㎠ to cm2, and ｱｲ to アイ; it also
+  # equates composed/decomposed forms such as e + combining acute and é, and
+  # ligatures such as ﬁ and fi. Curly quotes are deliberately mapped separately
+  # because NFKC keeps them distinct.
+  # The dangerous distinctions remain closed: Latin A versus Greek Α, Latin a
+  # versus Cyrillic а, case differences, and hyphen versus en dash remain
+  # distinct keys. Do not add case folding or broad confusable stripping here:
   # this representation is used only for dedup keys/comparisons, never storage.
   python3 -B - "$normalized" <<'PY'
 import re
