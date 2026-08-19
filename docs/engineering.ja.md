@@ -197,9 +197,10 @@ caty-agent-harness/
 │                           # INSTALL.md, bootstrap-block.md, hook, verifier/cron script
 ├── templates/              # step-prompt, rubric, cron-wrapper, task テンプレート
 ├── tests/                  # 契約を固定する 20 の shell suite
-├── docs/                   # 本ガイド, reference, agent-guide, plugin/governance 文書
-├── DESIGN.md               # learning-loop 契約（正本）
-└── DESIGN-task-runner.md   # task-runner 契約（正本）
+└── docs/                   # 本ガイド, reference, agent-guide, plugin/governance 文書
+    └── design/             # 内部設計メモ
+        ├── DESIGN.md               # learning-loop 契約（正本）
+        └── DESIGN-task-runner.md   # task-runner 契約（正本）
 
 <workspace>/                # install が作る、あなたのプロジェクトフォルダ
 ├── STATE.md                # 引き継ぎノート（bounded operational memory）

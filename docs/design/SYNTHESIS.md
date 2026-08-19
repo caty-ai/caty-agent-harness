@@ -2,10 +2,10 @@
 
 > Namespace note: the R1–R15 in this file are harness v0.2 design-review resolutions —
 > a separate series from the family adoption **governance** R1–R14 in
-> [docs/governance-rules.md](docs/governance-rules.md). Never cross-reference by bare number.
+> [docs/governance-rules.md](../governance-rules.md). Never cross-reference by bare number.
 
 Adjudicator: Alpha (Claude Fable 5), 2026-07-02
-Inputs: DESIGN.md (v0.1) + reviews/review-codex-clean.md (Codex gpt-5.5 xhigh) +
+Inputs: [DESIGN.md](./DESIGN.md) (v0.1) + reviews/review-codex-clean.md (Codex gpt-5.5 xhigh) +
 reviews/review-glm.md (GLM 5.2) + reviews/review-sonnet.md (Claude Sonnet 5)
 
 ## Verdicts
@@ -101,6 +101,6 @@ R15. **Alpha dedup**: Phase 0 must define migration — per-project STATE.md sub
 - Q5: duplications identified and removed via R9 (Cero) and R15 (Alpha).
 
 ## Remaining scope for v0.2 rewrite (Phase 0 implementation task)
-Rewrite DESIGN.md §3–§7 incorporating R1–R15; add artifact-bundle and rubric schemas as
+Rewrite [DESIGN.md](./DESIGN.md) §3–§7 incorporating R1–R15; add artifact-bundle and rubric schemas as
 appendix; add per-adapter "verifier launch" subsection. Estimated: 1 codex-worker task +
 Alpha final review.

@@ -11,7 +11,7 @@ Convergence: every seat independently hit the same four load-bearing defects
 write vs parent single-writer; mechanical-pass leak into verified-only promotion).
 Per the k≥2 convergence heuristic these were treated as confirmed without re-litigation.
 
-## Resolutions TR-R1…TR-R15 (applied in DESIGN-task-runner.md v0.2)
+## Resolutions TR-R1…TR-R15 (applied in [DESIGN-task-runner.md](./DESIGN-task-runner.md) v0.2)
 
 | # | Finding (seats) | Resolution |
 |---|---|---|

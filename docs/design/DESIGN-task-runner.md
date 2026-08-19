@@ -2,12 +2,12 @@
 
 > Historical design record. Issue numbers cited in this document (e.g. #43, #49) refer to the pre-publication private tracker, not to issues in this repository.
 
-Status: v0.2 — cross-review resolutions TR-R1…TR-R15 (SYNTHESIS-task-runner.md) applied.
+Status: v0.2 — cross-review resolutions TR-R1…TR-R15 ([SYNTHESIS-task-runner.md](./SYNTHESIS-task-runner.md)) applied.
 Amended 2026-07-18: §8 cross-cutting contracts (grok-build study, #43 → #49).
 Author: Alpha (Claude Fable 5), 2026-07-04.
 Review lineage: v0.1 → Codex gpt-5.5 xhigh / GLM 5.2 / Sonnet 5 (APPROVE-WITH-CHANGES)
-+ Opus 4.8 (REJECT) → adjudication in SYNTHESIS-task-runner.md → this rewrite.
-Parent: Issue #8 (EPIC). Companion to DESIGN.md (harness v0.2); does not restate it.
++ Opus 4.8 (REJECT) → adjudication in [SYNTHESIS-task-runner.md](./SYNTHESIS-task-runner.md) → this rewrite.
+Parent: Issue #8 (EPIC). Companion to [DESIGN.md](./DESIGN.md) (harness v0.2); does not restate it.
 
 ## 0. TL;DR
 
@@ -224,7 +224,7 @@ optional, off the critical path.
 
 ### 3.8 v1 reservation (one line, TR-R13)
 
-v1 = Claude-vision rubric scoring through the DESIGN.md §4.1 `claude -p` verifier seam
+v1 = Claude-vision rubric scoring through the [DESIGN.md](./DESIGN.md) §4.1 `claude -p` verifier seam
 (non-xAI mandate satisfied); the verifier bundle EXCLUDES PROGRESS.md and step-result
 files (maker-narration-adjacent — parent no-transcript invariant). If access/cost
 blocks Claude vision, v1 is deferred rather than substituted.
@@ -340,7 +340,7 @@ direction is "not complete".)
 The driver stamps `git_head` + dirty-file-count in `driver.json` — pure
 observability, zero machinery. **Git refs are never part of correctness, rollback,
 or resume identity.** The artifact bundle plus `attempts/NNN/` already IS the
-durable snapshot (Appendix A of DESIGN.md's whole point); git-ref snapshot machinery
+durable snapshot (Appendix A of [DESIGN.md](./DESIGN.md)'s whole point); git-ref snapshot machinery
 was a unanimous v0 reject, including by its original proposers.
 
 Recorded revisit trigger: pilot DLQs showing unreconstructable worktree state as an

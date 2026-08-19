@@ -91,8 +91,8 @@ The flush intake consumer's accounting ledger is `loop/pending/intake-runs.log`.
 
 | Document | Contract |
 | --- | --- |
-| [DESIGN.md](../DESIGN.md) | learning-loop contracts, verification seam, promotion rules, and adapter contracts |
-| [DESIGN-task-runner.md](../DESIGN-task-runner.md) | task-runner contract, budgets, DLQ, and metrics |
+| [DESIGN.md](design/DESIGN.md) | learning-loop contracts, verification seam, promotion rules, and adapter contracts |
+| [DESIGN-task-runner.md](design/DESIGN-task-runner.md) | task-runner contract, budgets, DLQ, and metrics |
 | [governance-rules.md](governance-rules.md) | family adoption governance canon (governance R1–R14; amendment status and effectiveness gates) |
 | [plugin-convention.md](plugin-convention.md) | plugin seam contract and extraction policy |
 | [plugins.md](plugins.md) | known plugin registry and attachment status |
