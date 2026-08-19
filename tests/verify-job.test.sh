@@ -621,6 +621,37 @@ else
     "one or more linked attempt layouts did not fail closed"
 fi
 
+bundle=$(make_bundle unreadable-attempts-root)
+mkdir -p "$bundle/attempts/001"
+chmod 000 "$bundle/attempts"
+unreadable_attempts_ok=1
+unreadable_run=1
+while [ "$unreadable_run" -le 2 ]; do
+  set +e
+  output=$(VERIFIER_CMD="$verifier" VERIFIER_ID=unreadable-attempts-root \
+    bash "$SCRIPT" "$bundle" 2>&1)
+  rc=$?
+  set -e
+  if [ "$rc" -ne 5 ] \
+    || ! printf '%s\n' "$output" | grep -Fq \
+      'verify-job record path error: bundle attempts directory cannot be opened' \
+    || ! printf '%s\n' "$output" | grep -Fq \
+      'verify-job infra error: unsafe verify record target' \
+    || printf '%s\n' "$output" | grep -Fq 'Traceback' \
+    || [ -e "$bundle/verify.json" ] \
+    || [ -e "$bundle/attempts/001/verify.json" ]; then
+    unreadable_attempts_ok=0
+  fi
+  unreadable_run=$((unreadable_run + 1))
+done
+chmod 700 "$bundle/attempts"
+if [ "$unreadable_attempts_ok" -eq 1 ]; then
+  pass "an unreadable attempts root fails cleanly and repeatably without selecting a record"
+else
+  fail_case "an unreadable attempts root fails cleanly and repeatably without selecting a record" \
+    "one or both runs did not return the clean record-path infrastructure error"
+fi
+
 bundle=$(make_bundle attempt-swap-race)
 mkdir -p "$bundle/attempts/001"
 moved_attempt=$TMP_ROOT/attempt-swap-moved
@@ -1125,11 +1156,13 @@ for litter_mode in fallback explicit; do
   set -e
   chmod 700 "$bundle/attempts/009"
   litter_log=${bundle%/loop/artifacts/task-one}/loop/VERIFY.log.md
+  litter_task_count=$(grep -Fc 'task=task-one' "$litter_log" 2>/dev/null || true)
+  litter_task_count=${litter_task_count:-0}
   if [ "$rc" -ne 0 ] \
     || ! printf '%s\n' "$output" | grep -Fq 'VERDICT: pass' \
     || [ "$(verify_json_field "$bundle/attempts/001/verify.json" verdict 2>/dev/null)" != pass ] \
     || [ -e "$bundle/attempts/009/verify.json" ] \
-    || [ "$(grep -Fc 'task=task-one' "$litter_log" 2>/dev/null || true)" -ne 1 ]; then
+    || [ "$litter_task_count" -ne 1 ]; then
     litter_paths_ok=0
   fi
 done

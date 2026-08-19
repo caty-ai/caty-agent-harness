@@ -293,10 +293,13 @@ The rules there apply in addition to the Hermes-specific wiring below.
    a real numeric directory directly under `<bundle>/attempts`. Without `ATTEMPT_DIR`,
    it selects the highest-numbered openable real entry; numeric regular files, FIFOs,
    and unopenable directories are skipped as litter. Reconciliation skips the same
-   litter rather than turning a derived-view repair into an outage. A numeric symlink,
-   including one whose target remains inside the same bundle, is rejected as an
-   infrastructure error when fallback selection encounters it or when it is explicitly
-   selected. An explicit `ATTEMPT_DIR` must itself be a real openable numeric directory.
+   litter rather than turning a derived-view repair into an outage. The `attempts` root
+   itself is not litter: when it exists but cannot be opened, selection reports a clean
+   record-path infrastructure error instead of falling back to the bundle-level record.
+   A numeric symlink, including one whose target remains inside the same bundle, is
+   rejected as an infrastructure error when fallback selection encounters it or when it
+   is explicitly selected. An explicit `ATTEMPT_DIR` must itself be a real openable
+   numeric directory.
    The host reopens the selected directory without following links and revalidates its
    inode immediately around the atomic record replacement, so replacing it with a link
    cannot redirect the write.

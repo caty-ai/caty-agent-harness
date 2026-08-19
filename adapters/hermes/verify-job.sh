@@ -468,18 +468,22 @@ if os.path.lexists(attempts_root):
     if os.path.islink(attempts_root) or not os.path.isdir(attempts_root):
         reject("bundle attempts entry is not a real directory")
     numeric_dirs = []
-    for entry in os.scandir(attempts_root):
-        if re.fullmatch(r"[0-9]+", entry.name) is None:
-            continue
-        if entry.is_symlink():
-            reject(f"numeric attempt entry is not a real directory: {entry.name}")
-        if not entry.is_dir(follow_symlinks=False) or not is_openable_directory(entry.path):
-            continue
-        record_path = safe_attempt_record(entry.path)
-        if record_path is None:
-            reject(f"numeric attempt directory escaped bundle containment: {entry.name}")
-        significant = entry.name.lstrip("0") or "0"
-        numeric_dirs.append((len(significant), significant, entry.name, record_path))
+    try:
+        with os.scandir(attempts_root) as entries:
+            for entry in entries:
+                if re.fullmatch(r"[0-9]+", entry.name) is None:
+                    continue
+                if entry.is_symlink():
+                    reject(f"numeric attempt entry is not a real directory: {entry.name}")
+                if not entry.is_dir(follow_symlinks=False) or not is_openable_directory(entry.path):
+                    continue
+                record_path = safe_attempt_record(entry.path)
+                if record_path is None:
+                    reject(f"numeric attempt directory escaped bundle containment: {entry.name}")
+                significant = entry.name.lstrip("0") or "0"
+                numeric_dirs.append((len(significant), significant, entry.name, record_path))
+    except OSError:
+        reject("bundle attempts directory cannot be opened")
     if numeric_dirs:
         numeric_dirs.sort()
         print(numeric_dirs[-1][3])

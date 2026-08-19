@@ -184,12 +184,14 @@ until an operator repairs or replaces it; `verify.json` remains the result sourc
 An attempt-scoped record may be written only through a real numeric directory directly
 under the bundle's real `attempts` directory. Fallback selection skips numeric entries
 that are not directories or cannot be opened, and reconciliation likewise ignores such
-litter. A numeric symlink is still an infrastructure error when fallback selection
-encounters it or when it is explicitly selected, even if it points elsewhere inside
-the same bundle. An explicit `ATTEMPT_DIR` must itself be a real openable numeric
-directory. Selection, directory opening, and the atomic replacement each enforce this
-containment; a linked or replaced selected directory must not redirect the authoritative
-record.
+litter. The `attempts` root itself is not litter: if it exists but cannot be opened,
+selection fails with a clean record-path infrastructure error rather than silently
+falling back to the bundle-level record. A numeric symlink is still an infrastructure
+error when fallback selection encounters it or when it is explicitly selected, even if
+it points elsewhere inside the same bundle. An explicit `ATTEMPT_DIR` must itself be a
+real openable numeric directory. Selection, directory opening, and the atomic replacement
+each enforce this containment; a linked or replaced selected directory must not redirect
+the authoritative record.
 
 #### Verifier bundle assembly
 
