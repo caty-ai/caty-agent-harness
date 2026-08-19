@@ -125,8 +125,44 @@ else
   fail_case "whitespace-normalized lesson text has a deterministic hash across invocations" "keys=$key_normal/$key_spaced"
 fi
 
-hash_plain=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$ROOT/scripts/lib-state-fold.sh" '- 2026-07-06 normalized lesson (source: distill-audit)')
-hash_mech=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$ROOT/scripts/lib-state-fold.sh" '- 2026-07-06 normalized lesson (source: distill-audit) [mech_check: yes]')
+hash_ascii_quote=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$STATE_FOLD_LIB" "- 2026-07-06 Use 'retry' after failure. (source: distill-audit)")
+hash_smart_quote=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$STATE_FOLD_LIB" '- 2026-07-06 Use ‘retry’ after failure. (source: distill-audit)')
+if [ "$hash_ascii_quote" = "$hash_smart_quote" ]; then
+  pass "smart apostrophes map to ASCII only in the candidate hash"
+else
+  fail_case "smart apostrophes map to ASCII only in the candidate hash" \
+    "hashes=$hash_ascii_quote/$hash_smart_quote"
+fi
+
+hash_ascii_space=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$STATE_FOLD_LIB" '- 2026-07-06 Keep retry budget bounded. (source: distill-audit)')
+hash_nbsp=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$STATE_FOLD_LIB" $'- 2026-07-06 Keep\u00a0retry budget bounded. (source: distill-audit)')
+if [ "$hash_ascii_space" = "$hash_nbsp" ]; then
+  pass "NBSP maps to an ordinary space in the candidate hash"
+else
+  fail_case "NBSP maps to an ordinary space in the candidate hash" \
+    "hashes=$hash_ascii_space/$hash_nbsp"
+fi
+
+hash_ascii_width=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$STATE_FOLD_LIB" '- 2026-07-06 Retry ID ABC-123. (source: distill-audit)')
+hash_fullwidth=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$STATE_FOLD_LIB" '- 2026-07-06 Ｒｅｔｒｙ ＩＤ ＡＢＣ－１２３． (source: distill-audit)')
+if [ "$hash_ascii_width" = "$hash_fullwidth" ]; then
+  pass "NFKC folds fullwidth ASCII in the candidate hash"
+else
+  fail_case "NFKC folds fullwidth ASCII in the candidate hash" \
+    "hashes=$hash_ascii_width/$hash_fullwidth"
+fi
+
+hash_latin_a=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$STATE_FOLD_LIB" '- 2026-07-06 Keep route A distinct. (source: distill-audit)')
+hash_greek_alpha=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$STATE_FOLD_LIB" '- 2026-07-06 Keep route Α distinct. (source: distill-audit)')
+if [ "$hash_latin_a" != "$hash_greek_alpha" ]; then
+  pass "NFKC does not collapse a Greek alpha into Latin A"
+else
+  fail_case "NFKC does not collapse a Greek alpha into Latin A" \
+    "hashes=$hash_latin_a/$hash_greek_alpha"
+fi
+
+hash_plain=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$STATE_FOLD_LIB" '- 2026-07-06 normalized lesson (source: distill-audit)')
+hash_mech=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$STATE_FOLD_LIB" '- 2026-07-06 normalized lesson (source: distill-audit) [mech_check: yes]')
 rm -f "$ws/loop/.distill-last-run"
 reply_mech=$'## LESSONS\n- 2026-07-06 normalized lesson (source: distill-audit) [mech_check: yes]\n## OPEN_FAILURES\n## SKILL_DRAFTS'
 DISTILL_REPLY="$reply_mech" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" >/dev/null 2>&1
@@ -180,6 +216,32 @@ if [ "$rc" -eq 0 ] \
   pass "malformed or missing legacy keys remain distinct"
 else
   fail_case "malformed or missing legacy keys remain distinct" "rc=$rc output=$output"
+fi
+
+# New normalization is append-only. A legacy annotation remains byte-for-byte
+# intact; because its old hash is not migrated, one duplicate may cross the
+# old-key/new-key boundary before the normalized key is recorded.
+ws=$(make_ws append-only-key-boundary)
+legacy_task_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+legacy_lesson_hash=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+legacy_line="- 2026-07-06 Don’t retry route Ａ. (source: distill-audit) [dedup_key: $legacy_task_hash:$legacy_lesson_hash]"
+sed "/^## Last session/i\\
+$legacy_line" "$ws/STATE.md" >"$TMP_ROOT/state-with-legacy-key"
+mv "$TMP_ROOT/state-with-legacy-key" "$ws/STATE.md"
+cp "$ws/STATE.md" "$TMP_ROOT/state-before-append"
+reply_append=$'## LESSONS\n- 2026-07-06 Don\'t retry route A. (source: distill-audit)\n## OPEN_FAILURES\n## SKILL_DRAFTS'
+output=$(DISTILL_REPLY="$reply_append" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+appended_line="- 2026-07-06 Don't retry route A. (source: distill-audit)"
+grep -Fvx -- "$appended_line" "$ws/STATE.md" >"$TMP_ROOT/state-without-append"
+if [ "$rc" -eq 0 ] \
+  && grep -Fqx -- "$legacy_line" "$ws/STATE.md" \
+  && grep -Fqx -- "$appended_line" "$ws/STATE.md" \
+  && cmp -s "$TMP_ROOT/state-before-append" "$TMP_ROOT/state-without-append"; then
+  pass "legacy STATE dedup annotations remain byte-identical across the append-only key boundary"
+else
+  fail_case "legacy STATE dedup annotations remain byte-identical across the append-only key boundary" \
+    "rc=$rc output=$output legacy_count=$(grep -Fxc -- "$legacy_line" "$ws/STATE.md")"
 fi
 
 # Same-day replacements must retain prior keys so A -> B -> whitespace-variant A
