@@ -78,7 +78,7 @@ flowchart LR
 
 - 🔍 **"Done" comes with proof**
 
-  "Done" is judged by mechanical checks against the actual result — never by the AI's own claim. The checking is done by an independent verifier, not by the maker grading its own work. When nothing is working, it doesn't spin forever: it stops honestly, with evidence, and reports to you.
+  "Done" is judged by mechanical checks against the actual result — never by the AI's own claim. An independent verifier joins only when configured; without one, the mechanical check remains the core, and the maker's claim is still not treated as proof. When nothing is working, it doesn't spin forever: it stops honestly, with evidence, and reports to you.
 
 <details>
 <summary><b>How it works (the reason it isn't magic)</b></summary>
@@ -151,7 +151,7 @@ Still hesitant to paste it? The next section explains why nothing gets broken.
 
 ## Why it's safe to try
 
-- **Your AI stays exactly yours** — its personality, instruction files, and accumulated memory are never touched. This only adds a few files around them.
+- **Your AI stays exactly yours** — its personality and accumulated memory stay as they are. Existing instruction-file content is left intact; if you choose `--append-bootstrap`, setup adds only the documented bootstrap block to the selected instruction file. The rest is harness scaffold around it.
 - **Quitting is one command too** — installing is one command, pausing is one command, and nothing it learned is lost. Resume, and it continues where it stopped.
 - **You can read everything** — lessons, progress, and evidence all live in plain text files, so you can see what's happening with your own eyes.
 
@@ -171,7 +171,7 @@ The page you just read is a map. The substance is real, and it's all documented.
 | [docs/engineering.md](docs/engineering.md) | **The full technical guide** — what's enforced where, per-tool depth, pause semantics, architecture, directory map |
 | [docs/reference.md](docs/reference.md) | **The exact contracts** — every flag, every state, every pointer to the design documents |
 | [Runtime setup](docs/engineering.md#runtime-setup) | **Per-tool wiring** — hooks, verifiers, and schedules for each of the five AI tools |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | **How to propose changes** — issue-first flow and the test suites (20 of them, one `make test` to run) |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | **How to propose changes** — issue-first flow and every test suite under `tests/` (one `make test` runs them all) |
 | [SECURITY.md](SECURITY.md) | **How to report issues safely** — private vulnerability reporting |
 
 ## Project status
