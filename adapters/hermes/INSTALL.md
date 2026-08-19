@@ -65,12 +65,22 @@ The rules there apply in addition to the Hermes-specific wiring below.
    `verify.json`; stdout `VERDICT:` lines and `loop/VERIFY.log.md` entries are derived
    diagnostics. The append-only log may lag the record if the process stops between
    those writes. After its conformance gate succeeds, every later `verify-job` start
-   reconciles complete, valid records that have no matching log line before launching
-   the provider; malformed or partial JSON is never projected. A fail verdict still
+   attempts to reconcile complete, valid records that have no matching physical
+   `U+000A`-delimited log line before launching the provider; malformed or partial JSON
+   is never projected. Unsafe paths, invalid UTF-8, permission failures, and other log
+   reconciliation errors are warned about but do not block verification or change the
+   canonical record/stdout/exit result. Repair or replace the derived log to restore
+   backfill; do not edit `verify.json` to compensate. A fail verdict still
    routes the TASK back to PLAN/ACT; it is not
    an infra failure. Exit 2 (usage), 3 (blocked-missing-artifact), and 5
    (infrastructure/configuration, including wrapper-conformance failure) are job
    errors eligible for agjob retry/DLQ.
+
+   Exit 97 and exit 98 are reserved test-only fault-injection results. Setting
+   `HERMES_VERIFY_TEST_INTERRUPT_AFTER_RECORD=1` exits 97 after the authoritative rename
+   and before its log projection. Setting
+   `HERMES_VERIFY_TEST_STOP_AFTER_RECONCILE=1` exits 98 after startup reconciliation and
+   before provider launch. Do not set either variable in a production job environment.
 
 5. Set the verifier environment.
 
@@ -281,11 +291,15 @@ The rules there apply in addition to the Hermes-specific wiring below.
 
    When an attempt directory is available, `verify-job` writes the record only through
    a real numeric directory directly under `<bundle>/attempts`. Without `ATTEMPT_DIR`,
-   it selects the highest-numbered real entry. A numeric symlink, including one whose
-   target remains inside the same bundle, is rejected as infrastructure error instead
-   of being skipped. The host reopens each directory without following links and
-   revalidates its inode immediately around the atomic record replacement, so replacing
-   the selected attempt with a link cannot redirect the write.
+   it selects the highest-numbered openable real entry; numeric regular files, FIFOs,
+   and unopenable directories are skipped as litter. Reconciliation skips the same
+   litter rather than turning a derived-view repair into an outage. A numeric symlink,
+   including one whose target remains inside the same bundle, is rejected as an
+   infrastructure error when fallback selection encounters it or when it is explicitly
+   selected. An explicit `ATTEMPT_DIR` must itself be a real openable numeric directory.
+   The host reopens the selected directory without following links and revalidates its
+   inode immediately around the atomic record replacement, so replacing it with a link
+   cannot redirect the write.
 
 6. Keep native skill generation staged.
 

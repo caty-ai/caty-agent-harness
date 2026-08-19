@@ -61,6 +61,29 @@ with open(path, "w", encoding="utf-8") as record:
 PY
 }
 
+write_mutated_verify_json() {
+  python3 - "$1" "$2" "$3" "$4" <<'PY'
+import json
+import sys
+
+path, field, encoded_value, label = sys.argv[1:5]
+record = {
+    "verdict": "pass",
+    "reason": f"INVALID-RECORD-{label}",
+    "verifier_id": f"invalid-record-{label}",
+    "step": 1,
+    "ts": "2026-08-18T00:00:00Z",
+}
+if field == "__missing__":
+    del record[encoded_value]
+else:
+    record[field] = json.loads(encoded_value)
+with open(path, "w", encoding="utf-8") as destination:
+    json.dump(record, destination, sort_keys=True)
+    destination.write("\n")
+PY
+}
+
 make_bundle() {
   ws=$TMP_ROOT/ws-$1
   bundle=$ws/loop/artifacts/task-one
@@ -91,6 +114,29 @@ write_configurable_verifier() {
 #!/usr/bin/env bash
 printf 'VERDICT: %s\n' "${VERIFY_TEST_VERDICT:-pass}"
 printf '%s\n' "${VERIFY_TEST_REASON:-configurable fixture}"
+SH
+  chmod +x "$path"
+}
+
+write_unicode_separator_verifier() {
+  path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' 'VERDICT: pass'
+printf 'line-sep\342\200\250injected reason\n'
+SH
+  chmod +x "$path"
+}
+
+write_corrupt_log_verifier() {
+  path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+if [[ -n "${VERIFY_TEST_LOG_PATH:-}" ]]; then
+  printf '\377' >"$VERIFY_TEST_LOG_PATH"
+fi
+printf '%s\n' 'VERDICT: pass'
+printf '%s\n' 'record survives derived-log corruption'
 SH
   chmod +x "$path"
 }
@@ -879,6 +925,219 @@ if [ "$rc" -eq 98 ] \
 else
   fail_case "reconciliation never leaves an older backfill after a newer record" \
     "rc=$rc output=$output log=$(cat "$reconciliation_order_log" 2>/dev/null)"
+fi
+
+verifier=$TMP_ROOT/schema-record-verifier.sh
+write_verifier "$verifier"
+attest_verifier_wrapper "$verifier" schema-record
+for verdict_shape in list dict; do
+  bundle=$(make_bundle "reconcile-verdict-$verdict_shape")
+  mkdir -p "$bundle/attempts/001" "$bundle/attempts/002"
+  if [ "$verdict_shape" = list ]; then
+    encoded_verdict='["pass"]'
+  else
+    encoded_verdict='{"a": 1}'
+  fi
+  write_mutated_verify_json "$bundle/attempts/001/verify.json" verdict \
+    "$encoded_verdict" "verdict-$verdict_shape"
+  set +e
+  output=$(VERIFIER_CMD="$verifier" VERIFIER_ID=schema-record bash "$SCRIPT" "$bundle" 2>&1)
+  rc=$?
+  set -e
+  schema_log=${bundle%/loop/artifacts/task-one}/loop/VERIFY.log.md
+  if [ "$rc" -eq 0 ] \
+    && printf '%s\n' "$output" | grep -Fq 'VERDICT: pass' \
+    && [ "$(verify_json_field "$bundle/attempts/002/verify.json" verdict 2>/dev/null)" = pass ] \
+    && [ "$(grep -Fc 'task=task-one' "$schema_log" 2>/dev/null || true)" -eq 1 ] \
+    && ! grep -Fq "INVALID-RECORD-verdict-$verdict_shape" "$schema_log"; then
+    pass "parseable record with $verdict_shape verdict is ignored and verification recovers"
+  else
+    fail_case "parseable record with $verdict_shape verdict is ignored and verification recovers" \
+      "rc=$rc output=$output log=$(cat "$schema_log" 2>/dev/null)"
+  fi
+done
+
+bundle=$(make_bundle reconcile-schema-matrix)
+schema_index=1
+while IFS='|' read -r field encoded_value label; do
+  attempt_name=$(printf '%03d' "$schema_index")
+  mkdir -p "$bundle/attempts/$attempt_name"
+  write_mutated_verify_json "$bundle/attempts/$attempt_name/verify.json" \
+    "$field" "$encoded_value" "$label"
+  schema_index=$((schema_index + 1))
+done <<'EOF'
+__missing__|verdict|missing-verdict
+__missing__|reason|missing-reason
+__missing__|verifier_id|missing-verifier-id
+__missing__|step|missing-step
+__missing__|ts|missing-ts
+verdict|null|verdict-null
+verdict|true|verdict-bool
+verdict|0|verdict-int
+verdict|1.5|verdict-float
+verdict|""|verdict-empty
+verdict|"mystery"|verdict-unknown
+reason|null|reason-null
+reason|true|reason-bool
+reason|0|reason-int
+reason|1.5|reason-float
+reason|[]|reason-list
+reason|{}|reason-dict
+reason|""|reason-empty
+reason|"   "|reason-blank
+reason|"bad\u0007"|reason-cc
+reason|"bad\u200b"|reason-cf
+verifier_id|null|verifier-null
+verifier_id|true|verifier-bool
+verifier_id|0|verifier-int
+verifier_id|1.5|verifier-float
+verifier_id|[]|verifier-list
+verifier_id|{}|verifier-dict
+verifier_id|""|verifier-empty
+verifier_id|"bad\u0007"|verifier-cc
+verifier_id|"bad\u200b"|verifier-cf
+ts|null|ts-null
+ts|true|ts-bool
+ts|0|ts-int
+ts|1.5|ts-float
+ts|[]|ts-list
+ts|{}|ts-dict
+ts|""|ts-empty
+ts|"2026-08-18 00:00:00"|ts-shape
+step|true|step-true
+step|false|step-false
+step|0|step-zero
+step|-1|step-negative
+step|1.5|step-float
+step|"1"|step-string
+step|[]|step-list
+step|{}|step-dict
+EOF
+mkdir -p "$bundle/attempts/999"
+set +e
+output=$(VERIFIER_CMD="$verifier" VERIFIER_ID=schema-record bash "$SCRIPT" "$bundle" 2>&1)
+rc=$?
+set -e
+schema_log=$TMP_ROOT/ws-reconcile-schema-matrix/loop/VERIFY.log.md
+if [ "$rc" -eq 0 ] \
+  && printf '%s\n' "$output" | grep -Fq 'VERDICT: pass' \
+  && [ "$(verify_json_field "$bundle/attempts/999/verify.json" verdict 2>/dev/null)" = pass ] \
+  && [ "$(grep -Fc 'task=task-one' "$schema_log" 2>/dev/null || true)" -eq 1 ] \
+  && ! grep -Fq 'INVALID-RECORD-' "$schema_log"; then
+  pass "parseable records with incomplete schemas, wrong JSON types, unknown verdicts, or malformed timestamps are ignored"
+else
+  fail_case "parseable records with incomplete schemas, wrong JSON types, unknown verdicts, or malformed timestamps are ignored" \
+    "rc=$rc output=$output task_lines=$(grep -Fc 'task=task-one' "$schema_log" 2>/dev/null || true) log=$(cat "$schema_log" 2>/dev/null)"
+fi
+
+bundle=$(make_bundle unicode-separator-dedup)
+verifier=$TMP_ROOT/unicode-separator-verifier.sh
+write_unicode_separator_verifier "$verifier"
+attest_verifier_wrapper "$verifier" unicode-separator
+unicode_runs_ok=1
+unicode_run=1
+while [ "$unicode_run" -le 3 ]; do
+  attempt_name=$(printf '%03d' "$unicode_run")
+  mkdir -p "$bundle/attempts/$attempt_name"
+  set +e
+  output=$(ATTEMPT_DIR="$bundle/attempts/$attempt_name" VERIFY_STEP="$unicode_run" \
+    VERIFIER_CMD="$verifier" VERIFIER_ID=unicode-separator bash "$SCRIPT" "$bundle" 2>&1)
+  rc=$?
+  set -e
+  if [ "$rc" -ne 0 ] || ! printf '%s\n' "$output" | grep -Fq 'VERDICT: pass'; then
+    unicode_runs_ok=0
+  fi
+  unicode_run=$((unicode_run + 1))
+done
+unicode_log=$TMP_ROOT/ws-unicode-separator-dedup/loop/VERIFY.log.md
+unicode_counts=$(python3 - "$unicode_log" <<'PY'
+import sys
+
+text = open(sys.argv[1], encoding="utf-8").read()
+physical_entries = sum(
+    "line-sep\u2028injected reason" in line for line in text.split("\n")
+)
+print(f"{physical_entries} {text.count(chr(0x2028))}")
+PY
+)
+if [ "$unicode_runs_ok" -eq 1 ] && [ "$unicode_counts" = '3 3' ]; then
+  pass "U+2028 remains record text and N verifier runs produce exactly N physical log entries"
+else
+  fail_case "U+2028 remains record text and N verifier runs produce exactly N physical log entries" \
+    "runs_ok=$unicode_runs_ok counts=$unicode_counts log=$(cat "$unicode_log" 2>/dev/null)"
+fi
+
+verifier=$TMP_ROOT/corrupt-log-verifier.sh
+write_corrupt_log_verifier "$verifier"
+attest_verifier_wrapper "$verifier" corrupt-log
+bundle=$(make_bundle linked-derived-log)
+outside_log=$TMP_ROOT/linked-derived-log-target
+printf '%s\n' 'OUTSIDE-LOG-MUST-STAY-UNCHANGED' >"$outside_log"
+ln -s "$outside_log" "$TMP_ROOT/ws-linked-derived-log/loop/VERIFY.log.md"
+set +e
+linked_log_output=$(VERIFIER_CMD="$verifier" VERIFIER_ID=linked-derived-log \
+  bash "$SCRIPT" "$bundle" 2>&1)
+linked_log_rc=$?
+set -e
+linked_log_record=$(verify_json_field "$bundle/verify.json" verdict 2>/dev/null || true)
+
+bundle=$(make_bundle corrupt-derived-log-after-provider)
+corrupt_log=$TMP_ROOT/ws-corrupt-derived-log-after-provider/loop/VERIFY.log.md
+set +e
+corrupt_log_output=$(VERIFY_TEST_LOG_PATH="$corrupt_log" VERIFIER_CMD="$verifier" \
+  VERIFIER_ID=corrupt-derived-log bash "$SCRIPT" "$bundle" 2>&1)
+corrupt_log_rc=$?
+set -e
+corrupt_log_record=$(verify_json_field "$bundle/verify.json" verdict 2>/dev/null || true)
+if [ "$linked_log_rc" -eq 0 ] \
+  && [ "$linked_log_record" = pass ] \
+  && printf '%s\n' "$linked_log_output" | grep -Fq 'VERDICT: pass' \
+  && [ "$(cat "$outside_log")" = 'OUTSIDE-LOG-MUST-STAY-UNCHANGED' ] \
+  && [ "$corrupt_log_rc" -eq 0 ] \
+  && [ "$corrupt_log_record" = pass ] \
+  && printf '%s\n' "$corrupt_log_output" | grep -Fq 'VERDICT: pass' \
+  && printf '%s\n' "$corrupt_log_output" | grep -Fq 'log reconciliation error'; then
+  pass "unsafe or corrupted derived logs never suppress the authoritative record, stdout verdict, or exit mapping"
+else
+  fail_case "unsafe or corrupted derived logs never suppress the authoritative record, stdout verdict, or exit mapping" \
+    "linked_rc=$linked_log_rc linked_record=$linked_log_record linked_output=$linked_log_output corrupt_rc=$corrupt_log_rc corrupt_record=$corrupt_log_record corrupt_output=$corrupt_log_output"
+fi
+
+verifier=$TMP_ROOT/attempt-litter-verifier.sh
+write_verifier "$verifier"
+attest_verifier_wrapper "$verifier" attempt-litter
+litter_paths_ok=1
+for litter_mode in fallback explicit; do
+  bundle=$(make_bundle "attempt-litter-$litter_mode")
+  mkdir -p "$bundle/attempts/001" "$bundle/attempts/009"
+  printf '%s\n' 'numeric regular-file litter' >"$bundle/attempts/007"
+  mkfifo "$bundle/attempts/008"
+  chmod 000 "$bundle/attempts/009"
+  if [ "$litter_mode" = explicit ]; then
+    attempt_dir_override=$bundle/attempts/001
+  else
+    attempt_dir_override=
+  fi
+  set +e
+  output=$(ATTEMPT_DIR="$attempt_dir_override" VERIFIER_CMD="$verifier" \
+    VERIFIER_ID=attempt-litter bash "$SCRIPT" "$bundle" 2>&1)
+  rc=$?
+  set -e
+  chmod 700 "$bundle/attempts/009"
+  litter_log=${bundle%/loop/artifacts/task-one}/loop/VERIFY.log.md
+  if [ "$rc" -ne 0 ] \
+    || ! printf '%s\n' "$output" | grep -Fq 'VERDICT: pass' \
+    || [ "$(verify_json_field "$bundle/attempts/001/verify.json" verdict 2>/dev/null)" != pass ] \
+    || [ -e "$bundle/attempts/009/verify.json" ] \
+    || [ "$(grep -Fc 'task=task-one' "$litter_log" 2>/dev/null || true)" -ne 1 ]; then
+    litter_paths_ok=0
+  fi
+done
+if [ "$litter_paths_ok" -eq 1 ]; then
+  pass "numeric regular-file, FIFO, and unreadable-directory litter is skipped for fallback and explicit attempts"
+else
+  fail_case "numeric regular-file, FIFO, and unreadable-directory litter is skipped for fallback and explicit attempts" \
+    "one or more litter shapes blocked verification or redirected verify.json"
 fi
 
 bundle=$(make_bundle prompt-contract)

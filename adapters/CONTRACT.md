@@ -139,8 +139,9 @@ The verifier provider's allowed reply vocabulary is exactly:
 `blocked-missing-artifact`. `contract-violation` is host-only. A provider must not emit
 it. When provider output is malformed, the trusted Hermes host canonicalizes that
 failure into `verify.json` with `verdict=contract-violation`, emits the derived human
-`VERDICT: contract-violation` plus reason lines, appends the derived record to
-`loop/VERIFY.log.md`, and exits 6.
+`VERDICT: contract-violation` plus reason lines, attempts to append the derived record
+to `loop/VERIFY.log.md`, and exits 6. A failure of that non-authoritative log write does
+not change the canonical record, stdout verdict, or exit mapping.
 
 `verify-job` canonicalizes every verifier result into one JSON record named
 `verify.json` with these fields:
@@ -170,12 +171,25 @@ the projection of the record currently read, so recovery cannot manufacture a ve
 that the authoritative record does not contain. If repairing an older attempt would
 place it after an already-recorded newer attempt, reconciliation reprojects the newest
 numeric attempt last rather than leaving the derived tail contradictory.
+Projection and deduplication both define a physical log line using ASCII LF (`U+000A`)
+only. Other Unicode separator characters remain record text, so the writer and matcher
+cannot assign different boundaries to the same projection.
+
+Log reconciliation is best-effort because `loop/VERIFY.log.md` is not authoritative.
+An unsafe log path, invalid UTF-8, permission failure, or other read/write error is
+refused and warned about, but it must not prevent record replacement, suppress the
+derived stdout verdict, or alter the record's exit mapping. The log may remain stale
+until an operator repairs or replaces it; `verify.json` remains the result source.
 
 An attempt-scoped record may be written only through a real numeric directory directly
-under the bundle's real `attempts` directory. Numeric symlinks are infrastructure
-errors even when they point elsewhere inside the same bundle. Selection, directory
-opening, and the atomic replacement each enforce this containment; a linked or replaced
-directory must not redirect the authoritative record.
+under the bundle's real `attempts` directory. Fallback selection skips numeric entries
+that are not directories or cannot be opened, and reconciliation likewise ignores such
+litter. A numeric symlink is still an infrastructure error when fallback selection
+encounters it or when it is explicitly selected, even if it points elsewhere inside
+the same bundle. An explicit `ATTEMPT_DIR` must itself be a real openable numeric
+directory. Selection, directory opening, and the atomic replacement each enforce this
+containment; a linked or replaced selected directory must not redirect the authoritative
+record.
 
 #### Verifier bundle assembly
 

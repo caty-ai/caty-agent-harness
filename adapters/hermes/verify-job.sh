@@ -97,6 +97,14 @@ def safe_text(value):
         unicodedata.category(character) in ("Cc", "Cf") for character in value
     )
 
+def physical_lines(text):
+    # project() terminates records with an ASCII LF. Use that same byte-level
+    # boundary for deduplication so Unicode separators remain record text.
+    lines = {line + "\n" for line in text.split("\n")[:-1]}
+    if text and not text.endswith("\n"):
+        lines.add(text.rsplit("\n", 1)[-1] + "\n")
+    return lines
+
 def read_complete_record(parent_fd):
     try:
         before = os.stat("verify.json", dir_fd=parent_fd, follow_symlinks=False)
@@ -123,7 +131,7 @@ def read_complete_record(parent_fd):
     verifier_id = record["verifier_id"]
     step = record["step"]
     timestamp = record["ts"]
-    if verdict not in allowed_verdicts:
+    if not isinstance(verdict, str) or verdict not in allowed_verdicts:
         return None
     if not safe_text(reason) or not reason.strip():
         return None
@@ -165,8 +173,14 @@ try:
         for name in sorted(os.listdir(attempts_fd)):
             if re.fullmatch(r"[0-9]+", name) is None:
                 continue
+            try:
+                attempt_before = os.stat(name, dir_fd=attempts_fd, follow_symlinks=False)
+                if not stat.S_ISDIR(attempt_before.st_mode):
+                    continue
+                attempt_fd = open_directory(name, attempts_fd)
+            except (OSError, UnsafePath):
+                continue
             numeric_attempt_seen = True
-            attempt_fd = open_directory(name, attempts_fd)
             try:
                 record = read_complete_record(attempt_fd)
             finally:
@@ -186,7 +200,7 @@ try:
     with os.fdopen(log_fd, "r+b") as log:
         fcntl.flock(log.fileno(), fcntl.LOCK_EX)
         existing_data = log.read()
-        existing_lines = set(existing_data.decode("utf-8").splitlines(keepends=True))
+        existing_lines = physical_lines(existing_data.decode("utf-8"))
         if not existing_data:
             log.write(header.encode("utf-8"))
             existing_lines.add(header)
@@ -216,6 +230,13 @@ finally:
         if fd is not None:
             os.close(fd)
 PY
+}
+
+reconcile_log_best_effort() {
+  if ! reconcile_log; then
+    printf '%s\n' \
+      'verify-job warning: VERIFY.log.md remains stale; authoritative verify.json is unaffected' >&2
+  fi
 }
 
 write_record() {
@@ -372,9 +393,7 @@ finish_with_record() {
   if [[ "${HERMES_VERIFY_TEST_INTERRUPT_AFTER_RECORD:-0}" = 1 ]]; then
     exit 97
   fi
-  if ! reconcile_log; then
-    infra_fail "failed to reconcile VERIFY.log.md from authoritative records"
-  fi
+  reconcile_log_best_effort
   emit_record "$verify_record_path"
   exit "$(record_exit_code "$verify_record_path")"
 }
@@ -422,6 +441,15 @@ def safe_attempt_record(candidate: str):
             return os.path.join(real, "verify.json")
     return None
 
+def is_openable_directory(path: str):
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError:
+        return False
+    os.close(fd)
+    return True
+
 def reject(reason: str):
     print(f"verify-job record path error: {reason}", file=sys.stderr)
     raise SystemExit(7)
@@ -443,8 +471,10 @@ if os.path.lexists(attempts_root):
     for entry in os.scandir(attempts_root):
         if re.fullmatch(r"[0-9]+", entry.name) is None:
             continue
-        if entry.is_symlink() or not entry.is_dir(follow_symlinks=False):
+        if entry.is_symlink():
             reject(f"numeric attempt entry is not a real directory: {entry.name}")
+        if not entry.is_dir(follow_symlinks=False) or not is_openable_directory(entry.path):
+            continue
         record_path = safe_attempt_record(entry.path)
         if record_path is None:
             reject(f"numeric attempt directory escaped bundle containment: {entry.name}")
@@ -637,9 +667,7 @@ if ! wrapper_conformance_gate verifier VERIFIER_CMD "$verifier_cmd"; then
 fi
 verifier_id=${VERIFIER_ID:-$WRAPPER_CONFORMANCE_WRAPPER_PATH}
 verifier_argv=("$WRAPPER_CONFORMANCE_STAGED_PATH")
-if ! reconcile_log; then
-  infra_fail "failed to reconcile VERIFY.log.md from authoritative records"
-fi
+reconcile_log_best_effort
 if [[ "${HERMES_VERIFY_TEST_STOP_AFTER_RECONCILE:-0}" = 1 ]]; then
   exit 98
 fi
