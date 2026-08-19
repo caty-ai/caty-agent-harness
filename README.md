@@ -22,6 +22,16 @@ a small system, wrapped around the AI you already use.
 
 **A tool that grows on its own — and learns to run your tasks all the way to done.**
 
+**Measured** — sealed, pre-registered benchmark on context-overflow workloads (2026-08):
+
+| Model | Verified completion (bare → harness) | Completion hallucination¹ | Time & tokens |
+|---|---|---|---|
+| Claude Haiku 4.5 | 13% → **43%** (+30 pt, p=0.008) | 94% → **5%** | **half or less** |
+| GPT-5.6 Luna (Codex) | planned | — | — |
+| Local models (Ollama) | planned | — | — |
+
+<sub>¹ Claiming "done" without having read the work — measured from tool-call transcripts, not self-reports (247 → 2 claims). 150K–300K-token jobs, 30 paired runs per arm, machine-scored. Weak spots included: [full numbers & limitations](docs/benchmark.md).</sub>
+
 🔧 [Engineering guide](docs/engineering.md) ｜ 📘 [Reference](docs/reference.md)
 
 </div>
