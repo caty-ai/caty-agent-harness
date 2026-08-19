@@ -22,7 +22,7 @@ Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决�
 
 **一个会自我成长、并学会把你交办的任务一路跑到「完成」的工具。**
 
-**实测** — 针对上下文溢出类工作负载的封版、预先注册基准测试（2026-08）：
+**实测** — 针对上下文溢出类工作负载的密封、预先注册的基准测试（2026-08）：
 
 | 模型 | 已验证完成率（裸跑 → harness） | 完成幻觉¹ | 用时与 token |
 |---|---|---|---|
@@ -177,6 +177,7 @@ flowchart LR
 | 文档 | 内容 |
 | --- | --- |
 | [docs/agent-guide.md](docs/agent-guide.md) | **给安装 AI 的剧本** — 选择、命令、核查、汇报方式，一条路走到底（英文） |
+| [docs/benchmark.md](docs/benchmark.md) | **密封基准测试** — 开头表格背后的完整数字、测量方法与诚实的局限（英文） |
 | [docs/engineering.md](docs/engineering.md) | **完整技术指南** — 哪里强制什么、各工具深度、暂停语义、架构、目录地图（英文） |
 | [docs/reference.md](docs/reference.md) | **精确契约** — 每个参数、每种状态、设计文档索引（英文） |
 | [运行环境设置（英文）](docs/engineering.md#runtime-setup) | **各工具接线** — 5 种 AI 工具各自的 hooks、verifier 与调度 |

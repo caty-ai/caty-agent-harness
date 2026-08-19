@@ -69,9 +69,9 @@ coverage shows the corpus was not actually read. Both pools, labeled:
 
 The failure shapes are qualitatively different: bare's failed claims are
 overwhelmingly *unread* claims. The harness almost always reads everything
-before claiming anything — 2 of its 19 gate-rejected deliveries contained
-unread files, and both were caught — and when it cannot progress it stops
-honestly (DLQ/no-progress) instead of declaring success.
+before claiming anything — 2 of its 19 unverified deliveries (all sizes)
+contained unread files, and both were caught — and when it cannot progress it
+stops honestly (no-progress) instead of declaring success.
 
 We split hallucination three ways (M/L pool) and **only the completion kind
 collapsed — and within it, specifically the unread shape**:
@@ -84,9 +84,9 @@ collapsed — and within it, specifically the unread shape**:
 | unsupported quotes (quote doesn't back the answer, totals) | 138 | 166 |
 
 The harness does not make the model smarter per answer — wrong answers and
-loose quotes remain, and half of its overflow-size deliveries were still
-rejected by the external gate. What collapses is the **unread claim**: saying
-"done" without having done the reading.
+loose quotes remain, and half of its overflow-size deliveries still failed
+verification. What collapses is the **unread claim**: saying "done" without
+having done the reading.
 
 ### Time and cost (totals per 15 runs)
 
@@ -124,7 +124,7 @@ faster while completing 3× as often**.
   completion and honest reporting*, not perfection.
 - All runs executed in the author's environment. Two transient CLI outage
   bursts occurred; affected sequences were re-run under the pre-registered
-  infra procedure. One sequence needed a second re-run — one more than the
+  infra procedure. Two sequences needed a second re-run — one more than the
   procedure's default, recorded as a deviation. Final data contains zero
   infra-terminated runs.
 
