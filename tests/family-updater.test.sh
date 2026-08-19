@@ -8,6 +8,7 @@ TMP_ROOT=${TMPDIR:-/tmp}/family-updater-test.$$
 REAL_GIT=$(command -v git)
 PASS_COUNT=0
 FAIL_COUNT=0
+SKIP_COUNT=0
 
 cleanup() { rm -rf "$TMP_ROOT"; }
 trap cleanup EXIT HUP INT TERM
@@ -15,6 +16,259 @@ mkdir -p "$TMP_ROOT"
 
 pass() { PASS_COUNT=$((PASS_COUNT + 1)); printf 'PASS %s\n' "$1"; }
 fail_case() { FAIL_COUNT=$((FAIL_COUNT + 1)); printf 'FAIL %s: %s\n' "$1" "$2"; }
+skip_case() { SKIP_COUNT=$((SKIP_COUNT + 1)); printf 'SKIP %s: %s\n' "$1" "$2"; }
+print_summary() {
+  printf 'Summary: %s PASS, %s FAIL, %s SKIP\n' "$PASS_COUNT" "$FAIL_COUNT" "$SKIP_COUNT"
+}
+
+skip_cases() {
+  local reason=$1 case_name
+  while IFS= read -r case_name; do
+    [[ -z "$case_name" ]] || skip_case "$case_name" "$reason"
+  done
+}
+
+# The suite is linear and every case builds a key-backed fixture. Keep these
+# declarations grouped by the same focused-mode gates used by the runner below.
+skip_issue54_updater_cases() {
+  skip_cases "$1" <<'SKIP_CASES'
+cross-repo replay is refused while a release-branch sibling installs
+SKIP_CASES
+}
+
+skip_issue54_bootstrap_cases() {
+  skip_cases "$1" <<'SKIP_CASES'
+bootstrap refuses a foreign owner-named tag without checkout, pin, or wrapper
+SKIP_CASES
+}
+
+skip_issue54_endpoint_cases() {
+  skip_cases "$1" <<'SKIP_CASES'
+post-binding URL rewrite is refused before recurring network and side effects
+post-binding URL rewrite is refused before bootstrap network and side effects
+endpoint resolution failure is refused without exposing the endpoint
+SKIP_CASES
+}
+
+skip_issue54_binding_cases() {
+  skip_cases "$1" <<'SKIP_CASES'
+matching repository directive binds the signer snapshot
+signer file without a repository directive is refused
+multiple repository directives are refused
+mismatched repository directive is refused
+CRLF repository directive is refused with the explicit reason
+trailing-space repository directive is refused
+relative allowed_signers path is refused before filesystem lookup
+verification consumes the validated signer snapshot after source replacement
+SKIP_CASES
+}
+
+skip_issue54_normalization_cases() {
+  skip_cases "$1" <<'SKIP_CASES'
+accepted host origin normalizes without userinfo: git@GitHub.COM
+accepted host origin normalizes without userinfo: ssh
+accepted host origin normalizes without userinfo: https
+host suffix spelling and mixed-case identity normalize consistently
+host suffix spelling and mixed-case identity normalize consistently
+host suffix spelling and mixed-case identity normalize consistently
+mixed-case URL scheme normalizes case-insensitively
+mixed-case URL scheme normalizes case-insensitively
+accepted local origin resolves to its physical path
+accepted local origin resolves to its physical path
+accepted local origin resolves to its physical path
+uppercase file URL scheme preserves the case-exact path identity
+duplicate leading slashes collapse to one physical path identity
+unsupported origin shape is refused
+unsupported origin shape is refused
+unsupported origin shape is refused
+unsupported origin shape is refused
+unsupported origin shape is refused
+unsupported origin shape is refused
+unsupported origin shape is refused
+well-formed credential origin is accepted without exposing its token on transport failure
+malformed credential origin is refused without exposing its token
+malformed scp credential origin is refused without exposing its secret
+well-formed scp origin still normalizes correctly
+multiple origin URLs are refused
+SKIP_CASES
+}
+
+skip_issue54_reachability_cases() {
+  skip_cases "$1" <<'SKIP_CASES'
+tag-only reachable commit is refused
+deleted release anchor is pruned and cannot vouch on the next tick
+invalid release branch config is refused without echoing its value
+merge-base operational failure has a distinct fatal reason
+release-ref rev-parse operational failure has the git-error reason
+network operations stay bound to the endpoint captured at validation
+SKIP_CASES
+}
+
+skip_issue54_retry_cases() {
+  skip_cases "$1" <<'SKIP_CASES'
+reachability refusal deduplicates, retries, clears, and installs after branch recovery
+SKIP_CASES
+}
+
+skip_delta4_cases() {
+  skip_cases "$1" <<'SKIP_CASES'
+startup pin failure reports once across three ticks, clears on recovery, and reports on recurrence
+dry-run prints candidate rejection while writing and reporting nothing
+SKIP_CASES
+}
+
+skip_delta2_cases() {
+  skip_cases "$1" <<'SKIP_CASES'
+ledger floor ignores unsigned high tag at installed HEAD
+ledger floor ignores lightweight high tag at installed HEAD
+floor seed without a usable ledger fails closed and names bootstrap
+dry-run writes no pin, dedupe, ledger, heartbeat, or hot-inbox state
+non-semver and rc-shaped remote names skip without reports while genuine release installs
+duplicate remote tag record fails closed and reports once across three ticks
+peeled remote tag record fails closed and reports once across three ticks
+duplicated non-semver records are skipped outside duplicate detection
+install failure reports once and exact pair causes no repeated checkout churn
+second-candidate fetch failure leaves first and second tag refs absent
+SKIP_CASES
+}
+
+skip_baseline_focused_cases() {
+  skip_cases "$1" <<'SKIP_CASES'
+pre-fix probe: rebound-name must be rejected
+pre-fix probe: below-floor tag must be rejected
+pre-fix probe: moved tag must not wedge legitimate newer update
+pre-fix probe: rollback install requires an identity assertion
+SKIP_CASES
+}
+
+skip_baseline_cases() {
+  skip_cases "$1" <<'SKIP_CASES'
+already-current valid signed tag accepted
+already-current unsigned tag rejected before success
+already-current unpinned-key tag rejected before success
+already-current rebound-name attack M2 rejected
+already-current below-floor tag rejected
+already-current equal-version different-OID rejected
+dry-run valid signed tag verifies without checkout
+dry-run unsigned tag rejected
+dry-run unpinned-key tag rejected
+dry-run rebound-name attack rejected
+dry-run below-floor tag rejected
+dry-run equal-version different-OID rejected
+legacy lightweight tag refused as update target with no install
+floor comparison is numeric per semver component
+floor comparison refuses v0.9.0 below v0.10.0
+moved tag stays local and ineligible, reports once, legitimate newer tag installs
+two offending names report once each and never repeat on next tick
+signer rotation retries a verification failure, installs, clears dedupe, and can report again
+ls-remote failure stops without checkout or install
+rollback to exact pre-update OID succeeds and only then runs rollback install
+rollback identity mismatch executes no rollback install.sh
+stable-ring soak skip leaves HEAD unchanged and sends no hot-inbox
+canary ignores soak hours
+live lock refuses the run and sends a failure heartbeat
+stale lock is reclaimed and released
+dirty worktree refuses checkout and records the failure
+already-up-to-date sends heartbeat but skips ledger and hot-inbox
+missing reporters warn while a valid update succeeds
+failing heartbeat reporter warns while a valid update succeeds
+rollback check failure produces one caution with the ALSO-failed shape
+same-basename clones receive distinct physical-path state keys
+fresh clone bootstrap installs exactly owner-named tag then enables cron
+bootstrap retries cron install when the existing pin has the same identity
+bootstrap still refuses an existing pin with a different identity
+fresh clone attacker-substituted unsigned content is refused
+bootstrap rejects a rebound initial tag
+capability failure reports once, stays visible each tick, clears, and can report again
+signer failure reports once, stays visible each tick, clears, and can report again
+state failure reports once, stays visible each tick, clears, and can report again
+invalid startup dedupe state fails closed before update work
+repository-local allowed_signers is refused
+absent floor at non-semver HEAD fails closed and names bootstrap
+malformed pin fails closed, names the file, and executes no install
+SKIP_CASES
+}
+
+skip_ssh_keygen_cases() {
+  local reason=$1 issue54_mode=${ISSUE54_REPLAY_CASE:-all}
+
+  case "$issue54_mode" in
+    updater)
+      skip_issue54_updater_cases "$reason"
+      return
+      ;;
+    bootstrap)
+      skip_issue54_bootstrap_cases "$reason"
+      return
+      ;;
+    endpoint-rewrite)
+      skip_issue54_endpoint_cases "$reason"
+      return
+      ;;
+    binding)
+      skip_issue54_binding_cases "$reason"
+      return
+      ;;
+    normalization)
+      skip_issue54_normalization_cases "$reason"
+      return
+      ;;
+    reachability)
+      skip_issue54_reachability_cases "$reason"
+      return
+      ;;
+    retry)
+      skip_issue54_retry_cases "$reason"
+      return
+      ;;
+    none)
+      ;;
+    all)
+      skip_issue54_updater_cases "$reason"
+      skip_issue54_bootstrap_cases "$reason"
+      skip_issue54_endpoint_cases "$reason"
+      skip_issue54_binding_cases "$reason"
+      skip_issue54_normalization_cases "$reason"
+      skip_issue54_reachability_cases "$reason"
+      skip_issue54_retry_cases "$reason"
+      ;;
+    *)
+      printf 'unknown ISSUE54_REPLAY_CASE: %s (expected updater, bootstrap, endpoint-rewrite, binding, normalization, reachability, retry, or none)\n' \
+        "$issue54_mode" >&2
+      exit 2
+      ;;
+  esac
+
+  skip_delta4_cases "$reason"
+  [[ "${DELTA4_FOCUSED:-0}" == 1 ]] && return
+
+  if [[ "${SKIP_DELTA2_CASES:-0}" == 0 ]]; then
+    skip_delta2_cases "$reason"
+    [[ "${DELTA2_FOCUSED:-0}" == 1 ]] && return
+  fi
+
+  if [[ "${BASELINE_FOCUSED:-0}" == 1 ]]; then
+    skip_baseline_focused_cases "$reason"
+  else
+    skip_baseline_cases "$reason"
+  fi
+}
+
+SSH_KEYGEN_SKIP_REASON=
+if ! command -v ssh-keygen >/dev/null 2>&1; then
+  SSH_KEYGEN_SKIP_REASON='ssh-keygen not found'
+else
+  ssh_probe=$(ssh-keygen -Y 2>&1 || true)
+  if printf '%s\n' "$ssh_probe" | grep -Eiq 'unknown option.*Y|illegal option.*Y'; then
+    SSH_KEYGEN_SKIP_REASON='ssh-keygen lacks -Y support'
+  fi
+fi
+
+if [[ -n "$SSH_KEYGEN_SKIP_REASON" ]]; then
+  skip_ssh_keygen_cases "$SSH_KEYGEN_SKIP_REASON"
+  print_summary
+  exit 0
+fi
 
 write_fake_install() {
   local src=$1 result=$2
@@ -875,44 +1129,44 @@ run_issue54_retry_case() {
 case "${ISSUE54_REPLAY_CASE:-all}" in
   updater)
     run_issue54_updater_replay_case
-    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    print_summary
     [[ "$FAIL_COUNT" -eq 0 ]]
     exit $?
     ;;
   bootstrap)
     run_issue54_bootstrap_replay_case
-    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    print_summary
     [[ "$FAIL_COUNT" -eq 0 ]]
     exit $?
     ;;
   endpoint-rewrite)
     run_issue54_endpoint_rewrite_cases
     run_issue54_endpoint_resolution_failure_case
-    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    print_summary
     [[ "$FAIL_COUNT" -eq 0 ]]
     exit $?
     ;;
   binding)
     run_issue54_binding_cases
-    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    print_summary
     [[ "$FAIL_COUNT" -eq 0 ]]
     exit $?
     ;;
   normalization)
     run_issue54_normalization_cases
-    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    print_summary
     [[ "$FAIL_COUNT" -eq 0 ]]
     exit $?
     ;;
   reachability)
     run_issue54_reachability_cases
-    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    print_summary
     [[ "$FAIL_COUNT" -eq 0 ]]
     exit $?
     ;;
   retry)
     run_issue54_retry_case
-    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    print_summary
     [[ "$FAIL_COUNT" -eq 0 ]]
     exit $?
     ;;
@@ -1000,7 +1254,7 @@ else
 fi
 
 if [[ "${DELTA4_FOCUSED:-0}" == 1 ]]; then
-  printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+  print_summary
   [[ "$FAIL_COUNT" -eq 0 ]]
   exit $?
 fi
@@ -1286,7 +1540,7 @@ ATOMIC_GIT_SHIM
   fi
 
   if [[ "${DELTA2_FOCUSED:-0}" == 1 ]]; then
-    printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+    print_summary
     [[ "$FAIL_COUNT" -eq 0 ]]
     exit $?
   fi
@@ -1412,7 +1666,7 @@ BASELINE_GIT_SHIM
     fail_case "pre-fix probe: rollback install requires an identity assertion" "rc=$rc install-lines=$sentinel_lines output=$output"
   fi
 
-  printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+  print_summary
   [[ "$FAIL_COUNT" -eq 0 ]]
   exit $?
 fi
@@ -2061,5 +2315,5 @@ else
   fail_case "malformed pin fails closed, names the file, and executes no install" "rc=$rc output=$output"
 fi
 
-printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
+print_summary
 [[ "$FAIL_COUNT" -eq 0 ]]
