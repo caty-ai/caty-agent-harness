@@ -479,6 +479,42 @@ case_forwarded_term_quarantines_partial_output_and_kills_group() {
   fi
 }
 
+case_pause_boundary_returns_zero_status_record() {
+  local name=pause-boundary-returns-zero-status-record
+  local dir code output
+  dir=$(make_case_dir)
+  mkdir -p "$dir/ws/.caty-agent-harness"
+  : >"$dir/ws/.caty-agent-harness/DISABLED"
+  write_success_cli "$dir/fake-hermes"
+  set +e
+  output=$(HERMES_STEP_CMD="$dir/fake-hermes" run_adapter "$dir" 2>&1)
+  code=$?
+  set -e
+  if [[ "$code" -eq 0 ]] \
+    && grep -Fq 'status=paused workspace=' <<<"$output" \
+    && [[ ! -e "$dir/attempt/step-result.json" ]]; then
+    pass "$name"
+  else
+    fail "$name" "expected exit 0 and no step-result under pause, got rc=$code output=$output"
+  fi
+}
+
+case_underlying_exit75_passthrough() {
+  local name=underlying-exit75-passthrough
+  local dir code
+  dir=$(make_case_dir)
+  write_exit_cli "$dir/fake-hermes" 75
+  set +e
+  HERMES_STEP_CMD="$dir/fake-hermes" run_adapter "$dir" >/dev/null 2>&1
+  code=$?
+  set -e
+  if [[ "$code" -eq 75 ]]; then
+    pass "$name"
+  else
+    fail "$name" "underlying exit 75 did not pass through: rc=$code"
+  fi
+}
+
 case_runner_rejects_relative_spawn_step() {
   local name=runner-rejects-relative-spawn-step
   local dir code output
@@ -531,6 +567,8 @@ case_timeout_quarantines_partial_output_and_kills_group
 case_fast_exit_preserves_complete_output_and_reaps_group
 case_ordinary_failure_preserves_complete_output
 case_forwarded_term_quarantines_partial_output_and_kills_group
+case_pause_boundary_returns_zero_status_record
+case_underlying_exit75_passthrough
 case_runner_rejects_relative_spawn_step
 case_runner_rejects_nonexecutable_spawn_step
 

@@ -399,6 +399,21 @@ PY
   return 0
 }
 
+spawn_step_pause_record_matches() {
+  local stderr_file=$1
+  local workspace_path=$2
+  [[ -f "$stderr_file" && ! -L "$stderr_file" ]] || return 1
+  python3 - "$stderr_file" "$workspace_path" <<'PY'
+import sys
+
+stderr_file, workspace = sys.argv[1:3]
+expected = f"status=paused workspace={workspace} entrypoint=hermes-spawn-step".encode("utf-8")
+with open(stderr_file, "rb") as f:
+    actual = f.read()
+raise SystemExit(0 if actual in (expected, expected + b"\n") else 1)
+PY
+}
+
 last_gate_output() {
   local artifact_dir=$1
   local current_attempt_dir=$2
@@ -545,50 +560,50 @@ PY
 }
 
 prior_verifier_finding() {
-  local task_id=$1
+  local artifact_dir=$1
   local attempts_used=$2
   local step_k=$3
-  local verify_log="$workspace/loop/VERIFY.log.md"
   local finding
-  if (( attempts_used == 0 )) || [[ ! -f "$verify_log" ]]; then
+  if (( attempts_used == 0 )); then
     printf '%s\n' none
     return 0
   fi
-  finding=$(python3 - "$verify_log" "$task_id" "$step_k" <<'PY'
+  finding=$(python3 - "$artifact_dir" "$step_k" <<'PY'
+import json
+import os
 import sys
 
-path, task_id, step_k = sys.argv[1:4]
-line = ""
+artifact_dir, step_k = sys.argv[1:3]
+attempts_dir = os.path.join(artifact_dir, "attempts")
 try:
-    for candidate in open(path, encoding="utf-8"):
-        if "task=%s " % task_id in candidate:
-            line = candidate.rstrip("\n")
-except Exception:
-    pass
-if not line:
-    sys.exit(0)
-# Known field layout:
-#   - <ts> | task=<id> [| step=<k>] | verifier=<vid> | verdict=<v> | <reason...>
-# The reason is everything after the verdict field, so a reason containing
-# " | " survives intact. Entries without a step field are never re-injected:
-# they cannot be proven to belong to the current step.
-parts = line.split(" | ")
-fields = {}
-verdict_index = None
-for index, part in enumerate(parts):
-    if "=" in part:
-        key, value = part.split("=", 1)
-        if key in ("task", "step", "verifier", "verdict") and key not in fields:
-            fields[key] = value
-            if key == "verdict":
-                verdict_index = index
-                break
-verdict = fields.get("verdict", "")
-if not verdict or verdict == "pass" or fields.get("step") != step_k:
-    sys.exit(0)
-reason = " | ".join(parts[verdict_index + 1:])
-print("verdict: %s" % verdict)
-print("finding: %s" % reason)
+    attempts = sorted(
+        (
+            entry.path for entry in os.scandir(attempts_dir)
+            if entry.is_dir() and entry.name.isdigit()
+        ),
+        key=lambda path: int(os.path.basename(path)),
+        reverse=True,
+    )
+except OSError:
+    attempts = []
+
+for attempt in attempts:
+    verify_json = os.path.join(attempt, "verify.json")
+    try:
+        with open(verify_json, encoding="utf-8") as f:
+            record = json.load(f)
+    except Exception:
+        continue
+    if str(record.get("step")) != step_k:
+        continue
+    verdict = record.get("verdict", "")
+    if verdict == "pass":
+        raise SystemExit(0)
+    reason = record.get("reason", "")
+    if isinstance(reason, str) and reason:
+        print("verdict: %s" % verdict)
+        print("finding: %s" % reason)
+        raise SystemExit(0)
 PY
 ) || finding=''
   if [[ -z "$finding" ]]; then
@@ -775,7 +790,7 @@ PY
 )
   local gate_output prior_verifier prior_failure skill_dir_index utc_date prompt_tmp="$attempt_dir/prompt.md.tmp.$$"
   gate_output=$(last_gate_output "$artifact_dir" "$attempt_dir") || gate_output=none
-  prior_verifier=$(prior_verifier_finding "$id" "$attempts_used" "$step_k") || prior_verifier=none
+  prior_verifier=$(prior_verifier_finding "$artifact_dir" "$attempts_used" "$step_k") || prior_verifier=none
   prior_failure=$(prior_attempt_failure "$artifact_dir" "$attempt_dir") || prior_failure=none
   skill_dir_index=$(consult_skill_dir_index) || skill_dir_index=none
   utc_date=$(date -u '+%Y-%m-%d')
@@ -1796,6 +1811,30 @@ reap_running() {
       continue
     fi
     [[ "$status" = "running" ]] || continue
+    local artifact_dir
+    artifact_dir=$(dirname "$state_file")
+    local task_id
+    task_id=$(basename "$artifact_dir")
+    local task_file="$queue_dir/$task_id.task.md"
+    [[ -f "$task_file" ]] || continue
+    local nnn
+    nnn=$(printf '%03d' $(( attempts_used + 1 )))
+    local attempt_dir="$artifact_dir/attempts/$nnn"
+    mkdir -p "$attempt_dir"
+    chmod 0700 "$attempt_dir"
+    if [[ ! -f "$attempt_dir/driver.json" ]] \
+      && spawn_step_pause_record_matches "$attempt_dir/model.stderr" "$workspace"; then
+      lease_pid=''
+      lease_pgid=''
+      lease_started=''
+      lease_owner_pid=''
+      lease_owner_started=''
+      lease_owner_sentinel=''
+      status=queued
+      terminal_reason=''
+      write_state "$state_file"
+      continue
+    fi
     local age
     age=$(lease_age_s "$lease_started")
     # Wall-clock timestamps are still advisory in v0; without monotonic
@@ -1811,14 +1850,6 @@ reap_running() {
       if lease_owner_matches "$lease_owner_pid" "$lease_owner_started" "$lease_owner_sentinel"; then
         kill_pgroup "$lease_pgid"
       else
-        local artifact_dir task_id task_file attempt_dir nnn
-        artifact_dir=$(dirname "$state_file")
-        task_id=$(basename "$artifact_dir")
-        task_file="$queue_dir/$task_id.task.md"
-        nnn=$(printf '%03d' $(( attempts_used + 1 )))
-        attempt_dir="$artifact_dir/attempts/$nnn"
-        mkdir -p "$attempt_dir"
-        chmod 0700 "$attempt_dir"
         driver_write "$attempt_dir/driver.json" "${lease_started:-$(utc_now)}" "$(utc_now)" 0 manual-recovery "" unproven-pgid
         if [[ -f "$task_file" ]]; then
           dlq_task "$task_file" "$artifact_dir" unproven-pgid
@@ -1826,17 +1857,6 @@ reap_running() {
         continue
       fi
     fi
-    local artifact_dir
-    artifact_dir=$(dirname "$state_file")
-    local task_id
-    task_id=$(basename "$artifact_dir")
-    local task_file="$queue_dir/$task_id.task.md"
-    [[ -f "$task_file" ]] || continue
-    local nnn
-    nnn=$(printf '%03d' $(( attempts_used + 1 )))
-    local attempt_dir="$artifact_dir/attempts/$nnn"
-    mkdir -p "$attempt_dir"
-    chmod 0700 "$attempt_dir"
     if [[ -f "$attempt_dir/driver.json" ]]; then
       local recovered_class
       recovered_class=$(python3 - "$attempt_dir/driver.json" <<'PY'
@@ -1849,6 +1869,18 @@ PY
 )
       if [[ "$recovered_class" = deterministic-auth || "$recovered_class" = deterministic-input ]]; then
         dlq_task "$task_file" "$artifact_dir" "$recovered_class"
+        continue
+      fi
+      if [[ "$recovered_class" = paused ]]; then
+        lease_pid=''
+        lease_pgid=''
+        lease_started=''
+        lease_owner_pid=''
+        lease_owner_started=''
+        lease_owner_sentinel=''
+        status=queued
+        terminal_reason=''
+        write_state "$state_file"
         continue
       fi
       if [[ "$(driver_is_infra "$attempt_dir/driver.json")" = "true" ]]; then
@@ -1886,6 +1918,18 @@ PY
 )
       finalize_attempt "$task_file" "$artifact_dir" "$attempt_dir" "$dur"
     else
+      if spawn_step_pause_record_matches "$attempt_dir/model.stderr" "$workspace"; then
+        lease_pid=''
+        lease_pgid=''
+        lease_started=''
+        lease_owner_pid=''
+        lease_owner_started=''
+        lease_owner_sentinel=''
+        status=queued
+        terminal_reason=''
+        write_state "$state_file"
+        continue
+      fi
       # Charges lease age capped at the step timeout. If the driver crashed
       # pre-stamp AND the next cron tick is late, this over-counts active time
       # for a short-lived step — accepted for v0: it fails SAFE (earlier DLQ →
@@ -2054,13 +2098,23 @@ run_one_attempt() {
   local elapsed=$(( SECONDS - start_seconds ))
   local ended_at
   ended_at=$(utc_now)
+  local pause_record_seen=0
+  if (( timed_out == 0 && exit_code == 0 )) \
+    && spawn_step_pause_record_matches "$attempt_dir/model.stderr" "$workspace"; then
+    pause_record_seen=1
+  fi
   local outcome=ok
   if (( timed_out == 1 )); then
     outcome=timeout
+  elif (( pause_record_seen == 1 )); then
+    outcome=paused
   elif (( exit_code != 0 )); then
     outcome=error
   fi
   local classified=''
+  if (( pause_record_seen == 1 )); then
+    classified=paused
+  fi
   if (( timed_out == 0 && exit_code != 0 && exit_code != 111 )); then
     classified=$(classify_failure "$exit_code" "$attempt_dir/model.stderr" "$attempt_dir/model.stdout")
     printf 'task-runner.sh: call-site=step class=%s\n' "$classified" >&2
@@ -2077,6 +2131,19 @@ run_one_attempt() {
 
   if [[ "$classified" = deterministic-auth || "$classified" = deterministic-input ]]; then
     dlq_task "$task_file" "$artifact_dir" "$classified"
+    return 0
+  fi
+
+  if [[ "$classified" = paused ]]; then
+    lease_pid=''
+    lease_pgid=''
+    lease_started=''
+    lease_owner_pid=''
+    lease_owner_started=''
+    lease_owner_sentinel=''
+    status=queued
+    terminal_reason=''
+    write_state "$state_file"
     return 0
   fi
 

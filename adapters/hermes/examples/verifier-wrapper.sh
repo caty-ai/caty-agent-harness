@@ -17,10 +17,9 @@ bundle_bytes=$(LC_ALL=C printf '%s' "$bundle" | wc -c | tr -d '[:space:]')
   && -x "$FABLE_CONFORMING_PROVIDER_PATH" ]] || exit 69
 
 provider_output=$(mktemp "${TMPDIR:-/tmp}/caty-verifier-output.XXXXXX")
-nul_stripped_output=$(mktemp "${TMPDIR:-/tmp}/caty-verifier-nul-stripped.XXXXXX")
 validated_output=$(mktemp "${TMPDIR:-/tmp}/caty-verifier-validated.XXXXXX")
 cleanup() {
-  rm -f "$provider_output" "$nul_stripped_output" "$validated_output"
+  rm -f "$provider_output" "$validated_output"
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -33,59 +32,79 @@ if ((provider_status != 0)); then
   exit 70
 fi
 
-if ! LC_ALL=C tr -d '\0' <"$provider_output" >"$nul_stripped_output" \
-  || ! cmp -s "$provider_output" "$nul_stripped_output"; then
-  exit 65
-fi
+if ! python3 - "$provider_output" >"$validated_output" <<'PY'
+import re
+import sys
+import unicodedata
 
-if ! LC_ALL=C awk '
-  function count_exact(haystack, needle, count, position) {
-    count = 0
-    while ((position = index(haystack, needle)) != 0) {
-      count++
-      haystack = substr(haystack, position + length(needle))
-    }
-    return count
-  }
-  function sanitize_reason(line) {
-    gsub(/[\001-\010\013-\037\177]/, "", line)
-    sub(/[[:space:]]+$/, "", line)
-    return line
-  }
-  function reason_is_empty(line, scratch) {
-    scratch = line
-    gsub(/[[:space:]]/, "", scratch)
-    gsub(/\302\240/, "", scratch)
-    gsub(/\343\200\200/, "", scratch)
-    gsub(/\342\200\213/, "", scratch)
-    return scratch == ""
-  }
-  {
-    sub(/\r$/, "")
-    sub(/[[:space:]]+$/, "")
-    lines[NR] = $0
-    marker_count += count_exact($0, "VERDICT:")
-    if ($0 ~ /^VERDICT: (pass|fail|inconclusive|rubric-invalid|needs-human|blocked-missing-artifact)$/) {
-      anchor_count++
-      verdict_number = NR
-      verdict = $0
-    }
-  }
-  END {
-    if (marker_count != 1 || anchor_count != 1) {
-      exit 1
-    }
-    for (line = verdict_number + 1; line <= NR; line++) {
-      reason = sanitize_reason(lines[line])
-      if (!reason_is_empty(reason)) {
-        print verdict
-        print reason
-        exit 0
-      }
-    }
-    exit 1
-  }
-' "$provider_output" >"$validated_output"; then
+path = sys.argv[1]
+allowed = {
+    "pass",
+    "fail",
+    "inconclusive",
+    "rubric-invalid",
+    "needs-human",
+    "blocked-missing-artifact",
+}
+verdict_re = re.compile(r"^VERDICT: ([a-z-]+)$")
+marker_re = re.compile(r"VERDICT\s*:")
+
+
+def sanitize_reason(line: str) -> str:
+    return re.sub(r"[\x01-\x08\x0b-\x1f\x7f]", "", line).rstrip("\r\t\v\f ")
+
+
+def reason_is_empty(line: str) -> bool:
+    scratch = line.encode("utf-8")
+    for empty_bytes in (
+        b" ",
+        b"\t",
+        b"\v",
+        b"\f",
+        b"\r",
+        b"\xc2\xa0",
+        b"\xe3\x80\x80",
+        b"\xe2\x80\x8b",
+    ):
+        scratch = scratch.replace(empty_bytes, b"")
+    return scratch == b""
+
+
+try:
+    raw = open(path, "rb").read()
+except OSError:
+    raise SystemExit(1)
+
+if b"\x00" in raw:
+    raise SystemExit(1)
+
+try:
+    text = raw.decode("utf-8")
+except UnicodeDecodeError:
+    raise SystemExit(1)
+
+raw_lines = text.split("\n")
+normalized_lines = [
+    unicodedata.normalize("NFKC", line.replace("\r", "")) for line in raw_lines
+]
+marker_count = sum(len(marker_re.findall(line)) for line in normalized_lines)
+if marker_count != 1 or not normalized_lines:
+    raise SystemExit(1)
+
+match = verdict_re.fullmatch(normalized_lines[0])
+if match is None or match.group(1) not in allowed:
+    raise SystemExit(1)
+
+if len(raw_lines) < 2:
+    raise SystemExit(1)
+reason = sanitize_reason(raw_lines[1].replace("\r", ""))
+if reason == "" or reason_is_empty(reason):
+    raise SystemExit(1)
+
+print(normalized_lines[0])
+print(reason)
+PY
+then
   exit 65
 fi
 

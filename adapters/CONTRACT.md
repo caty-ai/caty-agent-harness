@@ -122,8 +122,76 @@ cannot infer a provider's persistence or tool policy.
 ### Verifier fork
 
 The verifier may consume only artifact-bundle content inlined by the trusted host. It
-returns verdict text to that host, which may persist it only in the designated verdict
-file `loop/VERIFY.log.md`; this does not grant the verifier read or write tools.
+returns verdict text to that host. The trusted host canonicalizes that result into the
+authoritative `verify.json` record and may derive human stdout plus `loop/VERIFY.log.md`
+from that record; this does not grant the verifier read or write tools.
+
+The verifier provider reply contract is positional: after removing `\r` and applying
+Unicode NFKC to each candidate line, line 1 must exactly match the ASCII form
+`VERDICT: <allowed-provider-value>`, line 2 must be one concise nonempty reason, and
+any optional body or findings may appear only from line 3 onward. This normalization
+rule is intentional: it folds `U+00A0` into a regular space and `U+FF1A` into `:`
+before marker counting and line-1 matching, so the host still uses one parser rather
+than separate "literal" and "normalized" paths.
+
+The verifier provider's allowed reply vocabulary is exactly:
+`pass`, `fail`, `inconclusive`, `rubric-invalid`, `needs-human`, and
+`blocked-missing-artifact`. `contract-violation` is host-only. A provider must not emit
+it. When provider output is malformed, the trusted Hermes host canonicalizes that
+failure into `verify.json` with `verdict=contract-violation`, emits the derived human
+`VERDICT: contract-violation` plus reason lines, attempts to append the derived record
+to `loop/VERIFY.log.md`, and exits 6. A failure of that non-authoritative log write does
+not change the canonical record, stdout verdict, or exit mapping.
+
+`verify-job` canonicalizes every verifier result into one JSON record named
+`verify.json` with these fields:
+
+```json
+{
+  "verdict": "<value>",
+  "reason": "<canonical reason>",
+  "verifier_id": "<host-selected verifier id>",
+  "step": 1,
+  "ts": "<UTC timestamp>"
+}
+```
+
+`step` may also be `null` when the verifier result is not bound to a specific positive
+step. A malformed explicit step is treated as unset; it cannot change the verdict or
+its exit mapping. The human `VERDICT:` stdout line and `loop/VERIFY.log.md` entry are
+derived views of that canonical record, not separate parser outputs.
+
+The log is an append-only, lagging projection rather than a second authority. If the
+host stops after atomically replacing `verify.json` but before appending its projection,
+the next conforming `verify-job` invocation backfills the complete record after the
+wrapper-conformance gate and before provider launch.
+Reconciliation accepts only bounded, single-link regular files with a complete valid
+record schema; a temporary, truncated, or malformed record is ignored. It appends only
+the projection of the record currently read, so recovery cannot manufacture a verdict
+that the authoritative record does not contain. If repairing an older attempt would
+place it after an already-recorded newer attempt, reconciliation reprojects the newest
+numeric attempt last rather than leaving the derived tail contradictory.
+Projection and deduplication both define a physical log line using ASCII LF (`U+000A`)
+only. Other Unicode separator characters remain record text, so the writer and matcher
+cannot assign different boundaries to the same projection.
+
+Log reconciliation is best-effort because `loop/VERIFY.log.md` is not authoritative.
+An unsafe log path, invalid UTF-8, permission failure, or other read/write error is
+refused and warned about, but it must not prevent record replacement, suppress the
+derived stdout verdict, or alter the record's exit mapping. The log may remain stale
+until an operator repairs or replaces it; `verify.json` remains the result source.
+
+An attempt-scoped record may be written only through a real numeric directory directly
+under the bundle's real `attempts` directory. Fallback selection skips numeric entries
+that are not directories or cannot be opened, and reconciliation likewise ignores such
+litter. The `attempts` root itself is not litter: if it exists but cannot be opened,
+selection fails with a clean record-path infrastructure error rather than silently
+falling back to the bundle-level record. A numeric symlink is still an infrastructure
+error when fallback selection encounters it or when it is explicitly selected, even if
+it points elsewhere inside the same bundle. An explicit `ATTEMPT_DIR` must itself be a
+real openable numeric directory. Selection, directory opening, and the atomic replacement
+each enforce this containment; a linked or replaced selected directory must not redirect
+the authoritative record.
 
 #### Verifier bundle assembly
 

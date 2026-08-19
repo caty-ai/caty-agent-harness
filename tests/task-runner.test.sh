@@ -128,6 +128,61 @@ run_tick() {
   env TR_SPAWN_STEP="$MOCK" "$@" bash "$RUNNER" "$ws"
 }
 
+run_tick_with_step() {
+  local ws=$1
+  local step_cmd=$2
+  shift 2
+  env TR_SPAWN_STEP="$step_cmd" "$@" bash "$RUNNER" "$ws"
+}
+
+write_paused_step() {
+  local path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+printf 'status=paused workspace=%s entrypoint=%s\n' "$2" hermes-spawn-step >&2
+exit 0
+SH
+  chmod +x "$path"
+}
+
+write_nonpause_status_step() {
+  local path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+printf 'status=paused workspace=%s entrypoint=%s extra=bad\n' "$2" hermes-spawn-step >&2
+exit 0
+SH
+  chmod +x "$path"
+}
+
+write_verify_record() {
+  local path=$1
+  local verdict=$2
+  local step=$3
+  local reason=$4
+  python3 - "$path" "$verdict" "$step" "$reason" <<'PY'
+import json
+import sys
+
+path, verdict, step_text, reason = sys.argv[1:5]
+step = None if step_text == "null" else int(step_text)
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(
+        {
+            "verdict": verdict,
+            "reason": reason,
+            "verifier_id": "fixture",
+            "step": step,
+            "ts": "2026-07-22T00:00:00Z",
+        },
+        f,
+        indent=2,
+        sort_keys=True,
+    )
+    f.write("\n")
+PY
+}
+
 case_env_integer_validation() {
   local name=env-integer-validation
   local variable invalid_value validation_case ws output code
@@ -2317,6 +2372,124 @@ PY
   fi
 }
 
+case_paused_step_old_behavior_red() {
+  local name=paused-step-old-behavior-red
+  local ws paused_step
+  ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  paused_step="$ws/paused-step-old-behavior-red.sh"
+  write_paused_step "$paused_step"
+  run_tick_with_step "$ws" "$paused_step" >/dev/null 2>&1 || true
+  if [[ "$(state_value "$ws" tr-basic status)" = queued ]] \
+    && [[ "$(state_value "$ws" tr-basic attempts_used)" = 0 ]] \
+    && [[ "$(state_value "$ws" tr-basic active_seconds_used)" = 0 ]] \
+    && [[ "$(driver_value "$ws" tr-basic outcome)" = paused ]] \
+    && [[ ! -f "$ws/loop/artifacts/tr-basic/attempts/001/step-result.json" ]]; then
+    pass "$name"
+  else
+    fail "$name" "pause record was charged like the old behavior: status=$(state_value "$ws" tr-basic status) attempts=$(state_value "$ws" tr-basic attempts_used) active=$(state_value "$ws" tr-basic active_seconds_used)"
+  fi
+}
+
+case_paused_step_requeues_without_charge() {
+  local name=paused-step-requeues-without-charge
+  local ws paused_step
+  ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  paused_step="$ws/paused-step.sh"
+  write_paused_step "$paused_step"
+  run_tick_with_step "$ws" "$paused_step" >/dev/null 2>&1
+  if [[ "$(state_value "$ws" tr-basic status)" = queued ]] \
+    && [[ "$(state_value "$ws" tr-basic attempts_used)" = 0 ]] \
+    && [[ "$(state_value "$ws" tr-basic active_seconds_used)" = 0 ]] \
+    && [[ "$(state_value "$ws" tr-basic infra_retries)" = 0 ]] \
+    && [[ "$(driver_value "$ws" tr-basic outcome)" = paused ]] \
+    && [[ "$(driver_value "$ws" tr-basic classified)" = paused ]] \
+    && [[ "$(driver_value "$ws" tr-basic exit_code)" = 0 ]] \
+    && [[ -f "$ws/loop/tasks/queue/tr-basic.task.md" ]] \
+    && grep -Fq 'status=paused workspace=' "$ws/loop/artifacts/tr-basic/attempts/001/model.stderr"; then
+    pass "$name"
+  else
+    fail "$name" "paused step did not requeue cleanly: status=$(state_value "$ws" tr-basic status) attempts=$(state_value "$ws" tr-basic attempts_used) active=$(state_value "$ws" tr-basic active_seconds_used)"
+  fi
+}
+
+case_paused_step_crash_recovery() {
+  local name=paused-step-crash-recovery
+  local ws paused_step first_rc
+  ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  paused_step="$ws/paused-step.sh"
+  write_paused_step "$paused_step"
+  set +e
+  run_tick_with_step "$ws" "$paused_step" TR_CRASH_AFTER=stamp >/dev/null 2>&1
+  first_rc=$?
+  set -e
+  run_tick_with_step "$ws" "$paused_step" >/dev/null 2>&1
+  if [[ "$first_rc" -eq 137 ]] \
+    && [[ "$(state_value "$ws" tr-basic status)" = queued ]] \
+    && [[ "$(state_value "$ws" tr-basic attempts_used)" = 0 ]] \
+    && [[ "$(state_value "$ws" tr-basic active_seconds_used)" = 0 ]] \
+    && [[ "$(driver_value "$ws" tr-basic classified)" = paused ]]; then
+    pass "$name"
+  else
+    fail "$name" "paused recovery did not restore queued/uncharged state: rc=$first_rc status=$(state_value "$ws" tr-basic status) attempts=$(state_value "$ws" tr-basic attempts_used) active=$(state_value "$ws" tr-basic active_seconds_used)"
+  fi
+}
+
+case_paused_step_crash_before_stamp_recovery() {
+  local name=paused-step-crash-before-stamp-recovery
+  local ws paused_step first_rc tries stderr_path sentinel_path
+  ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  paused_step="$ws/paused-step.sh"
+  write_paused_step "$paused_step"
+  set +e
+  run_tick_with_step "$ws" "$paused_step" TR_CRASH_AFTER=spawn >/dev/null 2>&1
+  first_rc=$?
+  set -e
+  stderr_path="$ws/loop/artifacts/tr-basic/attempts/001/model.stderr"
+  sentinel_path="$ws/loop/artifacts/tr-basic/attempts/001/owner.sentinel"
+  tries=0
+  while [[ "$tries" -lt 50 ]]; do
+    if [[ -f "$stderr_path" ]] \
+      && grep -Fqx "status=paused workspace=$ws entrypoint=hermes-spawn-step" "$stderr_path" \
+      && [[ ! -e "$sentinel_path" ]]; then
+      break
+    fi
+    sleep 0.1
+    tries=$(( tries + 1 ))
+  done
+  run_tick_with_step "$ws" "$paused_step" >/dev/null 2>&1
+  if [[ "$first_rc" -eq 137 ]] \
+    && [[ "$(state_value "$ws" tr-basic status)" = queued ]] \
+    && [[ "$(state_value "$ws" tr-basic attempts_used)" = 0 ]] \
+    && [[ "$(state_value "$ws" tr-basic active_seconds_used)" = 0 ]]; then
+    pass "$name"
+  else
+    fail "$name" "pre-stamp paused recovery did not restore queued/uncharged state: rc=$first_rc status=$(state_value "$ws" tr-basic status) attempts=$(state_value "$ws" tr-basic attempts_used) active=$(state_value "$ws" tr-basic active_seconds_used)"
+  fi
+}
+
+case_nonpause_status_record_is_not_paused() {
+  local name=nonpause-status-record-is-not-paused
+  local ws nonpause_step
+  ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  nonpause_step="$ws/nonpause-status-step.sh"
+  write_nonpause_status_step "$nonpause_step"
+  run_tick_with_step "$ws" "$nonpause_step" >/dev/null 2>&1 || true
+  if [[ "$(state_value "$ws" tr-basic status)" = queued ]] \
+    && [[ "$(state_value "$ws" tr-basic attempts_used)" = 1 ]] \
+    && [[ "$(state_value "$ws" tr-basic infra_retries)" = 0 ]] \
+    && [[ "$(driver_value "$ws" tr-basic outcome)" = ok ]] \
+    && [[ "$(driver_value "$ws" tr-basic classified)" = '' ]]; then
+    pass "$name"
+  else
+    fail "$name" "malformed paused record was misclassified as paused: status=$(state_value "$ws" tr-basic status) attempts=$(state_value "$ws" tr-basic attempts_used) infra=$(state_value "$ws" tr-basic infra_retries) classified=$(driver_value "$ws" tr-basic classified)"
+  fi
+}
+
 case_prior_verifier_finding() {
   local name=prior-verifier-finding
   local ws prompt_one prompt_two
@@ -2325,9 +2498,11 @@ case_prior_verifier_finding() {
   printf 'noncomplete\n' >"$ws/mock-cases/001"
   printf 'noncomplete\n' >"$ws/mock-cases/002"
   printf 'auth\n' >"$ws/mock-error-class"
-  printf '%s\n' '- 2026-07-22T00:00:00Z | task=tr-basic | step=1 | verifier=fixture | verdict=fail | rubric item x: evidence.md:3 missing proof | second reason segment' >"$ws/loop/VERIFY.log.md"
   copy_task "$FIX_BASIC" "$ws" tr-basic
   run_tick "$ws" || true
+  write_verify_record \
+    "$ws/loop/artifacts/tr-basic/attempts/001/verify.json" \
+    fail 1 'rubric item x: evidence.md:3 missing proof | second reason segment'
   printf 'tool-misuse\n' >"$ws/mock-error-class"
   run_tick "$ws" || true
   prompt_one="$ws/loop/artifacts/tr-basic/attempts/001/prompt.md"
@@ -2349,17 +2524,20 @@ case_prior_verifier_pass_is_none() {
   printf 'noncomplete\n' >"$ws/mock-cases/001"
   printf 'noncomplete\n' >"$ws/mock-cases/002"
   printf 'auth\n' >"$ws/mock-error-class"
-  {
-    printf '%s\n' '- 2026-07-21T00:00:00Z | task=tr-basic | step=1 | verifier=fixture | verdict=fail | stale finding that must be suppressed'
-    printf '%s\n' '- 2026-07-22T00:00:00Z | task=tr-basic | step=1 | verifier=fixture | verdict=pass | no-findings residual risk: none'
-  } >"$ws/loop/VERIFY.log.md"
   copy_task "$FIX_BASIC" "$ws" tr-basic
   run_tick "$ws" || true
+  write_verify_record \
+    "$ws/loop/artifacts/tr-basic/attempts/001/verify.json" \
+    fail 1 'stale finding that must be suppressed'
+  mkdir -p "$ws/loop/artifacts/tr-basic/attempts/002"
+  write_verify_record \
+    "$ws/loop/artifacts/tr-basic/attempts/002/verify.json" \
+    pass 1 'no-findings residual risk: none'
   printf 'tool-misuse\n' >"$ws/mock-error-class"
   run_tick "$ws" || true
   prompt="$ws/loop/artifacts/tr-basic/attempts/002/prompt.md"
   if grep -A4 'BEGIN PRIOR VERIFIER FINDING DATA' "$prompt" | grep -q '^none$' \
-    && ! grep -q 'stale finding that must be suppressed' "$prompt"; then
+    && ! grep -A8 'BEGIN PRIOR VERIFIER FINDING DATA' "$prompt" | grep -q 'stale finding that must be suppressed'; then
     pass "$name"
   else
     fail "$name" "pass verdict was re-injected or older fail entry leaked (last-wins violated)"
@@ -2370,20 +2548,22 @@ case_prior_verifier_step_scoped() {
   local name=prior-verifier-step-scoped
   local ws prompt
   # Finding recorded for a DIFFERENT step (step=2) while the task is on step 1:
-  # it must not surface. Old-format entries without a step field are ignored too.
+  # it must not surface. Root-level verify.json is not canonical either.
   ws=$(make_ws)
   mkdir -p "$ws/mock-cases"
   printf 'noncomplete\n' >"$ws/mock-cases/001"
   printf 'noncomplete\n' >"$ws/mock-cases/002"
   printf 'auth\n' >"$ws/mock-error-class"
-  printf '%s\n' '- 2026-07-22T00:00:00Z | task=tr-basic | step=2 | verifier=fixture | verdict=fail | wrong-step finding' >"$ws/loop/VERIFY.log.md"
   copy_task "$FIX_BASIC" "$ws" tr-basic
   run_tick "$ws" || true
+  write_verify_record \
+    "$ws/loop/artifacts/tr-basic/attempts/001/verify.json" \
+    fail 2 'wrong-step finding'
   printf 'tool-misuse\n' >"$ws/mock-error-class"
   run_tick "$ws" || true
   prompt="$ws/loop/artifacts/tr-basic/attempts/002/prompt.md"
   if ! grep -A4 'BEGIN PRIOR VERIFIER FINDING DATA' "$prompt" | grep -q '^none$' \
-    || grep -q 'wrong-step finding' "$prompt"; then
+    || grep -A8 'BEGIN PRIOR VERIFIER FINDING DATA' "$prompt" | grep -q 'wrong-step finding'; then
     fail "$name" "finding for another step was re-injected"
     return
   fi
@@ -2393,17 +2573,19 @@ case_prior_verifier_step_scoped() {
   printf 'noncomplete\n' >"$ws/mock-cases/001"
   printf 'noncomplete\n' >"$ws/mock-cases/002"
   printf 'auth\n' >"$ws/mock-error-class"
-  printf '%s\n' '- 2026-07-22T00:00:00Z | task=tr-basic | verifier=fixture | verdict=fail | old-format finding without step' >"$ws/loop/VERIFY.log.md"
   copy_task "$FIX_BASIC" "$ws" tr-basic
   run_tick "$ws" || true
+  write_verify_record \
+    "$ws/loop/artifacts/tr-basic/verify.json" \
+    fail 1 'root-level verify.json must be ignored'
   printf 'tool-misuse\n' >"$ws/mock-error-class"
   run_tick "$ws" || true
   prompt="$ws/loop/artifacts/tr-basic/attempts/002/prompt.md"
   if grep -A4 'BEGIN PRIOR VERIFIER FINDING DATA' "$prompt" | grep -q '^none$' \
-    && ! grep -q 'old-format finding without step' "$prompt"; then
+    && ! grep -q 'root-level verify.json must be ignored' "$prompt"; then
     pass "$name"
   else
-    fail "$name" "old-format entry without step field was re-injected"
+    fail "$name" "non-attempt verify.json was re-injected"
   fi
 }
 
@@ -2694,6 +2876,11 @@ case_prompt_budget_mid_budget_no_wind_down
 case_prompt_budget_time_exhaustion_wind_down
 case_prompt_budget_time_boundary_wind_down
 case_prompt_budget_time_above_boundary_no_wind_down
+case_paused_step_old_behavior_red
+case_paused_step_requeues_without_charge
+case_paused_step_crash_recovery
+case_paused_step_crash_before_stamp_recovery
+case_nonpause_status_record_is_not_paused
 case_prior_verifier_finding
 case_prior_verifier_pass_is_none
 case_prior_verifier_step_scoped
