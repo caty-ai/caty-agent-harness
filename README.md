@@ -178,7 +178,7 @@ The page you just read is a map. The substance is real, and it's all documented.
 
 - **CI**: [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml) — runs `make test` + `make lint` on every pull request
 - **Verified environments**: macOS (GitHub Actions `macos-latest`, Apple silicon) and Linux (`ubuntu-latest`) — see the table in [What you need](#what-you-need)
-- **Maturity**: public preview — the frozen identifiers in [docs/reference.md](docs/reference.md) are stable; everything else may still move
+- **Maturity**: public preview — the FROZEN CLI output contracts in [docs/cli-conventions.md](docs/cli-conventions.md) are stable; everything else may still move
 - **Known constraints**: Windows is not supported; some updater suites need `ssh-keygen` (see [CONTRIBUTING Prerequisites](CONTRIBUTING.md#prerequisites))
 
 One last thing — the bigger picture this tool belongs to.

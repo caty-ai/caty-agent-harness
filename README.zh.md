@@ -177,7 +177,7 @@ flowchart LR
 
 - **CI**: [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml) — 每个 pull request 都会运行 `make test` + `make lint`
 - **已验证环境**: macOS（GitHub Actions `macos-latest`，Apple 芯片）与 Linux（`ubuntu-latest`）— 参见「[使用前提](#使用前提)」中的表格
-- **成熟度**: public preview — [docs/reference.md](docs/reference.md) 中的冻结标识符是稳定的，其余部分仍可能变动
+- **成熟度**: public preview — [docs/cli-conventions.md](docs/cli-conventions.md) 中标记为 FROZEN 的 CLI 输出契约是稳定的，其余部分仍可能变动
 - **已知限制**: 不支持 Windows；部分 updater 测试套件需要 `ssh-keygen`（参见 [CONTRIBUTING 的 Prerequisites](CONTRIBUTING.md#prerequisites)）
 
 最后再讲一句——这个工具所属的更大图景。

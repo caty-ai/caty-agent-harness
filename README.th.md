@@ -178,7 +178,7 @@ flowchart LR
 
 - **CI**: [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml) — รัน `make test` + `make lint` ในทุก pull request
 - **สภาพแวดล้อมที่ตรวจสอบแล้ว**: macOS (GitHub Actions `macos-latest`, Apple silicon) และ Linux (`ubuntu-latest`) — ดูตารางใน「[สิ่งที่ต้องมี](#สิ่งที่ต้องมี)」
-- **ระดับความพร้อม**: public preview — ตัวระบุที่ถูกตรึงไว้ใน [docs/reference.md](docs/reference.md) มีความเสถียร ส่วนอื่นอาจเปลี่ยนแปลงได้
+- **ระดับความพร้อม**: public preview — สัญญา output ของ CLI ที่ระบุเป็น FROZEN ใน [docs/cli-conventions.md](docs/cli-conventions.md) มีความเสถียร ส่วนอื่นอาจเปลี่ยนแปลงได้
 - **ข้อจำกัดที่ทราบ**: ไม่รองรับ Windows; ชุดทดสอบ updater บางชุดต้องใช้ `ssh-keygen` (ดู [Prerequisites ใน CONTRIBUTING](CONTRIBUTING.md#prerequisites))
 
 สุดท้ายอีกเรื่องเดียว — ภาพใหญ่ที่เครื่องมือนี้สังกัดอยู่
