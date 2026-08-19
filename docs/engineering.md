@@ -180,7 +180,7 @@ Claude Code, Codex CLI, and Kimi Code CLI provide their own generation and execu
 
 ## Vertical and horizontal axes
 
-Caty Agent Harness is the vertical axis in Family OS, the maintainers' multi-agent environment: it strengthens an individual agent's ability to learn across work and finish multi-step work. Family Memory Architecture (FMA) is the horizontal axis: it coordinates memory, schedules, and provenance across agents. The two roles are orthogonal, not competing. (Family OS and FMA live in private repositories; their names appear here only to explain this project's scope boundary.)
+Caty Agent Harness is the vertical axis in Family OS, the maintainers' multi-agent environment: it strengthens an individual agent's ability to learn across work and finish multi-step work. Family Memory Architecture (FMA) is the horizontal axis: it coordinates memory, schedules, and provenance across agents. The two roles are orthogonal, not competing. Both projects are public: see [Family OS](https://github.com/caty-ai/family-os) and [Family Memory Architecture](https://github.com/caty-ai/family-memory-architecture).
 
 ---
 
@@ -248,7 +248,7 @@ What this project owns, and what it deliberately does not.
 
 - This is the public Caty AI release repository. Development happens in a private working repository; releases land here as clean snapshots.
 - The canonical installer is the pure-shell `install.sh`. There is no npm package and none is required.
-- Verification: merges are gated on every `tests/*.test.sh` suite passing; run them locally as shown in [CONTRIBUTING.md](../CONTRIBUTING.md). There is no public CI yet, so the claim is locally reproducible rather than badge-backed.
+- Verification: merges are gated on every `tests/*.test.sh` suite passing; run them locally as shown in [CONTRIBUTING.md](../CONTRIBUTING.md). Public CI is live; see the live badges in the [README](../README.md#project-status) and the workflow definitions under [`.github/workflows/`](../.github/workflows/).
 - `self-growth-loop` is an active plugin consumer; `persona-growth-loop` remains planned/scaffolded.
 - `sitter` is a proposed architecture edge, not an integrated default.
 
@@ -256,13 +256,10 @@ What this project owns, and what it deliberately does not.
 
 ## Contributing and tests
 
-Contribution flow, issue-first rules, and code style live in [CONTRIBUTING.md](../CONTRIBUTING.md). From the repository root of the current checkout, run every shell suite:
+Contribution flow, issue-first rules, and code style live in [CONTRIBUTING.md](../CONTRIBUTING.md). From the repository root of the current checkout, run every shell suite through the canonical target:
 
 ```sh
-set -e
-for test_file in tests/*.test.sh; do
-  bash "$test_file"
-done
+make test
 ```
 
 Exact contracts, budgets, and promotion rules are specified in the [reference](reference.md).

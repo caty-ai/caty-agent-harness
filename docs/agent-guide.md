@@ -63,7 +63,7 @@ WORKSPACE="/absolute/path/to/the/project"
 ./install.sh --workspace "$WORKSPACE" --bootstrap-runtime <your-runtime> --append-bootstrap "$WORKSPACE/<instruction-file>"
 ```
 
-Fill `<your-runtime>` and `<instruction-file>` from the Step 1 table (Hermes and OpenClaw: use the exact invocation from your adapter document instead of this template). Missing folders and files are created; existing ones are never replaced. Initialization also pins the absolute Bash and Perl paths in `$WORKSPACE/loop/.tr-interpreters`, so donecheck validation and execution use the same binaries. If the block is already present you'll see `skip: bootstrap already present` — that's fine, it's idempotent.
+Fill `<your-runtime>` and `<instruction-file>` from the Step 1 table (Hermes and OpenClaw: use the exact invocation from your adapter document instead of this template). Missing folders and files are created; existing files are not replaced. When the instruction-file target already exists, its prior content is kept and the documented marker-aware bootstrap block is appended. Initialization also pins the absolute Bash and Perl paths in `$WORKSPACE/loop/.tr-interpreters`, so donecheck validation and execution use the same binaries. If the block is already present you'll see `skip: bootstrap already present` — that's fine, it's idempotent.
 
 ## Step 4 — health check
 

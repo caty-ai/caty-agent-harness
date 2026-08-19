@@ -180,7 +180,7 @@ Claude Code、Codex CLI、Kimi Code CLI にはそれぞれ generation / executio
 
 ## 縦軸・横軸
 
-Caty Agent Harness は、maintainer たちのマルチエージェント環境 Family OS の縦軸です。個々の agent が仕事をまたいで学び、複数 step の仕事を完走する力を強くします。Family Memory Architecture（FMA）は横軸で、複数 agent 間の memory、schedule、provenance をつなぎます。役割は直交しており、競合しません。（Family OS と FMA は private repository にあり、名前はこのプロジェクトの範囲の境界を説明するためだけに登場します。）
+Caty Agent Harness は、maintainer たちのマルチエージェント環境 Family OS の縦軸です。個々の agent が仕事をまたいで学び、複数 step の仕事を完走する力を強くします。Family Memory Architecture（FMA）は横軸で、複数 agent 間の memory、schedule、provenance をつなぎます。役割は直交しており、競合しません。両プロジェクトは公開済みです。[Family OS](https://github.com/caty-ai/family-os) と [Family Memory Architecture](https://github.com/caty-ai/family-memory-architecture) を参照してください。
 
 ---
 
@@ -196,7 +196,7 @@ caty-agent-harness/
 ├── adapters/               # runtime 別配線（claude-code / codex / kimi / hermes / openclaw）:
 │                           # INSTALL.md, bootstrap-block.md, hook, verifier/cron script
 ├── templates/              # step-prompt, rubric, cron-wrapper, task テンプレート
-├── tests/                  # 契約を固定する 20 の shell suite
+├── tests/                  # 契約を固定する全 shell suite
 └── docs/                   # 本ガイド, reference, agent-guide, plugin/governance 文書
     └── design/             # 内部設計メモ
         ├── DESIGN.md               # learning-loop 契約（正本）
@@ -248,7 +248,7 @@ plugin は `tr-enqueue`、pinned template、read-only artifact consumption を�
 
 - ここは Caty AI の public release repository です。開発は private の作業リポジトリで行い、リリースはクリーンなスナップショットとしてここに置かれます。
 - canonical installer は pure-shell の `install.sh` です。npm package は提供しておらず、不要です。
-- 検証: merge は `tests/*.test.sh` 全 suite の pass を条件にしています（執筆時点で 20 suite。[CONTRIBUTING.md](../CONTRIBUTING.md) の手順でローカル再実行できます。公開 CI はまだ無いため、バッジではなくローカル再現で確かめる主張です）。
+- 検証: merge は `tests/*.test.sh` 全 suite の pass を条件にしています。[CONTRIBUTING.md](../CONTRIBUTING.md) の手順でローカル再実行できます。公開 CI も稼働中です。[README の live バッジ](../README.md#project-status)と [`.github/workflows/`](../.github/workflows/) 配下の workflow 定義を参照してください。
 - `self-growth-loop` は active plugin consumer、`persona-growth-loop` は planned/scaffolded のままです。
 - `sitter` は proposed architecture edge であり、integrated default ではありません。
 
@@ -256,13 +256,10 @@ plugin は `tr-enqueue`、pinned template、read-only artifact consumption を�
 
 ## コントリビュートとテスト
 
-変更提案の流れ・issue-first のルール・コードスタイルは [CONTRIBUTING.md](../CONTRIBUTING.md)（英語）へ。現在の checkout の repository root で、全 shell suite を実行します。
+変更提案の流れ・issue-first のルール・コードスタイルは [CONTRIBUTING.md](../CONTRIBUTING.md)（英語）へ。現在の checkout の repository root で、canonical target を通して全 shell suite を実行します。
 
 ```sh
-set -e
-for test_file in tests/*.test.sh; do
-  bash "$test_file"
-done
+make test
 ```
 
 正確な契約・budget・promotion rule は[詳細仕様](reference.ja.md)に定義があります。
