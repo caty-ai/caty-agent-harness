@@ -2,13 +2,13 @@
 
 > Historical design record. Issue numbers cited in this document (e.g. #43, #49) refer to the pre-publication private tracker, not to issues in this repository.
 
-Status: v0.2 — cross-review resolutions R1–R15 (SYNTHESIS.md) applied.
+Status: v0.2 — cross-review resolutions R1–R15 ([SYNTHESIS.md](./SYNTHESIS.md)) applied.
 Amended 2026-07-18: §10 cross-cutting contracts (grok-build study, #43 → #49).
 Amended 2026-07-24: P1 implementation roll-up (#74–#84) and related CHECKPOINT
 documentation drift (tracked by #107).
 Author: Alpha (Claude Fable 5), 2026-07-02.
 Review lineage: v0.1 → Codex gpt-5.5 xhigh / GLM 5.2 / Claude Sonnet 5 (all
-APPROVE-WITH-CHANGES) → adjudication in SYNTHESIS.md → this rewrite.
+APPROVE-WITH-CHANGES) → adjudication in [SYNTHESIS.md](./SYNTHESIS.md) → this rewrite.
 
 ## 0. TL;DR
 
@@ -229,7 +229,7 @@ artifact bundle, STATE.md pointer, and runtime-native ledger entry.
 
 ## 4. Adapters (thin by design; each specifies its verifier launch seam)
 
-The [shared adapter runtime contract](adapters/CONTRACT.md) is the single normative
+The [shared adapter runtime contract](../../adapters/CONTRACT.md) is the single normative
 home for blank-tool-call recovery, untrusted verifier/distiller fork isolation, and
 verifier-bundle assembly for Claude Code, Hermes, and OpenClaw. Adapter-specific guides
 define wiring only and must not weaken or contradict that contract. The same contract
@@ -368,7 +368,7 @@ Adopted as spec text from the five-model grok-build study
 (`reviews/grok-build-study/SYNTHESIS.md` "Cross-cutting spec sentences"; the review
 corpus is internal and not shipped in the public repository). The full
 batch — including the per-surface parse-posture table and the
-workspace-observability rule — lives in DESIGN-task-runner.md §8; restated here only
+workspace-observability rule — lives in [DESIGN-task-runner.md](./DESIGN-task-runner.md) §8; restated here only
 where this spec's own sections are bound:
 
 - **Stop-rule precedence.** Terminal classification (deterministic failure
@@ -410,7 +410,7 @@ loop/artifacts/<task-id>/
 
 Rule: everything the verifier needs, nothing the maker thought. No transcripts.
 Transport of this layout is governed by the shared
-[verifier bundle assembly contract](adapters/CONTRACT.md#verifier-bundle-assembly).
+[verifier bundle assembly contract](../../adapters/CONTRACT.md#verifier-bundle-assembly).
 
 ## Appendix B — Rubric required fields
 

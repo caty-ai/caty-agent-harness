@@ -99,7 +99,7 @@ The rules there apply in addition to the OpenClaw-specific wiring below.
 
    Cross-vendor distillation is not required here because `distill-audit.sh` never
    grants verified status to anything. Skill promotion still requires the verify gate
-   described in DESIGN.md §3.2 and §3.3.
+   described in [DESIGN.md](../../docs/design/DESIGN.md) §3.2 and §3.3.
 
    `DISTILLER_CMD` must be exactly one absolute wrapper-script path. The adapter
    rejects legacy multi-token command strings and ships no provider default.
@@ -124,7 +124,7 @@ The rules there apply in addition to the OpenClaw-specific wiring below.
       Re-run the attester after changing the wrapper, probe, provider executable, or
       provider configuration.
 
-   For the later per-task verify spike in DESIGN.md §4.3, reuse
+   For the later per-task verify spike in [DESIGN.md](../../docs/design/DESIGN.md) §4.3, reuse
    `adapters/hermes/verify-job.sh` as the natural starting point. It is runtime-neutral:
    bind it to a fresh-session verifier process and feed it artifact bundles only,
    instead of building a new verifier from scratch.

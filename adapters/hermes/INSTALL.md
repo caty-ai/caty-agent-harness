@@ -55,7 +55,7 @@ The rules there apply in addition to the Hermes-specific wiring below.
    ```
 
    agjob provides scheduling only: queueing, heartbeats, retries, and DLQ. Per
-   DESIGN.md §4.2, do not extend agjob to perform cross-model dispatch itself.
+   [DESIGN.md](../../docs/design/DESIGN.md) §4.2, do not extend agjob to perform cross-model dispatch itself.
 
    Exit-code mapping for the job wrapper: exit 0/1/4 mean the verification RAN and
    returned a legitimate verifier verdict (pass / fail-or-rubric-invalid /
@@ -85,7 +85,7 @@ The rules there apply in addition to the Hermes-specific wiring below.
 5. Set the verifier environment.
 
    `VERIFIER_CMD` is required for skill promotion and must target a different VENDOR
-   than the maker model. This is DESIGN.md R8 and addresses Hermes same-family bias
+   than the maker model. This is [DESIGN.md](../../docs/design/DESIGN.md) R8 and addresses Hermes same-family bias
    issue #15204. Use `VERIFIER_ID` when the command string is not a clear model/vendor
    identifier for `loop/VERIFY.log.md`.
 
@@ -350,7 +350,7 @@ marker after the guarded fold completes.
 ## Optional stale-claim watchdog
 
 Schedule `adapters/hermes/stale-claim-watchdog.sh` as an agjob job body if the profile
-needs stale `claimed` entries surfaced back into the loop. Per DESIGN.md §4.2, agjob is
+needs stale `claimed` entries surfaced back into the loop. Per [DESIGN.md](../../docs/design/DESIGN.md) §4.2, agjob is
 scheduling only here: queueing, heartbeats, retries, and DLQ around this standalone
 script. The script itself reads the ledger, calls optional action commands, and appends
 candidate lines to `loop/pending/`; it never writes `STATE.md`.

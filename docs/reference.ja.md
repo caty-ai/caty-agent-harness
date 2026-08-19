@@ -90,8 +90,8 @@ flush intake consumer の会計 ledger は `loop/pending/intake-runs.log` です
 
 | 文書 | 契約 |
 | --- | --- |
-| [DESIGN.md](../DESIGN.md) | learning-loop contract、verification seam、promotion rule、adapter contract |
-| [DESIGN-task-runner.md](../DESIGN-task-runner.md) | task-runner contract、budget、DLQ、metric |
+| [DESIGN.md](design/DESIGN.md) | learning-loop contract、verification seam、promotion rule、adapter contract |
+| [DESIGN-task-runner.md](design/DESIGN-task-runner.md) | task-runner contract、budget、DLQ、metric |
 | [governance-rules.md](governance-rules.md) | family adoption governance canon（governance R1–R14・amendment status と effectiveness gate） |
 | [plugin-convention.md](plugin-convention.md) | plugin seam contract と extraction policy |
 | [plugins.md](plugins.md) | known plugin registry と attachment status |

@@ -198,8 +198,8 @@ caty-agent-harness/
 ├── templates/              # step-prompt, rubric, cron-wrapper, task templates
 ├── tests/                  # shell suites pinning the contracts
 ├── docs/                   # this guide, reference, agent-guide, plugin & governance docs
-├── DESIGN.md               # learning-loop contracts (source of truth)
-└── DESIGN-task-runner.md   # task-runner contract (source of truth)
+├── docs/design/DESIGN.md               # learning-loop contracts (source of truth)
+└── docs/design/DESIGN-task-runner.md   # task-runner contract (source of truth)
 
 <workspace>/                # created by install; your project folder
 ├── STATE.md                # handover notebook (bounded operational memory)

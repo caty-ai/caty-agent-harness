@@ -17,7 +17,7 @@ bare number.**
 | Series | Canon | Scope |
 | --- | --- | --- |
 | **Governance R1–R14** (this file) | `docs/governance-rules.md` | Family adoption governance: how the family senses, trials, and adopts external tools/LLMs/practices, and how identity-critical changes are gated |
-| Synthesis R1–R15 | `SYNTHESIS.md` | harness v0.1→v0.2 design review resolutions (verifier, STATE.md, rubric discipline) |
+| Synthesis R1–R15 | [`SYNTHESIS.md`](design/SYNTHESIS.md) | harness v0.1→v0.2 design review resolutions (verifier, STATE.md, rubric discipline) |
 
 When ambiguity is possible, qualify as `governance-R12` vs `synthesis-R12`.
 
@@ -374,7 +374,7 @@ review). Until then, **this canon's stricter reading prevails**:
 | 8 | overlay-contract §14: in force = commit + 4 syncs (wiki listed; no #26 record, no record-of-record) | + Sho's CP-2 decision recorded via this file's version-table cell flip; #26 record = hard condition | Align §14 |
 
 Also scheduled in the CP-2 PR group (not a contract disagreement): a reciprocal one-line
-namespace note in `SYNTHESIS.md` (file outside this Issue's declared scope).
+namespace note in [`SYNTHESIS.md`](design/SYNTHESIS.md) (file outside this Issue's declared scope).
 
 ## Cross-references
 
