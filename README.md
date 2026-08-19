@@ -22,6 +22,16 @@ a small system, wrapped around the AI you already use.
 
 **A tool that grows on its own — and learns to run your tasks all the way to done.**
 
+**Measured** — sealed, pre-registered benchmark on context-overflow workloads (2026-08):
+
+| Model | Verified completion (bare → harness) | Completion hallucination¹ | Time & tokens |
+|---|---|---|---|
+| Claude Haiku 4.5 | 13% → **43%** (+30 pt, p=0.0079) | 98% → **8%** | **59% fewer tokens · 40–46% less time** |
+| GPT-5.6 Luna (Codex) | planned | — | — |
+| Local models (Ollama) | planned | — | — |
+
+<sub>¹ Claiming "done" without having read the work — measured from tool-call transcripts, not self-reports: 222 → 2 such claims on the 150K–300K-token jobs (30 runs per arm, machine-scored). Weak spots included: [full numbers & limitations](docs/benchmark.md).</sub>
+
 🔧 [Engineering guide](docs/engineering.md) ｜ 📘 [Reference](docs/reference.md)
 
 </div>
@@ -168,6 +178,7 @@ The page you just read is a map. The substance is real, and it's all documented.
 | Document | What's inside |
 | --- | --- |
 | [docs/agent-guide.md](docs/agent-guide.md) | **The installer's playbook** — a step-by-step guide your AI follows: choices, commands, checks, and how to report back |
+| [docs/benchmark.md](docs/benchmark.md) | **The sealed benchmark** — full numbers behind the hero table, method, and the honest limitations |
 | [docs/engineering.md](docs/engineering.md) | **The full technical guide** — what's enforced where, per-tool depth, pause semantics, architecture, directory map |
 | [docs/reference.md](docs/reference.md) | **The exact contracts** — every flag, every state, every pointer to the design documents |
 | [Runtime setup](docs/engineering.md#runtime-setup) | **Per-tool wiring** — hooks, verifiers, and schedules for each of the five AI tools |

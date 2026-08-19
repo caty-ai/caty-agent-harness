@@ -22,6 +22,16 @@ Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决�
 
 **一个会自我成长、并学会把你交办的任务一路跑到「完成」的工具。**
 
+**实测** — 针对上下文溢出类工作负载的密封、预先注册的基准测试（2026-08）：
+
+| 模型 | 已验证完成率（裸跑 → harness） | 完成幻觉¹ | 用时与 token |
+|---|---|---|---|
+| Claude Haiku 4.5 | 13% → **43%**（+30 pt，p=0.0079） | 98% → **8%** | **token 减少 59% ・用时减少 40–46%** |
+| GPT-5.6 Luna（Codex） | 计划中 | — | — |
+| 本地模型（Ollama） | 计划中 | — | — |
+
+<sub>¹ 还没读完工作内容就宣称「完成」——依据工具调用记录测量，而非自我报告：在 15 万至 30 万 token 的任务上（每组配对运行 30 次，全部由机器评分），此类宣称从 222 次降至 2 次。包含薄弱环节：[完整数据与局限（英文）](docs/benchmark.md)。</sub>
+
 🔧 [工程指南（英文）](docs/engineering.md) ｜ 📘 [详细规范（英文）](docs/reference.md)
 
 </div>
@@ -167,6 +177,7 @@ flowchart LR
 | 文档 | 内容 |
 | --- | --- |
 | [docs/agent-guide.md](docs/agent-guide.md) | **给安装 AI 的剧本** — 选择、命令、核查、汇报方式，一条路走到底（英文） |
+| [docs/benchmark.md](docs/benchmark.md) | **密封基准测试** — 开头表格背后的完整数字、测量方法与诚实的局限（英文） |
 | [docs/engineering.md](docs/engineering.md) | **完整技术指南** — 哪里强制什么、各工具深度、暂停语义、架构、目录地图（英文） |
 | [docs/reference.md](docs/reference.md) | **精确契约** — 每个参数、每种状态、设计文档索引（英文） |
 | [运行环境设置（英文）](docs/engineering.md#runtime-setup) | **各工具接线** — 5 种 AI 工具各自的 hooks、verifier 与调度 |
