@@ -8,18 +8,27 @@ Thanks for your interest in improving Caty Agent Harness.
 - **Stay inside the documented seams.** Integrations must go through the documented plugin seams (`scripts/tr-enqueue`, pinned templates, read-only artifact consumption) and must not bypass runtime-specific installer or verifier requirements. See [docs/plugin-convention.md](docs/plugin-convention.md).
 - **Honest completion.** A change is done when its stated done-conditions pass with evidence, not when it looks done. Pull requests should list which conditions passed and how they were checked.
 
+## Prerequisites
+
+The tests are plain shell suites, but a few tools must be present:
+
+- **bash 3.2+** — the macOS default is fine; everything targets it (see Code style)
+- **make** — the test and lint entry points are Makefile targets
+- **git 2.34+** — the updater suite exercises SSH signature verification, which older git cannot do
+- **ssh-keygen with `-Y` support** (OpenSSH 8.2+, the floor git documents for SSH signing) — the updater suite generates and verifies ed25519 signing keys; without it those cases cannot run
+- **python3** — several suites shell out to it for fixtures and checks (any recent 3.x)
+- standard Unix tools (grep, sed, awk, mktemp) as shipped on macOS or Linux
+
 ## Running the tests
 
-From the repository root, run every shell suite:
+From the repository root:
 
 ```sh
-set -e
-for test_file in tests/*.test.sh; do
-  bash "$test_file"
-done
+make test
+make lint
 ```
 
-All suites must pass before a pull request is reviewed. If your change alters installer, pause, task-runner, or adapter behavior, add or extend a test that pins the new contract.
+`make test` runs every shell suite under `tests/`; `make lint` syntax-checks every tracked shell script. All suites must pass before a pull request is reviewed. If your change alters installer, pause, task-runner, or adapter behavior, add or extend a test that pins the new contract.
 
 ## Pull requests
 

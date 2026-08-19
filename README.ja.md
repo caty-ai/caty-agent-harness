@@ -171,8 +171,15 @@ workspace としてインストールし、ヘルスチェックを実行し、�
 | [docs/engineering.ja.md](docs/engineering.ja.md) | **技術ガイド全部** — どこで何が強制されるか、ツール別の深さ、pause の意味論、アーキテクチャ、ディレクトリ地図 |
 | [docs/reference.ja.md](docs/reference.ja.md) | **正確な契約** — 全フラグ・全状態・設計文書への索引 |
 | [Runtime 別設定](docs/engineering.ja.md#runtime-setup) | **ツール別の配線** — 5つの AI ツールそれぞれの hook・verifier・スケジュール |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | **変更の提案方法** — Issue 起点のフローとテストスイート20本（1ループで実行可・英語） |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | **変更の提案方法** — Issue 起点のフローとテストスイート20本（`make test` 1発で実行可・英語） |
 | [SECURITY.md](SECURITY.md) | **問題の安全な報告先** — private な脆弱性報告の窓口（英語） |
+
+## プロジェクトの現況
+
+- **CI**: [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml) — すべての pull request で `make test` + `make lint` を実行
+- **検証済み環境**: macOS（GitHub Actions `macos-latest`・Apple シリコン）と Linux（`ubuntu-latest`）—「[使うのに必要なもの](#使うのに必要なもの)」の表を参照
+- **成熟度**: public preview — [docs/cli-conventions.md](docs/cli-conventions.md) の FROZEN な CLI 出力契約は安定・それ以外は変わり得ます
+- **既知の制約**: Windows 非対応・updater 系スイートの一部は `ssh-keygen` が必要（[CONTRIBUTING の Prerequisites](CONTRIBUTING.md#prerequisites) 参照）
 
 最後に、このツールが属する大きな絵を一言だけ。
 
