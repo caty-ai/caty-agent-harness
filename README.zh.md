@@ -170,8 +170,15 @@ flowchart LR
 | [docs/engineering.md](docs/engineering.md) | **完整技术指南** — 哪里强制什么、各工具深度、暂停语义、架构、目录地图（英文） |
 | [docs/reference.md](docs/reference.md) | **精确契约** — 每个参数、每种状态、设计文档索引（英文） |
 | [运行环境设置（英文）](docs/engineering.md#runtime-setup) | **各工具接线** — 5 种 AI 工具各自的 hooks、verifier 与调度 |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | **如何提出变更** — issue 优先的流程与 20 个测试套件（一个循环即可全部运行，英文） |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | **如何提出变更** — issue 优先的流程与 20 个测试套件（一条 `make test` 即可全部运行，英文） |
 | [SECURITY.md](SECURITY.md) | **安全地报告问题** — 私密漏洞报告通道（英文） |
+
+## 项目现状
+
+- **CI**: [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml) — 每个 pull request 都会运行 `make test` + `make lint`
+- **已验证环境**: macOS（GitHub Actions `macos-latest`，Apple 芯片）与 Linux（`ubuntu-latest`）— 参见「[使用前提](#使用前提)」中的表格
+- **成熟度**: public preview — [docs/reference.md](docs/reference.md) 中的冻结标识符是稳定的，其余部分仍可能变动
+- **已知限制**: 不支持 Windows；部分 updater 测试套件需要 `ssh-keygen`（参见 [CONTRIBUTING 的 Prerequisites](CONTRIBUTING.md#prerequisites)）
 
 最后再讲一句——这个工具所属的更大图景。
 

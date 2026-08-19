@@ -171,8 +171,15 @@ The page you just read is a map. The substance is real, and it's all documented.
 | [docs/engineering.md](docs/engineering.md) | **The full technical guide** — what's enforced where, per-tool depth, pause semantics, architecture, directory map |
 | [docs/reference.md](docs/reference.md) | **The exact contracts** — every flag, every state, every pointer to the design documents |
 | [Runtime setup](docs/engineering.md#runtime-setup) | **Per-tool wiring** — hooks, verifiers, and schedules for each of the five AI tools |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | **How to propose changes** — issue-first flow and the test suites (20 of them, one loop to run) |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | **How to propose changes** — issue-first flow and the test suites (20 of them, one `make test` to run) |
 | [SECURITY.md](SECURITY.md) | **How to report issues safely** — private vulnerability reporting |
+
+## Project status
+
+- **CI**: [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml) — runs `make test` + `make lint` on every pull request
+- **Verified environments**: macOS (GitHub Actions `macos-latest`, Apple silicon) and Linux (`ubuntu-latest`) — see the table in [What you need](#what-you-need)
+- **Maturity**: public preview — the frozen identifiers in [docs/reference.md](docs/reference.md) are stable; everything else may still move
+- **Known constraints**: Windows is not supported; some updater suites need `ssh-keygen` (see [CONTRIBUTING Prerequisites](CONTRIBUTING.md#prerequisites))
 
 One last thing — the bigger picture this tool belongs to.
 
