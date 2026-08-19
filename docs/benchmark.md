@@ -1,6 +1,6 @@
 # Benchmark — sealed, pre-registered, machine-scored
 
-[🇯🇵 日本語版](benchmark.ja.md)
+[English](benchmark.md) | [日本語](benchmark.ja.md) ｜ back to the [front page](../README.md)
 
 This page carries the full numbers behind the README claim — including the
 places where the harness did **not** win. One benchmark lane exists per model;
@@ -13,7 +13,8 @@ new lanes are added as they are measured (tracking:
 
 The failure this product exists for: an AI that says **"done!" without having
 done the work**. We measured it on context-overflow workloads — jobs whose
-reading volume (75K–300K tokens) cannot fit one context window.
+reading volume exceeds one context window (M ≈ 150K and L ≈ 300K tokens; the
+S ≈ 75K size fits in-context and serves as the control).
 
 - **Verified completion** (`task_resolved`): the run passed a sealed machine
   gate (schema + *measured* read coverage from transcripts + verbatim-quote
@@ -31,7 +32,14 @@ pinned VS Code checkout / CSV extraction) × 3 sizes (S≈75K, M≈150K, L≈300
 tokens) × 5 independent instances × arms. Arms: **bare** (single best-effort
 prompt, up to 10 attempts), **harness** (`install.sh` full install, task-file
 operation, product defaults), and a **naive-retry control** (bare + previous
-answers fed back, M size only). Equal token caps per size for every arm.
+answers fed back, M size only). Equal token caps per size for every arm. Both
+arms were restricted to the same three tools — Read, Glob, Write; **no
+search** — to force actual reading; results do not extrapolate to
+search-enabled operation. Attempt units differ by design: bare had a safety
+cap of 10 attempts, the harness ran product-default budgets (16 attempts /
+90 min at S/M, 24 / 150 min at L). 14 of bare's 30 M/L runs ended on its
+attempt cap; the token caps — the binding resource — were identical for every
+arm.
 Order: hypotheses and analysis pre-registered → corpora, graders and runners
 hash-sealed (`SEAL-MANIFEST`, 185 files) → then the runs. Scoring is machines
 only; near-miss adjudication was done arm-blind (54 candidates, 3 accepted —
@@ -51,25 +59,34 @@ CSV **0/10 → 0/10** (see limitations).
 
 ### Completion hallucination — the headline number
 
-| per completion claim | bare | harness |
-|---|---|---|
-| claimed "done" without having read the corpus (measured coverage) | 247/263 (**94%**) | 2/41 (**5%**) |
+"Completion hallucination" here means a completion claim whose *measured*
+coverage shows the corpus was not actually read. Both pools, labeled:
 
-The two failure shapes are qualitatively different: bare's failed claims are
-overwhelmingly *unread* claims; when the harness misses, it has read
-everything and some answers are wrong — and when it cannot progress it stops
+| unread completion claims (per claim) | bare | harness |
+|---|---|---|
+| context-overflow sizes M/L (30 runs/arm) | 222/226 (**98%**) | 2/26 (**8%**) |
+| all sizes S+M+L (45 runs/arm) | 247/263 (94%) | 2/41 (5%) |
+
+The failure shapes are qualitatively different: bare's failed claims are
+overwhelmingly *unread* claims. The harness almost always reads everything
+before claiming anything — 2 of its 19 gate-rejected deliveries contained
+unread files, and both were caught — and when it cannot progress it stops
 honestly (DLQ/no-progress) instead of declaring success.
 
-We split hallucination three ways and **only the completion kind collapsed**:
+We split hallucination three ways (M/L pool) and **only the completion kind
+collapsed — and within it, specifically the unread shape**:
 
-| hallucination kind | bare | harness |
+| hallucination kind (M/L) | bare | harness |
 |---|---|---|
-| completion (claimed done, work not done) | 94% of claims | 5% of claims |
-| wrong answers (per-item error, M/L) | 22–31% | 24–38% |
-| unsupported quotes (quote doesn't back the answer, M/L totals) | 138 | 166 |
+| false completion — claimed done, delivery not verified (per claim) | 222/226 (98%) | 13/26 (50%) |
+| …of which unread-type (measured coverage gap) | 222/226 (98%) | 2/26 (8%) |
+| wrong answers (per-item error rate) | 22–31% | 24–38% |
+| unsupported quotes (quote doesn't back the answer, totals) | 138 | 166 |
 
-The harness does not make the model smarter per answer — it makes the *claim
-of completion* honest and the delivery verified.
+The harness does not make the model smarter per answer — wrong answers and
+loose quotes remain, and half of its overflow-size deliveries were still
+rejected by the external gate. What collapses is the **unread claim**: saying
+"done" without having done the reading.
 
 ### Time and cost (totals per 15 runs)
 
@@ -95,6 +112,8 @@ faster while completing 3× as often**.
 - **CSV genre: both arms 0/10 at M/L.** Verbatim-quote transcription of CSV
   rows exceeds what Haiku 4.5 reliably does; the gate catches it in both arms.
   This stratum detects no arm difference — we say so instead of dropping it.
+  Aggregation-style work (sums, group-bys) is **unevaluated**: the CSV genre
+  tests extraction/transcription only.
 - **S size shows no advantage** (67% vs 60%): if the job fits comfortably, the
   bare model is fine. The product's value starts where context overflows.
 - **Single model.** Everything above is Haiku 4.5. Other model lanes are
@@ -105,7 +124,9 @@ faster while completing 3× as often**.
   completion and honest reporting*, not perfection.
 - All runs executed in the author's environment. Two transient CLI outage
   bursts occurred; affected sequences were re-run under the pre-registered
-  infra procedure (final data contains zero infra-terminated runs).
+  infra procedure. One sequence needed a second re-run — one more than the
+  procedure's default, recorded as a deviation. Final data contains zero
+  infra-terminated runs.
 
 ## Reproduce / audit
 
