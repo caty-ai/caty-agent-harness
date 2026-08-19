@@ -86,7 +86,7 @@ parentheticals from #26 are uniformly omitted (provenance lives in #26), and R6'
   (normalized subject+vendor, NOT feed item id). Alpha's runtime is the writer of record;
   other agents submit proposals/results via Task Packets (existing vault round-trip route).
   Kills the 3-writer append race.
-- **R2 — Complete state machine.** RETRY, PENDING_SHO, per-stage DLQ, per-arrow
+- **R2 — Complete state machine.** RETRY, PENDING_OWNER, per-stage DLQ, per-arrow
   owner+timeout, defined EXPIRED semantics (stale vs superseded vs no-response).
 - **R3 — Lint actuates, not just detects.** The growth-lint WRITES `self-growth-queue.md`
   (state counts, overdue items, pending-Sho queue, next action + owner) into vault
