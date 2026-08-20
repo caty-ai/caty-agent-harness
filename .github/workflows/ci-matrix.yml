@@ -319,10 +319,18 @@ jobs:
             fi
           fi
 
-          # Drift tripwire: the counted loop below intentionally mirrors the Makefile's
-          # `test` recipe verbatim. Compare the FULL recipe body, not a substring — a
-          # substring grep stayed green when a recipe line was prepended (Codex delta).
-          expected_recipe=$(printf '\t@set -e; for test_file in tests/*.test.sh; do bash "$$test_file"; done')
+          # Drift tripwire: pin the Makefile `test` recipe verbatim. Compare the FULL
+          # recipe body, not a substring — a substring grep stayed green when a recipe
+          # line was prepended (Codex delta). Since #121 the recipe is the run-all +
+          # aggregate loop, so the counted loop below is no longer a verbatim mirror of
+          # the recipe; it is this workflow's own per-suite counting runner. The pin's
+          # job is unchanged: any future Makefile recipe edit must fail here and be
+          # consciously resynced against the checked-in pin (#133).
+          # The pin lives in a data file, not an inline heredoc: bash 3.2 (the b32
+          # matrix cells) collapses backslash-newline inside a quoted heredoc within
+          # $(...), silently corrupting a multi-line expected value (#133, measured).
+          expected_recipe=$(cat .github/ci/make-test-recipe.pin)
+          [ -n "$expected_recipe" ] || fail "make-test-recipe.pin missing or empty - refusing vacuous comparison"
           actual_recipe=$(awk '/^test:/{found=1; next} found && /^\t/{print; next} found{exit}' Makefile)
           if [ "$actual_recipe" != "$expected_recipe" ]; then
             fail "Makefile test recipe drifted from the CI inline loop - resync both"
