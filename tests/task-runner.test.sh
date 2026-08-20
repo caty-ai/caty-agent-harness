@@ -155,6 +155,16 @@ SH
   chmod +x "$path"
 }
 
+write_permission_error_step() {
+  local path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' '{"type":"error","error":{"type":"permission_error","message":"Your API key does not have permission to use the specified resource."}}' >&2
+exit 1
+SH
+  chmod +x "$path"
+}
+
 write_verify_record() {
   local path=$1
   local verdict=$2
@@ -2092,6 +2102,24 @@ case_non111_deterministic_auth_dlq() {
   fi
 }
 
+case_non111_permission_error_deterministic_auth_dlq() {
+  local name=non111-permission-error-deterministic-auth-dlq
+  local ws permission_step
+  ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  permission_step="$ws/permission-error-step.sh"
+  write_permission_error_step "$permission_step"
+  run_tick_with_step "$ws" "$permission_step"
+  if [[ "$(state_value "$ws" tr-basic status)" = dlq ]] \
+    && [[ "$(state_value "$ws" tr-basic terminal_reason)" = deterministic-auth ]] \
+    && [[ "$(state_value "$ws" tr-basic infra_retries)" = 0 ]] \
+    && [[ "$(state_value "$ws" tr-basic attempts_used)" = 0 ]]; then
+    pass "$name"
+  else
+    fail "$name" "exit=1 permission error did not DLQ without a retry"
+  fi
+}
+
 case_stdout_cli_login_deterministic_auth_dlq() {
   local name=stdout-cli-login-deterministic-auth-dlq
   local ws
@@ -2937,6 +2965,7 @@ case_infra_exhaustion_wide_attempt_number
 case_infra_exhaustion_ignores_malformed_failing_lines
 case_infra_exhaustion_summaries_use_numeric_order
 case_non111_deterministic_auth_dlq
+case_non111_permission_error_deterministic_auth_dlq
 case_stdout_cli_login_deterministic_auth_dlq
 case_non111_unknown_error_uses_infra_retries
 case_empty_stderr_is_degenerate_and_retries
