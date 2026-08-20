@@ -495,7 +495,7 @@ unicode_ws=$(new_ws case-26-unicode-key)
   printf '%s\n' \
     '- Don’t retry Job A until “ready now”.' \
     "- Don't retry Job A until \"ready now\"." \
-    $'- Don\'t retry Job\u00a0A until "ready now".' \
+    $'- Don\'t retry Job\xc2\xa0A until "ready now".' \
     '- Ｄｏｎ'\''ｔ ｒｅｔｒｙ Ｊｏｂ Ａ ｕｎｔｉｌ "ｒｅａｄｙ ｎｏｗ"．'
 } >"$unicode_ws/loop/pending/flush-2026-07-20.md"
 run_intake "$unicode_ws"

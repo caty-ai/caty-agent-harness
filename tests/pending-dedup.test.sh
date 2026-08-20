@@ -135,7 +135,7 @@ else
 fi
 
 hash_ascii_space=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$STATE_FOLD_LIB" '- 2026-07-06 Keep retry budget bounded. (source: distill-audit)')
-hash_nbsp=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$STATE_FOLD_LIB" $'- 2026-07-06 Keep\u00a0retry budget bounded. (source: distill-audit)')
+hash_nbsp=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$STATE_FOLD_LIB" $'- 2026-07-06 Keep\xc2\xa0retry budget bounded. (source: distill-audit)')
 if [ "$hash_ascii_space" = "$hash_nbsp" ]; then
   pass "NBSP maps to an ordinary space in the candidate hash"
 else

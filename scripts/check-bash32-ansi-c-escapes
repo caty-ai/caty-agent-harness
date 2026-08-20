@@ -1,0 +1,79 @@
+"""Reject Bash 4.2+ Unicode escapes inside ANSI-C quoted shell strings."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+
+def ansi_c_violations(text: str) -> list[tuple[int, str]]:
+    violations: list[tuple[int, str]] = []
+    index = 0
+    line = 1
+    length = len(text)
+
+    while index < length:
+        if text.startswith("$'", index):
+            index += 2
+            while index < length:
+                char = text[index]
+                if char == "\\" and index + 1 < length:
+                    escape = text[index + 1]
+                    if escape in ("u", "U"):
+                        violations.append((line, escape))
+                    if escape == "\n":
+                        line += 1
+                    index += 2
+                    continue
+                if char == "'":
+                    index += 1
+                    break
+                if char == "\n":
+                    line += 1
+                index += 1
+            continue
+        if text[index] == "\n":
+            line += 1
+        index += 1
+
+    return violations
+
+
+def main(paths: list[str]) -> int:
+    if not paths:
+        print(
+            "bash32 ANSI-C lint: zero shell files checked - refusing vacuous green (fail-closed)",
+            file=sys.stderr,
+        )
+        return 2
+
+    checked = 0
+    found = 0
+    for raw_path in paths:
+        path = Path(raw_path)
+        try:
+            text = path.read_bytes().decode("utf-8", errors="surrogateescape")
+        except OSError as error:
+            print(f"bash32 ANSI-C lint: cannot read {path}: {error}", file=sys.stderr)
+            return 2
+        checked += 1
+        for line, escape in ansi_c_violations(text):
+            found += 1
+            print(
+                f"{path}:{line}: ANSI-C escape \\{escape} requires Bash 4.2+; "
+                "use Bash 3.2-compatible UTF-8 \\xHH bytes",
+                file=sys.stderr,
+            )
+
+    if found:
+        print(
+            f"bash32 ANSI-C lint: {found} violation(s) in {checked} shell file(s)",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"bash32 ANSI-C lint: {checked} shell files OK")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
