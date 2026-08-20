@@ -105,7 +105,7 @@ jobs:
           [ -n "$expected_recipe" ] || fail "make-test-recipe.pin missing or empty - refusing vacuous comparison"
           actual_recipe=$(awk '/^test:/{found=1; next} found && /^\t/{print; next} found{exit}' Makefile)
           if [ "$actual_recipe" != "$expected_recipe" ]; then
-            fail "Makefile test recipe drifted from the CI inline loop - resync both"
+            fail "Makefile test recipe drifted from .github/ci/make-test-recipe.pin - update the pin to match the Makefile"
           fi
           # shellcheck disable=SC2012 # Exact Makefile/CONTRIBUTING glob accounting contract.
           expected=$(ls tests/*.test.sh | wc -l | tr -d '[:space:]')
@@ -253,7 +253,7 @@ jobs:
           [ -n "$expected_recipe" ] || fail "make-test-recipe.pin missing or empty - refusing vacuous comparison"
           actual_recipe=$(awk '/^test:/{found=1; next} found && /^\t/{print; next} found{exit}' Makefile)
           if [ "$actual_recipe" != "$expected_recipe" ]; then
-            fail "Makefile test recipe drifted from the CI inline loop - resync both"
+            fail "Makefile test recipe drifted from .github/ci/make-test-recipe.pin - update the pin to match the Makefile"
           fi
           # shellcheck disable=SC2012 # Exact Makefile/CONTRIBUTING glob accounting contract.
           expected=$(ls tests/*.test.sh | wc -l | tr -d '[:space:]')
