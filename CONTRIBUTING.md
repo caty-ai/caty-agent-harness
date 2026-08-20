@@ -28,7 +28,7 @@ make test
 make lint
 ```
 
-`make test` runs every shell suite under `tests/`; `make lint` syntax-checks every tracked shell script. All suites must pass before a pull request is reviewed. If your change alters installer, pause, task-runner, or adapter behavior, add or extend a test that pins the new contract.
+`make test` runs every shell suite under `tests/` and reports all failing suites after the run; `make lint` syntax-checks every tracked shell script and rejects Bash 4.2+ Unicode escapes in ANSI-C quoted strings. All suites must pass before a pull request is reviewed. If your change alters installer, pause, task-runner, or adapter behavior, add or extend a test that pins the new contract.
 
 ## Pull requests
 
