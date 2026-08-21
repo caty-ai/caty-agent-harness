@@ -135,8 +135,18 @@ so a second route that is wired but has never run is detected only after its fir
 
 The consumer owns `loop/pending/intake-<UTC-date>.md` key ledgers. A ledger may be
 deleted only when no unarchived `flush-*.md` file predates it. Folded keys are retained
-after STATE cap eviction to prevent refold oscillation. `loop/archive/` is append-only,
-is never auto-pruned, and is deleted only by a human or operations owner.
+after STATE cap eviction to prevent refold oscillation. The raw layer in `loop/archive/`
+contains exactly the regular files `flush-<UTC-date>.md` and
+`intake-evictions-<UTC-date>.md`; see [DESIGN.md §3.1](../../docs/design/DESIGN.md) for
+the exact membership rule. Symlinks, and any other file that shares the directory, are
+outside this layer and have no retention or weekly-reference guarantee. The raw layer
+is append-only, is never auto-pruned, and is deleted only by a human or operations
+owner. List one ISO week's raw files with:
+
+```sh
+"$HARNESS/scripts/raw-week.sh" --workspace "$WS" --week 2026-W34
+```
+
 Each parsed bullet is limited to `INTAKE_MAX_BULLET_BYTES` bytes (default `512` after
 control-character stripping); an oversized bullet is dropped whole and counted as
 `dropped_oversize` in the run receipt. Lessons displaced by the STATE cap are appended

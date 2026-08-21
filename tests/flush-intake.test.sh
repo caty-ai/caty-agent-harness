@@ -13,6 +13,7 @@ FAIL_COUNT=0
 TODAY=$(date -u +%F)
 DEFAULT_INTAKE_MAX_FOLD=$(bash -c 'source "$1"; printf "%s\n" "$((STATE_FOLD_LESSONS_CAP_DEFAULT / 2))"' \
   _ "$ROOT/scripts/lib-state-fold.sh")
+DEFAULT_INTAKE_MAX_BULLET_BYTES=512
 
 cleanup() {
   rm -rf "$TMP_ROOT"
@@ -683,6 +684,43 @@ if grep -Fq 'Control-byte dedup joins fieldseparator text.' "$ws/STATE.md" \
   pass '[34] C0 controls are stripped before FS-delimited parsing and dedup'
 else
   fail_case '[34] C0 controls are stripped before FS-delimited parsing and dedup' "receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+fi
+
+ws=$(new_ws case-35-oversize-raw-retention)
+limit_body=
+i=0
+while [ "$i" -lt "$DEFAULT_INTAKE_MAX_BULLET_BYTES" ]; do
+  limit_body="${limit_body}x"
+  i=$((i + 1))
+done
+oversize_body="${limit_body}x"
+{
+  printf '%s\n' '<!-- flush ts=2026-07-21T01:02:03Z outcome=ok -->'
+  printf -- '- %s\n' "$limit_body"
+  printf -- '- %s\n' "$oversize_body"
+} >"$ws/loop/pending/flush-2026-07-21.md"
+run_intake "$ws"
+default_boundary_ok=0
+raw_retention_ok=0
+if grep -Fq -- "$limit_body" "$ws/STATE.md" \
+  && ! grep -Fq -- "$oversize_body" "$ws/STATE.md" \
+  && [ "$(receipt_value "$ws" folded)" -eq 1 ] \
+  && [ "$(receipt_value "$ws" dropped_oversize)" -eq 1 ]; then
+  default_boundary_ok=1
+fi
+if [ -f "$ws/loop/archive/flush-2026-07-21.md" ] \
+  && grep -Fqx -- "- $limit_body" "$ws/loop/archive/flush-2026-07-21.md" \
+  && grep -Fqx -- "- $oversize_body" "$ws/loop/archive/flush-2026-07-21.md"; then
+  raw_retention_ok=1
+fi
+if [ "$default_boundary_ok" -eq 1 ] && [ "$raw_retention_ok" -eq 1 ]; then
+  pass '[35] oversized bullet bodies remain in the raw archive after rejection'
+elif [ "$default_boundary_ok" -ne 1 ]; then
+  fail_case '[35] oversized bullet bodies remain in the raw archive after rejection' \
+    "default INTAKE_MAX_BULLET_BYTES drifted from $DEFAULT_INTAKE_MAX_BULLET_BYTES: receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+else
+  fail_case '[35] oversized bullet bodies remain in the raw archive after rejection' \
+    'raw archive did not preserve the accepted and rejected bullet bodies exactly'
 fi
 
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"

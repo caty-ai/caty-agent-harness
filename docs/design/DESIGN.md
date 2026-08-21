@@ -61,11 +61,39 @@ the missing verification discipline; neither runtime's native machinery is dupli
     VERIFY.log.md     # append-only verifier verdict log
     pending/          # host-staged, unverified candidates from parallel actors (§3.4)
     artifacts/        # artifact bundles per task (Appendix A), quarantine lives here
-    archive/          # consumed flush inputs; append-only retention
+    archive/          # retained raw-layer inputs; append-only
 ```
 
-`loop/archive/` is never pruned automatically. Consumed flush records are retained
-append-only until a human or operations owner explicitly deletes them.
+The **raw layer** is the append-only population formed by exactly two streams of regular
+files: `loop/archive/flush-<UTC-date>.md` and
+`loop/archive/intake-evictions-<UTC-date>.md`. These dates are produced with `date -u`;
+symlinks and anything else placed in the same directory are outside the raw layer and
+have no retention guarantee under this contract.
+
+Agents do not read the raw layer during CONSULT. They read `STATE.md` and
+trigger-matching promoted skills; the raw layer is the population available to future
+promotion work, not task context. Accordingly, `## Lessons learned` (cap 60) is a
+current window cut from the raw population, not the raw layer itself. Its cap is the
+prompt-injection budget for every step, not a statement of retention duration.
+
+The retirement policy explicitly selects **no automatic retirement trigger**: measured
+2026-08-21, the raw layer contained 40 files totaling 791,937 bytes over 35 days
+(2026-07-18 through 2026-08-21), about 22.6 KB/day or 8.3 MB/year. The flat files are
+therefore retained permanently unless a human explicitly deletes them; no automated
+deletion path exists.
+
+ISO-8601 weeks are the downstream comparison unit for recurrence, not a capacity
+measure. Finding the same topic in last week's raw and this week's raw establishes that
+it came from separate jobs without depending on task IDs or individual dates. Week
+membership is derived from each filename's UTC date, so the archive layout remains
+flat. `scripts/raw-week.sh` lists the raw-layer files for a requested ISO week. The
+downstream weekly review that uses this comparison is not yet implemented and is
+planned for #148.
+
+A pending flush enters the raw layer only after its UTC date has passed because
+`flush-intake.sh` archives dates strictly before `today`; deferred files enter later.
+A week's raw set is therefore incomplete while that week is current and may grow after
+the fact.
 
 STATE.md sections (fixed order, machine-locatable by `## ` headers):
 
