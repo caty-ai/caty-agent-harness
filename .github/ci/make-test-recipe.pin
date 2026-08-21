@@ -1,0 +1,15 @@
+	@pass_count=0; fail_count=0; failed_suites=; \
+	for test_file in tests/*.test.sh; do \
+	  if bash "$$test_file"; then \
+	    pass_count=$$((pass_count+1)); \
+	  else \
+	    fail_count=$$((fail_count+1)); \
+	    failed_suites="$$failed_suites $${test_file##*/}"; \
+	  fi; \
+	done; \
+	printf '\nSuite Summary: %s PASS, %s FAIL\n' "$$pass_count" "$$fail_count"; \
+	if [ "$$fail_count" -ne 0 ]; then \
+	  printf 'Failed suites:\n'; \
+	  for failed_suite in $$failed_suites; do printf ' - %s\n' "$$failed_suite"; done; \
+	  exit 1; \
+	fi
