@@ -42,6 +42,7 @@ if ! command -v python3 >/dev/null 2>&1; then
   skip_case 'recompute script exits successfully' "$reason"
   skip_case 'English benchmark block matches recomputed stdout' "$reason"
   skip_case 'Japanese benchmark block matches recomputed stdout' "$reason"
+  skip_case 'benchmark prose quotes the sha256 pinned in recompute.py' "$reason"
   skip_case 'aggregate sha256 matches the digest pinned in recompute.py' "$reason"
   print_summary
   exit 0
@@ -94,6 +95,49 @@ assert_stdout_block \
 assert_stdout_block \
   'Japanese benchmark block matches recomputed stdout' \
   "$ROOT/docs/benchmark.ja.md"
+
+doc_digest_stderr="$TMP/doc-digest.stderr"
+if doc_digest_lines=$(python3 - "$RECOMPUTE" "$ROOT/docs/benchmark.md" "$ROOT/docs/benchmark.ja.md" 2>"$doc_digest_stderr" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+script = Path(sys.argv[1]).read_text(encoding="utf-8")
+matches = re.findall(
+    r'^EXPECTED_SHA256[ \t]*=[ \t]*"([0-9a-f]{64})"[ \t]*$',
+    script,
+    re.MULTILINE,
+)
+if len(matches) != 1:
+    raise SystemExit("expected exactly one literal EXPECTED_SHA256 assignment")
+expected = matches[0]
+
+for document in sys.argv[2:]:
+    text = Path(document).read_text(encoding="utf-8")
+    match = re.search(r'ev006-aggregate\.json.*?`([0-9a-f]{64})`', text, re.DOTALL)
+    if match is None:
+        raise SystemExit(f"could not find the quoted aggregate digest in {document}")
+    print(f"{document}\t{expected}\t{match.group(1)}")
+PY
+); then
+  doc_digest_ok=1
+  while IFS=$'\t' read -r document expected_digest quoted_digest; do
+    if [[ "$quoted_digest" != "$expected_digest" ]]; then
+      doc_digest_ok=0
+      fail_case 'benchmark prose quotes the sha256 pinned in recompute.py' \
+        "document=$document expected=$expected_digest quoted=$quoted_digest; update the quoted aggregate digest to match recompute.py"
+    fi
+  done <<<"$doc_digest_lines"
+  if [[ "$doc_digest_ok" -eq 1 ]]; then
+    # This only catches partial or lazy edits where the prose digest drifts from
+    # the pinned file and script; an author who edits every anchor together can
+    # still fabricate evidence entirely in-repo.
+    pass 'benchmark prose quotes the sha256 pinned in recompute.py'
+  fi
+else
+  fail_case 'benchmark prose quotes the sha256 pinned in recompute.py' \
+    "$(cat "$doc_digest_stderr"); keep one literal EXPECTED_SHA256 assignment in recompute.py and quote that same digest in both benchmark prose files"
+fi
 
 digest_stderr="$TMP/digest.stderr"
 if digest_pair=$(python3 - "$RECOMPUTE" "$AGGREGATE" 2>"$digest_stderr" <<'PY'

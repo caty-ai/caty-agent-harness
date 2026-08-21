@@ -51,7 +51,8 @@ one per arm).
 |---|---|---|
 | Verified completion, M/L pooled (n=30/arm) | 4/30 (13%, CI 5–30%) | **13/30 (43%, CI 27–61%)** |
 
-Effect **+30 pt**, stratified exact test **p = 0.0079**. Naive-retry control:
+Effect **+30 pt**, stratified exact test **p = 0.0079** (the rig's
+pre-registered exact test). Naive-retry control:
 2/15 (13%) at comparable cost to bare — retrying alone does not close the gap.
 
 Per genre (M/L pooled): research 4/10 → 7/10 · code questions 0/10 → **6/10** ·
@@ -171,5 +172,12 @@ Verified completion by size
   L: bare 0/15 (0%), harness 5/15 (33%)
 ```
 
-Every figure quoted on this page and in the README hero table is derived from
-that file; if the script's output disagrees with the prose, the prose is wrong.
+That vendored aggregate backs the headline verified-completion and completion-
+hallucination figures, the per-size and per-genre splits, the token/time
+reductions, the Wilson confidence intervals, and the other per-run derivations
+on this page from the same 105 scored runs. Two numbers do not come from this
+file: `p = 0.0079` and the "3 accepted" out of the 54 near-miss candidates.
+Those come from the rig's pre-registered scoring and adjudication, documented
+in [harness#100](https://github.com/caty-ai/caty-agent-harness/issues/100).
+For the figures the script covers, if the script's output disagrees with the
+prose, the prose is wrong.
