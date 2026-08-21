@@ -98,11 +98,14 @@ jobs:
           fi
 
           # Full-recipe-body drift tripwire (substring grep passed on prepended lines — Codex delta).
-          # shellcheck disable=SC2016 # Literal Makefile recipe text; $$ is make escaping, not expansion.
-          expected_recipe=$(printf '\t@set -e; for test_file in tests/*.test.sh; do bash "$$test_file"; done')
+          # Pinned to the post-#121 run-all + aggregate recipe via the checked-in data
+          # file (#133) — an inline quoted heredoc inside $(...) is corrupted by bash
+          # 3.2's backslash-newline collapse (measured), so the pin lives in a file.
+          expected_recipe=$(cat .github/ci/make-test-recipe.pin)
+          [ -n "$expected_recipe" ] || fail "make-test-recipe.pin missing or empty - refusing vacuous comparison"
           actual_recipe=$(awk '/^test:/{found=1; next} found && /^\t/{print; next} found{exit}' Makefile)
           if [ "$actual_recipe" != "$expected_recipe" ]; then
-            fail "Makefile test recipe drifted from the CI inline loop - resync both"
+            fail "Makefile test recipe drifted from .github/ci/make-test-recipe.pin - update the pin to match the Makefile"
           fi
           # shellcheck disable=SC2012 # Exact Makefile/CONTRIBUTING glob accounting contract.
           expected=$(ls tests/*.test.sh | wc -l | tr -d '[:space:]')
@@ -243,11 +246,14 @@ jobs:
           fi
 
           # Full-recipe-body drift tripwire (substring grep passed on prepended lines — Codex delta).
-          # shellcheck disable=SC2016 # Literal Makefile recipe text; $$ is make escaping, not expansion.
-          expected_recipe=$(printf '\t@set -e; for test_file in tests/*.test.sh; do bash "$$test_file"; done')
+          # Pinned to the post-#121 run-all + aggregate recipe via the checked-in data
+          # file (#133) — an inline quoted heredoc inside $(...) is corrupted by bash
+          # 3.2's backslash-newline collapse (measured), so the pin lives in a file.
+          expected_recipe=$(cat .github/ci/make-test-recipe.pin)
+          [ -n "$expected_recipe" ] || fail "make-test-recipe.pin missing or empty - refusing vacuous comparison"
           actual_recipe=$(awk '/^test:/{found=1; next} found && /^\t/{print; next} found{exit}' Makefile)
           if [ "$actual_recipe" != "$expected_recipe" ]; then
-            fail "Makefile test recipe drifted from the CI inline loop - resync both"
+            fail "Makefile test recipe drifted from .github/ci/make-test-recipe.pin - update the pin to match the Makefile"
           fi
           # shellcheck disable=SC2012 # Exact Makefile/CONTRIBUTING glob accounting contract.
           expected=$(ls tests/*.test.sh | wc -l | tr -d '[:space:]')
