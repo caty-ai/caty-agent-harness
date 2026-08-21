@@ -51,7 +51,8 @@ one per arm).
 |---|---|---|
 | Verified completion, M/L pooled (n=30/arm) | 4/30 (13%, CI 5–30%) | **13/30 (43%, CI 27–61%)** |
 
-Effect **+30 pt**, stratified exact test **p = 0.0079**. Naive-retry control:
+Effect **+30 pt**, stratified exact test **p = 0.0079** (the rig's
+pre-registered exact test). Naive-retry control:
 2/15 (13%) at comparable cost to bare — retrying alone does not close the gap.
 
 Per genre (M/L pooled): research 4/10 → 7/10 · code questions 0/10 → **6/10** ·
@@ -130,9 +131,53 @@ faster while completing 3× as often**.
 
 ## Reproduce / audit
 
-Design (5-seat cross-model review), pre-registration, seal manifest, raw
-writeback and the adjudication log live in
+Design (5-seat cross-model review), pre-registration, raw writeback and the
+adjudication log live in
 [harness#100](https://github.com/caty-ai/caty-agent-harness/issues/100)
-(final results comment). Raw per-run artifacts (transcripts, gates, scores,
-ledgers) are retained offline and available on request — they are too large to
-vendor into this repository.
+(final results comment).
+
+The scored aggregate is now in this repository at
+[`docs/benchmark/ev006-aggregate.json`](benchmark/ev006-aggregate.json). Its
+SHA-256 is
+`61dad2cb43a11ce8ae9f6b0e82d492c71b6b46eae27a07418fd90fa673cf3848`.
+It contains scores only: `cells` has one row for each of the 105 benchmark
+runs, while `table` is a pre-aggregated summary. The recomputation script uses
+`cells`, not `table`. The file does not contain transcripts or prompts. Raw
+per-run artifacts (transcripts, gates, scores, ledgers) remain retained offline
+and available on request — they are too large to vendor into this repository.
+
+The rig's seal manifest is `corpora/main/SEAL-MANIFEST.txt`: 185 files, sealed
+at `2026-08-19T03:36:09Z`, with scope `corpora/main tools runner
+(py/md/json/sh) + design v3 + PREREGISTRATION`. The manifest itself is not
+vendored; its SHA-256 is
+`f31e9af832d7ac54922f5176228172aecadd080ff46f8d6a73e331d598389cb0`, so a
+reader who requests the corpus can verify that they received what was
+measured.
+
+From the repository root, recompute the published headline and size results:
+
+```sh
+python3 docs/benchmark/recompute.py
+```
+
+```text
+Primary result (M/L pooled)
+  bare verified completion: 4/30 (13%)
+  harness verified completion: 13/30 (43%)
+  bare unread completion claims: 222/226 (98%)
+  harness unread completion claims: 2/26 (8%)
+Verified completion by size
+  S: bare 10/15 (67%), harness 9/15 (60%)
+  M: bare 4/15 (27%), harness 8/15 (53%)
+  L: bare 0/15 (0%), harness 5/15 (33%)
+```
+
+That vendored aggregate backs the headline verified-completion and completion-
+hallucination figures, the per-size and per-genre splits, the token/time
+reductions, the Wilson confidence intervals, and the other per-run derivations
+on this page from the same 105 scored runs. Two numbers do not come from this
+file: `p = 0.0079` and the "3 accepted" out of the 54 near-miss candidates.
+Those come from the rig's pre-registered scoring and adjudication, documented
+in [harness#100](https://github.com/caty-ai/caty-agent-harness/issues/100).
+For the figures the script covers, if the script's output disagrees with the
+prose, the prose is wrong.

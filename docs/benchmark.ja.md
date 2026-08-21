@@ -45,8 +45,9 @@
 |---|---|---|
 | 検証済み完了・M/L プール（各腕 n=30） | 4/30（13%・CI 5–30%） | **13/30（43%・CI 27–61%）** |
 
-効果 **+30pt**・層別 exact 検定 **p = 0.0079**。素朴リトライ対照は 2/15（13%）で
-コストは素腕並み — リトライだけでは差は埋まりません。
+効果 **+30pt**・層別 exact 検定 **p = 0.0079**（rig が計算した事前登録の exact
+検定です）。素朴リトライ対照は 2/15（13%）でコストは素腕並み — リトライだけでは
+差は埋まりません。
 
 課題別（M/L プール）: リサーチ 4/10 → 7/10・コード質問 0/10 → **6/10**・
 CSV **0/10 → 0/10**（下の「弱点」参照）。
@@ -121,8 +122,54 @@ CSV **0/10 → 0/10**（下の「弱点」参照）。
 
 ## 再現・監査
 
-設計（5席クロスモデルレビュー）・事前登録・封印マニフェスト・生 writeback・
-裁定ログは [harness#100](https://github.com/caty-ai/caty-agent-harness/issues/100)
-（最終結果コメント）にあります。run ごとの生データ（transcript・gate・score・
-ledger）はサイズが大きいためリポジトリには同梱せず、オフライン保全 —
-求めがあれば提供します。
+設計（5席クロスモデルレビュー）・事前登録・生 writeback・
+裁定ログは
+[harness#100](https://github.com/caty-ai/caty-agent-harness/issues/100)
+（最終結果コメント）にあります。
+
+採点済み aggregate は
+[`docs/benchmark/ev006-aggregate.json`](benchmark/ev006-aggregate.json) として
+このリポジトリに同梱しました。SHA-256 は
+`61dad2cb43a11ce8ae9f6b0e82d492c71b6b46eae27a07418fd90fa673cf3848` です。
+中身は score のみです。`cells` には105本の benchmark run それぞれにつき
+1行が入り、`table` は事前集計済みの summary です。再計算スクリプトは
+`table` ではなく `cells` を使います。transcript や prompt は含みません。
+run ごとの生データ（transcript・gate・score・ledger）はサイズが大きいため
+引き続きリポジトリには同梱せず、オフライン保全しています。求めがあれば
+提供します。
+
+rig の封印マニフェストは `corpora/main/SEAL-MANIFEST.txt` です。
+185ファイルを `2026-08-19T03:36:09Z` に封印し、scope は
+`corpora/main tools runner (py/md/json/sh) + design v3 + PREREGISTRATION`
+です。マニフェスト自体は同梱せず、SHA-256
+`f31e9af832d7ac54922f5176228172aecadd080ff46f8d6a73e331d598389cb0` だけを
+記載します。コーパスを求めた読者は、測定に使われたものを受け取ったか
+検証できます。
+
+リポジトリのルートから次の1コマンドで、公開した主結果とサイズ別結果を
+再計算できます。
+
+```sh
+python3 docs/benchmark/recompute.py
+```
+
+```text
+Primary result (M/L pooled)
+  bare verified completion: 4/30 (13%)
+  harness verified completion: 13/30 (43%)
+  bare unread completion claims: 222/226 (98%)
+  harness unread completion claims: 2/26 (8%)
+Verified completion by size
+  S: bare 10/15 (67%), harness 9/15 (60%)
+  M: bare 4/15 (27%), harness 8/15 (53%)
+  L: bare 0/15 (0%), harness 5/15 (33%)
+```
+
+この同梱 aggregate が裏づけるのは、このページの検証済み完了と完了
+ハルシネーションの主数字、サイズ別・課題別の分割、token/time の削減、Wilson の
+信頼区間、そして同じ105本の採点済み run から引けるそのほかの per-run 派生量です。
+例外は 2 つだけで、`p = 0.0079` と、54件の near-miss 候補のうち「受理 3 件」です。
+これらはこのファイルではなく rig の事前登録済み scoring / adjudication に由来し、
+根拠は [harness#100](https://github.com/caty-ai/caty-agent-harness/issues/100) にあります。
+スクリプトがカバーする数字については、出力と本文が食い違うなら、間違っているのは
+本文です。
