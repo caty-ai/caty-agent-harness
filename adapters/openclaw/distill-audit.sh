@@ -13,6 +13,37 @@ infra_fail() {
   exit 3
 }
 
+trim_outer_whitespace() {
+  local value=${1-}
+  value=${value#"${value%%[![:space:]]*}"}
+  value=${value%"${value##*[![:space:]]}"}
+  printf '%s' "$value"
+}
+
+is_nonnegative_integer() {
+  local value
+  value=$(trim_outer_whitespace "${1-}")
+  case "$value" in
+    ''|*[!0-9]*|0[0-9]*) return 1 ;;
+    *) [ "$value" -ge 0 ] 2>/dev/null ;;
+  esac
+}
+
+read_wc_count() {
+  local wc_option=$1
+  local file=$2
+  local count
+
+  if ! count=$(wc "$wc_option" <"$file" 2>/dev/null); then
+    infra_fail "wc $wc_option failed: file='$file'"
+  fi
+  count=$(trim_outer_whitespace "$count")
+  if ! is_nonnegative_integer "$count"; then
+    infra_fail "invalid wc $wc_option count: value='$count' file='$file'"
+  fi
+  WC_COUNT=$count
+}
+
 injection_size_check() {
   local workspace_root=${1:-}
   local pending=${2:-}
@@ -475,7 +506,8 @@ fi
 
 LC_ALL=C sort -n "$candidate_list" >"$work_dir/candidates.sorted.tsv"
 mv "$work_dir/candidates.sorted.tsv" "$candidate_list"
-files_scanned=$(wc -l <"$candidate_list" | tr -d '[:space:]')
+read_wc_count -l "$candidate_list"
+files_scanned=$WC_COUNT
 
 if [[ "$files_scanned" -eq 0 ]]; then
   printf 'nothing to distill\n'
@@ -514,7 +546,8 @@ while :; do
   mv "$work_dir/selected.next.tsv" "$selected_list"
 done
 
-selected_count=$(wc -l <"$selected_list" | tr -d '[:space:]')
+read_wc_count -l "$selected_list"
+selected_count=$WC_COUNT
 dropped_count=$((files_scanned - selected_count))
 # The sorted mtime/size/path list is the deterministic identity of this input batch.
 task_id=$(sha256_file "$selected_list")
@@ -652,8 +685,10 @@ while IFS=$'\t' read -r key line; do
   fi
 done <"$failures_file"
 
-lessons_added=$(wc -l <"$deduped_lessons" | tr -d '[:space:]')
-failures_added=$(wc -l <"$deduped_failures" | tr -d '[:space:]')
+read_wc_count -l "$deduped_lessons"
+lessons_added=$WC_COUNT
+read_wc_count -l "$deduped_failures"
+failures_added=$WC_COUNT
 evicted_by_cap=0
 
 if [[ "$lessons_added" -gt 0 || "$failures_added" -gt 0 ]]; then

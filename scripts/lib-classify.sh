@@ -1,8 +1,28 @@
 #!/usr/bin/env bash
 
+CLASSIFY_INLINE_MAX_BYTES=131072
+CLASSIFY_WINDOW_BYTES=65536
+
+_classify_trim_outer_whitespace() {
+  local value=${1-}
+  value=${value#"${value%%[![:space:]]*}"}
+  value=${value%"${value##*[![:space:]]}"}
+  printf '%s' "$value"
+}
+
+_classify_is_nonnegative_integer() {
+  local value
+  value=$(_classify_trim_outer_whitespace "${1-}")
+  case "$value" in
+    ''|*[!0-9]*|0[0-9]*) return 1 ;;
+    *) [ "$value" -ge 0 ] 2>/dev/null ;;
+  esac
+}
+
 _classify_read_bounded() {
   local file=$1
   local size=''
+  local size_unknown=0
   local LC_ALL=C
   export LC_ALL
 
@@ -16,11 +36,17 @@ _classify_read_bounded() {
 
   if ! size=$(wc -c <"$file" 2>/dev/null); then
     printf 'classify_failure: unreadable evidence: %s\n' "$file" >&2
-    return 0
+    size_unknown=1
+  else
+    size=$(_classify_trim_outer_whitespace "$size")
+    if ! _classify_is_nonnegative_integer "$size"; then
+      printf "classify_failure: invalid evidence size: value='%s' file='%s'\n" "$size" "$file" >&2
+      size=''
+      size_unknown=1
+    fi
   fi
-  size=$(printf '%s' "$size" | tr -d '[:space:]')
 
-  if (( size <= 131072 )); then
+  if (( size_unknown == 0 && size <= CLASSIFY_INLINE_MAX_BYTES )); then
     if ! cat "$file" 2>/dev/null; then
       printf 'classify_failure: unreadable evidence: %s\n' "$file" >&2
     fi
@@ -28,12 +54,12 @@ _classify_read_bounded() {
   fi
 
   # A marker fully outside the first and last 64 KiB windows is not seen.
-  if ! head -c 65536 "$file" 2>/dev/null; then
+  if ! head -c "$CLASSIFY_WINDOW_BYTES" "$file" 2>/dev/null; then
     printf 'classify_failure: unreadable evidence: %s\n' "$file" >&2
     return 0
   fi
   printf '\n'
-  if ! tail -c 65536 "$file" 2>/dev/null; then
+  if ! tail -c "$CLASSIFY_WINDOW_BYTES" "$file" 2>/dev/null; then
     printf 'classify_failure: unreadable evidence: %s\n' "$file" >&2
   fi
 }
