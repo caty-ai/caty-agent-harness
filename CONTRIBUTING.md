@@ -7,6 +7,7 @@ Thanks for your interest in improving Caty Agent Harness.
 - **Issue first.** Open a GitHub issue before starting non-trivial work. State *why* the change is needed, *what "done" looks like* (checkable conditions), and *which files you expect to touch*. One-line fixes such as typos are exempt.
 - **Stay inside the documented seams.** Integrations must go through the documented plugin seams (`scripts/tr-enqueue`, pinned templates, read-only artifact consumption) and must not bypass runtime-specific installer or verifier requirements. See [docs/plugin-convention.md](docs/plugin-convention.md).
 - **Honest completion.** A change is done when its stated done-conditions pass with evidence, not when it looks done. Pull requests should list which conditions passed and how they were checked.
+- **Validate external numerics narrowly.** Before using numeric text from an external command or API in arithmetic or comparisons, validate the exact decimal format the code accepts (follow `scripts/tr-enqueue`'s `is_positive_integer()` style). Validation failures must stop processing with an explicit error. The sole exception is an explicitly named conservative fallback that can only restrict processing and cannot broaden permissions, allowances, or budgets; for example, `scripts/lib-classify.sh` uses bounded window reads when evidence size is unreadable or invalid.
 
 ## Prerequisites
 
