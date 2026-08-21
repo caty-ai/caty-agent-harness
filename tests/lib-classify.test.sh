@@ -68,6 +68,9 @@ fill_bytes() {
 
 check auth-401 1 auth-401.json deterministic-auth
 check auth-403 1 auth-403.json deterministic-auth
+check auth-403-permission 1 auth-403-permission.json deterministic-auth
+check auth-402-billing 1 auth-402-billing.json deterministic-auth
+check oauth-invalid-grant 1 oauth-invalid-grant.json deterministic-auth
 check invalid-request 1 invalid-request.json deterministic-input
 check rate-limit 1 rate-limit.json transient
 check timeout-408 1 timeout-408.json transient
@@ -85,6 +88,9 @@ check degenerate-whitespace 1 degenerate-whitespace.txt degenerate
 check signal-137 137 unknown.json transient
 check backward-compatible-two-arg-auth 1 auth-401.json deterministic-auth
 check_with_stdout stdout-only-cli-login 1 degenerate-empty.txt cli-not-logged-in.txt deterministic-auth
+check_with_stdout stdout-oauth-invalid-grant 1 degenerate-empty.txt oauth-invalid-grant.json deterministic-auth
+check_with_stdout stdout-auth-permission 1 degenerate-empty.txt auth-403-permission.json deterministic-auth
+check_with_stdout stdout-auth-billing 1 degenerate-empty.txt auth-402-billing.json deterministic-auth
 check_with_stdout empty-stderr-and-stdout 1 degenerate-empty.txt degenerate-empty.txt degenerate
 check_with_stdout combined-transient-wins-over-auth 1 rate-limit.json cli-not-logged-in.txt transient
 

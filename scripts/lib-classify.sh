@@ -72,7 +72,7 @@ classify_failure() {
       printf '%s\n' context-overflow
       return 0
       ;;
-    *' 401 '*|*'"status":401'*|*'"status": 401'*|*'401 Unauthorized'*|*'status code 401'*|*' 403 '*|*'"status":403'*|*'"status": 403'*|*'403 Forbidden'*|*'status code 403'*|*'authentication_error'*|*'invalid_api_key'*|*'invalid api key'*|*'unauthorized'*|*'forbidden'*|*'Not logged in'*|*'not logged in'*|*'Please run /login'*|*'login required'*|*'Login required'*)
+    *' 401 '*|*'"status":401'*|*'"status": 401'*|*'401 Unauthorized'*|*'status code 401'*|*' 403 '*|*'"status":403'*|*'"status": 403'*|*'403 Forbidden'*|*'status code 403'*|*'authentication_error'*|*'invalid_api_key'*|*'invalid api key'*|*'unauthorized'*|*'forbidden'*|*'Not logged in'*|*'not logged in'*|*'Please run /login'*|*'login required'*|*'Login required'*|*'permission_error'*|*'billing_error'*|*'invalid_grant'*)
       printf '%s\n' deterministic-auth
       return 0
       ;;
@@ -94,7 +94,7 @@ classify_failure() {
       printf '%s\n' context-overflow
       return 0
       ;;
-    *'"status":401'*|*'"status": 401'*|*'401 Unauthorized'*|*'status code 401'*|*'"status":403'*|*'"status": 403'*|*'403 Forbidden'*|*'status code 403'*|*'authentication_error'*|*'invalid_api_key'*|*'Not logged in'*|*'Please run /login'*|*'Login required'*)
+    *'"status":401'*|*'"status": 401'*|*'401 Unauthorized'*|*'status code 401'*|*'"status":403'*|*'"status": 403'*|*'403 Forbidden'*|*'status code 403'*|*'authentication_error'*|*'invalid_api_key'*|*'Not logged in'*|*'Please run /login'*|*'Login required'*|*'permission_error'*|*'billing_error'*|*'invalid_grant'*)
       printf '%s\n' deterministic-auth
       return 0
       ;;
