@@ -34,4 +34,5 @@ scripts/lib-state-fold.sh	exempt	explicit-function-argument	not-applicable	sourc
 scripts/lib-wrapper-conformance.sh	exempt	none	not-applicable	sourced-library	-	-
 scripts/flush-intake.sh	exempt	explicit-function-argument	not-applicable	sourced-intake-core-guarded-by-adapter-entries	-	-
 scripts/loop-init	exempt	--workspace	not-applicable	explicit-initialization-command	-	-
+scripts/raw-week.sh	exempt	--workspace	not-applicable	read-only-inspection	-	-
 scripts/tr-metrics.sh	exempt	argv.workspace	not-applicable	read-only-inspection	-	-
