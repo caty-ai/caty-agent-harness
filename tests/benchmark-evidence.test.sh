@@ -97,7 +97,7 @@ assert_stdout_block \
   "$ROOT/docs/benchmark.ja.md"
 
 doc_digest_stderr="$TMP/doc-digest.stderr"
-if doc_digest_lines=$(python3 - "$RECOMPUTE" "$ROOT/docs/benchmark.md" "$ROOT/docs/benchmark.ja.md" 2>"$doc_digest_stderr" <<'PY'
+if python3 - "$RECOMPUTE" "$ROOT/docs/benchmark.md" "$ROOT/docs/benchmark.ja.md" 2>"$doc_digest_stderr" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -110,30 +110,35 @@ matches = re.findall(
 )
 if len(matches) != 1:
     raise SystemExit("expected exactly one literal EXPECTED_SHA256 assignment")
-expected = matches[0]
+aggregate_digest = matches[0]
+# The seal manifest is deliberately not vendored. This test is the only in-repo
+# pin for its digest, so changing it must be a deliberate two-place act.
+seal_manifest_digest = "f31e9af832d7ac54922f5176228172aecadd080ff46f8d6a73e331d598389cb0"
+expected_digests = {aggregate_digest, seal_manifest_digest}
+errors = []
 
 for document in sys.argv[2:]:
     text = Path(document).read_text(encoding="utf-8")
-    match = re.search(r'ev006-aggregate\.json.*?`([0-9a-f]{64})`', text, re.DOTALL)
-    if match is None:
-        raise SystemExit(f"could not find the quoted aggregate digest in {document}")
-    print(f"{document}\t{expected}\t{match.group(1)}")
+    found_digests = set(re.findall(r"[0-9a-f]{64}", text))
+    unexpected_digests = sorted(found_digests - expected_digests)
+    missing_digests = sorted(expected_digests - found_digests)
+    for digest in unexpected_digests:
+        errors.append(
+            f"document={document} value={digest}; any 64-hex string in these docs "
+            "must be one of the two known digests; if it is a new digest being "
+            "introduced deliberately, it must be added to this test's expected set"
+        )
+    for digest in missing_digests:
+        errors.append(f"document={document} missing expected digest={digest}")
+
+if errors:
+    raise SystemExit("; ".join(errors))
 PY
-); then
-  doc_digest_ok=1
-  while IFS=$'\t' read -r document expected_digest quoted_digest; do
-    if [[ "$quoted_digest" != "$expected_digest" ]]; then
-      doc_digest_ok=0
-      fail_case 'benchmark prose quotes the sha256 pinned in recompute.py' \
-        "document=$document expected=$expected_digest quoted=$quoted_digest; update the quoted aggregate digest to match recompute.py"
-    fi
-  done <<<"$doc_digest_lines"
-  if [[ "$doc_digest_ok" -eq 1 ]]; then
-    # This only catches partial or lazy edits where the prose digest drifts from
-    # the pinned file and script; an author who edits every anchor together can
-    # still fabricate evidence entirely in-repo.
-    pass 'benchmark prose quotes the sha256 pinned in recompute.py'
-  fi
+then
+  # This only catches partial or lazy edits where the prose digest drifts from
+  # the pinned file and script; an author who edits every anchor together can
+  # still fabricate evidence entirely in-repo.
+  pass 'benchmark prose quotes the sha256 pinned in recompute.py'
 else
   fail_case 'benchmark prose quotes the sha256 pinned in recompute.py' \
     "$(cat "$doc_digest_stderr"); keep one literal EXPECTED_SHA256 assignment in recompute.py and quote that same digest in both benchmark prose files"
