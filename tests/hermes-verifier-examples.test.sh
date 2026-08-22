@@ -28,7 +28,9 @@ fail_case() {
 }
 
 mode_of() {
-  stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"
+  # GNU first: on GNU coreutils `stat -f` does not fail — it prints filesystem
+  # status — so the BSD-first order silently returns garbage on Linux.
+  stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null
 }
 
 fake_provider=$TMP_ROOT/fake-provider.sh
@@ -262,9 +264,14 @@ wrapper_sha=$(shasum -a 256 "$CANONICAL_WRAPPER" | cut -d' ' -f1)
 provider_sha=$(shasum -a 256 "$PROVIDER" | cut -d' ' -f1)
 probe_sha=$(shasum -a 256 "$PROBE" | cut -d' ' -f1)
 modes_ok=1
+mode_diag=
 for example_file in "$CANONICAL_WRAPPER" "$PROVIDER" "$PROBE"; do
   mode=$(mode_of "$example_file")
-  if [ ! -x "$example_file" ] || (( (8#$mode & 8#022) != 0 )); then
+  if ! [[ "$mode" =~ ^[0-7]+$ ]]; then
+    mode_first_line=$(printf '%s\n' "$mode" | sed -n '1p')
+    modes_ok=0
+    mode_diag="${mode_diag}invalid_mode example_file=$example_file mode_first_line=$mode_first_line; "
+  elif [ ! -x "$example_file" ] || (( (8#$mode & 8#022) != 0 )); then
     modes_ok=0
   fi
 done
@@ -273,7 +280,16 @@ if [ "$wrapper_sha" != "$provider_sha" ] && [ "$wrapper_sha" != "$probe_sha" ] \
   pass '[8] example files have distinct content, executable modes, and no group/world write bit'
 else
   fail_case '[8] example files have distinct content, executable modes, and no group/world write bit' \
-    "modes_ok=$modes_ok"
+    "modes_ok=$modes_ok mode_diag=$mode_diag"
+fi
+
+fixture_mode=$(mode_of "$fake_provider")
+if [[ "$fixture_mode" =~ ^[0-7]+$ ]]; then
+  pass '[8a] mode_of returns a pure-octal mode for a known fixture'
+else
+  fixture_mode_first_line=$(printf '%s\n' "$fixture_mode" | sed -n '1p')
+  fail_case '[8a] mode_of returns a pure-octal mode for a known fixture' \
+    "example_file=$fake_provider mode_first_line=$fixture_mode_first_line"
 fi
 
 # The single-quoted text below is an intentional literal source pattern.
