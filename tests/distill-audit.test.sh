@@ -309,6 +309,65 @@ ws=$(make_ws cap)
 distiller=$TMP_ROOT/fake-distiller.sh
 write_distiller "$distiller"
 attest_distiller_wrapper "$distiller" fake-distiller
+
+invalid_wc_bin=$TMP_ROOT/invalid-wc-bin
+mkdir -p "$invalid_wc_bin"
+printf '%s\n' '#!/usr/bin/env bash' \
+  'if [ "${1:-}" = "-l" ]; then' \
+  '  case "${ISSUE105_WC_MODE:-invalid}" in' \
+  '    fail) exit 1 ;;' \
+  "    leading-zero) printf '%s\\n' 0200000; exit 0 ;;" \
+  "    internal-space) printf '  12 34  \\n'; exit 0 ;;" \
+  "    invalid) printf '%s\\n' not-a-number; exit 0 ;;" \
+  '  esac' \
+  'fi' \
+  'exec /usr/bin/wc "$@"' >"$invalid_wc_bin/wc"
+chmod +x "$invalid_wc_bin/wc"
+ws=$(make_ws invalid-files-scanned-count)
+output=$(PATH="$invalid_wc_bin:$PATH" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+if [ "$rc" -eq 3 ] \
+  && printf '%s\n' "$output" | grep -Fq "distill-audit infra error: invalid wc -l count: value='not-a-number'" \
+  && [ ! -e "$ws/loop/.distill-last-run" ]; then
+  pass "nonnumeric external count is rejected before arithmetic"
+else
+  fail_case "nonnumeric external count is rejected before arithmetic" "rc=$rc output=$output"
+fi
+
+ws=$(make_ws leading-zero-files-scanned-count)
+output=$(PATH="$invalid_wc_bin:$PATH" ISSUE105_WC_MODE=leading-zero DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+if [ "$rc" -eq 3 ] \
+  && printf '%s\n' "$output" | grep -Fq "distill-audit infra error: invalid wc -l count: value='0200000'" \
+  && [ ! -e "$ws/loop/.distill-last-run" ]; then
+  pass "leading-zero external count is rejected before arithmetic"
+else
+  fail_case "leading-zero external count is rejected before arithmetic" "rc=$rc output=$output"
+fi
+
+ws=$(make_ws internal-space-files-scanned-count)
+output=$(PATH="$invalid_wc_bin:$PATH" ISSUE105_WC_MODE=internal-space DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+if [ "$rc" -eq 3 ] \
+  && printf '%s\n' "$output" | grep -Fq "distill-audit infra error: invalid wc -l count: value='12 34'" \
+  && [ ! -e "$ws/loop/.distill-last-run" ]; then
+  pass "internal-whitespace external count is rejected before arithmetic"
+else
+  fail_case "internal-whitespace external count is rejected before arithmetic" "rc=$rc output=$output"
+fi
+
+ws=$(make_ws failed-files-scanned-count)
+output=$(PATH="$invalid_wc_bin:$PATH" ISSUE105_WC_MODE=fail DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+if [ "$rc" -eq 3 ] \
+  && printf '%s\n' "$output" | grep -Fq 'distill-audit infra error: wc -l failed:' \
+  && [ ! -e "$ws/loop/.distill-last-run" ]; then
+  pass "failed external count command stops with an explicit error"
+else
+  fail_case "failed external count command stops with an explicit error" "rc=$rc output=$output"
+fi
+
+ws=$(make_ws cap)
 output=$(DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
 rc=$?
 lessons_lines=$(section_count "## Lessons learned" "$ws/STATE.md")
