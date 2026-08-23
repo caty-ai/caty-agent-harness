@@ -83,7 +83,7 @@ Harness は各ツールが支えられる範囲で同じように役立ちます
 
 > AI エージェント経由で導入する場合は [agent-guide.md](agent-guide.md)（英語）を渡してください。runtime の選択・ヘルスチェック・必要な後続配線まで一本道で案内します。
 
-installer、scaffold、pause command の前提は、Git と bash 3.2+ が動く macOS または Linux を使っていることです。runtime hook、`task-runner`、adapter integration、fully operational な runtime 配線には Python 3 が必要です。
+installer、scaffold、pause command の前提は、Git と bash 3.2+ が動く macOS、Linux、または [WSL2 サポートメモ](wsl2-support.md)の条件を満たす WSL2（Ubuntu on Windows）を使っていることです。native Windows は非対応です。runtime hook、`task-runner`、adapter integration、fully operational な runtime 配線には Python 3 が必要です。
 
 ```sh
 git clone https://github.com/caty-ai/caty-agent-harness.git
