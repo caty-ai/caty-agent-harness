@@ -564,8 +564,7 @@ expect_library_failure "group-writable evidence fails closed" verifier "$wrapper
 mode_wrapper=$TMP_ROOT/group-writable-wrapper.sh
 mode_wrapper_provider=$TMP_ROOT/group-writable-wrapper-provider.sh
 mode_wrapper_probe=$TMP_ROOT/group-writable-wrapper-probe.sh
-mode_wrapper_sentinel=$TMP_ROOT/group-writable-wrapper.executed
-write_exec_sentinel_wrapper "$mode_wrapper" "$mode_wrapper_sentinel" verifier
+write_pass_verifier_wrapper "$mode_wrapper"
 conformance_write_provider "$mode_wrapper_provider"
 conformance_write_probe "$mode_wrapper_probe"
 chmod 0775 "$mode_wrapper"
@@ -579,20 +578,18 @@ mode_wrapper_rc=$?
 set -e
 mode_wrapper_reason="attest-wrapper: wrapper_path must not be group- or world-writable: $mode_wrapper"
 if [ "$mode_wrapper_rc" -ne 0 ] \
-  && [ "$mode_wrapper_output" = "$mode_wrapper_reason" ] \
-  && [ ! -e "$mode_wrapper_sentinel" ]; then
-  pass "attester rejects a group-writable wrapper before execution"
+  && [ "$mode_wrapper_output" = "$mode_wrapper_reason" ]; then
+  pass "attester reports the exact reason for a group-writable wrapper"
 else
-  fail_case "attester rejects a group-writable wrapper before execution" \
-    "rc=$mode_wrapper_rc output=$mode_wrapper_output sentinel=$(cat "$mode_wrapper_sentinel" 2>/dev/null)"
+  fail_case "attester reports the exact reason for a group-writable wrapper" \
+    "rc=$mode_wrapper_rc output=$mode_wrapper_output"
 fi
 
 mode_provider_wrapper=$TMP_ROOT/group-writable-provider-wrapper.sh
 mode_provider=$TMP_ROOT/group-writable-provider.sh
 mode_provider_probe=$TMP_ROOT/group-writable-provider-probe.sh
-mode_provider_sentinel=$TMP_ROOT/group-writable-provider.executed
 write_pass_verifier_wrapper "$mode_provider_wrapper"
-write_exec_sentinel_wrapper "$mode_provider" "$mode_provider_sentinel" provider
+conformance_write_provider "$mode_provider"
 conformance_write_probe "$mode_provider_probe"
 chmod 0775 "$mode_provider"
 set +e
@@ -605,12 +602,11 @@ mode_provider_rc=$?
 set -e
 mode_provider_reason="attest-wrapper: provider_path must not be group- or world-writable: $mode_provider"
 if [ "$mode_provider_rc" -ne 0 ] \
-  && [ "$mode_provider_output" = "$mode_provider_reason" ] \
-  && [ ! -e "$mode_provider_sentinel" ]; then
-  pass "attester rejects a group-writable provider before execution"
+  && [ "$mode_provider_output" = "$mode_provider_reason" ]; then
+  pass "attester reports the exact reason for a group-writable provider"
 else
-  fail_case "attester rejects a group-writable provider before execution" \
-    "rc=$mode_provider_rc output=$mode_provider_output sentinel=$(cat "$mode_provider_sentinel" 2>/dev/null)"
+  fail_case "attester reports the exact reason for a group-writable provider" \
+    "rc=$mode_provider_rc output=$mode_provider_output"
 fi
 
 mode_probe_wrapper=$TMP_ROOT/group-writable-probe-wrapper.sh
@@ -659,6 +655,7 @@ case "\$1" in
 esac
 exit 1
 SH
+# This is a PATH shim, not a trust input, and is deliberately outside the explicit-octal rule.
 chmod +x "$fake_stat_bin/stat"
 set +e
 PATH="$fake_stat_bin:$PATH" wrapper_conformance_validate_trusted_file_mode wrapper_path "$wrapper"
@@ -690,6 +687,31 @@ if [ "$rc" -ne 0 ] \
 else
   fail_case "ownership validation rejects a foreign-owned wrapper before execution" \
     "rc=$rc reason=$WRAPPER_CONFORMANCE_REASON log=$(cat "$fake_stat_log" 2>/dev/null) sentinel=$(cat "$ownership_sentinel" 2>/dev/null)"
+fi
+
+attest_ownership_wrapper=$TMP_ROOT/foreign-owner-attest-wrapper.sh
+attest_ownership_provider=$TMP_ROOT/foreign-owner-attest-provider.sh
+attest_ownership_probe=$TMP_ROOT/foreign-owner-attest-probe.sh
+attest_ownership_probe_sentinel=$TMP_ROOT/foreign-owner-attest-probe.executed
+write_pass_verifier_wrapper "$attest_ownership_wrapper"
+conformance_write_provider "$attest_ownership_provider"
+write_exec_sentinel_probe "$attest_ownership_probe" "$attest_ownership_probe_sentinel"
+set +e
+attest_ownership_output=$(
+  PROBE_PROVIDER_PATH="$attest_ownership_provider" PATH="$fake_stat_bin:$PATH" \
+    "$ROOT/scripts/attest-wrapper" --route verifier --wrapper "$attest_ownership_wrapper" \
+      --probe "$attest_ownership_probe" 2>&1
+)
+attest_ownership_rc=$?
+set -e
+attest_ownership_reason="attest-wrapper: wrapper_path must be owned by the invoking uid or root: $attest_ownership_wrapper"
+if [ "$attest_ownership_rc" -ne 0 ] \
+  && [ "$attest_ownership_output" = "$attest_ownership_reason" ] \
+  && [ ! -e "$attest_ownership_probe_sentinel" ]; then
+  pass "attester rejects a foreign-owned wrapper before running the probe"
+else
+  fail_case "attester rejects a foreign-owned wrapper before running the probe" \
+    "rc=$attest_ownership_rc output=$attest_ownership_output sentinel=$(cat "$attest_ownership_probe_sentinel" 2>/dev/null)"
 fi
 
 wrapper=$TMP_ROOT/ttl-wrapper.sh

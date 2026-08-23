@@ -164,12 +164,12 @@ jobs:
       UMASK_MODE: ${{ matrix.umask_mode }}
       ASSERT_GIT_234: ${{ matrix.assert_git_234 }}
       ASSERT_GIT_MIN_234: ${{ matrix.assert_git_min_234 }}
-      WRAPPER_CONFORMANCE_PASS_FLOOR: '46'
+      WRAPPER_CONFORMANCE_PASS_FLOOR: '47'
       # Local macOS run measured 1081 lines on 2026-08-23; retain the original 45-line slack.
-      PASS_FLOOR: '1036'
+      PASS_FLOOR: '1037'
     steps:
       # Git must exist before checkout or checkout can silently degrade to its tarball fallback.
-      - name: Bootstrap git-2.34 container
+      - name: Bootstrap non-root container (git preinstall)
         if: matrix.run_as_nonroot
         shell: bash
         run: |

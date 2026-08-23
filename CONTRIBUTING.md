@@ -30,6 +30,8 @@ make lint
 
 `make test` runs every shell suite under `tests/` and reports all failing suites after the run; `make lint` syntax-checks every tracked shell script and rejects Bash 4.2+ Unicode escapes in ANSI-C quoted strings. All suites must pass before a pull request is reviewed. If your change alters installer, pause, task-runner, or adapter behavior, add or extend a test that pins the new contract.
 
+`WRAPPER_CONFORMANCE_PASS_FLOOR` in `.github/workflows/ci-matrix.yml` is an exact pin: adding a case to `tests/wrapper-conformance.test.sh` requires bumping it and `PASS_FLOOR` in the same pull request.
+
 WSL2 contributors run the same `make test` and `make lint`, with the same support conditions as the README: if you are validating install or hook behavior, your AI tool (Claude Code / Codex CLI) must run inside the same WSL2 distro, the repo must live on the Linux filesystem (`/home/...`, not `/mnt/c/...`) for correctness rather than speed, `git 2.34+` is required, the user must be non-root, and wrapper-type files must not be group/world-writable (for example `chmod 0755`). The post-merge `ci-matrix` job carries the closest automated approximation in the `ubuntu-wsl2-profile` cell (`umask 002`, non-root container); the pull-request gate is still `test-lint`, so a regression that appears only under `umask 002` will surface on `main`'s matrix run, not in the PR gate.
 
 ## Pull requests
