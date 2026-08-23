@@ -10,10 +10,11 @@
 [![CI: matrix (main)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/ci-matrix.yml/badge.svg?branch=main)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/ci-matrix.yml?query=branch%3Amain)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![runtime: bash 3.2+](https://img.shields.io/badge/runtime-bash%203.2%2B-lightgrey?logo=gnubash&logoColor=white)
-![platform: macOS | Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
+![platform: macOS | Linux | WSL2*](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20WSL2*-lightgrey)
 ![status: public preview](https://img.shields.io/badge/status-public--preview-blue)
 
 <sub>CI 证据（2026-08-15 UTC）：[矩阵 7/7 通过](https://github.com/caty-ai/caty-agent-harness/actions/runs/31858953187) ・ [同一 SHA 的 60 次独立运行、0 次失败](https://github.com/caty-ai/caty-agent-harness/actions/runs/31859000233)。每周运行 — 仓库 60 天无活动时 GitHub 会自动暂停计划任务，请留意运行日期。</sub>
+<br><sub>* WSL2 是一个“经实测但带条件”的 tier，只在一台带日期记录的 VM 上验证过，不属于 CI 已测试 tier；详见 [WSL2 support note](docs/wsl2-support.md)。</sub>
 
 一遍遍重复的背景说明。莫名消失的上下文。没有任何凭证的「完成了！」。<br>
 Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决掉。<br>
@@ -115,7 +116,8 @@ flowchart LR
 | 类别 | 支持情况 |
 | --- | --- |
 | 操作系统 | macOS：✅ 已通过 CI 测试（GitHub Actions `macos-latest`，Apple 芯片） ／ Linux：✅ 已通过 CI 测试（GitHub Actions `ubuntu-latest`） |
-| Windows | ❌ 不支持（未测试；WSL 未测试） |
+| Windows (native) | ❌ 不支持 — 实测到三道硬墙：`chmod` 会悄悄变成 `644`，`ln -s` 会变成复制，且没有 `flock`。详见 [WSL2 support note](docs/wsl2-support.md#windows-native-walls)。 |
+| WSL2 (Ubuntu on Windows) | 🟡 有条件支持 — 已于 2026-08-23 在 `win11-test-vm` 上实测通过（30/30 suites、`umask 0002`、非 root、Linux filesystem），但不是 CI 已测试 tier。<br>你的 AI tool（Claude Code / Codex CLI）必须运行在同一个 WSL2 distro 里；如果 agent 运行在 Windows 侧，安装会成功，但 hooks 会始终不触发。<br>repo 必须放在 Linux filesystem（`/home/...`，不要放在 `/mnt/c/...`），这是正确性要求，不是速度建议；并使用 `git 2.34+`、非 root 用户，且确保 wrapper 类文件不是 group/world-writable（例如 `chmod 0755`）。CI 里的近似单元是 `ubuntu-wsl2-profile`（`umask 002`、非 root container）。[实测详情](docs/wsl2-support.md) |
 | AI 工具 | Claude Code ✅ ／ Codex CLI ✅ ／ Kimi Code CLI ✅ ／ Hermes Agent ✅ ／ OpenClaw ✅ |
 | Shell | bash 3.2+ ✅（macOS 默认版本即可） |
 | Python 3 | 幕后自动化（技术上叫 hooks 的机制）会用到——你的 AI 会替你确认 |
@@ -187,9 +189,9 @@ flowchart LR
 ## 项目现状
 
 - **CI**: [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml) — 每个 pull request 都会运行 `make test` + `make lint`
-- **已验证环境**: macOS（GitHub Actions `macos-latest`，Apple 芯片）与 Linux（`ubuntu-latest`）— 参见「[使用前提](#使用前提)」中的表格
+- **已验证环境**: macOS（GitHub Actions `macos-latest`，Apple 芯片）、Linux（`ubuntu-latest`）以及 WSL2（Ubuntu on Windows；2026-08-23 在 `win11-test-vm` 上实测 30/30 suites，Linux filesystem、非 root、`umask 0002`；不是 CI 已测试 tier）— 参见「[使用前提](#使用前提)」中的表格与 [WSL2 support note](docs/wsl2-support.md)
 - **成熟度**: public preview — [docs/cli-conventions.md](docs/cli-conventions.md) 中标记为 FROZEN 的 CLI 输出契约是稳定的，其余部分仍可能变动
-- **已知限制**: 不支持 Windows；部分 updater 测试套件需要 `ssh-keygen`（参见 [CONTRIBUTING 的 Prerequisites](CONTRIBUTING.md#prerequisites)）
+- **已知限制**: Native Windows 不受支持；上面的 WSL2 行是唯一经过实测的 Windows 相关路径。另有部分 updater 测试套件需要 `ssh-keygen`（参见 [CONTRIBUTING 的 Prerequisites](CONTRIBUTING.md#prerequisites)）
 
 最后再讲一句——这个工具所属的更大图景。
 

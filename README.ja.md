@@ -10,10 +10,11 @@
 [![CI: matrix (main)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/ci-matrix.yml/badge.svg?branch=main)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/ci-matrix.yml?query=branch%3Amain)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![runtime: bash 3.2+](https://img.shields.io/badge/runtime-bash%203.2%2B-lightgrey?logo=gnubash&logoColor=white)
-![platform: macOS | Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
+![platform: macOS | Linux | WSL2*](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20WSL2*-lightgrey)
 ![status: public preview](https://img.shields.io/badge/status-public--preview-blue)
 
 <sub>CI 証拠（2026-08-15 UTC）: [マトリクス 7/7 green](https://github.com/caty-ai/caty-agent-harness/actions/runs/31858953187) ・ [同一 SHA に対する 60 回の独立実行・フレーク0件](https://github.com/caty-ai/caty-agent-harness/actions/runs/31859000233)。週次実行 — リポジトリが60日間動かないと GitHub が schedule を自動停止するため、run の日付も確認してください。</sub>
+<br><sub>* WSL2 は 1 台の dated VM で条件つき実測済みの tier であり、CI テスト済み tier ではありません。詳しくは [WSL2 サポートメモ](docs/wsl2-support.md) を参照してください。</sub>
 
 説明のやり直し。消える文脈。証拠のない「できました！」。<br>
 Caty Agent Harness は、その全部をただのテキストファイルと確認の仕組みで解決します。<br>
@@ -115,7 +116,8 @@ flowchart LR
 | 観点 | 対応 |
 | --- | --- |
 | OS | macOS: ✅ CI テスト済み（GitHub Actions `macos-latest`・Apple シリコン） ／ Linux: ✅ CI テスト済み（GitHub Actions `ubuntu-latest`） |
-| Windows | ❌ 非対応（未テスト、WSL も未テスト） |
+| Windows (native) | ❌ 非対応 — 実測した壁は3つです: `chmod` が黙って `644` になり、`ln -s` はコピーになり、`flock` がありません。詳しくは [WSL2 サポートメモ](docs/wsl2-support.md#windows-native-walls) を参照してください。 |
+| WSL2 (Ubuntu on Windows) | 🟡 条件つき対応 — 2026-08-23 に `win11-test-vm` 上で実測済み（30/30 suites、`umask 0002`、非root、Linux filesystem）ですが、CI テストは未実施です。<br>AI ツール（Claude Code / Codex CLI）は同じ WSL2 distro の中で動かす必要があり、Windows 側で動かすと install は通っても hooks は一度も発火しません。<br>repo は速度のためではなく正しさのために Linux filesystem（`/home/...`、`/mnt/c/...` ではない）へ置き、`git 2.34+`・非rootユーザー・wrapper 系ファイルを group/world-writable にしないこと（例 `chmod 0755`）。CI 上の近似セルは `ubuntu-wsl2-profile`（`umask 002`、非root container）です。[実測詳細](docs/wsl2-support.md) |
 | 対応 AI ツール | Claude Code ✅ ／ Codex CLI ✅ ／ Kimi Code CLI ✅ ／ Hermes Agent ✅ ／ OpenClaw ✅ |
 | シェル | bash 3.2+ ✅（macOS 標準のままで OK） |
 | Python 3 | 裏方の自動処理（技術的には hook と呼ばれる仕組み）が使います（有無は AI が確認してくれます） |
@@ -188,9 +190,9 @@ workspace としてインストールし、ヘルスチェックを実行し、�
 ## プロジェクトの現況
 
 - **CI**: [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml) — すべての pull request で `make test` + `make lint` を実行
-- **検証済み環境**: macOS（GitHub Actions `macos-latest`・Apple シリコン）と Linux（`ubuntu-latest`）—「[使うのに必要なもの](#使うのに必要なもの)」の表を参照
+- **検証済み環境**: macOS（GitHub Actions `macos-latest`・Apple シリコン）、Linux（`ubuntu-latest`）、WSL2（Ubuntu on Windows。2026-08-23 に `win11-test-vm` 上で 30/30 suites、Linux filesystem、非root、`umask 0002` を実測。CI テストではない）—「[使うのに必要なもの](#使うのに必要なもの)」の表と [WSL2 サポートメモ](docs/wsl2-support.md) を参照
 - **成熟度**: public preview — [docs/cli-conventions.md](docs/cli-conventions.md) の FROZEN な CLI 出力契約は安定・それ以外は変わり得ます
-- **既知の制約**: Windows 非対応・updater 系スイートの一部は `ssh-keygen` が必要（[CONTRIBUTING の Prerequisites](CONTRIBUTING.md#prerequisites) 参照）
+- **既知の制約**: Native Windows は非対応です。Windows 系で実測済みなのは上の WSL2 行だけです。加えて updater 系スイートの一部は `ssh-keygen` が必要です（[CONTRIBUTING の Prerequisites](CONTRIBUTING.md#prerequisites) 参照）
 
 最後に、このツールが属する大きな絵を一言だけ。
 
