@@ -105,7 +105,7 @@ write_verifier() {
 printf '%s\n' 'VERDICT: pass'
 printf '%s\n' 'fixture pass'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_configurable_verifier() {
@@ -115,7 +115,7 @@ write_configurable_verifier() {
 printf 'VERDICT: %s\n' "${VERIFY_TEST_VERDICT:-pass}"
 printf '%s\n' "${VERIFY_TEST_REASON:-configurable fixture}"
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_unicode_separator_verifier() {
@@ -125,7 +125,7 @@ write_unicode_separator_verifier() {
 printf '%s\n' 'VERDICT: pass'
 printf 'line-sep\342\200\250injected reason\n'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_corrupt_log_verifier() {
@@ -138,7 +138,7 @@ fi
 printf '%s\n' 'VERDICT: pass'
 printf '%s\n' 'record survives derived-log corruption'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_warning_verifier() {
@@ -149,7 +149,7 @@ printf '%s\n' 'provider warning retained on stderr' >&2
 printf '%s\n' 'VERDICT: pass'
 printf '%s\n' 'warning fixture pass'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_attempt_swap_verifier() {
@@ -161,7 +161,7 @@ ln -s "$VERIFY_TEST_SWAP_TARGET" "$VERIFY_TEST_SWAP_FROM"
 printf '%s\n' 'VERDICT: pass'
 printf '%s\n' 'attempt swap fixture pass'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_reason_hygiene_verifier() {
@@ -196,7 +196,7 @@ case "${VERIFY_REASON_MODE:-japanese}" in
     ;;
 esac
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_auth_failure_verifier() {
@@ -206,7 +206,7 @@ write_auth_failure_verifier() {
 printf '%s\n' 'AxiosError: Request failed with status code 401' >&2
 exit 1
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_hanging_verifier() {
@@ -215,7 +215,7 @@ write_hanging_verifier() {
 #!/usr/bin/env bash
 sleep 60
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_large_output_verifier() {
@@ -230,7 +230,7 @@ while [ "$i" -lt 4000 ]; do
   i=$((i + 1))
 done
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_confusable_duplicate_verifier() {
@@ -242,7 +242,7 @@ printf '%s\n' 'confusable duplicate fixture'
 printf '%s\n' 'VERDICT： fail'
 printf '%s\n' 'smuggled duplicate'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_nbsp_duplicate_verifier() {
@@ -254,7 +254,7 @@ printf '%s\n' 'nbsp duplicate fixture'
 printf 'VERDICT:\302\240fail\n'
 printf '%s\n' 'smuggled duplicate'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_verdict_last_verifier() {
@@ -265,7 +265,7 @@ printf '%s\n' 'finding line before verdict'
 printf '%s\n' 'VERDICT: fail'
 printf '%s\n' 'old behavior reason'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_unknown_verdict_verifier() {
@@ -275,7 +275,7 @@ write_unknown_verdict_verifier() {
 printf '%s\n' 'VERDICT: mystery'
 printf '%s\n' 'unknown verdict fixture'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_timeout_tail_verifier() {
@@ -292,7 +292,7 @@ printf '%s\n' 'timeout-stderr-01' >&2
 printf '%s\n' 'timeout-stderr-02' >&2
 sleep 60
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_prompt_dump_verifier() {
@@ -303,7 +303,7 @@ printf '%s\n' "$@" >"$PROMPT_DUMP"
 printf '%s\n' 'VERDICT: pass'
 printf '%s\n' 'no-findings; residual risk: fixture evidence is synthetic'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 attest_verifier_wrapper() {
@@ -541,7 +541,7 @@ cat >"$verifier" <<'SH'
 #!/usr/bin/env bash
 kill -TERM $$
 SH
-chmod +x "$verifier"
+chmod 0755 "$verifier"
 attest_verifier_wrapper "$verifier" signal-death
 set +e
 output=$(VERIFIER_CMD="$verifier" VERIFIER_ID=signal-death bash "$SCRIPT" "$bundle" 2>&1)

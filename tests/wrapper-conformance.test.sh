@@ -64,7 +64,7 @@ write_pass_verifier_wrapper() {
 printf '%s\n' 'VERDICT: pass'
 printf '%s\n' 'fixture pass'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_waiting_verifier_wrapper() {
@@ -80,7 +80,7 @@ done
 printf '%s\n' 'VERDICT: pass'
 printf '%s\n' 'fixture pass after staged wait'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_fail_verifier_wrapper() {
@@ -90,7 +90,7 @@ write_fail_verifier_wrapper() {
 printf '%s\n' 'VERDICT: fail'
 printf '%s\n' 'original wrapper replaced after staging'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_verdict_last_verifier_wrapper() {
@@ -101,7 +101,7 @@ printf '%s\n' 'analysis before the verdict is malformed'
 printf '%s\n' 'VERDICT: pass'
 printf '%s\n' 'late reason that must not escape'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_distiller_wrapper() {
@@ -115,7 +115,7 @@ cat <<'OUT'
 ## SKILL_DRAFTS
 OUT
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_exec_sentinel_wrapper() {
@@ -142,7 +142,7 @@ OUT
     ;;
 esac
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_exec_sentinel_probe() {
@@ -165,7 +165,7 @@ printf '%s\n' 'action_requests=auto-deny'
 printf '%s\n' 'permission_requests=auto-deny'
 printf '%s\n' 'workspace_access=none'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 attest_route_fixture() {
@@ -561,15 +561,95 @@ attest_route_fixture verifier permission-wrapper "$wrapper" "$evidence"
 chmod 666 "$evidence"
 expect_library_failure "group-writable evidence fails closed" verifier "$wrapper" "$evidence" 'evidence must not be group- or world-writable'
 
+mode_wrapper=$TMP_ROOT/group-writable-wrapper.sh
+mode_wrapper_provider=$TMP_ROOT/group-writable-wrapper-provider.sh
+mode_wrapper_probe=$TMP_ROOT/group-writable-wrapper-probe.sh
+mode_wrapper_sentinel=$TMP_ROOT/group-writable-wrapper.executed
+write_exec_sentinel_wrapper "$mode_wrapper" "$mode_wrapper_sentinel" verifier
+conformance_write_provider "$mode_wrapper_provider"
+conformance_write_probe "$mode_wrapper_probe"
+chmod 0775 "$mode_wrapper"
+set +e
+mode_wrapper_output=$(
+  PROBE_PROVIDER_PATH="$mode_wrapper_provider" \
+    "$ROOT/scripts/attest-wrapper" --route verifier --wrapper "$mode_wrapper" \
+      --probe "$mode_wrapper_probe" 2>&1
+)
+mode_wrapper_rc=$?
+set -e
+mode_wrapper_reason="attest-wrapper: wrapper_path must not be group- or world-writable: $mode_wrapper"
+if [ "$mode_wrapper_rc" -ne 0 ] \
+  && [ "$mode_wrapper_output" = "$mode_wrapper_reason" ] \
+  && [ ! -e "$mode_wrapper_sentinel" ]; then
+  pass "attester rejects a group-writable wrapper before execution"
+else
+  fail_case "attester rejects a group-writable wrapper before execution" \
+    "rc=$mode_wrapper_rc output=$mode_wrapper_output sentinel=$(cat "$mode_wrapper_sentinel" 2>/dev/null)"
+fi
+
+mode_provider_wrapper=$TMP_ROOT/group-writable-provider-wrapper.sh
+mode_provider=$TMP_ROOT/group-writable-provider.sh
+mode_provider_probe=$TMP_ROOT/group-writable-provider-probe.sh
+mode_provider_sentinel=$TMP_ROOT/group-writable-provider.executed
+write_pass_verifier_wrapper "$mode_provider_wrapper"
+write_exec_sentinel_wrapper "$mode_provider" "$mode_provider_sentinel" provider
+conformance_write_probe "$mode_provider_probe"
+chmod 0775 "$mode_provider"
+set +e
+mode_provider_output=$(
+  PROBE_PROVIDER_PATH="$mode_provider" \
+    "$ROOT/scripts/attest-wrapper" --route verifier --wrapper "$mode_provider_wrapper" \
+      --probe "$mode_provider_probe" 2>&1
+)
+mode_provider_rc=$?
+set -e
+mode_provider_reason="attest-wrapper: provider_path must not be group- or world-writable: $mode_provider"
+if [ "$mode_provider_rc" -ne 0 ] \
+  && [ "$mode_provider_output" = "$mode_provider_reason" ] \
+  && [ ! -e "$mode_provider_sentinel" ]; then
+  pass "attester rejects a group-writable provider before execution"
+else
+  fail_case "attester rejects a group-writable provider before execution" \
+    "rc=$mode_provider_rc output=$mode_provider_output sentinel=$(cat "$mode_provider_sentinel" 2>/dev/null)"
+fi
+
+mode_probe_wrapper=$TMP_ROOT/group-writable-probe-wrapper.sh
+mode_probe_provider=$TMP_ROOT/group-writable-probe-provider.sh
+mode_probe=$TMP_ROOT/group-writable-probe.sh
+mode_probe_sentinel=$TMP_ROOT/group-writable-probe.executed
+write_pass_verifier_wrapper "$mode_probe_wrapper"
+conformance_write_provider "$mode_probe_provider"
+write_exec_sentinel_probe "$mode_probe" "$mode_probe_sentinel"
+chmod 0775 "$mode_probe"
+set +e
+mode_probe_output=$(
+  PROBE_PROVIDER_PATH="$mode_probe_provider" \
+    "$ROOT/scripts/attest-wrapper" --route verifier --wrapper "$mode_probe_wrapper" \
+      --probe "$mode_probe" 2>&1
+)
+mode_probe_rc=$?
+set -e
+mode_probe_reason="attest-wrapper: probe_path must not be group- or world-writable: $mode_probe"
+if [ "$mode_probe_rc" -ne 0 ] \
+  && [ "$mode_probe_output" = "$mode_probe_reason" ] \
+  && [ ! -e "$mode_probe_sentinel" ]; then
+  pass "attester rejects a group-writable probe before execution"
+else
+  fail_case "attester rejects a group-writable probe before execution" \
+    "rc=$mode_probe_rc output=$mode_probe_output sentinel=$(cat "$mode_probe_sentinel" 2>/dev/null)"
+fi
+
 fake_stat_bin=$TMP_ROOT/fake-stat-bin
 fake_stat_log=$TMP_ROOT/fake-stat.log
+fake_stat_uid=$TMP_ROOT/fake-stat.uid
 mkdir -p "$fake_stat_bin"
+printf '%s\n' "$(id -u)" >"$fake_stat_uid"
 cat >"$fake_stat_bin/stat" <<SH
 #!/usr/bin/env bash
 printf '%s\n' "\$1" >>"$fake_stat_log"
 case "\$1" in
   -c)
-    printf '%s %s\n' "$(id -u)" 755
+    printf '%s %s\n' "\$(cat "$fake_stat_uid")" 755
     exit 0
     ;;
   -f)
@@ -588,6 +668,28 @@ if [ "$rc" -eq 0 ] && [ "$(sed -n '1p' "$fake_stat_log")" = -c ]; then
   pass "ownership probe selects GNU stat semantics before BSD fallback"
 else
   fail_case "ownership probe selects GNU stat semantics before BSD fallback" "rc=$rc reason=$WRAPPER_CONFORMANCE_REASON log=$(cat "$fake_stat_log" 2>/dev/null)"
+fi
+
+ownership_wrapper=$TMP_ROOT/foreign-owner-wrapper.sh
+ownership_sentinel=$TMP_ROOT/foreign-owner-wrapper.executed
+write_exec_sentinel_wrapper "$ownership_wrapper" "$ownership_sentinel" verifier
+current_uid=$(id -u)
+foreign_uid=$((current_uid + 1))
+printf '%s\n' "$foreign_uid" >"$fake_stat_uid"
+: >"$fake_stat_log"
+set +e
+PATH="$fake_stat_bin:$PATH" wrapper_conformance_validate_trusted_file_mode wrapper_path "$ownership_wrapper"
+rc=$?
+set -e
+ownership_reason="wrapper_path must be owned by the invoking uid or root: $ownership_wrapper"
+if [ "$rc" -ne 0 ] \
+  && [ "$WRAPPER_CONFORMANCE_REASON" = "$ownership_reason" ] \
+  && [ "$(sed -n '1p' "$fake_stat_log")" = -c ] \
+  && [ ! -e "$ownership_sentinel" ]; then
+  pass "ownership validation rejects a foreign-owned wrapper before execution"
+else
+  fail_case "ownership validation rejects a foreign-owned wrapper before execution" \
+    "rc=$rc reason=$WRAPPER_CONFORMANCE_REASON log=$(cat "$fake_stat_log" 2>/dev/null) sentinel=$(cat "$ownership_sentinel" 2>/dev/null)"
 fi
 
 wrapper=$TMP_ROOT/ttl-wrapper.sh
@@ -686,7 +788,7 @@ while :; do
   printf '%s\n' 'unbounded diagnostic output' >&2
 done
 SH
-chmod +x "$noisy_probe"
+chmod 0755 "$noisy_probe"
 set +e
 noisy_probe_start=$SECONDS
 noisy_probe_output=$(
@@ -743,7 +845,7 @@ while [ ! -f "$provider_release" ]; do
 done
 "\${FABLE_CONFORMING_PROVIDER_PATH:?}"
 SH
-chmod +x "$provider_wrapper"
+chmod 0755 "$provider_wrapper"
 write_pass_verifier_wrapper "$provider_original"
 conformance_write_probe "$provider_probe"
 conformance_attest_wrapper "$ROOT" verifier "$provider_wrapper" "$provider_original" "$provider_probe" staged-provider staged-provider-v1
