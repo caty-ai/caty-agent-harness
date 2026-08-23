@@ -43,7 +43,9 @@ jobs:
             assert_system_bash32: false
             run_lint: false
             run_as_nonroot: false
+            umask_mode: '022'
             assert_git_234: false
+            assert_git_min_234: false
           # GNU userland の non-C collation axis。
           - cell: ubuntu-enus
             runner: ubuntu-latest
@@ -56,7 +58,9 @@ jobs:
             assert_system_bash32: false
             run_lint: false
             run_as_nonroot: false
+            umask_mode: '022'
             assert_git_234: false
+            assert_git_min_234: false
           # Semantic cell, not a true 3.2: bash 5 with globasciiranges disabled.
           - cell: ubuntu-globascii-semantic
             runner: ubuntu-latest
@@ -69,7 +73,9 @@ jobs:
             assert_system_bash32: false
             run_lint: false
             run_as_nonroot: false
+            umask_mode: '022'
             assert_git_234: false
+            assert_git_min_234: false
           # bash 3.2 × C collation control.
           - cell: macos-b32-c
             runner: macos-latest
@@ -82,7 +88,9 @@ jobs:
             assert_system_bash32: true
             run_lint: true
             run_as_nonroot: false
+            umask_mode: '022'
             assert_git_234: false
+            assert_git_min_234: false
           # bash 3.2 × non-C collation for the 26 unpinned suites.
           - cell: macos-b32-enus
             runner: macos-latest
@@ -95,7 +103,9 @@ jobs:
             assert_system_bash32: true
             run_lint: true
             run_as_nonroot: false
+            umask_mode: '022'
             assert_git_234: false
+            assert_git_min_234: false
           # brew bash 5 separates the bash-version effect from the macOS effect.
           - cell: macos-b5-enus
             runner: macos-latest
@@ -108,7 +118,9 @@ jobs:
             assert_system_bash32: true
             run_lint: false
             run_as_nonroot: false
+            umask_mode: '022'
             assert_git_234: false
+            assert_git_min_234: false
           # Real lower boundary: Ubuntu 22.04 tag/index digest resolved 2026-08-15.
           - cell: git-2.34
             runner: ubuntu-latest
@@ -121,7 +133,24 @@ jobs:
             assert_system_bash32: false
             run_lint: false
             run_as_nonroot: true
+            umask_mode: '022'
             assert_git_234: true
+            assert_git_min_234: false
+          # WSL2 user profile approximation: Ubuntu userland, non-root, private-group umask.
+          - cell: ubuntu-wsl2-profile
+            runner: ubuntu-latest
+            container_image: ubuntu:22.04@sha256:0e0a0fc6d18feda9db1590da249ac93e8d5abfea8f4c3c0c849ce512b5ef8982
+            lc_all: C.UTF-8
+            bash_expect: '^GNU bash, version 5\.1'
+            sort_expect: B-first
+            glob_expect: nomatch
+            setup: none
+            assert_system_bash32: false
+            run_lint: false
+            run_as_nonroot: true
+            umask_mode: '002'
+            assert_git_234: false
+            assert_git_min_234: true
     env:
       LC_ALL: ${{ matrix.lc_all }}
       LANG: ${{ matrix.lc_all }}
@@ -132,9 +161,12 @@ jobs:
       ASSERT_SYSTEM_BASH32: ${{ matrix.assert_system_bash32 }}
       RUN_LINT: ${{ matrix.run_lint }}
       RUN_AS_NONROOT: ${{ matrix.run_as_nonroot }}
+      UMASK_MODE: ${{ matrix.umask_mode }}
       ASSERT_GIT_234: ${{ matrix.assert_git_234 }}
-      # Measured by one local `make test` run on macOS, 2026-08-15; additions may raise it.
-      PASS_FLOOR: '931'
+      ASSERT_GIT_MIN_234: ${{ matrix.assert_git_min_234 }}
+      WRAPPER_CONFORMANCE_PASS_FLOOR: '46'
+      # Local macOS run measured 1081 lines on 2026-08-23; retain the original 45-line slack.
+      PASS_FLOOR: '1036'
     steps:
       # Git must exist before checkout or checkout can silently degrade to its tarball fallback.
       - name: Bootstrap git-2.34 container
@@ -228,10 +260,9 @@ jobs:
           cell_script=/tmp/caty-matrix-cell.sh
           cat > "$cell_script" <<'BASH'
           set -euo pipefail
-          # Container su(1) sessions inherit Ubuntu's private-group umask 002; the suites
-          # assert fixtures are not group- or world-writable (dry-run 31836960133,
-          # distill-audit via attest-wrapper). Match the runner default everywhere.
-          umask 022
+          # The matrix owns this axis: 022 models the runner default, while 002 models
+          # the Ubuntu/WSL2 private-group user default observed in dry-run 31836960133.
+          umask "$UMASK_MODE"
 
           fail() {
             echo "::error::$*" >&2
@@ -239,8 +270,37 @@ jobs:
           }
 
           cd "$GITHUB_WORKSPACE"
-          if [ "$RUN_AS_NONROOT" = true ] && [ "$(id -u)" -eq 0 ]; then
-            fail "git-2.34 tests must run as non-root"
+          effective_umask=$(umask)
+          case "$effective_umask" in
+            0???) effective_umask_mode=${effective_umask#0} ;;
+            ???) effective_umask_mode=$effective_umask ;;
+            *) fail "unexpected umask format: $effective_umask" ;;
+          esac
+          printf 'umask=%s\n' "$effective_umask"
+          if [ "$effective_umask_mode" != "$UMASK_MODE" ]; then
+            fail "effective umask=$effective_umask, expected $UMASK_MODE"
+          fi
+
+          effective_uid=$(id -u)
+          printf 'uid=%s\n' "$effective_uid"
+          if [ "$RUN_AS_NONROOT" = true ] && [ "$effective_uid" -eq 0 ]; then
+            fail "$CELL_ID is configured to run as non-root but effective uid is 0"
+          fi
+
+          case "$UMASK_MODE" in
+            002) expected_probe_mode=664 ;;
+            022) expected_probe_mode=644 ;;
+            *) fail "unknown umask axis value: $UMASK_MODE" ;;
+          esac
+          umask_probe=/tmp/caty-umask-"$CELL_ID"-$$
+          cat > "$umask_probe" <<'PROBE'
+          umask propagation probe
+          PROBE
+          probe_mode=$(stat -c '%a' "$umask_probe" 2>/dev/null || stat -f '%Lp' "$umask_probe" 2>/dev/null)
+          rm -f "$umask_probe"
+          printf 'umask_file_mode=%s\n' "$probe_mode"
+          if [ "$probe_mode" != "$expected_probe_mode" ]; then
+            fail "umask file mode=$probe_mode, expected $expected_probe_mode for umask $UMASK_MODE"
           fi
 
           resolved_bash=$(command -v bash)
@@ -318,6 +378,18 @@ jobs:
               fail "updater_check_capabilities left a reason after success: $UPDATER_VERIFY_REASON"
             fi
           fi
+          if [ "$ASSERT_GIT_MIN_234" = true ]; then
+            git_version_number=${git_version#git version }
+            git_major=${git_version_number%%.*}
+            git_version_rest=${git_version_number#*.}
+            git_minor=${git_version_rest%%.*}
+            case "$git_major:$git_minor" in
+              *[!0-9:]*|:*|*:) fail "cannot parse git version for >= 2.34 check: $git_version" ;;
+            esac
+            if [ "$git_major" -lt 2 ] || { [ "$git_major" -eq 2 ] && [ "$git_minor" -lt 34 ]; }; then
+              fail "git version must be >= 2.34: $git_version"
+            fi
+          fi
 
           # Drift tripwire: pin the Makefile `test` recipe verbatim. Compare the FULL
           # recipe body, not a substring — a substring grep stayed green when a recipe
@@ -339,11 +411,26 @@ jobs:
           expected=$(ls tests/*.test.sh | wc -l | tr -d '[:space:]')
           test_log=/tmp/caty-test-"$CELL_ID".log
           count_file=/tmp/caty-suite-count-"$CELL_ID"
+          wrapper_conformance_log=/tmp/caty-wrapper-conformance-"$CELL_ID".log
           (
             set -euo pipefail
             n=0
             for f in tests/*.test.sh; do
-              bash "$f"
+              if [ "$f" = tests/wrapper-conformance.test.sh ]; then
+                bash "$f" 2>&1 | tee "$wrapper_conformance_log"
+                wrapper_summary=$(grep -E '^Summary: [0-9]+ PASS, 0 FAIL$' "$wrapper_conformance_log" || true)
+                wrapper_summary_count=$(printf '%s\n' "$wrapper_summary" | awk 'NF {count++} END {print count+0}')
+                if [ "$wrapper_summary_count" -ne 1 ]; then
+                  fail "wrapper-conformance emitted $wrapper_summary_count exact zero-FAIL summaries, expected 1"
+                fi
+                wrapper_pass_count=${wrapper_summary#Summary: }
+                wrapper_pass_count=${wrapper_pass_count%% PASS, 0 FAIL}
+                if [ "$wrapper_pass_count" -lt "$WRAPPER_CONFORMANCE_PASS_FLOOR" ]; then
+                  fail "wrapper-conformance PASS count $wrapper_pass_count is below pinned floor $WRAPPER_CONFORMANCE_PASS_FLOOR"
+                fi
+              else
+                bash "$f"
+              fi
               n=$((n + 1))
             done
             printf '%s\n' "$n" > "$count_file"
@@ -353,9 +440,9 @@ jobs:
             fail "executed suite count $n != expected $expected"
           fi
 
-          skip_count=$(awk 'tolower($0) ~ /(^[[:space:]]*skip([[:space:]:-]|$)|#[[:space:]]*skip([[:space:]:-]|$))/ {count++} END {print count+0}' "$test_log")
+          skip_count=$(awk 'tolower($0) ~ /(^[[:space:]]*skip([[:space:]:-]|$)|#[[:space:]]*skip([[:space:]:-]|$)|^(pass|ok)([[:space:]]|[[:punct:]]).*skip(ped)?[[:space:]]+because)/ {count++} END {print count+0}' "$test_log")
           if [ "$skip_count" -ne 0 ]; then
-            fail "test output contains $skip_count SKIP lines"
+            fail "test output contains $skip_count SKIP or PASS-as-SKIP lines"
           fi
           pass_count=$(awk '/^(PASS|ok)([[:space:]]|[[:punct:]])/ {count++} END {print count+0}' "$test_log")
           if [ "$pass_count" -lt "$PASS_FLOOR" ]; then
@@ -374,6 +461,9 @@ jobs:
             echo
             echo '| Axis | Observed |'
             echo '| --- | --- |'
+            echo "| effective umask | \`$effective_umask\` |"
+            echo "| effective uid | \`$effective_uid\` |"
+            echo "| umask file mode | \`$probe_mode\` |"
             echo "| bash | \`$resolved_bash — $bash_version\` |"
             echo "| effective LC_COLLATE | \`$effective_locale\` |"
             echo "| sort probe | \`$sort_probe\` |"
