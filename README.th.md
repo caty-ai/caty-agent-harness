@@ -10,10 +10,11 @@
 [![CI: matrix (main)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/ci-matrix.yml/badge.svg?branch=main)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/ci-matrix.yml?query=branch%3Amain)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![runtime: bash 3.2+](https://img.shields.io/badge/runtime-bash%203.2%2B-lightgrey?logo=gnubash&logoColor=white)
-![platform: macOS | Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
+![platform: macOS | Linux | WSL2*](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20WSL2*-lightgrey)
 ![status: public preview](https://img.shields.io/badge/status-public--preview-blue)
 
 <sub>หลักฐาน CI (2026-08-15 UTC): [เมทริกซ์ผ่าน 7/7](https://github.com/caty-ai/caty-agent-harness/actions/runs/31858953187) ・ [รัน 60 ครั้งอย่างอิสระบน SHA เดียว ไม่มี flake](https://github.com/caty-ai/caty-agent-harness/actions/runs/31859000233) รันรายสัปดาห์ — หาก repo ไม่มีความเคลื่อนไหว 60 วัน GitHub จะหยุด schedule อัตโนมัติ โปรดดูวันที่ของ run ด้วย</sub>
+<br><sub>* WSL2 เป็น tier ที่ยืนยันจากการวัดจริงแบบมีเงื่อนไขบน VM ที่ลงวันที่ไว้เพียงเครื่องเดียว ไม่ใช่ tier ที่ผ่าน CI; ดู [WSL2 support note](docs/wsl2-support.md)</sub>
 
 การอธิบายซ้ำแล้วซ้ำอีก บริบทที่หายไป และ "เสร็จแล้ว!" ที่ไม่มีหลักฐาน<br>
 Caty Agent Harness แก้ทั้งหมดนี้ด้วยไฟล์ข้อความธรรมดาและการตรวจสอบจริง<br>
@@ -115,7 +116,8 @@ flowchart LR
 | หมวด | รองรับ |
 | --- | --- |
 | ระบบปฏิบัติการ | macOS: ✅ ทดสอบผ่าน CI แล้ว (GitHub Actions `macos-latest`, Apple silicon) ／ Linux: ✅ ทดสอบผ่าน CI แล้ว (GitHub Actions `ubuntu-latest`) |
-| Windows | ❌ ไม่รองรับ (ยังไม่ได้ทดสอบ และยังไม่ได้ทดสอบ WSL) |
+| Windows (native) | ❌ ไม่รองรับ — กำแพงที่วัดได้มี 3 ข้อ: `chmod` จะกลายเป็น `644` แบบเงียบ ๆ, `ln -s` กลายเป็นการ copy และไม่มี `flock` ดู [WSL2 support note](docs/wsl2-support.md#windows-native-walls) |
+| WSL2 (Ubuntu on Windows) | 🟡 รองรับแบบมีเงื่อนไข — ยืนยันแล้วเมื่อ 2026-08-23 บน `win11-test-vm` (30/30 suites, `umask 0002`, non-root, Linux filesystem) แต่ยังไม่ใช่ tier ที่ผ่าน CI<br>AI tool ของคุณ (Claude Code / Codex CLI) ต้องรันอยู่ใน WSL2 distro เดียวกัน; ถ้า agent รันอยู่ฝั่ง Windows การติดตั้งจะผ่าน แต่ hooks จะไม่ทำงานเลย<br>repo ต้องอยู่บน Linux filesystem (`/home/...` ไม่ใช่ `/mnt/c/...`) เพื่อความถูกต้อง ไม่ใช่เรื่องความเร็ว, ใช้ `git 2.34+`, รันด้วยผู้ใช้ non-root และทำให้ไฟล์ประเภท wrapper ไม่เป็น group/world-writable (เช่น `chmod 0755`) ค่าใกล้เคียงใน CI คือ `ubuntu-wsl2-profile` (`umask 002`, non-root container) [รายละเอียดการวัด](docs/wsl2-support.md) |
 | เครื่องมือ AI | Claude Code ✅ ／ Codex CLI ✅ ／ Kimi Code CLI ✅ ／ Hermes Agent ✅ ／ OpenClaw ✅ |
 | Shell | bash 3.2+ ✅ (ค่าเริ่มต้นของ macOS ใช้ได้เลย) |
 | Python 3 | ใช้โดยระบบอัตโนมัติเบื้องหลัง (ในทางเทคนิคเรียกว่า hooks) — AI ของคุณจะตรวจให้เอง |
@@ -188,9 +190,9 @@ flowchart LR
 ## สถานะโปรเจกต์
 
 - **CI**: [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml) — รัน `make test` + `make lint` ในทุก pull request
-- **สภาพแวดล้อมที่ตรวจสอบแล้ว**: macOS (GitHub Actions `macos-latest`, Apple silicon) และ Linux (`ubuntu-latest`) — ดูตารางใน「[สิ่งที่ต้องมี](#สิ่งที่ต้องมี)」
+- **สภาพแวดล้อมที่ตรวจสอบแล้ว**: macOS (GitHub Actions `macos-latest`, Apple silicon), Linux (`ubuntu-latest`) และ WSL2 (Ubuntu on Windows; ยืนยันเมื่อ 2026-08-23 บน `win11-test-vm`, 30/30 suites, Linux filesystem, non-root, `umask 0002`; ยังไม่ผ่าน CI) — ดูตารางใน「[สิ่งที่ต้องมี](#สิ่งที่ต้องมี)」และ [WSL2 support note](docs/wsl2-support.md)
 - **ระดับความพร้อม**: public preview — สัญญา output ของ CLI ที่ระบุเป็น FROZEN ใน [docs/cli-conventions.md](docs/cli-conventions.md) มีความเสถียร ส่วนอื่นอาจเปลี่ยนแปลงได้
-- **ข้อจำกัดที่ทราบ**: ไม่รองรับ Windows; ชุดทดสอบ updater บางชุดต้องใช้ `ssh-keygen` (ดู [Prerequisites ใน CONTRIBUTING](CONTRIBUTING.md#prerequisites))
+- **ข้อจำกัดที่ทราบ**: Native Windows ไม่รองรับ; เส้นทางฝั่ง Windows ที่ยืนยันจากการวัดมีเฉพาะแถว WSL2 ด้านบนเท่านั้น และชุดทดสอบ updater บางชุดต้องใช้ `ssh-keygen` (ดู [Prerequisites ใน CONTRIBUTING](CONTRIBUTING.md#prerequisites))
 
 สุดท้ายอีกเรื่องเดียว — ภาพใหญ่ที่เครื่องมือนี้สังกัดอยู่
 

@@ -2634,7 +2634,7 @@ case_verify_job_derived_step_reinjects_finding() {
 printf '%s\n' 'VERDICT: fail'
 printf '%s\n' 'fixture verifier finding: evidence.md:1 is missing proof'
 SH
-  chmod +x "$verifier"
+  chmod 0755 "$verifier"
   attest_verifier_wrapper "$ws" "$verifier" verify-job-derived-step
   set +e
   env -u VERIFY_STEP VERIFIER_CMD="$verifier" bash "$ROOT/adapters/hermes/verify-job.sh" "$artifact_dir" >/dev/null 2>&1

@@ -7,7 +7,7 @@ conformance_write_provider() {
 #!/usr/bin/env bash
 printf '%s\n' 'fixture provider'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 conformance_write_probe() {
@@ -29,7 +29,7 @@ printf '%s\n' 'action_requests=auto-deny'
 printf '%s\n' 'permission_requests=auto-deny'
 printf '%s\n' 'workspace_access=none'
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 conformance_attest_wrapper() {

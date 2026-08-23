@@ -63,7 +63,7 @@ cat <<'OUT'
 ## SKILL_DRAFTS
 OUT
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_auth_failure_distiller() {
@@ -73,7 +73,7 @@ write_auth_failure_distiller() {
 printf '%s\n' 'AxiosError: Request failed with status code 401' >&2
 exit 1
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_hanging_distiller() {
@@ -82,7 +82,7 @@ write_hanging_distiller() {
 #!/usr/bin/env bash
 sleep 60
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_prompt_dump_distiller() {
@@ -100,7 +100,7 @@ trigger: prompt-test
 check the source
 OUT
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 write_integrity_distiller() {
@@ -109,7 +109,7 @@ write_integrity_distiller() {
 #!/usr/bin/env bash
 printf '%s\n' "$DISTILL_REPLY"
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 attest_distiller_wrapper() {

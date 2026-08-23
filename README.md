@@ -10,10 +10,11 @@
 [![CI: matrix (main)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/ci-matrix.yml/badge.svg?branch=main)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/ci-matrix.yml?query=branch%3Amain)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![runtime: bash 3.2+](https://img.shields.io/badge/runtime-bash%203.2%2B-lightgrey?logo=gnubash&logoColor=white)
-![platform: macOS | Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
+![platform: macOS | Linux | WSL2*](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20WSL2*-lightgrey)
 ![status: public preview](https://img.shields.io/badge/status-public--preview-blue)
 
 <sub>CI evidence (2026-08-15 UTC): [matrix 7/7 green](https://github.com/caty-ai/caty-agent-harness/actions/runs/31858953187) ・ [60 independent runs of one SHA, 0 flakes](https://github.com/caty-ai/caty-agent-harness/actions/runs/31859000233). Weekly schedule — GitHub pauses schedules after 60 days of repo inactivity, so mind the run date.</sub>
+<br><sub>* WSL2 is a verified-with-conditions tier on one dated VM, not a CI-tested tier; see the [WSL2 support note](docs/wsl2-support.md).</sub>
 
 Re-explaining everything. Context that vanishes. A cheerful "done!" with nothing to show for it.<br>
 Caty Agent Harness fixes those — with plain text files and real checks.<br>
@@ -115,7 +116,8 @@ The supported AI tools all run in a terminal — **but you won't be the one typi
 | Category | Supported |
 | --- | --- |
 | OS | macOS: ✅ CI-tested (GitHub Actions `macos-latest`, Apple silicon) ／ Linux: ✅ CI-tested (GitHub Actions `ubuntu-latest`) |
-| Windows | ❌ not supported (not tested; WSL not tested) |
+| Windows (native) | ❌ not supported — measured walls: `chmod` silently becomes `644`, `ln -s` becomes a copy, and there is no `flock`. See [WSL2 support note](docs/wsl2-support.md#windows-native-walls). |
+| WSL2 (Ubuntu on Windows) | 🟡 supported with conditions — verified 2026-08-23 on `win11-test-vm` (30/30 suites, `umask 0002`, non-root, Linux filesystem), but not CI-tested.<br>Your AI tool (Claude Code / Codex CLI) must run inside the same WSL2 distro; a Windows-side agent can install successfully and the hooks will simply never fire.<br>Keep the repo on the Linux filesystem (`/home/...`, not `/mnt/c/...`) for correctness, not speed; use `git 2.34+`, run as a non-root user, and keep wrapper-type files not group/world-writable (for example `chmod 0755`). CI approximation: `ubuntu-wsl2-profile` (`umask 002`, non-root container). [Measured details](docs/wsl2-support.md) |
 | AI tools | Claude Code ✅ ／ Codex CLI ✅ ／ Kimi Code CLI ✅ ／ Hermes Agent ✅ ／ OpenClaw ✅ |
 | Shell | bash 3.2+ ✅ (the macOS default is fine) |
 | Python 3 | used by behind-the-scenes automation (technically, a mechanism called hooks) — your AI will check this for you |
@@ -188,9 +190,9 @@ The page you just read is a map. The substance is real, and it's all documented.
 ## Project status
 
 - **CI**: [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml) — runs `make test` + `make lint` on every pull request
-- **Verified environments**: macOS (GitHub Actions `macos-latest`, Apple silicon) and Linux (`ubuntu-latest`) — see the table in [What you need](#what-you-need)
+- **Verified environments**: macOS (GitHub Actions `macos-latest`, Apple silicon), Linux (`ubuntu-latest`), and WSL2 (Ubuntu on Windows; verified 2026-08-23 on `win11-test-vm`, 30/30 suites, Linux filesystem, non-root, `umask 0002`; not CI-tested) — see the table in [What you need](#what-you-need) and the [WSL2 support note](docs/wsl2-support.md)
 - **Maturity**: public preview — the FROZEN CLI output contracts in [docs/cli-conventions.md](docs/cli-conventions.md) are stable; everything else may still move
-- **Known constraints**: Windows is not supported; some updater suites need `ssh-keygen` (see [CONTRIBUTING Prerequisites](CONTRIBUTING.md#prerequisites))
+- **Known constraints**: Native Windows is not supported; the WSL2 row above is the only verified Windows-adjacent path, and some updater suites need `ssh-keygen` (see [CONTRIBUTING Prerequisites](CONTRIBUTING.md#prerequisites))
 
 One last thing — the bigger picture this tool belongs to.
 

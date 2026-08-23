@@ -46,7 +46,7 @@ write_distiller() {
 #!/usr/bin/env bash
 printf '%s\n' "$DISTILL_REPLY"
 SH
-  chmod +x "$path"
+  chmod 0755 "$path"
 }
 
 attest_distiller_wrapper() {
