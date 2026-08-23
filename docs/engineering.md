@@ -83,7 +83,7 @@ The implementation is intentionally asymmetric. The Harness does not claim that 
 
 > Installing via your AI agent instead? Hand it [agent-guide.md](agent-guide.md) — it covers runtime selection, the health check, and required follow-up wiring.
 
-Prerequisites for the installer, scaffold, and pause commands: Git and bash 3.2+ on macOS or Linux. Python 3 is required for runtime hooks, `task-runner`, adapter integrations, and fully operational runtime wiring.
+Prerequisites for the installer, scaffold, and pause commands: Git and bash 3.2+ on macOS, Linux, or WSL2 (Ubuntu on Windows, under the conditions in the [WSL2 support note](wsl2-support.md)); native Windows is unsupported. Python 3 is required for runtime hooks, `task-runner`, adapter integrations, and fully operational runtime wiring.
 
 ```sh
 git clone https://github.com/caty-ai/caty-agent-harness.git
