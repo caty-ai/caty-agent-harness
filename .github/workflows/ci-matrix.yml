@@ -165,7 +165,7 @@ jobs:
       ASSERT_GIT_234: ${{ matrix.assert_git_234 }}
       ASSERT_GIT_MIN_234: ${{ matrix.assert_git_min_234 }}
       WRAPPER_CONFORMANCE_PASS_FLOOR: '47'
-      # Local macOS run measured 1081 lines on 2026-08-23; retain the original 45-line slack.
+      # Local macOS run measured 1082 lines on 2026-08-23 (1081 pre-polish + 1 attester ownership case); retain the original 45-line slack.
       PASS_FLOOR: '1037'
     steps:
       # Git must exist before checkout or checkout can silently degrade to its tarball fallback.
