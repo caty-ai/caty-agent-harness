@@ -34,6 +34,8 @@ This file is a **map**, not an encyclopedia. It routes; the documents it points 
 | Benchmark method and results | [docs/benchmark.md](docs/benchmark.md) |
 | Family adoption governance (R1–R14) | [docs/governance-rules.md](docs/governance-rules.md) — maintainer context: how this family adopts external tools. Not the contribution workflow. **Editing that file is not an ordinary docs change**: its own amendment procedure requires cross-model review, and a Sho gate for its gated sections. |
 
+<!-- claim: contract-scope claude-code hermes openclaw -->
+
 Directories:
 
 - `adapters/` — one directory per runtime: claude-code, codex, hermes, kimi, openclaw. `CONTRACT.md` is normative for claude-code, hermes, and openclaw; the codex and kimi adapters are bootstrap plus Stop hooks and are not bound by it.
@@ -52,6 +54,9 @@ make test    # runs every tests/*.test.sh suite, reports all failing suites
 make lint    # syntax-checks every tracked shell script, rejects bash 4.2+ ANSI-C Unicode escapes
 ```
 
+<!-- claim: make-target test -->
+<!-- claim: make-target lint -->
+
 - Expected: `Suite Summary: <n> PASS, 0 FAIL`. `make lint` refuses a vacuous green — zero files checked is a failure.
 - Prerequisites are listed in [CONTRIBUTING.md](CONTRIBUTING.md) — bash 3.2+, `make`, git 2.34+, `ssh-keygen -Y` (OpenSSH 8.2+), python3, and standard Unix tools.
 - If you edit the Makefile `test` recipe, resync `.github/ci/make-test-recipe.pin` in the same change. That pin is checked after merge, not on your PR, so skipping it turns `main` red.
@@ -59,8 +64,22 @@ make lint    # syntax-checks every tracked shell script, rejects bash 4.2+ ANSI-
 CI, accurately:
 
 - **On every pull request**: `test-lint.yml`, `gitleaks.yml`, `history-check.yml`, `review-labels.yml`, `pr-size.yml`.
-- **Required before merge to `main`**: `test-lint / test`, `test-lint / lint`, `test-lint / test-macos`, `test-lint / test-macos-skip`, `gitleaks / gitleaks`, `history-check / history-check`, `risk-review-gate / risk-review-gate`.
+<!-- claim: workflow-on test-lint.yml pull_request -->
+<!-- claim: workflow-on gitleaks.yml pull_request -->
+<!-- claim: workflow-on history-check.yml pull_request -->
+<!-- claim: workflow-on review-labels.yml pull_request -->
+<!-- claim: workflow-on pr-size.yml pull_request -->
+- **Required before merge to `main`**: `test-lint / test`, `test-lint / lint`, `test-lint / test-macos`, `test-lint / test-macos-skip`, `gitleaks / gitleaks`, `history-check / history-check`, `risk-review-gate / risk-review-gate`. The check names are validated against workflow sources on every PR run and against live branch protection wherever the API is readable (maintainer machines); CI cannot read branch protection.
+<!-- claim: required-check test-lint / test -->
+<!-- claim: required-check test-lint / lint -->
+<!-- claim: required-check test-lint / test-macos -->
+<!-- claim: required-check test-lint / test-macos-skip -->
+<!-- claim: required-check gitleaks / gitleaks -->
+<!-- claim: required-check history-check / history-check -->
+<!-- claim: required-check risk-review-gate / risk-review-gate -->
 - **After merge, not a PR gate**: `ci-matrix.yml` runs on pushes to `main`, on a weekly schedule, and on manual dispatch. It is a portability detection net. Do not wait for it on a PR — a pull request event does not start it.
+<!-- claim: workflow-on ci-matrix.yml push schedule workflow_dispatch -->
+<!-- claim: workflow-not-on ci-matrix.yml pull_request -->
 
 "It looks right" is not evidence. The output of those commands is.
 
@@ -112,6 +131,6 @@ The maintainers additionally run the lane discipline in the [Family Dev Handbook
 
 ## 6. Maintaining this file
 
-- Prefer a link over a copied fact. Every concrete detail duplicated here (a trigger, a required check, a directory's contents) is a fact that can drift silently — nothing in CI validates this file today.
+- Prefer a link over a copied fact. Machine-readable claim markers let CI validate selected duplicated mechanics; unmarked facts can still drift silently.
 - Keep it between 50 and 200 lines. When it grows, move content into `docs/` and leave a link.
 - Change it in the same PR that changes the behavior it describes. A stale map is worse than no map.
