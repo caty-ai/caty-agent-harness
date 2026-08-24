@@ -12,7 +12,8 @@ agent charter file path during setup.
 
 What it does: when the agent ends a turn in a cwd for a Caty Agent Harness
 workspace that contains `STATE.md` and workspace files changed after `STATE.md`
-was last written, it asks ONCE per session to update `## Last session`, and
+was last written, it asks ONCE per session to write a `loop/handoffs/` handoff,
+insert the new entry 1, push existing `## Last session` entries down verbatim, and
 demands a delta-only, unverified flush append when there are genuinely new
 observations. Silent in every other case: no STATE.md, nothing changed,
 already asked this session, a Stop-forced continuation (`stop_hook_active`),
@@ -27,6 +28,12 @@ once-per-session guard file, so a continuation is never re-blocked.
 
 Known accepted false positive: `git checkout`/`rebase` rewrites tree mtimes and can
 trigger one spurious ask; the message allows the agent to decline explicitly.
+
+The shared flush-intake consumer performs the host-only `## Last session` collapse on
+every intake under the STATE lock, including scans with zero flush files. Entry 1 stays
+inline; retained older entries become handoff pointers; tail entries beyond 20 append
+verbatim to the weekly Last-session archive. A missing pointer target is a cold start
+and is synthesized before the host collapses that entry.
 
 ## Register (once)
 

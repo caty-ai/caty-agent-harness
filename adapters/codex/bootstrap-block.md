@@ -9,8 +9,8 @@ Load order is bootstrap -> STATE.md -> skills.
 STATE.md is operational truth for task execution and overrides episodic native memory/session context.
 If STATE.md conflicts with episodic memory, follow STATE.md and log the conflict to STATE.md "Open failures".
 Before acting, fill a task rubric from loop/RUBRIC.tmpl.md.
-CHECKPOINT at task end: rewrite "## Last session" with ONLY task id, next action, blockers, and last verified artifact path.
-If "Last session" is older than the newest loop/VERIFY.log.md entry, treat this as a cold start and do not trust the pointer.
+CHECKPOINT at task end: write `loop/handoffs/<UTC-date>-<task-slug>.md`; insert entry 1 under "## Last session" as `- YYYY-MM-DD | task id | next: ... | blockers: ... | artifact: ... | handoff: loop/handoffs/<UTC-date>-<task-slug>.md`; push every previous entry down verbatim; never delete, summarize, or collapse existing entries.
+If entry 1 is older than the newest loop/VERIFY.log.md entry, or entry 1's `handoff:` pointer targets a missing file, treat this as a cold start and do not trust the pointer.
 Before reporting progress or completion, audit each claim against a tool result or file you can point to; report unverified items as unverified.
 A Mythos-class classifier can block auto-route to another model; this may look like a silent error.
 When distilling lessons into STATE.md: do not save transient environment-dependent failures or negative absolute claims about tools; if a retry fixed it, save the retry pattern (the fix), not the failure.
