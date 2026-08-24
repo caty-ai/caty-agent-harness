@@ -659,9 +659,6 @@ EOF
     return 0
   fi
 
-  if [[ "${STATE_FOLD_TEST_CONCURRENT_WRITE:-0}" == 1 ]]; then
-    printf '%s\n' '<!-- concurrent writer test -->' >>"$state_file"
-  fi
   if ! cmp -s "$snapshot" "$state_file"; then
     LAST_SESSION_FOLD_REASON=concurrent-writer
     return 1
@@ -740,8 +737,7 @@ EOF
   if [[ -s "$archive_entries" ]]; then
     archive_week=$(date -u '+%G-W%V')
     archive_file="$workspace/loop/archive/last-session-$archive_week.md"
-    if [[ "${STATE_FOLD_TEST_FAIL_ARCHIVE_APPEND:-0}" == 1 ]] \
-      || ! last_session_atomic_archive_append "$archive_entries" "$archive_file"; then
+    if ! last_session_atomic_archive_append "$archive_entries" "$archive_file"; then
       while IFS= read -r LAST_SESSION_CREATED_HANDOFF; do
         [[ -n "$LAST_SESSION_CREATED_HANDOFF" ]] && rm -f "$LAST_SESSION_CREATED_HANDOFF"
       done <"$created_files"

@@ -1286,9 +1286,17 @@ EOF
       fi
     done < <(
       awk '
+        function is_boundary(value) {
+          return value ~ /^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] \| / \
+            || value ~ /^- task id:/
+        }
         index($0, "## Last session") == 1 {in_section = 1; next}
         in_section && /^## / {exit}
-        in_section {print}
+        in_section && is_boundary($0) {
+          entries++
+          if (entries > 1) exit
+        }
+        in_section && entries == 1 {print}
       ' "$state_file" | grep -Eo '[A-Za-z0-9._-]+/[A-Za-z0-9._/-]+' | sort -u | head -20
     )
   fi

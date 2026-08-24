@@ -117,7 +117,9 @@ legacy `- task id:` boundaries. Content before the first boundary is template-ow
 preamble and stays in place. Entry 1 carries the four restart fields plus `handoff:`;
 entries 2..20 are one-line pointers. Entry 21 and later append verbatim to
 `loop/archive/last-session-<ISO-year-week>.md` before leaving STATE.md. Oversize entries
-are never filtered by intake bullet limits.
+are never filtered by intake bullet limits. In a mixed new-format and legacy block,
+the host synthesizes one handoff per retained legacy entry; the single shared
+`-migrated.md` handoff remains the pure-legacy path.
 
 ### 3.2 The loop (per task)
 
@@ -380,7 +382,8 @@ not part of the spec.
 
 ## 7. Risks & mitigations
 
-1. **STATE.md bloat** → per-section caps + delete-on-overflow (§3.6).
+1. **STATE.md bloat** → fact-section caps plus the capped Last-session index and
+   lossless archive fold (§3.1, §3.6).
 2. **Rubric gaming by the maker** → rubric-invalid authority + required fields (§3.2).
 3. **Bad facts/rules compounding** → n=1 → Lessons only; k≥2 for rules; invalidation
    pointers + deprecated status for rollback (§3.3).

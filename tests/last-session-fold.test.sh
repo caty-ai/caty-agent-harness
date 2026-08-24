@@ -89,6 +89,26 @@ else
   fail_case '[1] entry 1 is untouched when no newer entry exists' "$(cat "$ws/STATE.md")"
 fi
 
+ws=$(new_ws missing-last-session)
+awk 'index($0, "## Last session") != 1 {print}' "$ws/STATE.md" >"$TMP_ROOT/missing-last-session.state"
+mv "$TMP_ROOT/missing-last-session.state" "$ws/STATE.md"
+{
+  printf '%s\n' '<!-- flush ts=2026-08-23T01:02:03Z outcome=ok -->'
+  printf '%s\n' '- Intake survives a missing Last-session section.'
+} >"$ws/loop/pending/flush-2026-08-23.md"
+run_intake "$ws"
+rc=$?
+if [ "$rc" -eq 0 ] \
+  && grep -Fq 'Intake survives a missing Last-session section.' "$ws/STATE.md" \
+  && [ ! -e "$ws/loop/pending/flush-2026-08-23.md" ] \
+  && [ -f "$ws/loop/archive/flush-2026-08-23.md" ] \
+  && [ -e "$ws/loop/.deadman/distill.marker" ] \
+  && grep -Fq 'last_session_fold=skipped reason=missing-section' "$ws/loop/pending/intake-runs.log"; then
+  pass '[1-skip] a missing Last-session section skips only the fold and intake continues'
+else
+  fail_case '[1-skip] a missing Last-session section skips only the fold and intake continues' "rc=$rc receipt=$(tail -n 1 "$ws/loop/pending/intake-runs.log")"
+fi
+
 ws=$(new_ws collapse)
 printf 'new handoff\n' >"$ws/loop/handoffs/2026-08-24-new.md"
 printf 'old handoff\n' >"$ws/loop/handoffs/2026-08-23-old.md"
@@ -108,6 +128,28 @@ if grep -Fqx -- '- 2026-08-24 | new | next: continue | blockers: none | artifact
   pass '[2] a newer entry makes the host collapse only the previous entry'
 else
   fail_case '[2] a newer entry makes the host collapse only the previous entry' "$(cat "$ws/STATE.md")"
+fi
+
+ws=$(new_ws preserve-after)
+printf 'new handoff\n' >"$ws/loop/handoffs/2026-08-24-new.md"
+printf 'old handoff\n' >"$ws/loop/handoffs/2026-08-23-old.md"
+{
+  write_state_prefix
+  printf '%s\n' '- 2026-08-24 | new | next: continue | blockers: none | artifact: new.md | handoff: loop/handoffs/2026-08-24-new.md'
+  printf '%s\n' '- 2026-08-23 | old | next: old next | blockers: none | artifact: old.md | handoff: loop/handoffs/2026-08-23-old.md'
+  printf '%s\n' 'old continuation collapses before the following section'
+  printf '%s\n' '## Open failures after fold'
+  printf '%s\n' 'Prose after Last session must remain byte-identical.'
+  printf '%s\n' '- after-section-verbatim-sentinel'
+  printf '%s\n' 'final prose line'
+} >"$ws/STATE.md"
+sed -n '/^## Open failures after fold$/,$p' "$ws/STATE.md" >"$TMP_ROOT/preserve-after.expected"
+run_intake "$ws"
+sed -n '/^## Open failures after fold$/,$p' "$ws/STATE.md" >"$TMP_ROOT/preserve-after.actual"
+if cmp -s "$TMP_ROOT/preserve-after.expected" "$TMP_ROOT/preserve-after.actual"; then
+  pass '[2-after] sections and prose after Last session survive a fold byte-for-byte'
+else
+  fail_case '[2-after] sections and prose after Last session survive a fold byte-for-byte' "state=$(cat "$ws/STATE.md")"
 fi
 
 ws=$(new_ws missing-pointer)
@@ -193,8 +235,10 @@ fi
 ws=$(new_ws archive-failure)
 write_over_cap_state "$ws" 0 >"$ws/STATE.md"
 cp "$ws/STATE.md" "$TMP_ROOT/archive-failure.before"
-run_intake "$ws" STATE_FOLD_TEST_FAIL_ARCHIVE_APPEND=1
+chmod 500 "$ws/loop/archive"
+run_intake "$ws"
 rc=$?
+chmod 700 "$ws/loop/archive"
 if [ "$rc" -ne 0 ] \
   && cmp -s "$TMP_ROOT/archive-failure.before" "$ws/STATE.md" \
   && [ ! -e "$ws/loop/archive/last-session-$ISO_WEEK.md" ] \
@@ -210,16 +254,47 @@ printf 'new\n' >"$ws/loop/handoffs/2026-08-24-new.md"
   write_state_prefix
   printf '%s\n' '- 2026-08-24 | new | next: continue | blockers: none | artifact: new.md | handoff: loop/handoffs/2026-08-24-new.md'
   printf '%s\n' '- 2026-08-23 | pointerless | next: recover | blockers: none | artifact: old.md'
+  awk 'BEGIN {for (i = 1; i <= 100000; i++) printf "race-padding-%06d\n", i}'
 } >"$ws/STATE.md"
-run_intake "$ws" STATE_FOLD_TEST_CONCURRENT_WRITE=1
+(
+  : >"$TMP_ROOT/race-writer.started"
+  while [ ! -e "$TMP_ROOT/race-writer.stop" ]; do
+    printf '%s\n' '<!-- real concurrent writer -->' >>"$ws/STATE.md"
+    sleep 0.001
+  done
+) &
+race_pid=$!
+while [ ! -e "$TMP_ROOT/race-writer.started" ]; do :; done
+run_intake "$ws"
 rc=$?
+: >"$TMP_ROOT/race-writer.stop"
+wait "$race_pid" 2>/dev/null || true
 if [ "$rc" -ne 0 ] \
-  && grep -Fq '<!-- concurrent writer test -->' "$ws/STATE.md" \
+  && grep -Fq '<!-- real concurrent writer -->' "$ws/STATE.md" \
   && [ "$(find "$ws/loop/handoffs" -maxdepth 1 -type f -name '*migrated*.md' | wc -l | tr -d '[:space:]')" -eq 0 ] \
   && grep -Fq 'last_session_fold=failed reason=concurrent-writer' "$ws/loop/pending/intake-runs.log"; then
   pass '[7] concurrent-writer mismatch aborts before creating handoffs'
 else
-  fail_case '[7] concurrent-writer mismatch aborts before creating handoffs' "rc=$rc state=$(cat "$ws/STATE.md")"
+  fail_case '[7] concurrent-writer mismatch aborts before creating handoffs' "rc=$rc state_bytes=$(wc -c <"$ws/STATE.md" | tr -d '[:space:]')"
+fi
+
+ws=$(new_ws exported-hooks-ignored)
+write_over_cap_state "$ws" 0 >"$ws/STATE.md"
+{
+  printf '%s\n' '<!-- flush ts=2026-08-23T01:02:03Z outcome=ok -->'
+  printf '%s\n' '- Exported former fault hooks cannot alter production intake.'
+} >"$ws/loop/pending/flush-2026-08-23.md"
+run_intake "$ws" STATE_FOLD_TEST_CONCURRENT_WRITE=1 STATE_FOLD_TEST_FAIL_ARCHIVE_APPEND=1
+rc=$?
+if [ "$rc" -eq 0 ] \
+  && ! grep -Fq '<!-- concurrent writer test -->' "$ws/STATE.md" \
+  && grep -Fq 'Exported former fault hooks cannot alter production intake.' "$ws/STATE.md" \
+  && [ -f "$ws/loop/archive/last-session-$ISO_WEEK.md" ] \
+  && [ ! -e "$ws/loop/pending/flush-2026-08-23.md" ] \
+  && [ -e "$ws/loop/.deadman/distill.marker" ]; then
+  pass '[7-env] exported former fault hooks have no effect on STATE or intake'
+else
+  fail_case '[7-env] exported former fault hooks have no effect on STATE or intake' "rc=$rc receipt=$(tail -n 1 "$ws/loop/pending/intake-runs.log")"
 fi
 
 ws=$(new_ws legacy-migration)
@@ -286,6 +361,64 @@ if [ "$rc" -eq 0 ] \
   pass '[9] eager legacy migration is idempotent on a second install'
 else
   fail_case '[9] eager legacy migration is idempotent on a second install' "rc=$rc stderr=$(cat "$TMP_ROOT/install-second.err")"
+fi
+
+ws=$(new_ws mixed-migration)
+printf 'new-format handoff\n' >"$ws/loop/handoffs/2026-08-24-new.md"
+{
+  write_state_prefix
+  printf '%s\n' '- 2026-08-24 | new | next: continue | blockers: none | artifact: new.md | handoff: loop/handoffs/2026-08-24-new.md'
+  i=1
+  while [ "$i" -le 22 ]; do
+    printf -- '- task id: mixed-%02d\n' "$i"
+    printf -- '- next action: continue mixed %02d\n' "$i"
+    printf '%s\n' '- blockers: none'
+    printf -- '- last verified artifact path: loop/artifacts/mixed-%02d/result.md\n' "$i"
+    printf -- 'mixed-lossless-sentinel-%02d\n' "$i"
+    i=$((i + 1))
+  done
+} >"$ws/STATE.md"
+run_intake "$ws"
+rc=$?
+archive="$ws/loop/archive/last-session-$ISO_WEEK.md"
+{
+  cat "$ws/STATE.md"
+  find "$ws/loop/handoffs" -maxdepth 1 -type f -name '*-migrated*.md' -print | LC_ALL=C sort | while IFS= read -r handoff; do
+    cat "$handoff"
+  done
+  cat "$archive"
+} >"$TMP_ROOT/mixed-migration.corpus"
+mixed_lossless=1
+i=1
+while [ "$i" -le 22 ]; do
+  sentinel=$(printf 'mixed-lossless-sentinel-%02d' "$i")
+  if [ "$(grep -Fxc "$sentinel" "$TMP_ROOT/mixed-migration.corpus")" -ne 1 ]; then
+    mixed_lossless=0
+  fi
+  i=$((i + 1))
+done
+if [ "$rc" -eq 0 ] \
+  && [ "$mixed_lossless" -eq 1 ] \
+  && [ "$(entry_count "$ws/STATE.md")" -eq 20 ] \
+  && [ "$(find "$ws/loop/handoffs" -maxdepth 1 -type f -name '*-migrated*.md' | wc -l | tr -d '[:space:]')" -eq 19 ] \
+  && [ "$(receipt_value "$ws" evicted)" -eq 3 ] \
+  && [ "$(receipt_value "$ws" synthesized_handoffs)" -eq 19 ]; then
+  pass '[9-mixed] mixed blocks synthesize retained legacy entries separately without loss'
+else
+  fail_case '[9-mixed] mixed blocks synthesize retained legacy entries separately without loss' "rc=$rc receipt=$(tail -n 1 "$ws/loop/pending/intake-runs.log")"
+fi
+cp "$ws/STATE.md" "$TMP_ROOT/mixed-state.before"
+cp -R "$ws/loop/handoffs" "$TMP_ROOT/mixed-handoffs.before"
+cp "$archive" "$TMP_ROOT/mixed-archive.before"
+run_intake "$ws"
+rc=$?
+if [ "$rc" -eq 0 ] \
+  && cmp -s "$TMP_ROOT/mixed-state.before" "$ws/STATE.md" \
+  && diff -r "$TMP_ROOT/mixed-handoffs.before" "$ws/loop/handoffs" >/dev/null \
+  && cmp -s "$TMP_ROOT/mixed-archive.before" "$archive"; then
+  pass '[9-mixed-idempotent] mixed-block synthesis is idempotent on a second intake'
+else
+  fail_case '[9-mixed-idempotent] mixed-block synthesis is idempotent on a second intake' "rc=$rc receipt=$(tail -n 1 "$ws/loop/pending/intake-runs.log")"
 fi
 
 run_check() {
@@ -365,6 +498,25 @@ if ! printf '%s\n' "$output" | grep -Fq 'Last session date 2020-01-01 is older';
   pass '[12] freshness comparison is scoped to entry 1'
 else
   fail_case '[12] freshness comparison is scoped to entry 1' "$output"
+fi
+
+ws=$(new_ws sibling-scope-entry-one)
+mkdir -p "$ws/../sibling-artifacts"
+printf 'sibling artifact\n' >"$ws/../sibling-artifacts/result.md"
+printf 'new\n' >"$ws/loop/handoffs/new.md"
+printf 'old\n' >"$ws/loop/handoffs/old.md"
+{
+  write_state_prefix
+  printf '%s\n' '- 2026-08-24 | new | next: none | blockers: none | artifact: none | handoff: loop/handoffs/new.md'
+  printf '%s\n' '- 2026-08-23 | old | handoff: loop/handoffs/old.md'
+  printf '%s\n' 'historical sibling-artifacts/result.md reference'
+} >"$ws/STATE.md"
+printf '%s\n' '- 2026-08-23 | task=fixture | verifier=test | verdict=pass | fixture' >>"$ws/loop/VERIFY.log.md"
+output=$(run_check "$ws")
+if ! printf '%s\n' "$output" | grep -Fq 'warning: Last session references sibling-project path:'; then
+  pass '[13] sibling-path mismatch detection is scoped to entry 1'
+else
+  fail_case '[13] sibling-path mismatch detection is scoped to entry 1' "$output"
 fi
 
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"

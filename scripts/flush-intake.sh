@@ -287,10 +287,17 @@ trap 'exit 143' TERM
 if fold_last_session_index "$workspace" "$state_file" "$work_dir" "$(date -u '+%Y-%m-%d')"; then
   last_session_receipt=" last_session_entries=$LAST_SESSION_ENTRIES evicted=$LAST_SESSION_EVICTED synthesized_handoffs=$LAST_SESSION_SYNTHESIZED_HANDOFFS"
 else
-  last_session_receipt=" last_session_fold=failed reason=$LAST_SESSION_FOLD_REASON"
-  receipt_error=last-session-fold
-  write_receipt acquired untouched
-  exit 1
+  case "$LAST_SESSION_FOLD_REASON" in
+    handoff-write|archive-append|state-rename|concurrent-writer)
+      last_session_receipt=" last_session_fold=failed reason=$LAST_SESSION_FOLD_REASON"
+      receipt_error=last-session-fold
+      write_receipt acquired untouched
+      exit 1
+      ;;
+    *)
+      last_session_receipt=" last_session_fold=skipped reason=$LAST_SESSION_FOLD_REASON"
+      ;;
+  esac
 fi
 
 prior_hashes="$work_dir/prior.hashes"
