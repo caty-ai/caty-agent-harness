@@ -195,7 +195,7 @@ INTAKE_UNDER_TEST="$HERMES_INTAKE" \
 full_suite_rc=$?
 set -e
 if [ "$full_suite_rc" -eq 0 ] \
-  && grep -Fqx 'Summary: 34 PASS, 0 FAIL' "$full_suite_log"; then
+  && grep -Fqx 'Summary: 35 PASS, 0 FAIL' "$full_suite_log"; then
   pass '[10] the full flush-intake behavioural suite passes through the Hermes entry'
 else
   fail_case '[10] the full flush-intake behavioural suite passes through the Hermes entry' \
