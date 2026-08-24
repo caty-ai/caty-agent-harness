@@ -69,7 +69,7 @@ CI, accurately:
 <!-- claim: workflow-on history-check.yml pull_request -->
 <!-- claim: workflow-on review-labels.yml pull_request -->
 <!-- claim: workflow-on pr-size.yml pull_request -->
-- **Required before merge to `main`**: `test-lint / test`, `test-lint / lint`, `test-lint / test-macos`, `test-lint / test-macos-skip`, `gitleaks / gitleaks`, `history-check / history-check`, `risk-review-gate / risk-review-gate`.
+- **Required before merge to `main`**: `test-lint / test`, `test-lint / lint`, `test-lint / test-macos`, `test-lint / test-macos-skip`, `gitleaks / gitleaks`, `history-check / history-check`, `risk-review-gate / risk-review-gate`. The check names are validated against workflow sources on every PR run and against live branch protection wherever the API is readable (maintainer machines); CI cannot read branch protection.
 <!-- claim: required-check test-lint / test -->
 <!-- claim: required-check test-lint / lint -->
 <!-- claim: required-check test-lint / test-macos -->
