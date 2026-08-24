@@ -4,6 +4,8 @@
 
 [🇺🇸 English](README.md) ｜ [🇯🇵 日本語](README.ja.md) ｜ [🇨🇳 简体中文](README.zh.md) ｜ **🇹🇭 ไทย**
 
+> **ประกาศ (2026-08-24):** เราพบความคลาดเคลื่อนบางส่วนระหว่าง README นี้กับพฤติกรรมจริงของระบบ ([#144](https://github.com/caty-ai/caty-agent-harness/issues/144)): ส่วนหนึ่งของลูปการเรียนรู้ที่อธิบายด้านล่าง — "วิธีนั้นถูกจดเป็นแค่ 'บทเรียน' ก่อน และเลื่อนขั้นเป็น 'กฎ' หลังผ่านการตรวจสอบอีกครั้งในงานอื่น ขั้นตอนที่โผล่มาบ่อยถูกตรวจโดย AI อีกตัวที่ไม่ใช่ผู้เขียน เฉพาะที่สอบผ่านจึงถูกเก็บเป็น 'สกิล'" — ได้รับการออกแบบแล้วแต่ยังไม่ได้ถูกพัฒนา ขณะนี้เรากำลังพัฒนาส่วนนี้ ([#147](https://github.com/caty-ai/caty-agent-harness/issues/147), [#148](https://github.com/caty-ai/caty-agent-harness/issues/148), [#149](https://github.com/caty-ai/caty-agent-harness/issues/149)) และจะปรับปรุงเอกสารแล้วเผยแพร่ใหม่เมื่อเสร็จสิ้น ติดตามได้ที่: [#146](https://github.com/caty-ai/caty-agent-harness/issues/146)
+
 ![Caty Agent Harness — เติบโตขึ้นเอง และพางานวิ่งไปจนเสร็จจริง](assets/readme/hero.png)
 
 [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml)

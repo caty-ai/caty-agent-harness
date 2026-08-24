@@ -4,6 +4,8 @@
 
 **🇺🇸 English** ｜ [🇯🇵 日本語](README.ja.md) ｜ [🇨🇳 简体中文](README.zh.md) ｜ [🇹🇭 ไทย](README.th.md)
 
+> **Notice (2026-08-24):** We found a gap between this README and the shipped behaviour ([#144](https://github.com/caty-ai/caty-agent-harness/issues/144)): part of the learning loop described below — "the method is saved only as a lesson at first, and becomes a rule after passing verification again on a different job. Procedures that keep coming up are reviewed by a different AI than the one that wrote them; only the ones that pass are stored as skills" — is designed but not yet implemented. We are implementing it now ([#147](https://github.com/caty-ai/caty-agent-harness/issues/147), [#148](https://github.com/caty-ai/caty-agent-harness/issues/148), [#149](https://github.com/caty-ai/caty-agent-harness/issues/149)) and will adjust and republish these docs once it ships. Tracking: [#146](https://github.com/caty-ai/caty-agent-harness/issues/146).
+
 ![Caty Agent Harness — grows on its own, runs your tasks to done](assets/readme/hero.png)
 
 [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml)
