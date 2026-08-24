@@ -244,24 +244,29 @@ EOF
           errors=$(( errors + 1 ))
         else
           events=$(workflow_events "$root/.github/workflows/$wfile")
-          for ev in ${args#* }; do
-            found=0
-            case "
+          if [ -z "$events" ]; then
+            log "claim-error: $ctype: cannot parse triggers of $wfile"
+            errors=$(( errors + 1 ))
+          else
+            for ev in ${args#* }; do
+              found=0
+              case "
 $events
 " in
-              *"
+                *"
 $ev
 "*) found=1 ;;
-            esac
-            if [ "$ctype" = "workflow-on" ] && [ "$found" -eq 0 ]; then
-              log "claim-error: workflow-on: $wfile does not trigger on '$ev' (actual: $(printf '%s' "$events" | tr '\n' ' '))"
-              errors=$(( errors + 1 ))
-            fi
-            if [ "$ctype" = "workflow-not-on" ] && [ "$found" -eq 1 ]; then
-              log "claim-error: workflow-not-on: $wfile DOES trigger on '$ev'"
-              errors=$(( errors + 1 ))
-            fi
-          done
+              esac
+              if [ "$ctype" = "workflow-on" ] && [ "$found" -eq 0 ]; then
+                log "claim-error: workflow-on: $wfile does not trigger on '$ev' (actual: $(printf '%s' "$events" | tr '\n' ' '))"
+                errors=$(( errors + 1 ))
+              fi
+              if [ "$ctype" = "workflow-not-on" ] && [ "$found" -eq 1 ]; then
+                log "claim-error: workflow-not-on: $wfile DOES trigger on '$ev'"
+                errors=$(( errors + 1 ))
+              fi
+            done
+          fi
         fi
         ;;
 
@@ -311,13 +316,28 @@ EOF
   local mention
   while IFS= read -r mention; do
     [ -n "$mention" ] || continue
-    if [ -f "$root/.github/workflows/$mention" ] \
-      && ! extract_claims "$agents" | grep -qE "^workflow-(on|not-on) $mention( |$)"; then
+    if [ ! -f "$root/.github/workflows/$mention" ]; then
+      log "claim-error: coverage: $mention is mentioned but no such workflow file exists"
+      errors=$(( errors + 1 ))
+    elif ! extract_claims "$agents" | grep -qE "^workflow-(on|not-on) $mention( |$)"; then
       log "claim-error: coverage: $mention is mentioned but carries no workflow-on/workflow-not-on claim"
       errors=$(( errors + 1 ))
     fi
   done <<EOF
-$({ grep -oE '[A-Za-z0-9_-]+\.yml' "$agents" || true; } | sort -u)
+$(awk '
+  {
+    line = $0
+    while (match(line, /[A-Za-z0-9_-]+\.(yml|yaml)/)) {
+      before = substr(line, 1, RSTART - 1)
+      mention = substr(line, RSTART, RLENGTH)
+      line = substr(line, RSTART + RLENGTH)
+      nextchar = substr(line, 1, 1)
+      if (before !~ /[A-Za-z0-9_.\/-]$/ \
+          && nextchar !~ /[A-Za-z0-9_\/-]/ \
+          && line !~ /^\.[A-Za-z0-9_-]/) print mention
+    }
+  }
+' "$agents" | sort -u)
 EOF
 
   while IFS= read -r mention; do
@@ -327,7 +347,26 @@ EOF
       errors=$(( errors + 1 ))
     fi
   done <<EOF
-$({ grep -oE 'make [a-z][a-z-]*' "$agents" || true; } | sed 's/^make //' | sort -u)
+$({ grep -oE 'make [A-Za-z0-9_.][A-Za-z0-9_.-]*' "$agents" || true; } | sed 's/^make //' | sort -u)
+EOF
+
+  if [ -f "$root/adapters/CONTRACT.md" ] \
+    && grep -qi 'normative for' "$root/adapters/CONTRACT.md" \
+    && ! extract_claims "$agents" | grep -qE '^contract-scope( |$)'; then
+    log "claim-error: coverage: adapters/CONTRACT.md contains a 'normative for' line but AGENTS.md carries no contract-scope claim"
+    errors=$(( errors + 1 ))
+  fi
+
+  while IFS= read -r mention; do
+    [ -n "$mention" ] || continue
+    if ! extract_claims "$agents" | grep -qxF "required-check $mention"; then
+      log "claim-error: coverage: '$mention' is mentioned but carries no required-check claim"
+      errors=$(( errors + 1 ))
+    fi
+  done <<EOF
+$({ grep -oE '`[A-Za-z0-9_-]+[[:space:]]+/[[:space:]]+[A-Za-z0-9_-]+`' "$agents" || true; } \
+  | sed -e 's/^`//' -e 's/`$//' \
+  | awk '{ print $1 " / " $3 }' | sort -u)
 EOF
 
   log "claims-checked=$claims_checked links-checked=$links_checked"
@@ -363,6 +402,7 @@ WF
 
 See [docs/guide.md](docs/guide.md). Verify with `make test`.
 The gate runs on every PR via gate.yml.
+The prose-only example path docs/config.yaml is not a workflow mention.
 
 <!-- claim: make-target test -->
 <!-- claim: contract-scope alpha-ad -->
@@ -505,14 +545,15 @@ else
   fi
 fi
 
-# 9. Coverage guard: mentioning a workflow file with no covering claim fails.
+# 9. Coverage guard: mentioning a .yaml workflow file with no covering claim
+#    fails, while the docs/config.yaml path in every fixture remains ignored.
 build_fixture "$FX"
-cp "$FX/.github/workflows/gate.yml" "$FX/.github/workflows/extra.yml"
-printf 'Also see extra.yml for the extra gate.\n' >>"$FX/AGENTS.md"
+cp "$FX/.github/workflows/gate.yml" "$FX/.github/workflows/extra.yaml"
+printf 'Also see extra.yaml for the extra gate.\n' >>"$FX/AGENTS.md"
 if out=$(check_claims "$FX"); then
   fail coverage-unmarked-workflow-fails "unmarked workflow mention passed"
 else
-  if output_has_line "$out" "claim-error: coverage: extra.yml is mentioned but carries no workflow-on/workflow-not-on claim"; then
+  if output_has_line "$out" "claim-error: coverage: extra.yaml is mentioned but carries no workflow-on/workflow-not-on claim"; then
     pass coverage-unmarked-workflow-fails
   else
     fail coverage-unmarked-workflow-fails "failed for the wrong reason: $out"
@@ -533,7 +574,89 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 11. The real repository's AGENTS.md passes against its real sources.
+# 11. Coverage guard: a mentioned workflow with no source file fails even when
+#     its workflow claim markers are also gone.
+# ---------------------------------------------------------------------------
+
+build_fixture "$FX"
+rm "$FX/.github/workflows/gate.yml"
+sed -i.bak '/claim: workflow-on gate.yml/d; /claim: workflow-not-on gate.yml/d' "$FX/AGENTS.md" \
+  && rm -f "$FX/AGENTS.md.bak"
+if out=$(check_claims "$FX"); then
+  fail coverage-missing-workflow-fails "missing workflow mention passed"
+else
+  if output_has_line "$out" "claim-error: coverage: gate.yml is mentioned but no such workflow file exists"; then
+    pass coverage-missing-workflow-fails
+  else
+    fail coverage-missing-workflow-fails "failed for the wrong reason: $out"
+  fi
+fi
+
+# 12. An unsupported flow-map trigger form fails as unparseable for both
+#     positive and negative trigger claims.
+build_fixture "$FX"
+cat >"$FX/.github/workflows/gate.yml" <<'WF'
+name: Gate
+on: { pull_request: }
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - run: true
+WF
+if out=$(check_claims "$FX"); then
+  fail workflow-flow-map-fails "flow-map triggers passed"
+else
+  if output_has_line "$out" "claim-error: workflow-on: cannot parse triggers of gate.yml" \
+    && output_has_line "$out" "claim-error: workflow-not-on: cannot parse triggers of gate.yml"; then
+    pass workflow-flow-map-fails
+  else
+    fail workflow-flow-map-fails "failed for the wrong reason: $out"
+  fi
+fi
+
+# 13. A normative contract source requires at least one contract-scope marker.
+build_fixture "$FX"
+sed -i.bak '/claim: contract-scope alpha-ad/d' "$FX/AGENTS.md" && rm -f "$FX/AGENTS.md.bak"
+if out=$(check_claims "$FX"); then
+  fail coverage-missing-contract-scope-fails "missing contract-scope marker passed"
+else
+  if output_has_line "$out" "claim-error: coverage: adapters/CONTRACT.md contains a 'normative for' line but AGENTS.md carries no contract-scope claim"; then
+    pass coverage-missing-contract-scope-fails
+  else
+    fail coverage-missing-contract-scope-fails "failed for the wrong reason: $out"
+  fi
+fi
+
+# 14. A backticked required-check context in prose requires its marker.
+build_fixture "$FX"
+sed -i.bak '/claim: required-check gate \/ inner/d' "$FX/AGENTS.md" && rm -f "$FX/AGENTS.md.bak"
+printf 'The required context is `gate / inner`.\n' >>"$FX/AGENTS.md"
+if out=$(check_claims "$FX"); then
+  fail coverage-unmarked-required-check-fails "unmarked required-check context passed"
+else
+  if output_has_line "$out" "claim-error: coverage: 'gate / inner' is mentioned but carries no required-check claim"; then
+    pass coverage-unmarked-required-check-fails
+  else
+    fail coverage-unmarked-required-check-fails "failed for the wrong reason: $out"
+  fi
+fi
+
+# 15. Uppercase and underscore are part of the make-target mention grammar.
+build_fixture "$FX"
+printf 'Also run `make TEST_ALL` before pushing.\n' >>"$FX/AGENTS.md"
+if out=$(check_claims "$FX"); then
+  fail coverage-unmarked-uppercase-make-fails "uppercase make mention passed"
+else
+  if output_has_line "$out" "claim-error: coverage: 'make TEST_ALL' is mentioned but carries no make-target claim"; then
+    pass coverage-unmarked-uppercase-make-fails
+  else
+    fail coverage-unmarked-uppercase-make-fails "failed for the wrong reason: $out"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 16. The real repository's AGENTS.md passes against its real sources.
 # ---------------------------------------------------------------------------
 
 if out=$(check_claims "$ROOT"); then
@@ -542,7 +665,7 @@ else
   fail real-agents-md-consistent "$out"
 fi
 
-# 12. Best effort, maintainer machines only: when the branch-protection API is
+# 17. Best effort, maintainer machines only: when the branch-protection API is
 #     readable, the claimed required-check set must equal the protected
 #     contexts exactly. CI tokens cannot read this endpoint; that is not a
 #     bypass of the suite - the source-level half of the claim ran above.
