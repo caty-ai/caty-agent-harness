@@ -103,11 +103,12 @@ write_receipt() {
   local timestamp
 
   timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-  printf 'ts=%s files_scanned=%s blocks=%s candidates=%s folded=%s deduped=%s evicted_by_cap=%s eviction_archive=%s dropped_oversize=%s deferred=%s headerless_bullets=%s torn_lines=%s quarantined=%s lock=%s marker=%s error=%s%s\n' \
+  printf 'ts=%s files_scanned=%s blocks=%s candidates=%s folded=%s deduped=%s evicted_by_cap=%s eviction_archive=%s dropped_oversize=%s deferred=%s headerless_bullets=%s torn_lines=%s quarantined=%s lock=%s marker=%s error=%s%s%s\n' \
     "$timestamp" "$files_scanned" "$blocks" "$candidates" "$folded" "$deduped" \
     "$evicted_by_cap" "$eviction_archive" "$dropped_oversize" "$deferred" \
     "$headerless_bullets" "$torn_lines" \
     "$quarantined" "$lock_status" "$marker_status" "$receipt_error" "$quarantined_paths" \
+    "$last_session_receipt" \
     >>"$receipt_file"
 }
 
@@ -257,11 +258,13 @@ torn_lines=0
 quarantined=0
 quarantined_paths=
 receipt_error=none
+last_session_receipt=' last_session_fold=failed reason=not-run'
 
 # Only old debris is swept so a concurrent process cannot lose a live temp file.
 find "$pending_dir" -maxdepth 1 -type f -name '.intake-*.tmp.*' -mtime +1 -delete
 
 if ! take_state_lock "$workspace" "$adapter_identity" "$lock_attempts" "$lock_sleep"; then
+  last_session_receipt=' last_session_fold=failed reason=lock-busy'
   write_receipt busy untouched
   exit 0
 fi
@@ -280,6 +283,15 @@ trap cleanup EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+if fold_last_session_index "$workspace" "$state_file" "$work_dir" "$(date -u '+%Y-%m-%d')"; then
+  last_session_receipt=" last_session_entries=$LAST_SESSION_ENTRIES evicted=$LAST_SESSION_EVICTED synthesized_handoffs=$LAST_SESSION_SYNTHESIZED_HANDOFFS"
+else
+  last_session_receipt=" last_session_fold=failed reason=$LAST_SESSION_FOLD_REASON"
+  receipt_error=last-session-fold
+  write_receipt acquired untouched
+  exit 1
+fi
 
 prior_hashes="$work_dir/prior.hashes"
 batch_hashes="$work_dir/batch.hashes"

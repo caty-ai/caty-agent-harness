@@ -47,7 +47,8 @@ fail_case() {
 
 seed_dates() {
   ws=$1
-  printf '%s\n' '- task id: fixture; next action: none; blockers: none; last verified artifact path: none; 2026-07-05' >>"$ws/STATE.md"
+  printf '%s\n' 'fixture handoff' >"$ws/loop/handoffs/2026-07-05-fixture.md"
+  printf '%s\n' '- 2026-07-05 | fixture | next: none | blockers: none | artifact: none | handoff: loop/handoffs/2026-07-05-fixture.md' >>"$ws/STATE.md"
   printf '%s\n' '- 2026-07-05 | task=fixture | verifier=test | verdict=pass | fixture' >>"$ws/loop/VERIFY.log.md"
 }
 

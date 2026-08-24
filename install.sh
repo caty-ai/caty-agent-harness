@@ -10,6 +10,8 @@ source "$repo_root/scripts/lib-pause.sh"
 source "$repo_root/scripts/lib-secrets-env.sh"
 # shellcheck disable=SC1091
 source "$repo_root/scripts/lib-donecheck.sh"
+# shellcheck disable=SC1091
+source "$repo_root/scripts/lib-state-fold.sh"
 legacy_marker_line="# fable-loop bootstrap v1"
 current_marker_line="# caty-agent-harness bootstrap v2"
 
@@ -488,7 +490,49 @@ run_loop_init() {
 
   "$repo_root/scripts/loop-init" --workspace "$workspace"
   workspace=$(cd "$workspace" && pwd -P)
+  migrate_last_session_on_install "$workspace"
   caty_load_interpreters "$workspace" || exit 2
+}
+
+migrate_last_session_on_install() {
+  local workspace=$1
+  local state_file="$workspace/STATE.md"
+  local legacy_count
+  local current_count
+  local tmp_root
+  local work_dir
+
+  [[ -f "$state_file" ]] || return 0
+  read -r legacy_count current_count <<EOF
+$(awk '
+  index($0, "## Last session") == 1 {in_section = 1; next}
+  in_section && /^## / {exit}
+  in_section && /^- task id:/ {legacy++}
+  in_section && /^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] \| / {current++}
+  END {print legacy + 0, current + 0}
+' "$state_file")
+EOF
+  if [[ "$legacy_count" -le 1 || "$current_count" -ne 0 ]]; then
+    return 0
+  fi
+  if ! take_state_lock "$workspace" install-last-session-migration 30 1; then
+    printf 'cannot acquire STATE lock for Last session migration\n' >&2
+    return 1
+  fi
+  tmp_root=${TMPDIR:-/tmp}
+  work_dir=$(mktemp -d "$tmp_root/last-session-install.XXXXXX") || {
+    release_state_lock
+    return 1
+  }
+  if ! fold_last_session_index "$workspace" "$state_file" "$work_dir" \
+    "$(date -u '+%Y-%m-%d')" legacy-only; then
+    printf 'Last session migration failed: %s\n' "$LAST_SESSION_FOLD_REASON" >&2
+    rm -rf "$work_dir"
+    release_state_lock
+    return 1
+  fi
+  rm -rf "$work_dir"
+  release_state_lock
 }
 
 print_hermes_next_steps() {
@@ -526,7 +570,11 @@ extract_last_session_dates() {
   awk '
     index($0, "## Last session") == 1 {in_section = 1; next}
     in_section && /^## / {exit}
-    in_section {print}
+    in_section && (/^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] \| / || /^- task id:/) {
+      if (saw_entry) exit
+      saw_entry = 1
+    }
+    in_section && saw_entry {print}
   ' "$state_file" | { grep -Eo '[0-9]{4}-[0-9]{2}-[0-9]{2}' || true; } | sort -u
 }
 
@@ -977,6 +1025,10 @@ check_workspace() {
     printf 'missing path: loop/archive/\n'
     failures=1
   fi
+  if [[ ! -d "$workspace/loop/handoffs" ]]; then
+    printf 'missing path: loop/handoffs/\n'
+    failures=1
+  fi
   if [[ ! -f "$workspace/loop/VERIFY.log.md" ]]; then
     printf 'missing path: loop/VERIFY.log.md\n'
     failures=1
@@ -1025,6 +1077,50 @@ EOF
     failures=1
   fi
 
+  if [[ -f "$state_file" ]]; then
+    local last_session_entries
+    local last_session_lines
+    local last_session_pointer
+    last_session_entries=$(awk '
+      index($0, "## Last session") == 1 {in_section = 1; next}
+      in_section && /^## / {exit}
+      in_section && (/^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] \| / || /^- task id:/) {entries++}
+      END {print entries + 0}
+    ' "$state_file")
+    last_session_lines=$(awk '
+      index($0, "## Last session") == 1 {in_section = 1; next}
+      in_section && /^## / {exit}
+      in_section {lines++}
+      END {print lines + 0}
+    ' "$state_file")
+    if [[ "$last_session_entries" -gt 20 ]]; then
+      printf 'warning: last-session-entries: %s entries exceeds cap 20\n' "$last_session_entries" >&2
+    fi
+    if [[ "$last_session_lines" -gt 60 ]]; then
+      printf 'warning: last-session-lines: %s physical lines exceeds cap 60\n' "$last_session_lines" >&2
+    fi
+    if awk '
+      index($0, "## Last session") == 1 {in_section = 1; next}
+      in_section && /^## / {exit}
+      in_section && /^- task id:/ {found = 1}
+      END {exit found ? 0 : 1}
+    ' "$state_file"; then
+      printf 'warning: last-session-grammar: legacy task-id boundary remains after migration\n' >&2
+    fi
+    while IFS= read -r last_session_pointer; do
+      [[ -n "$last_session_pointer" ]] || continue
+      if ! last_session_pointer_is_usable "$workspace" "$last_session_pointer"; then
+        printf 'warning: last-session-pointer: handoff target is missing: %s\n' "$last_session_pointer" >&2
+      fi
+    done < <(
+      awk '
+        index($0, "## Last session") == 1 {in_section = 1; next}
+        in_section && /^## / {exit}
+        in_section && (/^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] \| / || /^- task id:/) {print}
+      ' "$state_file" | sed -n 's/.*handoff:[[:space:]]*\([^ |]*\).*/\1/p'
+    )
+  fi
+
   if [[ -f "$state_file" && -f "$verify_file" ]]; then
     local last_dates
     local newest_date
@@ -1045,7 +1141,11 @@ EOF
           if ! awk '
             index($0, "## Last session") == 1 {in_section = 1; next}
             in_section && /^## / {exit}
-            in_section && /[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}/ {found = 1}
+            in_section && (/^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] \| / || /^- task id:/) {
+              if (saw_entry) exit
+              saw_entry = 1
+            }
+            in_section && saw_entry && /[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}/ {found = 1}
             END {exit found ? 0 : 1}
           ' "$state_file"; then
             printf 'warning: Last session date %s has date-only granularity and loop/VERIFY.log.md has same-day entries; cannot prove fresh\n' "$date_value" >&2
