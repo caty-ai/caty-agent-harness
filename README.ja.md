@@ -4,6 +4,8 @@
 
 [🇺🇸 English](README.md) ｜ **🇯🇵 日本語** ｜ [🇨🇳 简体中文](README.zh.md) ｜ [🇹🇭 ไทย](README.th.md)
 
+> **お知らせ（2026-08-24）:** この README と実装のあいだに一部乖離が見つかりました。以下に記載している学習ループのうち「教訓は別のジョブで再検証を通るとルールになる／別の AI が審査する」の部分は、設計済みですがまだ完全には実装されていません。現在実装を進めており（[#144](https://github.com/caty-ai/caty-agent-harness/issues/144), [#147](https://github.com/caty-ai/caty-agent-harness/issues/147)–[#149](https://github.com/caty-ai/caty-agent-harness/issues/149)）、完了後にドキュメントを調整して再公開します。追跡: [#146](https://github.com/caty-ai/caty-agent-harness/issues/146)。
+
 ![Caty Agent Harness — 自己成長しながら、タスクを最後まで完走する](assets/readme/hero.png)
 
 [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml)
