@@ -1,4 +1,6 @@
 """Reject Bash 4.2+ Unicode escapes inside ANSI-C quoted shell strings."""
+# Declared GATES risk path (review-labels.yml, #136): `make lint` calls this file —
+# changes here require the risk-review gate (a 1-file PR could defang the linter).
 
 from __future__ import annotations
 
