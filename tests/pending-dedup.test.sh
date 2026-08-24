@@ -28,13 +28,13 @@ fail_case() {
 
 make_ws() {
   ws=$TMP_ROOT/ws-$1
-  mkdir -p "$ws/loop/pending" "$ws/skills/_staging" "$ws/input"
+  mkdir -p "$ws/loop/pending" "$ws/loop/handoffs" "$ws/skills/_staging" "$ws/input"
   {
     printf '%s\n' '## Verified facts'
     printf '%s\n' '## General rules'
     printf '%s\n' '## Open failures'
     printf '%s\n' '## Lessons learned'
-    printf '%s\n' '## Last session'
+    printf '%s\n' '## Last session        (cap 20 entries — newest first; entry 1 carries the 4 fields inline)'
   } >"$ws/STATE.md"
   printf 'transcript\n' >"$ws/input/session.log"
   printf '%s\n' "$ws"

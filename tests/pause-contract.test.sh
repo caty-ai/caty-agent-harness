@@ -401,7 +401,7 @@ oldblock_instruction="$oldblock/AGENTS.md"
 {
   printf '%s\n' 'The loop below applies to dispatched work with a deliverable.'
   printf '%s\n' 'CONSULT at task start: read workspace STATE.md.'
-  printf '%s\n' 'CHECKPOINT at task end: rewrite Last session.'
+  printf '%s\n' 'CHECKPOINT at task end: write a handoff, insert entry 1, and push previous Last session entries down verbatim.'
 } >"$oldblock_instruction"
 mkdir -p "$oldblock/.caty-agent-harness"
 printf '%s\n' "$oldblock_instruction" >"$oldblock/.caty-agent-harness/instruction-files"
