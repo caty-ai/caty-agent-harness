@@ -809,28 +809,60 @@ check_raw_review() {
   local notify="$workspace/loop/notify"
   local wired=0
   local producer_set=0
+  local reviewer_set=0
+  local config_invalid=0
   local threshold=14
   local streak=0
   local newest_ts=
   local newest_epoch=
   local now_epoch
   local configured_threshold
+  local config_line config_value carriage_return
+  local -a config_argv
 
   if [[ -f "$conf" && ! -L "$conf" ]]; then
-    if grep -Eq '^[[:space:]]*reviewer[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+' "$conf"; then
+    carriage_return=$(printf '\r')
+    while IFS= read -r config_line || [[ -n "$config_line" ]]; do
+      config_line=${config_line%"$carriage_return"}
+      config_line=${config_line#"${config_line%%[![:space:]]*}"}
+      case "$config_line" in
+        ''|'#'*) ;;
+        producer=*)
+          config_value=${config_line#producer=}
+          [[ -n "$config_value" ]] && producer_set=1 || config_invalid=1
+          ;;
+        reviewer[[:space:]]*)
+          read -r -a config_argv <<<"$config_line" || config_invalid=1
+          if (( ${#config_argv[@]} >= 3 )); then
+            reviewer_set=1
+          else
+            config_invalid=1
+          fi
+          ;;
+        notify_cmd=*) ;;
+        review_window_weeks=*|reviewer_timeout_s=*|fabricated_floor=*|prompt_max_bytes=*)
+          config_value=${config_line#*=}
+          case "$config_value" in ''|*[!0-9]*|0) config_invalid=1 ;; esac
+          ;;
+        zero_streak_threshold=*)
+          configured_threshold=${config_line#zero_streak_threshold=}
+          case "$configured_threshold" in
+            ''|*[!0-9]*|0) config_invalid=1 ;;
+            *) threshold=$configured_threshold ;;
+          esac
+          ;;
+        *) config_invalid=1 ;;
+      esac
+    done <"$conf"
+    if [[ "$producer_set" -eq 1 && "$reviewer_set" -eq 1 && "$config_invalid" -eq 0 ]]; then
       wired=1
-    fi
-    if grep -Eq '^[[:space:]]*producer=[^[:space:]].*$' "$conf"; then
-      producer_set=1
-    fi
-    configured_threshold=$(sed -n 's/^[[:space:]]*zero_streak_threshold=\([0-9][0-9]*\)[[:space:]]*$/\1/p' "$conf" | tail -n 1)
-    [[ -n "$configured_threshold" && "$configured_threshold" -gt 0 ]] && threshold=$configured_threshold
-    if [[ "$producer_set" -ne 1 || "$wired" -ne 1 ]]; then
+    elif [[ "$config_invalid" -ne 0 || "$producer_set" -ne "$reviewer_set" ]]; then
       printf 'warning: review-config: loop/review.conf requires producer and reviewer wiring\n' >&2
     fi
   fi
 
-  if [[ "$wired" -ne 1 && ! -d "$promotions" ]]; then
+  if [[ "$wired" -ne 1 && "$config_invalid" -eq 0 \
+    && "$producer_set" -eq 0 && "$reviewer_set" -eq 0 ]]; then
     printf 'info: review not wired; loop/promotions/ is not required yet\n'
   fi
 

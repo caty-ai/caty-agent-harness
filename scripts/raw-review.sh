@@ -69,6 +69,7 @@ promotions_dir=$workspace/loop/promotions
 notify_dir=$workspace/loop/notify
 pause_state=$(caty_pause_workspace_state "$workspace")
 mkdir -p "$promotions_dir" "$notify_dir" || exit 2
+zero_file=$promotions_dir/.zero-streak
 
 run_started_epoch=$(date -u '+%s')
 run_ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
@@ -88,6 +89,10 @@ rejected=0
 candidates=0
 self_review_refused=-
 zero_streak=0
+if [[ -f "$zero_file" ]]; then
+  zero_streak=$(sed -n '1p' "$zero_file")
+  case "$zero_streak" in ''|*[!0-9]*) zero_streak=0 ;; esac
+fi
 failing_names=-
 notify_cmd=
 lock_owned=0
@@ -173,17 +178,23 @@ finish_failure() {
   local error_class=$2
   local notification_file="$notify_dir/review-$run_date.md"
   if take_review_lock; then
-    append_notification_block "$notification_file" "$error_class"
+    if [[ "$dry_run" -ne 1 ]]; then
+      append_notification_block "$notification_file" "$error_class"
+    fi
     receipt_line "$error_class" >>"$promotions_dir/runs.log"
     release_review_lock
   else
     error_class=lock-busy
-    append_notification_block "$notification_file" "$error_class"
+    if [[ "$dry_run" -ne 1 ]]; then
+      append_notification_block "$notification_file" "$error_class"
+    fi
     # O_APPEND is the only possible receipt path after lock acquisition itself fails.
     receipt_line "$error_class" >>"$promotions_dir/runs.log"
     exit_code=1
   fi
-  run_notify_cmd "$notification_file"
+  if [[ "$dry_run" -ne 1 ]]; then
+    run_notify_cmd "$notification_file"
+  fi
   exit "$exit_code"
 }
 
@@ -218,7 +229,10 @@ prompt_max_bytes=2000000
 reviewer_count=0
 declare -a reviewer_names reviewer_cmds
 config_invalid=0
+carriage_return=$(printf '\r')
 while IFS= read -r config_line || [[ -n "$config_line" ]]; do
+  config_line=${config_line%"$carriage_return"}
+  config_line=${config_line#"${config_line%%[![:space:]]*}"}
   case "$config_line" in
     ''|'#'*) continue ;;
     producer=*) producer=${config_line#producer=} ;;
@@ -228,7 +242,7 @@ while IFS= read -r config_line || [[ -n "$config_line" ]]; do
     fabricated_floor=*) fabricated_floor=${config_line#fabricated_floor=} ;;
     zero_streak_threshold=*) zero_streak_threshold=${config_line#zero_streak_threshold=} ;;
     prompt_max_bytes=*) prompt_max_bytes=${config_line#prompt_max_bytes=} ;;
-    reviewer' '*)
+    reviewer[[:space:]]*)
       read -r -a config_argv <<<"$config_line" || config_invalid=1
       if (( ${#config_argv[@]} < 3 )); then
         config_invalid=1
@@ -310,7 +324,7 @@ if [[ "$mode" == nightly && -f "$watermark_file" ]]; then
       continue
     fi
     late_mtime=$(file_mtime_epoch "$late_path" 2>/dev/null || printf '0\n')
-    if (( late_mtime > watermark )); then
+    if (( late_mtime >= watermark )); then
       printf 'loop/archive/%s\n' "$late_name" >>"$tmp_root/files"
     fi
   done
@@ -349,6 +363,51 @@ if [[ "$dry_run" -eq 1 ]]; then
   receipt_line lock-busy >>"$promotions_dir/runs.log"
   exit 1
 fi
+
+build_normalized_source_cache() {
+  local cache_root=$tmp_root/normalized-sources
+  mkdir -p "$cache_root"
+  python3 -B - "$workspace" "$tmp_root/files" "$cache_root" <<'PY'
+from pathlib import Path
+import re
+import sys
+import unicodedata
+
+workspace, file_list, cache_root = map(Path, sys.argv[1:])
+smart_quotes = str.maketrans({
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+})
+
+def field_fold(value):
+    # Mirror awk's default-field rebuild in normalize_state_candidate.
+    return re.sub(r"[ \t]+", " ", value).strip(" \t")
+
+def normalize(value):
+    value = field_fold(value)
+    value = re.sub(r"^- [0-9]{4}-[0-9]{2}-[0-9]{2} ", "", value, count=1)
+    value = re.sub(r"[ \t]+\[mech_check: (?:yes|no)\]$", "", value, count=1)
+    value = re.sub(r"[ \t]+\(source: [a-z-]+\)$", "", value, count=1)
+    value = field_fold(value)
+    value = unicodedata.normalize("NFKC", value).translate(smart_quotes)
+    return re.sub(r" +", " ", value).strip(" ")
+
+for relative in file_list.read_text(encoding="utf-8").splitlines():
+    if not relative:
+        continue
+    source = workspace / relative
+    target = cache_root / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with source.open("r", encoding="utf-8", errors="surrogateescape") as handle:
+        normalized = [normalize(line.rstrip("\r\n")) for line in handle]
+    with target.open("w", encoding="utf-8", errors="surrogateescape") as handle:
+        handle.write("\n".join(normalized) + ("\n" if normalized else ""))
+PY
+}
+
+build_normalized_source_cache || finish_failure 1 source-normalization
 
 normalize_model_name() {
   local normalized
@@ -392,7 +451,7 @@ PY
 run_with_timeout() {
   local timeout_s=$1 output_file=$2
   shift 2
-  local timeout_bin model_pid watchdog_pid marker status
+  local timeout_bin model_pid watchdog_pid marker status monitor_was_on=0
   timeout_bin=$(command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null || true)
   if [[ -n "$timeout_bin" ]]; then
     "$timeout_bin" -k 5 "$timeout_s" "$@" <"$tmp_root/prompt" >"$output_file"
@@ -400,22 +459,64 @@ run_with_timeout() {
   fi
   marker=$(mktemp "$tmp_root/timeout.XXXXXX") || return 1
   rm -f "$marker"
+  case $- in *m*) monitor_was_on=1 ;; esac
+  # Job control gives the reviewer a distinct process group on bash 3.2 hosts
+  # that lack timeout(1), so fail-closed cleanup reaches every descendant.
+  set -m
   (exec "$@" <"$tmp_root/prompt" >"$output_file") &
   model_pid=$!
-  (
-    sleep "$timeout_s"
-    if kill -0 "$model_pid" 2>/dev/null; then
-      : >"$marker"
-      kill "$model_pid" 2>/dev/null || true
-      sleep 1
-      kill -9 "$model_pid" 2>/dev/null || true
-    fi
-  ) &
+  [[ "$monitor_was_on" -eq 1 ]] || set +m
+  # A single Python watchdog has no background sleep child to orphan when the
+  # reviewer exits early. On expiry it terminates, then kills, the whole group.
+  python3 -B - "$timeout_s" "$model_pid" "$marker" <<'PY' &
+import os
+from pathlib import Path
+import signal
+import sys
+import time
+
+timeout_s, process_group, marker = int(sys.argv[1]), int(sys.argv[2]), Path(sys.argv[3])
+time.sleep(timeout_s)
+try:
+    os.killpg(process_group, 0)
+except ProcessLookupError:
+    raise SystemExit(0)
+marker.touch()
+try:
+    os.killpg(process_group, signal.SIGTERM)
+except ProcessLookupError:
+    raise SystemExit(0)
+time.sleep(1)
+try:
+    os.killpg(process_group, signal.SIGKILL)
+except ProcessLookupError:
+    pass
+PY
   watchdog_pid=$!
   if wait "$model_pid" 2>/dev/null; then status=0; else status=$?; fi
-  kill "$watchdog_pid" 2>/dev/null || true
-  wait "$watchdog_pid" 2>/dev/null || true
-  [[ -e "$marker" ]] && status=124
+  if [[ -e "$marker" ]]; then
+    # Let the watchdog complete its TERM-to-KILL escalation after the direct
+    # reviewer exits; stopping it here would strand TERM-resistant children.
+    wait "$watchdog_pid" 2>/dev/null || true
+    status=124
+  else
+    kill "$watchdog_pid" 2>/dev/null || true
+    wait "$watchdog_pid" 2>/dev/null || true
+    if [[ -e "$marker" ]]; then
+      # Close the marker/kill race if expiry began just as the direct reviewer
+      # exited and the parent stopped the watchdog.
+      python3 -B - "$model_pid" <<'PY' 2>/dev/null || true
+import os
+import signal
+import sys
+try:
+    os.killpg(int(sys.argv[1]), signal.SIGKILL)
+except ProcessLookupError:
+    pass
+PY
+      status=124
+    fi
+  fi
   rm -f "$marker"
   return "$status"
 }
@@ -436,7 +537,21 @@ end = "RAW-REVIEW-OUTPUT-END"
 if source.splitlines().count(begin) != 1 or source.splitlines().count(end) != 1:
     raise SystemExit(1)
 inside = source.split(begin, 1)[1].split(end, 1)[0].strip("\n")
-lines = inside.splitlines()
+raw_lines = inside.splitlines()
+lines = []
+i = 0
+while i < len(raw_lines):
+    if raw_lines[i].strip() == "":
+        next_nonblank = i
+        while next_nonblank < len(raw_lines) and raw_lines[next_nonblank].strip() == "":
+            next_nonblank += 1
+        if (lines and lines[-1].startswith("PROMOTE: ")
+                and next_nonblank < len(raw_lines)
+                and raw_lines[next_nonblank].startswith("THEME: ")):
+            i = next_nonblank
+            continue
+    lines.append(raw_lines[i])
+    i += 1
 theme_indexes = [i for i, line in enumerate(lines) if line.startswith("THEME: ")]
 if not theme_indexes:
     nonblank = [line for line in lines if line.strip()]
@@ -505,8 +620,11 @@ PY
 
 validate_parsed_blocks() {
   local parse_dir=$1 accepted_dir=$2 rejects_file=$3
-  local block_dir member basename quote source_path normalized_quote normalized_source
+  local block_dir member basename quote source_path source_cache normalized_quote normalized_source
   local block_bad member_week member_hash
+  # Short normalized prefixes collide too easily; empty prefixes match every
+  # line. Eight characters is the minimum useful citation discriminator.
+  local minimum_quote_chars=8
   rm -rf "$accepted_dir"
   mkdir -p "$accepted_dir"
   : >"$rejects_file"
@@ -547,14 +665,22 @@ validate_parsed_blocks() {
         block_bad=1
         continue
       }
+      if (( ${#normalized_quote} < minimum_quote_chars )); then
+        block_bad=1
+        continue
+      fi
+      source_cache=$tmp_root/normalized-sources/$source_path
+      if [[ ! -f "$source_cache" ]]; then
+        block_bad=1
+        continue
+      fi
       citation_found=0
-      while IFS= read -r source_line || [[ -n "$source_line" ]]; do
-        normalized_source=$(normalize_state_candidate_key_text "$source_line") || continue
+      while IFS= read -r normalized_source || [[ -n "$normalized_source" ]]; do
         if [[ "$normalized_source" == "$normalized_quote"* ]]; then
           citation_found=1
           break
         fi
-      done <"$workspace/$source_path"
+      done <"$source_cache"
       if [[ "$citation_found" -ne 1 ]]; then
         block_bad=1
         continue
@@ -604,7 +730,9 @@ index=0
 while (( index < reviewer_count )); do
   reviewer_name=${reviewer_names[$index]}
   chain_pos=$((index + 1))
-  if self_review_match "$producer" "$reviewer_name"; then
+  self_review_match "$producer" "$reviewer_name"
+  self_review_status=$?
+  if [[ "$self_review_status" -ne 1 ]]; then
     refusal="$producer/$reviewer_name"
     if [[ "$self_review_refused" == - ]]; then
       self_review_refused=$refusal
@@ -612,7 +740,11 @@ while (( index < reviewer_count )); do
       self_review_refused=$self_review_refused,$refusal
     fi
     if [[ "$failing_names" == - ]]; then failing_names=$reviewer_name; else failing_names=$failing_names,$reviewer_name; fi
-    printf 'self_review_refused=%s/%s\n' "$producer" "$reviewer_name" >&2
+    if [[ "$self_review_status" -eq 0 ]]; then
+      printf 'self_review_refused=%s/%s\n' "$producer" "$reviewer_name" >&2
+    else
+      printf 'self_review_check_error=%s\n' "$reviewer_name" >&2
+    fi
     index=$((index + 1))
     continue
   fi
@@ -753,11 +885,6 @@ for block_dir in "$tmp_root/accepted"/block.*; do
   } >>"$promotions_dir/ledger.md"
 done
 
-zero_file=$promotions_dir/.zero-streak
-if [[ -f "$zero_file" ]]; then
-  zero_streak=$(sed -n '1p' "$zero_file")
-  case "$zero_streak" in ''|*[!0-9]*) zero_streak=0 ;; esac
-fi
 distinct_input_weeks=$(
   while IFS= read -r relative_path; do
     basename=${relative_path##*/}

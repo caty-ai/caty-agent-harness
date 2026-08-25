@@ -103,10 +103,11 @@ ok: required layout and STATE.md headers present
 
 It also reports optional learning-path rows such as verifier availability or cron wiring. Optional rows can show `FAIL` while the required layout and required `STATE.md` headers are healthy; in that case the exit code is `0`. `FAIL` still means the loop is not fully operational for that runtime: complete the relevant adapter wiring before relying on it. The full flag list is in the [reference](reference.md).
 
-The same report-only surface warns with `review-config` when the commented raw-review
-example is not fully wired, `review-notify-unread` when review failure files await an
-operator, `review-silent` when a wired job has no receipt newer than 48 hours, and
-`review-zero-streak` at the configured silent-death threshold. These are literal
+The same report-only surface reports a fully commented raw-review example as informational
+and reserves `review-config` warnings for partial or malformed wiring. It warns with
+`review-notify-unread` when review failure files await an operator, `review-silent` when a
+wired job has no receipt newer than 48 hours, and `review-zero-streak` at the configured
+silent-death threshold. These are literal
 lowercase `warning:` rows on stderr and do not change required-layout exit semantics.
 For an older, unwired workspace, a missing `loop/promotions/` is informational rather
 than a `missing path:` contract failure.

@@ -339,7 +339,26 @@ mkdir -p "$ws/loop/tasks/queue"
 assert_no_tick_warning "empty queue is silent" "$ws"
 
 ws=$(new_ws review-config)
-assert_has_warning "commented review example warns that producer and reviewer are unwired" "$ws" "$WARN_REVIEW_CONFIG"
+output=$(run_check "$ws")
+rc=$?
+if [[ "$rc" -eq 0 && "$output" == *'info: review not wired;'* \
+  && "$output" != *"$WARN_REVIEW_CONFIG"* ]]; then
+  pass "[R1-4] fully commented stock review config is informational, not a warning"
+else
+  fail_case "[R1-4] fully commented stock review config is informational, not a warning" "rc=$rc output=$output"
+fi
+
+ws=$(new_ws review-config-producer-only)
+printf '%s\n' 'producer=producer-model' >"$ws/loop/review.conf"
+assert_has_warning "producer-only review config warns as partially wired" "$ws" "$WARN_REVIEW_CONFIG"
+
+ws=$(new_ws review-config-reviewer-only)
+printf '%s\n' 'reviewer other-model /bin/true' >"$ws/loop/review.conf"
+assert_has_warning "reviewer-only review config warns as partially wired" "$ws" "$WARN_REVIEW_CONFIG"
+
+ws=$(new_ws review-config-invalid)
+printf '%s\n' 'this is not review configuration' >"$ws/loop/review.conf"
+assert_has_warning "unparseable non-comment review config warns" "$ws" "$WARN_REVIEW_CONFIG"
 
 ws=$(new_ws review-notify)
 mkdir -p "$ws/loop/notify"

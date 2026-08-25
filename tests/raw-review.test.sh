@@ -85,7 +85,7 @@ write_conf() {
   {
     printf 'producer=%s\n' "$producer"
     while [[ $# -gt 0 ]]; do printf 'reviewer %s\n' "$1"; shift; done
-    printf '%s\n' 'review_window_weeks=2' 'reviewer_timeout_s=1' \
+    printf '%s\n' 'review_window_weeks=2' 'reviewer_timeout_s=10' \
       'fabricated_floor=2' 'zero_streak_threshold=2' 'prompt_max_bytes=2000000'
   } >"$ws/loop/review.conf"
 }
@@ -119,6 +119,7 @@ fi
 
 ws=$(new_ws dry)
 seed_two_weeks "$ws"
+printf '7\n' >"$ws/loop/promotions/.zero-streak"
 called=$TMP_ROOT/dry-called
 DRY_REVIEWER=$TMP_ROOT/dry-reviewer
 write_reviewer "$DRY_REVIEWER" "touch '$called'; cat >/dev/null"
@@ -127,10 +128,12 @@ write_conf "$ws" producer-model "fixture $DRY_REVIEWER"
 rc=$?
 if [[ "$rc" -eq 0 && ! -e "$called" ]] && grep -q '^prompt_bytes=[0-9][0-9]*$' "$TMP_ROOT/dry.out" \
   && grep -Fq 'loop/archive/flush-2026-08-10.md' "$TMP_ROOT/dry.out" \
-  && [[ "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' mode=dry '* ]]; then
-  pass '[3] dry-run validates and lists the complete window without model egress'
+  && [[ "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' mode=dry '* ]] \
+  && [[ "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' zero_streak=7 '* ]] \
+  && [[ ! -e "$ws/loop/notify/review-$(date -u +%Y-%m-%d).md" ]]; then
+  pass '[3] dry-run validates and lists the complete window without model egress or notification'
 else
-  fail_case '[3] dry-run validates and lists the complete window without model egress' "rc=$rc called=$([[ -e "$called" ]] && printf yes || printf no)"
+  fail_case '[3] dry-run validates and lists the complete window without model egress or notification' "rc=$rc called=$([[ -e "$called" ]] && printf yes || printf no) receipt=$(tail -n 1 "$ws/loop/promotions/runs.log")"
 fi
 
 ws=$(new_ws no-groups)
@@ -194,7 +197,6 @@ OUT'
 ws=$(new_ws overlap)
 seed_two_weeks "$ws"
 write_conf "$ws" producer-model "fixture $LOCK_CHECK $ws/loop/promotions/.lock $lock_seen"
-sed -i.bak 's/reviewer_timeout_s=1/reviewer_timeout_s=5/' "$ws/loop/review.conf" && rm "$ws/loop/review.conf.bak"
 "$RAW_REVIEW" --workspace "$ws" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/overlap1.err" &
 pid1=$!
 "$RAW_REVIEW" --workspace "$ws" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/overlap2.err" &
@@ -273,6 +275,224 @@ else
   fail_case '[8] fabricated citation drops the full block and the small-N floor permits valid blocks' "rc=$rc reject=$reject_file"
 fi
 
+EMPTY_QUOTE=$TMP_ROOT/empty-quote-reviewer
+write_reviewer "$EMPTY_QUOTE" 'cat >/dev/null
+printf "%s\n" RAW-REVIEW-OUTPUT-BEGIN "THEME: empty quote" "CLASS: rule" MEMBERS:
+printf "%s" "- flush-2026-08-10.md:"
+printf "   \n"
+printf "%s\n" "WEEKS: 2026-W33" "EVIDENCE: invalid normalized quote" "PROMOTE: yes" RAW-REVIEW-OUTPUT-END'
+SHORT_QUOTE=$TMP_ROOT/short-quote-reviewer
+write_reviewer "$SHORT_QUOTE" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: short quote
+CLASS: rule
+MEMBERS:
+- flush-2026-08-10.md:Dur
+WEEKS: 2026-W33
+EVIDENCE: invalid short quote
+PROMOTE: yes
+RAW-REVIEW-OUTPUT-END
+OUT'
+EIGHT_QUOTE=$TMP_ROOT/eight-quote-reviewer
+write_reviewer "$EIGHT_QUOTE" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: exact minimum quote
+CLASS: rule
+MEMBERS:
+- flush-2026-08-17.md:Retry lo
+WEEKS: 2026-W34
+EVIDENCE: exactly eight normalized characters
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+ws_empty=$(new_ws quote-empty)
+seed_two_weeks "$ws_empty"
+write_conf "$ws_empty" producer-model "empty $EMPTY_QUOTE"
+"$RAW_REVIEW" --workspace "$ws_empty" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/quote-empty.err"
+empty_rc=$?
+ws_short=$(new_ws quote-short)
+seed_two_weeks "$ws_short"
+write_conf "$ws_short" producer-model "short $SHORT_QUOTE"
+"$RAW_REVIEW" --workspace "$ws_short" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/quote-short.err"
+short_rc=$?
+ws_eight=$(new_ws quote-eight)
+seed_two_weeks "$ws_eight"
+write_conf "$ws_eight" producer-model "eight $EIGHT_QUOTE"
+"$RAW_REVIEW" --workspace "$ws_eight" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/quote-eight.err"
+eight_rc=$?
+if [[ "$empty_rc" -eq 0 && "$short_rc" -eq 0 && "$eight_rc" -eq 0 \
+  && "$(tail -n 1 "$ws_empty/loop/promotions/runs.log")" == *' fabricated=1 '* \
+  && "$(tail -n 1 "$ws_empty/loop/promotions/runs.log")" == *' candidates=0 '* \
+  && "$(tail -n 1 "$ws_short/loop/promotions/runs.log")" == *' fabricated=1 '* \
+  && "$(tail -n 1 "$ws_short/loop/promotions/runs.log")" == *' candidates=0 '* \
+  && "$(tail -n 1 "$ws_eight/loop/promotions/runs.log")" == *' fabricated=0 '* \
+  && "$(tail -n 1 "$ws_eight/loop/promotions/runs.log")" == *' candidates=1 '* ]]; then
+  pass '[R1-1] normalized quotes below eight characters reject while an eight-character prefix passes'
+else
+  fail_case '[R1-1] normalized quotes below eight characters reject while an eight-character prefix passes' "rcs=$empty_rc/$short_rc/$eight_rc receipts=$(tail -n 1 "$ws_empty/loop/promotions/runs.log") | $(tail -n 1 "$ws_short/loop/promotions/runs.log") | $(tail -n 1 "$ws_eight/loop/promotions/runs.log")"
+fi
+
+BLANK_ONE=$TMP_ROOT/blank-one-reviewer
+write_reviewer "$BLANK_ONE" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: first separated block
+CLASS: rule
+MEMBERS:
+- flush-2026-08-10.md:Durable r
+WEEKS: 2026-W33
+EVIDENCE: first
+PROMOTE: not-yet
+
+THEME: second separated block
+CLASS: rule
+MEMBERS:
+- flush-2026-08-17.md:Retry lo
+WEEKS: 2026-W34
+EVIDENCE: second
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+BLANK_THREE=$TMP_ROOT/blank-three-reviewer
+write_reviewer "$BLANK_THREE" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: first separated block
+CLASS: rule
+MEMBERS:
+- flush-2026-08-10.md:Durable r
+WEEKS: 2026-W33
+EVIDENCE: first
+PROMOTE: not-yet
+
+
+
+THEME: second separated block
+CLASS: rule
+MEMBERS:
+- flush-2026-08-17.md:Retry lo
+WEEKS: 2026-W34
+EVIDENCE: second
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+BLANK_INSIDE=$TMP_ROOT/blank-inside-reviewer
+write_reviewer "$BLANK_INSIDE" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: invalid interior blank
+CLASS: rule
+MEMBERS:
+- flush-2026-08-10.md:Durable r
+
+- flush-2026-08-17.md:Retry lo
+WEEKS: 2026-W33,2026-W34
+EVIDENCE: interior blanks are not separators
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+ws_one=$(new_ws blank-one)
+seed_two_weeks "$ws_one"
+write_conf "$ws_one" producer-model "one $BLANK_ONE"
+"$RAW_REVIEW" --workspace "$ws_one" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/blank-one.err"
+one_rc=$?
+ws_three=$(new_ws blank-three)
+seed_two_weeks "$ws_three"
+write_conf "$ws_three" producer-model "three $BLANK_THREE"
+"$RAW_REVIEW" --workspace "$ws_three" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/blank-three.err"
+three_rc=$?
+ws_inside=$(new_ws blank-inside)
+seed_two_weeks "$ws_inside"
+write_conf "$ws_inside" producer-model "inside $BLANK_INSIDE"
+"$RAW_REVIEW" --workspace "$ws_inside" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/blank-inside.err"
+inside_rc=$?
+if [[ "$one_rc" -eq 0 && "$three_rc" -eq 0 && "$inside_rc" -eq 1 \
+  && "$(tail -n 1 "$ws_one/loop/promotions/runs.log")" == *' blocks=2 '* \
+  && "$(tail -n 1 "$ws_three/loop/promotions/runs.log")" == *' blocks=2 '* \
+  && "$(tail -n 1 "$ws_inside/loop/promotions/runs.log")" == *' error=chain-exhausted' ]]; then
+  pass '[R1-2] blank-separated blocks parse while a blank inside MEMBERS remains invalid'
+else
+  fail_case '[R1-2] blank-separated blocks parse while a blank inside MEMBERS remains invalid' "rcs=$one_rc/$three_rc/$inside_rc"
+fi
+
+MIDLINE=$TMP_ROOT/midline-reviewer
+write_reviewer "$MIDLINE" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: mid-line fabrication
+CLASS: rule
+MEMBERS:
+- flush-2026-08-10.md:retries need
+WEEKS: 2026-W33
+EVIDENCE: substring is not a prefix
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+FLOOR_ONE=$TMP_ROOT/floor-one-reviewer
+write_reviewer "$FLOOR_ONE" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: fabricated one
+CLASS: rule
+MEMBERS:
+- flush-2026-08-10.md:not present anywhere
+WEEKS: 2026-W33
+EVIDENCE: fabricated
+PROMOTE: not-yet
+THEME: valid one
+CLASS: rule
+MEMBERS:
+- flush-2026-08-10.md:Durable r
+WEEKS: 2026-W33
+EVIDENCE: valid
+PROMOTE: not-yet
+THEME: valid two
+CLASS: rule
+MEMBERS:
+- flush-2026-08-17.md:Retry lo
+WEEKS: 2026-W34
+EVIDENCE: valid
+PROMOTE: not-yet
+THEME: valid three
+CLASS: rule
+MEMBERS:
+- intake-evictions-2026-08-18.md:Evicted l
+WEEKS: 2026-W34
+EVIDENCE: valid
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+FLOOR_TWO=$TMP_ROOT/floor-two-reviewer
+sed 's/flush-2026-08-10.md:Durable r/flush-2026-08-10.md:also fabricated/' "$FLOOR_ONE" >"$FLOOR_TWO"
+chmod +x "$FLOOR_TWO"
+ws_midline=$(new_ws midline)
+seed_two_weeks "$ws_midline"
+write_conf "$ws_midline" producer-model "midline $MIDLINE"
+"$RAW_REVIEW" --workspace "$ws_midline" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/midline.err"
+midline_rc=$?
+ws_floor_one=$(new_ws floor-one)
+seed_two_weeks "$ws_floor_one"
+write_conf "$ws_floor_one" producer-model "floor-one $FLOOR_ONE"
+"$RAW_REVIEW" --workspace "$ws_floor_one" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/floor-one.err"
+floor_one_rc=$?
+ws_floor_two=$(new_ws floor-two)
+seed_two_weeks "$ws_floor_two"
+write_conf "$ws_floor_two" producer-model "floor-two $FLOOR_TWO"
+"$RAW_REVIEW" --workspace "$ws_floor_two" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/floor-two.err"
+floor_two_rc=$?
+if [[ "$midline_rc" -eq 0 && "$floor_one_rc" -eq 0 && "$floor_two_rc" -eq 1 \
+  && "$(tail -n 1 "$ws_midline/loop/promotions/runs.log")" == *' fabricated=1 '* \
+  && "$(tail -n 1 "$ws_midline/loop/promotions/runs.log")" == *' candidates=0 '* \
+  && "$(tail -n 1 "$ws_floor_one/loop/promotions/runs.log")" == *' blocks=4 '* \
+  && "$(tail -n 1 "$ws_floor_one/loop/promotions/runs.log")" == *' fabricated=1 '* \
+  && "$(tail -n 1 "$ws_floor_two/loop/promotions/runs.log")" == *' error=chain-exhausted' ]]; then
+  pass '[R1-8] citations are prefix-anchored and the four-block fabrication floor seam is pinned'
+else
+  fail_case '[R1-8] citations are prefix-anchored and the four-block fabrication floor seam is pinned' "rcs=$midline_rc/$floor_one_rc/$floor_two_rc"
+fi
+
 NONZERO=$TMP_ROOT/nonzero
 write_reviewer "$NONZERO" 'cat >/dev/null; exit 7'
 EMPTY=$TMP_ROOT/empty
@@ -282,6 +502,7 @@ write_reviewer "$SLOW" 'cat >/dev/null; sleep 3'
 ws=$(new_ws chain)
 seed_two_weeks "$ws"
 write_conf "$ws" producer-model "missing $TMP_ROOT/not-there" "nonzero $NONZERO" "empty $EMPTY" "slow $SLOW" "good $GOOD"
+sed -i.bak 's/reviewer_timeout_s=10/reviewer_timeout_s=1/' "$ws/loop/review.conf" && rm "$ws/loop/review.conf.bak"
 "$RAW_REVIEW" --workspace "$ws" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/chain.err"
 rc=$?
 if [[ "$rc" -eq 0 && "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' model_used=good '* \
@@ -289,6 +510,65 @@ if [[ "$rc" -eq 0 && "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' model_u
   pass '[9] missing, non-zero, empty, and timed-out entries advance independently'
 else
   fail_case '[9] missing, non-zero, empty, and timed-out entries advance independently' "rc=$rc log=$(tail -n 1 "$ws/loop/promotions/runs.log")"
+fi
+
+TIMEOUT_CHILD=$TMP_ROOT/timeout-child-reviewer
+timeout_child_pid_file=$TMP_ROOT/timeout-child.pid
+timeout_child_marker=raw-review-timeout-child-$$
+timeout_child_started=$TMP_ROOT/timeout-child.started
+timeout_child_survived=$TMP_ROOT/timeout-child.survived
+write_reviewer "$TIMEOUT_CHILD" 'pid_file=$1
+marker=$2
+started=$3
+survived=$4
+python3 -B -c '\''import pathlib, signal, sys, time
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+signal.signal(signal.SIGHUP, signal.SIG_IGN)
+pathlib.Path(sys.argv[2]).write_text("started\n")
+time.sleep(5)
+pathlib.Path(sys.argv[3]).write_text("survived\n")
+time.sleep(300)'\'' "$marker" "$started" "$survived" &
+printf "%s\n" "$!" >"$pid_file"
+attempt=0
+while [[ ! -e "$started" && "$attempt" -lt 100 ]]; do
+  sleep 0.02
+  attempt=$((attempt + 1))
+done
+[[ -e "$started" ]] || exit 9
+cat >/dev/null
+sleep 300'
+NO_TIMEOUT_BIN=$TMP_ROOT/no-timeout-bin
+mkdir -p "$NO_TIMEOUT_BIN"
+for tool in awk bash cat cp date dirname env find grep id ls mkdir mktemp mv paste python3 rm sed sleep sort stat tr wc; do
+  tool_path=$(command -v "$tool")
+  ln -s "$tool_path" "$NO_TIMEOUT_BIN/$tool"
+done
+ws=$(new_ws timeout-descendant)
+seed_two_weeks "$ws"
+write_conf "$ws" producer-model "fixture $TIMEOUT_CHILD $timeout_child_pid_file $timeout_child_marker $timeout_child_started $timeout_child_survived"
+sed -i.bak 's/reviewer_timeout_s=10/reviewer_timeout_s=3/' "$ws/loop/review.conf" && rm "$ws/loop/review.conf.bak"
+PATH="$NO_TIMEOUT_BIN" "$RAW_REVIEW" --workspace "$ws" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/timeout-child.err"
+timeout_child_rc=$?
+timeout_child_pid=$(sed -n '1p' "$timeout_child_pid_file" 2>/dev/null || true)
+timeout_child_alive=1
+poll=0
+while [[ "$poll" -lt 30 ]]; do
+  timeout_child_command=$(ps -ww -p "$timeout_child_pid" -o command= 2>/dev/null || true)
+  case "$timeout_child_command" in
+    *"$timeout_child_marker"*) sleep 0.1 ;;
+    *) timeout_child_alive=0; break ;;
+  esac
+  poll=$((poll + 1))
+done
+sleep 3
+if [[ "$timeout_child_rc" -eq 1 && -n "$timeout_child_pid" && -e "$timeout_child_started" \
+  && ! -e "$timeout_child_survived" \
+  && "$timeout_child_alive" -eq 0 \
+  && "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' error=chain-exhausted' ]]; then
+  pass '[R1-6] fallback timeout kills the reviewer process group and its marked descendant'
+else
+  [[ -n "$timeout_child_pid" ]] && kill -9 "$timeout_child_pid" 2>/dev/null || true
+  fail_case '[R1-6] fallback timeout kills the reviewer process group and its marked descendant' "rc=$timeout_child_rc pid=$timeout_child_pid command=$timeout_child_command survived=$([[ -e "$timeout_child_survived" ]] && printf yes || printf no)"
 fi
 
 ws=$(new_ws producer-unset)
@@ -301,6 +581,49 @@ if [[ "$rc" -eq 2 && "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' error=c
   pass '[10] unset producer is a notified configuration-class exit 2'
 else
   fail_case '[10] unset producer is a notified configuration-class exit 2' "rc=$rc log=$(tail -n 1 "$ws/loop/promotions/runs.log")"
+fi
+
+REAL_PYTHON=$(command -v python3)
+PYTHON_ERROR_BIN=$TMP_ROOT/python-error-bin
+mkdir -p "$PYTHON_ERROR_BIN"
+{
+  printf '%s\n' '#!/usr/bin/env bash'
+  printf 'real_python=%q\n' "$REAL_PYTHON"
+  cat <<'SH'
+if [[ "${3-}" == producer-model && "${4-}" == other-model ]]; then
+  exit 3
+fi
+exec "$real_python" "$@"
+SH
+} >"$PYTHON_ERROR_BIN/python3"
+chmod +x "$PYTHON_ERROR_BIN/python3"
+ws=$(new_ws self-review-error)
+seed_two_weeks "$ws"
+write_conf "$ws" producer-model "other-model $GOOD"
+PATH="$PYTHON_ERROR_BIN:$PATH" "$RAW_REVIEW" --workspace "$ws" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/self-review-error.err"
+self_review_error_rc=$?
+if [[ "$self_review_error_rc" -eq 1 \
+  && "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' error=chain-exhausted' ]] \
+  && grep -Fqx 'self_review_check_error=other-model' "$TMP_ROOT/self-review-error.err"; then
+  pass '[R1-3] self-review matcher infrastructure errors refuse the entry and log the error'
+else
+  fail_case '[R1-3] self-review matcher infrastructure errors refuse the entry and log the error' "rc=$self_review_error_rc stderr=$(cat "$TMP_ROOT/self-review-error.err")"
+fi
+
+ws=$(new_ws indented-crlf)
+seed_two_weeks "$ws"
+printf '  producer=producer-model\r\n  reviewer fixture %s\r\n  review_window_weeks=2\r\n  reviewer_timeout_s=10\r\n  fabricated_floor=2\r\n  zero_streak_threshold=2\r\n  prompt_max_bytes=2000000\r\n' \
+  "$GOOD" >"$ws/loop/review.conf"
+"$RAW_REVIEW" --workspace "$ws" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/indented-crlf.err"
+indented_crlf_rc=$?
+indented_check=$("$ROOT/install.sh" --check --workspace "$ws" 2>&1)
+indented_check_rc=$?
+if [[ "$indented_crlf_rc" -eq 0 && "$indented_check_rc" -eq 0 \
+  && "$indented_check" != *'warning: review-config:'* \
+  && "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' model_used=fixture '* ]]; then
+  pass '[R1-7] indented CRLF review configuration is wired in production and health check grammars'
+else
+  fail_case '[R1-7] indented CRLF review configuration is wired in production and health check grammars' "rcs=$indented_crlf_rc/$indented_check_rc check=$indented_check"
 fi
 
 ws=$(new_ws identity)
@@ -349,6 +672,7 @@ printf '9\n' >"$ws/loop/promotions/.zero-streak"
 "$RAW_REVIEW" --workspace "$ws" >/dev/null 2>"$TMP_ROOT/paused.err"
 rc=$?
 if [[ "$rc" -eq 0 && ! -e "$called" && "$(cat "$ws/loop/promotions/.zero-streak")" == 9 \
+  && "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' zero_streak=9 '* \
   && "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' error=skipped-paused' ]]; then
   pass '[13] pause guard prevents egress and leaves zero_streak unchanged'
 else
@@ -366,6 +690,23 @@ if [[ "$rc" -eq 1 && "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' error=p
   pass '[14] over-budget prompt is never truncated and takes the notified exit-1 path'
 else
   fail_case '[14] over-budget prompt is never truncated and takes the notified exit-1 path' "rc=$rc log=$(tail -n 1 "$ws/loop/promotions/runs.log")"
+fi
+
+ws=$(new_ws dry-budget)
+seed_two_weeks "$ws"
+write_conf "$ws" producer-model "fixture $GOOD"
+printf '6\n' >"$ws/loop/promotions/.zero-streak"
+sed -i.bak 's/prompt_max_bytes=2000000/prompt_max_bytes=10/' "$ws/loop/review.conf" && rm "$ws/loop/review.conf.bak"
+"$RAW_REVIEW" --workspace "$ws" --week 2026-W34 --dry-run >/dev/null 2>"$TMP_ROOT/dry-budget.err"
+dry_budget_rc=$?
+if [[ "$dry_budget_rc" -eq 1 \
+  && ! -e "$ws/loop/notify/review-$(date -u +%Y-%m-%d).md" \
+  && "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' mode=dry '* \
+  && "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' zero_streak=6 '* \
+  && "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' error=prompt-too-large' ]]; then
+  pass '[R1-adjacent] failing dry-run writes an accurate receipt but never a notification'
+else
+  fail_case '[R1-adjacent] failing dry-run writes an accurate receipt but never a notification' "rc=$dry_budget_rc receipt=$(tail -n 1 "$ws/loop/promotions/runs.log") notify=$([[ -e "$ws/loop/notify/review-$(date -u +%Y-%m-%d).md" ]] && printf yes || printf no)"
 fi
 
 ws=$(new_ws notify-failure)
@@ -411,8 +752,12 @@ write_conf "$ws" producer-model "fixture $CAPTURE_NO_GROUPS $watermark_capture"
 "$RAW_REVIEW" --workspace "$ws" >/dev/null 2>"$TMP_ROOT/watermark1.err"
 first_rc=$?
 first_watermark=$(cat "$ws/loop/promotions/.last-success-epoch")
-sleep 2
 printf '%s\n' '- arbitrarily late durable lesson' >"$ws/loop/archive/flush-2020-01-06.md"
+python3 -B - "$ws/loop/archive/flush-2020-01-06.md" "$first_watermark" <<'PY'
+import os
+import sys
+os.utime(sys.argv[1], (int(sys.argv[2]), int(sys.argv[2])))
+PY
 "$RAW_REVIEW" --workspace "$ws" >/dev/null 2>"$TMP_ROOT/watermark2.err"
 second_rc=$?
 second_watermark=$(cat "$ws/loop/promotions/.last-success-epoch")
@@ -424,9 +769,9 @@ if [[ "$first_rc" -eq 0 && "$second_rc" -eq 0 && "$dry_rc" -eq 0 \
   && "$(cat "$ws/loop/promotions/.zero-streak")" -eq 2 \
   && -s "$ws/loop/notify/review-$(date -u +%Y-%m-%d).md" \
   && $(grep -Fxc 'RAW-FILE: loop/archive/flush-2020-01-06.md' "$watermark_capture") -eq 1 ]]; then
-  pass '[14c] late-arrival sweep is once-per-snapshot, nightly streak reaches threshold, and dry-run preserves watermark'
+  pass '[R1-5] same-second late arrival is reviewed, nightly streak reaches threshold, and dry-run preserves watermark'
 else
-  fail_case '[14c] late-arrival sweep is once-per-snapshot, nightly streak reaches threshold, and dry-run preserves watermark' "rcs=$first_rc/$second_rc/$dry_rc watermarks=$first_watermark/$second_watermark/$after_dry_watermark streak=$(cat "$ws/loop/promotions/.zero-streak" 2>/dev/null) notify=$([[ -s "$ws/loop/notify/review-$(date -u +%Y-%m-%d).md" ]] && printf yes || printf no) late_count=$(grep -Fxc 'RAW-FILE: loop/archive/flush-2020-01-06.md' "$watermark_capture")"
+  fail_case '[R1-5] same-second late arrival is reviewed, nightly streak reaches threshold, and dry-run preserves watermark' "rcs=$first_rc/$second_rc/$dry_rc watermarks=$first_watermark/$second_watermark/$after_dry_watermark streak=$(cat "$ws/loop/promotions/.zero-streak" 2>/dev/null) notify=$([[ -s "$ws/loop/notify/review-$(date -u +%Y-%m-%d).md" ]] && printf yes || printf no) late_count=$(grep -Fxc 'RAW-FILE: loop/archive/flush-2020-01-06.md' "$watermark_capture")"
 fi
 
 ws=$(new_ws supersedes)
@@ -477,6 +822,49 @@ if [[ "$rc" -eq 1 && "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' error=l
   pass '[16] lock-busy still emits its mandatory receipt and exits 1'
 else
   fail_case '[16] lock-busy still emits its mandatory receipt and exits 1' "rc=$rc log=$(tail -n 1 "$ws/loop/promotions/runs.log" 2>/dev/null)"
+fi
+
+PERF_REVIEWER=$TMP_ROOT/perf-reviewer
+write_reviewer "$PERF_REVIEWER" 'cat >/dev/null
+printf "%s\n" RAW-REVIEW-OUTPUT-BEGIN
+i=981
+while [ "$i" -le 1000 ]; do
+  printf "THEME: performance citation %s\n" "$i"
+  printf "%s\n" "CLASS: rule" MEMBERS:
+  printf -- "- flush-2026-08-10.md:Performance citation %04d\n" "$i"
+  printf "%s\n" "WEEKS: 2026-W33" "EVIDENCE: cached source validation" "PROMOTE: not-yet"
+  i=$((i + 1))
+done
+printf "%s\n" RAW-REVIEW-OUTPUT-END'
+ws=$(new_ws performance)
+i=1
+while [[ "$i" -le 1000 ]]; do
+  printf 'Performance citation %04d has a stable source prefix.\n' "$i"
+  i=$((i + 1))
+done >"$ws/loop/archive/flush-2026-08-10.md"
+write_conf "$ws" producer-model "fixture $PERF_REVIEWER"
+perf_started=$(date '+%s')
+"$RAW_REVIEW" --workspace "$ws" --week 2026-W33 >/dev/null 2>"$TMP_ROOT/performance.err" &
+perf_pid=$!
+perf_deadline=$((perf_started + 10))
+while kill -0 "$perf_pid" 2>/dev/null && [[ "$(date '+%s')" -lt "$perf_deadline" ]]; do
+  sleep 1
+done
+if kill -0 "$perf_pid" 2>/dev/null; then
+  kill "$perf_pid" 2>/dev/null || true
+  wait "$perf_pid" 2>/dev/null || true
+  perf_rc=124
+else
+  wait "$perf_pid"
+  perf_rc=$?
+fi
+perf_elapsed=$(($(date '+%s') - perf_started))
+if [[ "$perf_rc" -eq 0 && "$perf_elapsed" -lt 10 \
+  && "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' blocks=20 '* \
+  && "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' candidates=20 '* ]]; then
+  pass '[R1-9] twenty citations against a thousand-line fixture validate in under ten seconds'
+else
+  fail_case '[R1-9] twenty citations against a thousand-line fixture validate in under ten seconds' "rc=$perf_rc elapsed=$perf_elapsed receipt=$(tail -n 1 "$ws/loop/promotions/runs.log" 2>/dev/null)"
 fi
 
 if [[ -x "$RAW_REVIEW" && -x "$0" ]] && bash -n "$RAW_REVIEW" && bash -n "$0" \

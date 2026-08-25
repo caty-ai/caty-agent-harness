@@ -36,6 +36,13 @@ ws=$TMP_ROOT/ws
 seed_dates "$ws"
 
 notice=$ws/loop/pending/sentinel-notice.md
+
+if bash "$SCRIPT" --workspace "$ws" >/dev/null 2>&1 && [ ! -e "$notice" ]; then
+  pass "comment-only review config does not trip the sentinel"
+else
+  fail_case "comment-only review config does not trip the sentinel" "unexpected notice for opt-in review config"
+fi
+
 rm -f "$ws/loop/RUBRIC.tmpl.md"
 
 if bash "$SCRIPT" --workspace "$ws" >/dev/null 2>&1 \

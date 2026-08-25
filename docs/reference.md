@@ -72,11 +72,16 @@ Without `--week`, the command reviews whole raw files from the current UTC ISO w
 the preceding configured weeks, plus files arriving after the last successful nightly
 snapshot. `--week` selects a retroactive window ending at that week. `--dry-run` builds
 and byte-counts the same prompt and lists its files without calling a reviewer or
-advancing the late-arrival watermark. Exit `0` means a validated run, `NO_GROUPS`, or a
+advancing the late-arrival watermark, and never writes or dispatches a notification.
+Exit `0` means a validated run, `NO_GROUPS`, or a
 pause skip; `1` means attempted review failed closed; `2` means usage/configuration did
 not permit review. Every reachable workspace exit writes `loop/promotions/runs.log`.
+THEME blocks may be separated by blank lines, but blank lines inside a block are invalid.
+Each member citation must normalize to 8–200 characters and match the start of a normalized
+source line; shorter, mid-line-only, or fabricated citations reject the complete block.
 
-The shipped `loop/review.conf` is fully commented and therefore unwired. Enabling an
+The shipped `loop/review.conf` is fully commented and therefore informationally unwired;
+`review-config` is reserved for partial or malformed wiring. Enabling an
 uncommented `producer=` and `reviewer` line is explicit consent for each scheduled run
 to send the selected raw lesson files **whole** to that reviewer's configured provider
 (the example reviewer name is GLM). The declared producer and reviewer must differ.
@@ -86,7 +91,7 @@ cron is suitable only for chains that do not need Claude CLI Keychain access.
 
 `notify_cmd` is optional argv, never shell-evaluated, and receives the appended
 notification file path as `$1` (before any configured fixed arguments). `install.sh --check` reports
-`review-config`, unread review notifications, a wired review silent for over 48 hours,
+`review-config` for partial or malformed wiring, unread review notifications, a wired review silent for over 48 hours,
 and a zero-candidate streak at its configured threshold.
 
 ## Task-runner execution boundary

@@ -11,13 +11,14 @@ Inside it, write at most 100 blocks in this grammar:
 THEME: <short label>
 CLASS: capability-fact | rule | skill
 MEMBERS:
-- <raw file basename>:<verbatim prefix of the source line, at most 200 characters, no ellipsis>
+- <raw file basename>:<verbatim prefix of the source line, 8-200 normalized characters, no ellipsis>
 WEEKS: <YYYY-Www>[,...]
 EVIDENCE: <one to three lines>
 PROMOTE: yes | not-yet
 ```
 
-When there are no groups, write `NO_GROUPS:` inside the markers and no THEME block.
+Repeat blocks directly or separate them with blank lines. Do not put blank lines inside
+a block. When there are no groups, write `NO_GROUPS:` inside the markers and no THEME block.
 Do not add prose outside the output markers. Citation authenticity is checked by the
 host. `WEEKS` and `PROMOTE` are advisory: the host recomputes recurrence from the cited
 filenames and demotes promotion when fewer than two distinct ISO weeks are present.

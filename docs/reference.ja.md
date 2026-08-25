@@ -71,12 +71,17 @@ scripts/raw-review.sh --workspace <path> [--week <YYYY-Www>] [--dry-run]
 `--week` なしでは、現在の UTC ISO 週から設定された週数ぶんの raw file 全文と、
 前回の正常な nightly snapshot 後に遅着した file を review します。`--week` は指定週で
 終わる遡及 window、`--dry-run` は同じ prompt の構築・byte count・file 一覧だけを行い、
-reviewer call と遅着 watermark 更新を行いません。exit `0` は検証済み実行、
+reviewer call と遅着 watermark 更新を行わず、notification の書き込み・送信もしません。
+exit `0` は検証済み実行、
 `NO_GROUPS`、または pause skip、`1` は review 試行後の fail-closed、`2` は usage/config
 により review を開始できなかったことを示します。workspace を特定できる全 exit path は
 `loop/promotions/runs.log` に receipt を残します。
+THEME block 間の空行は許容しますが、block 内の空行は不正です。各 member citation は
+正規化後 8〜200 文字で、正規化済み source line の先頭に一致する必要があります。
+短すぎる citation、行途中だけの一致、fabrication は block 全体を reject します。
 
-同梱の `loop/review.conf` は全行 comment のため未配線です。`producer=` と `reviewer` を
+同梱の `loop/review.conf` は全行 comment のため情報表示だけの未配線状態です。
+`review-config` warning は部分配線または不正な設定だけに使います。`producer=` と `reviewer` を
 uncomment する操作は、schedule 実行ごとに選択された raw lesson file **全文**を、その
 reviewer に設定した provider（例の reviewer 名は GLM）へ送信する明示的 consent です。
 declared producer と reviewer は異なる必要があります。nightly invocation は任意の
@@ -85,7 +90,8 @@ runtime-neutral scheduler に登録してください。macOS で reviewer comma
 だけが cron を安全に利用できます。
 
 任意の `notify_cmd` は shell eval されない argv で、設定済み固定引数より先の `$1` として
-追記済み notification file path を受け取ります。`install.sh --check` は `review-config`、未消費の
+追記済み notification file path を受け取ります。`install.sh --check` は部分配線・不正設定の
+`review-config`、未消費の
 review notification、48時間を超える沈黙、設定 threshold 以上の zero-candidate streak を
 報告します。
 
