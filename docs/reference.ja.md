@@ -62,6 +62,33 @@ validation と execution の両方で使う Bash / Perl の絶対パスを記録
 
 flush intake consumer の会計 ledger は `loop/pending/intake-runs.log` です。deadman の `distill` marker が証明するのは intake が実行されたことだけです。内容レベルの沈黙・dedup・deferral・eviction・quarantine の各件数は ledger で確認します。`loop/archive/` の raw 層は append-only で、自動で prune されることはありません。厳密な所属条件は [DESIGN.md §3.1](design/DESIGN.md#31-files-per-agent-workspace) を参照してください。ledger の詳しい形式と schedule は [adapters/claude-code/INSTALL.md](../adapters/claude-code/INSTALL.md) を参照してください。
 
+## Raw 層のクロスモデルレビュー
+
+```text
+scripts/raw-review.sh --workspace <path> [--week <YYYY-Www>] [--dry-run]
+```
+
+`--week` なしでは、現在の UTC ISO 週から設定された週数ぶんの raw file 全文と、
+前回の正常な nightly snapshot 後に遅着した file を review します。`--week` は指定週で
+終わる遡及 window、`--dry-run` は同じ prompt の構築・byte count・file 一覧だけを行い、
+reviewer call と遅着 watermark 更新を行いません。exit `0` は検証済み実行、
+`NO_GROUPS`、または pause skip、`1` は review 試行後の fail-closed、`2` は usage/config
+により review を開始できなかったことを示します。workspace を特定できる全 exit path は
+`loop/promotions/runs.log` に receipt を残します。
+
+同梱の `loop/review.conf` は全行 comment のため未配線です。`producer=` と `reviewer` を
+uncomment する操作は、schedule 実行ごとに選択された raw lesson file **全文**を、その
+reviewer に設定した provider（例の reviewer 名は GLM）へ送信する明示的 consent です。
+declared producer と reviewer は異なる必要があります。nightly invocation は任意の
+runtime-neutral scheduler に登録してください。macOS で reviewer command が `claude` を
+呼ぶ場合は LaunchAgent が必須です。Claude CLI の Keychain access を必要としない chain
+だけが cron を安全に利用できます。
+
+任意の `notify_cmd` は shell eval されない argv で、設定済み固定引数より先の `$1` として
+追記済み notification file path を受け取ります。`install.sh --check` は `review-config`、未消費の
+review notification、48時間を超える沈黙、設定 threshold 以上の zero-candidate streak を
+報告します。
+
 ## task-runner の実行境界
 
 - task frontmatter の `receipt:` は

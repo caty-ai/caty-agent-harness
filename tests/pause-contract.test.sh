@@ -236,6 +236,22 @@ cover scripts/task-runner.sh exit-0-status
   && pass "paused task runner does not start the configured model" \
   || fail_case "paused task runner does not start the configured model" "model sentinel exists"
 
+printf 'producer=producer-model\nreviewer other-model %s\n' "$fake_model" >"$ws/loop/review.conf"
+raw_review_receipts_before=$(awk 'END {print NR + 0}' "$ws/loop/promotions/runs.log" 2>/dev/null || printf '0\n')
+capture_run raw-review-paused "$ROOT/scripts/raw-review.sh" --workspace "$ws"
+assert_eq "paused raw review exits zero" "0" "$CAPTURE_RC"
+assert_eq "paused raw review stdout is empty" "" "$CAPTURE_OUT"
+assert_eq "paused raw review stderr is empty" "" "$CAPTURE_ERR"
+raw_review_receipts_after=$(awk 'END {print NR + 0}' "$ws/loop/promotions/runs.log")
+assert_eq "paused raw review appends exactly one receipt" "$((raw_review_receipts_before + 1))" "$raw_review_receipts_after"
+grep -Fq ' error=skipped-paused' "$ws/loop/promotions/runs.log" \
+  && pass "paused raw review records skipped-paused" \
+  || fail_case "paused raw review records skipped-paused" "$(cat "$ws/loop/promotions/runs.log")"
+[[ ! -e "$model_sentinel" ]] \
+  && pass "paused raw review does not start the configured model" \
+  || fail_case "paused raw review does not start the configured model" "model sentinel exists"
+cover scripts/raw-review.sh exit-0-receipt
+
 for hook in \
   adapters/claude-code/checkpoint-stop-hook.sh \
   adapters/claude-code/precompact-flush-hook.sh \

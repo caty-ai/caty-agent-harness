@@ -802,6 +802,75 @@ check_instruction_files() {
   fi
 }
 
+check_raw_review() {
+  local workspace=$1
+  local conf="$workspace/loop/review.conf"
+  local promotions="$workspace/loop/promotions"
+  local notify="$workspace/loop/notify"
+  local wired=0
+  local producer_set=0
+  local threshold=14
+  local streak=0
+  local newest_ts=
+  local newest_epoch=
+  local now_epoch
+  local configured_threshold
+
+  if [[ -f "$conf" && ! -L "$conf" ]]; then
+    if grep -Eq '^[[:space:]]*reviewer[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+' "$conf"; then
+      wired=1
+    fi
+    if grep -Eq '^[[:space:]]*producer=[^[:space:]].*$' "$conf"; then
+      producer_set=1
+    fi
+    configured_threshold=$(sed -n 's/^[[:space:]]*zero_streak_threshold=\([0-9][0-9]*\)[[:space:]]*$/\1/p' "$conf" | tail -n 1)
+    [[ -n "$configured_threshold" && "$configured_threshold" -gt 0 ]] && threshold=$configured_threshold
+    if [[ "$producer_set" -ne 1 || "$wired" -ne 1 ]]; then
+      printf 'warning: review-config: loop/review.conf requires producer and reviewer wiring\n' >&2
+    fi
+  fi
+
+  if [[ "$wired" -ne 1 && ! -d "$promotions" ]]; then
+    printf 'info: review not wired; loop/promotions/ is not required yet\n'
+  fi
+
+  if [[ -d "$notify" ]] && find "$notify" -maxdepth 1 -type f -name 'review-*.md' -print | grep -q .; then
+    printf 'warning: review-notify-unread: review notification files require operator consumption\n' >&2
+  fi
+
+  if [[ "$wired" -eq 1 ]]; then
+    if [[ -f "$promotions/runs.log" ]]; then
+      newest_ts=$(sed -n 's/^ts=\([^[:space:]]*\).*/\1/p' "$promotions/runs.log" | LC_ALL=C sort | tail -n 1)
+    fi
+    if [[ -z "$newest_ts" ]]; then
+      printf 'warning: review-silent: wired review has no run receipt\n' >&2
+    else
+      newest_epoch=$(python3 -B - "$newest_ts" <<'PY' 2>/dev/null
+import datetime
+import sys
+try:
+    value = datetime.datetime.strptime(sys.argv[1], "%Y-%m-%dT%H:%M:%SZ")
+except ValueError:
+    raise SystemExit(1)
+print(int(value.replace(tzinfo=datetime.timezone.utc).timestamp()))
+PY
+)
+      now_epoch=$(date '+%s')
+      if [[ -z "$newest_epoch" || $((now_epoch - newest_epoch)) -gt 172800 ]]; then
+        printf 'warning: review-silent: newest review receipt is older than 48 hours\n' >&2
+      fi
+    fi
+  fi
+
+  if [[ -f "$promotions/.zero-streak" ]]; then
+    streak=$(sed -n '1p' "$promotions/.zero-streak")
+    case "$streak" in ''|*[!0-9]*) streak=0 ;; esac
+    if (( streak >= threshold )); then
+      printf 'warning: review-zero-streak: %s consecutive eligible zero-candidate runs (threshold %s)\n' "$streak" "$threshold" >&2
+    fi
+  fi
+}
+
 probe_readable_contains() {
   local path=$1
   local expected=$2
@@ -1236,6 +1305,7 @@ EOF
 
   check_cron_wrappers "$workspace"
   check_instruction_files "$workspace"
+  check_raw_review "$workspace"
   check_learning_paths
 
   if [[ -d "$workspace/loop/tasks/queue" ]]; then

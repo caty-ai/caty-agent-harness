@@ -62,6 +62,33 @@ Pre-existing workspaces create it on first enqueue/runner use; invalid entries f
 
 The flush intake consumer's accounting ledger is `loop/pending/intake-runs.log`. The deadman `distill` marker proves only that intake ran; inspect the ledger for content-level silence, dedup, deferral, eviction, and quarantine counts. The `loop/archive/` raw layer is append-only and is never auto-pruned; see [DESIGN.md §3.1](design/DESIGN.md#31-files-per-agent-workspace) for its exact membership. See [adapters/claude-code/INSTALL.md](../adapters/claude-code/INSTALL.md) for the full ledger format and scheduling.
 
+## Raw-layer cross-model review
+
+```text
+scripts/raw-review.sh --workspace <path> [--week <YYYY-Www>] [--dry-run]
+```
+
+Without `--week`, the command reviews whole raw files from the current UTC ISO week and
+the preceding configured weeks, plus files arriving after the last successful nightly
+snapshot. `--week` selects a retroactive window ending at that week. `--dry-run` builds
+and byte-counts the same prompt and lists its files without calling a reviewer or
+advancing the late-arrival watermark. Exit `0` means a validated run, `NO_GROUPS`, or a
+pause skip; `1` means attempted review failed closed; `2` means usage/configuration did
+not permit review. Every reachable workspace exit writes `loop/promotions/runs.log`.
+
+The shipped `loop/review.conf` is fully commented and therefore unwired. Enabling an
+uncommented `producer=` and `reviewer` line is explicit consent for each scheduled run
+to send the selected raw lesson files **whole** to that reviewer's configured provider
+(the example reviewer name is GLM). The declared producer and reviewer must differ.
+Schedule one nightly invocation in the runtime-neutral scheduler of your choice. On
+macOS, use a LaunchAgent whenever any configured reviewer command invokes `claude`;
+cron is suitable only for chains that do not need Claude CLI Keychain access.
+
+`notify_cmd` is optional argv, never shell-evaluated, and receives the appended
+notification file path as `$1` (before any configured fixed arguments). `install.sh --check` reports
+`review-config`, unread review notifications, a wired review silent for over 48 hours,
+and a zero-candidate streak at its configured threshold.
+
 ## Task-runner execution boundary
 
 - Task frontmatter requires `receipt:` matching

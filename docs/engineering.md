@@ -103,6 +103,14 @@ ok: required layout and STATE.md headers present
 
 It also reports optional learning-path rows such as verifier availability or cron wiring. Optional rows can show `FAIL` while the required layout and required `STATE.md` headers are healthy; in that case the exit code is `0`. `FAIL` still means the loop is not fully operational for that runtime: complete the relevant adapter wiring before relying on it. The full flag list is in the [reference](reference.md).
 
+The same report-only surface warns with `review-config` when the commented raw-review
+example is not fully wired, `review-notify-unread` when review failure files await an
+operator, `review-silent` when a wired job has no receipt newer than 48 hours, and
+`review-zero-streak` at the configured silent-death threshold. These are literal
+lowercase `warning:` rows on stderr and do not change required-layout exit semantics.
+For an older, unwired workspace, a missing `loop/promotions/` is informational rather
+than a `missing path:` contract failure.
+
 **Quickstart is not the whole installation.** It creates the workspace scaffold and the managed bootstrap. End-of-session checkpoint reminders and deeper automation require the per-runtime wiring in the next section (user-level hook/cron registration); until that is done, only the start-of-task discipline from the bootstrap block is active.
 
 ---

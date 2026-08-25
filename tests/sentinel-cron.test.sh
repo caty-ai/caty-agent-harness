@@ -73,6 +73,9 @@ fi
 cp "$ROOT/templates/STATE.md" "$ws/STATE.md"
 seed_dates "$ws"
 "$ROOT/install.sh" --workspace "$ws" >/dev/null 2>&1
+printf '%s\n' 'producer=producer-model' 'reviewer other-model /bin/true' >"$ws/loop/review.conf"
+printf 'ts=%s runid=fixture mode=nightly window=- files=0 prompt_bytes=0 model_used=other-model chain_pos=1 blocks=0 fabricated=0 rejected=0 candidates=0 self_review_refused=- zero_streak=0 error=none\n' \
+  "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >"$ws/loop/promotions/runs.log"
 if bash "$SCRIPT" --workspace "$ws" >/dev/null 2>&1 && [ ! -e "$notice" ]; then
   pass "clears notice after clean check"
 else

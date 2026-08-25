@@ -14,6 +14,7 @@ reviews/review-glm.md (GLM 5.2) + reviews/review-sonnet.md (Claude Sonnet 5)
 | Codex xhigh | APPROVE-WITH-CHANGES (10 blocking) | artifact bundle schema, verdict taxonomy, rubric gaming, skill-promotion criteria |
 | GLM 5.2 | APPROVE-WITH-CHANGES (5 blocking) | Claire cron self-contradiction, n=1→General-rules category error, staging quarantine |
 | Sonnet 5 | APPROVE-WITH-CHANGES (0 blocking, 4 major) | fresh-context unenforceability per adapter, cross-vendor mandate for Cero, dedup vs Alpha auto-memory |
+| #148 raw review v0.2.1 | IMPLEMENTED | nightly/retroactive two-week raw-layer review; host-validated citations and K; append-only promotion outputs |
 
 No REJECT. Core loop (files-as-interface, asymmetric adapters, verified-only gate)
 unanimously endorsed. All blocking issues are specification gaps, not architecture flaws.
