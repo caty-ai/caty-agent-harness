@@ -33,6 +33,8 @@ a small system, wrapped around the AI you already use.
 | GPT-5.6 Luna (Codex) | planned | — | — |
 | Local models (Ollama) | planned | — | — |
 
+<sub>This table is the bare-vs-harness **completion-rate** lane (lane additions tracked in [#129](https://github.com/caty-ai/caty-agent-harness/issues/129)). Codex, qwen, grok and opus are already measured in the [overflow-sentinel section](#model-effects) below — a separate experiment (EV-008) answering a different question, so "planned" here and measured numbers there are not a contradiction.</sub>
+
 <sub>¹ Claiming "done" without having read the work — measured from tool-call transcripts, not self-reports: 222 → 2 such claims on the 150K–300K-token jobs (30 runs per arm, machine-scored). Weak spots included: [full numbers & limitations](docs/benchmark.md).</sub>
 
 **Measured — overflow sentinel** (sealed EV-008, 2026-08-25): with the sentinel on, claude-sonnet-5 held 20/20 correctness on overflow jobs while cutting tokens (median sentinel/bare 0.801 · best cell −71%); claude-opus-5 0.923. Search-type runtimes fired in zero measured runs — by design (Codex 0/127 turns). Which models benefit — and which shouldn't switch it on: [per-model profiles](#model-effects) · [full numbers & history](docs/benchmark.md#ev-008).
@@ -180,7 +182,7 @@ That's the short version. The depth is all below.
 
 ## Which models benefit
 
-The **overflow sentinel** ([design issue #159](https://github.com/caty-ai/caty-agent-harness/issues/159)) watches the measured per-turn context level and, past a threshold, stops the run and decomposes the job instead of letting the context overflow. EV-008 — a sealed, pre-registered benchmark (2026-08) — measured how that behaves per model. The effect splits by how a runtime reads:
+The **overflow sentinel** ([design issue #159](https://github.com/caty-ai/caty-agent-harness/issues/159)) watches the measured per-turn context level and, past a threshold, stops the run and decomposes the job instead of letting the context overflow. The sentinel itself is still being designed and implemented in that issue (design document: [PR #166](https://github.com/caty-ai/caty-agent-harness/pull/166)) — it is not yet part of the shipped product; EV-008 was the pre-measurement that tested default-on viability ahead of that implementation, and this section is its measured profile. EV-008 — a sealed, pre-registered benchmark (2026-08) — measured how that behaves per model. The effect splits by how a runtime reads:
 
 | Runtime type | Measured models | Behaviour | Verdict |
 |---|---|---|---|
