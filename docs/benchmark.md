@@ -233,8 +233,9 @@ The default-on GO decision (2026-08-25) rests on four pre-registered
 conditions: codex fire rate 0 (0/127; rule-of-three 95 % upper bound
 2.4 %/turn) · codex tap-overhead GM ≤ 1.05 (0.9944) · sonnet all-pair median
 < 1.0 (0.801) · no consistent harmful false-fire (1/4 pairs only). qwen adds
-a second no-fire lane: 0 fires across ≈770 sentinel turns (95 % upper bound
-≈0.4 %/turn).
+a second no-fire lane: 0 fires across 669 sentinel turn events
+(102/116/205/246 per cell; recounted from the per-run sentinel event logs,
+quarantined partial excluded, 2026-08-25) — 95 % upper bound ≈0.45 %/turn.
 
 ### Read these before quoting (inseparable from the GO)
 
