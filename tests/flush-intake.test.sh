@@ -176,7 +176,10 @@ touch -t 202001010000 "$ws/loop/pending/.intake-old.tmp.fixture"
 run_intake "$ws"
 if [ "$(receipt_value "$ws" files_scanned)" -eq 0 ] \
   && [ -f "$ws/loop/.deadman/distill.marker" ] \
-  && [ ! -e "$ws/loop/pending/.intake-old.tmp.fixture" ]; then
+  && [ ! -e "$ws/loop/pending/.intake-old.tmp.fixture" ] \
+  && [ "$(receipt_value "$ws" last_session_entries)" -eq 0 ] \
+  && [ "$(receipt_value "$ws" evicted)" -eq 0 ] \
+  && [ "$(receipt_value "$ws" synthesized_handoffs)" -eq 0 ]; then
   pass '[9] an empty successful scan writes a receipt and marker'
 else
   fail_case '[9] an empty successful scan writes a receipt and marker' 'empty scan evidence missing'

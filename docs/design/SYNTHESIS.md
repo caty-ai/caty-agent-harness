@@ -66,10 +66,11 @@ R10. **STATE vs native memory precedence**: STATE.md = operational truth for tas
      context, untouched. Load order: bootstrap → STATE → skills. Disagreement →
      STATE wins operationally + conflict logged to Open failures. (Codex #8, Sonnet Q5)
 
-R11. **STATE.md caps**: 400 total with per-section budgets — Verified facts 120,
-     General rules 80, Open failures 100, Lessons 60, Last session 20 (protects the
-     resume pointer). Last session restricted to: task id, next action, blockers, last
-     verified artifact. (Codex Q3 + Sonnet Q3 merged)
+R11. **STATE.md caps**: fact-section budgets remain Verified facts 120, General rules
+     80, Open failures 100, and Lessons 60. Last session is a newest-first index capped
+     at 20 entries: entry 1 carries the four restart fields plus a handoff pointer;
+     entries 2..20 are pointers; the host appends older entries verbatim to the weekly
+     archive before eviction. (Codex Q3 + Sonnet Q3 merged; #145)
 
 R12. **Skill promotion criteria**: replace "≥5 tool calls" with "repeated OR
      high-friction workflow with stable trigger and reusable procedure", plus skill
