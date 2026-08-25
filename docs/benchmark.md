@@ -117,9 +117,11 @@ faster while completing 3× as often**.
   tests extraction/transcription only.
 - **S size shows no advantage** (67% vs 60%): if the job fits comfortably, the
   bare model is fine. The product's value starts where context overflows.
-- **Single model.** Everything above is Haiku 4.5. Other model lanes are
-  planned ([#129](https://github.com/caty-ai/caty-agent-harness/issues/129))
-  and will be added to the README table as they are measured.
+- **Single model.** Everything above is Haiku 4.5. Further completion-rate
+  lanes are tracked in
+  [#129](https://github.com/caty-ai/caty-agent-harness/issues/129); measured
+  cross-model EV-008 profiles live in the [matrix below](#ev-008) and the
+  README's per-model section.
 - **43% is not 100%.** The harness failed 17/30 M/L runs — honestly (verified
   stop or gate-rejected delivery), but it failed. The claim is *verified
   completion and honest reporting*, not perfection.
