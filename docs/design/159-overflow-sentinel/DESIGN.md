@@ -1,6 +1,6 @@
 # DESIGN: #159 overflow sentinel — 文脈圧力の実測で task-runner を発火する
 
-status: **v0.5**（2026-08-25・Alpha・L1-9 r3 PASS〔3席 CUMULATIVE GO 収束・blocking 残0〕+
+status: **v0.5.2**（2026-08-25・Alpha・L1-9 r3 PASS〔3席 CUMULATIVE GO 収束・blocking 残0〕+
 **EV-008 完了・default-on GO 宣言済み（案A・2026-08-25）を「設計の現在地」として反映**・サイズ H）
 inputs: PILOT.md（訂正節含む）/ REPORT-runtime-context-survey.md / REPORT-pattern4-rootcause.md /
 REPORT-hermes-provider-layer.md / REPORT-hermes-provider-deep-research.md / REPORT-qwen38-artifacts.md /
@@ -38,8 +38,9 @@ GO 宣言（EV008-GO-DECLARATION.md・翔さん決裁）**
   PASS・4/4 発火→分解→完走・全ペアで sentinel が安い側）
 - **検索型= 無発火が仕様**: codex 累計 **0/127 turns**・GM 0.9944 / qwen sentinel 4/4 **無発火**
   （max injected 68,805–79,696 @80k・M-i2 は閾値まで304トークン→「観測範囲で無発火」に留める・
-  0発火/671 sentinel ターン〔103+117+205+246〕= 95%上限 ≈0.45%/turn。FINAL-REPORT の「約770」は
-  内訳合計 671 と不整合のため本文書は内訳側を採用・源泉への訂正記録は別途）
+  0発火/**669** sentinel ターン〔一次ログ sentinel-events.jsonl の turn イベント実数
+  102+116+205+246・2系統の独立再計数で一致〕= 95%上限 ≈0.45%/turn。FINAL-REPORT 当初の「約770」
+  は出所不明のため棄却・同報告に訂正記録済み）
 - **第3類型（grok・descriptive）**: 発火型だが経済メリットなし — 4/4 発火→分解→完走（機構の頑健性を
   別ランタイムで実証）する一方、bare が極めて安く（763k〜2.4M）ペア比中央値 **2.145 >1.0**。
   「**成長型×低 bare 単価= default-on 不向き**」。
@@ -137,7 +138,7 @@ alert       = ts_first_byte 不在のまま TTFB 床超過（fire とは別イ�
 ```
 
 **OR の実効挙動を明記**（Opus NB1）: 実効水位閾値は `min(T_abs, w×ctx_window)` であり、
-**ctx_window ≥ T_abs/w（既定なら 80k）のモデルでは絶対項が常に先に効く**。相対項が主役になるのは
+**ctx_window ≥ T_abs/w（設計時初期値 T_abs=40k・w=50% なら 80k。製品既定は §5= TBD）のモデルでは絶対項が常に先に効く**。相対項が主役になるのは
 小窓モデル（64k 級・EV-008 の人工縮小腕を含む）のみ。「相対=あふれ射影用」という v0.3 の説明は不正確
 だったため削除。
 
@@ -164,7 +165,7 @@ alert       = ts_first_byte 不在のまま TTFB 床超過（fire とは別イ�
 - 所有境界: **sentinel 軸= 生きている間の検出+alert / harness#162= 死んだ後の attempt 分類+早期 DLQ**。
   共有するのは byte tap のみ。kill/再接続の semantics は v2 で #162 側と合同設計。
 
-## 5. 閾値と ctx_window（D4: 実測由来の既定 + config 上書き）
+## 5. 閾値と ctx_window（D4: 設計時初期値 + config 上書き — 製品既定は実装 Issue で確定）
 
 | パラメータ | 既定 | 由来 |
 |---|---|---|
@@ -251,7 +252,7 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
 
 ## 10. レビュー履歴
 
-- r1（2026-08-23・kimi-k3/grok-4.6/glm-5.3・**NO-GO/NO-GO/GWC**〔v0.4 までの本節が席順に対して
+- r1（2026-08-23・kimi-k3/grok-4.6/glm-5.3・**NO-GO/NO-GO/GWC**〔v0.5 までの本節が席順に対して
   GWC/NO-GO/NO-GO と誤記・ADJUDICATION-r1 の実票に合わせ訂正 2026-08-25〕）: F1 述語一意化→§4 /
   F2 絶対閾値併置→§4-§5 / F3 EV-008 凍結→別紙 / F4 TTFB alert-only→§4-1 /
   F5 ログ分離→§6 / F6 細部→§3-§5。裁定= reviews/ADJUDICATION-r1.md
@@ -278,3 +279,8 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
   671 に訂正（≈0.45%/turn）・GO 射程に opus 外挿・qwen GO 中立を明記 / C-1 に「class prior ではない」
   明確化 / §5 T_abs 既定を TBD 化・w 行の時制整合 / 同梱 prereg のアカウント運用情報 redact・README
   現行化・LITE に位置づけバナー（各席の out= レビュー記録として別途保全）
+- v0.5.2（2026-08-25・Alpha・delta レビュー〔codex/grok/glm〕の flip 条件反映）: §0 qwen ターン数を
+  一次ログ実数 **669**（102+116+205+246・2系統の独立再計数一致・「約770」は出所不明で棄却）へ再訂正 /
+  prereg の残存リセット日付と本垢運用記述を redact（redaction notice を真に）/ README の
+  「3席 cumulative GO」を裁定記録ベースと明示（r3 確認ログ非保全の開示と整合）/ §4 の「既定なら 80k」と
+  §5 見出しを TBD 化と整合 / §10 r1 訂正注記の版表記を v0.5 までに修正

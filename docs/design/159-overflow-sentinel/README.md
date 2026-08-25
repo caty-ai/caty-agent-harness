@@ -1,12 +1,14 @@
 # Design lane: #159 overflow sentinel (design record — not yet shipped as a product feature)
 
-Status: design **v0.5** — upstream design review passed (3 heterogeneous seats, 3 rounds,
-cumulative GO — see `reviews/ADJUDICATION-r3-FINAL.md`), and the validation experiment
+Status: design **v0.5.2** — upstream design review passed (3 heterogeneous seats, 3 rounds,
+cumulative GO **as recorded in the adjudication** — see `reviews/ADJUDICATION-r3-FINAL.md`; the
+verbatim log of the round-3 grok micro-confirmation was not preserved as a file, so that seat's
+final flip rests on the adjudication record — disclosed in `DESIGN.md` §10), and the validation experiment
 **EV-008 completed on 2026-08-25 with a default-on GO declaration** (owner decision; results,
 the four GO conditions, and three mandatory caveats are transcribed in `DESIGN.md` §0).
 Implementation is tracked separately from this design lane.
 
-- `DESIGN.md` — overflow sentinel design v0.5 (trigger predicate, tap contract, thresholds,
+- `DESIGN.md` — overflow sentinel design v0.5.2 (trigger predicate, tap contract, thresholds,
   fire log schema, v1 = recommend-only; §0 = EV-008 results and GO declaration as current state)
 - `EV008-PREREG.md` — **pre-sealing rolling draft snapshot (DRAFT v0.3, published for
   provenance)**. The sealed instrument actually governing the run (`EV008-PREREG-DRAFT.md`
