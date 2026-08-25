@@ -103,12 +103,13 @@ write_receipt() {
   local timestamp
 
   timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-  printf 'ts=%s files_scanned=%s blocks=%s candidates=%s folded=%s deduped=%s evicted_by_cap=%s eviction_archive=%s dropped_oversize=%s deferred=%s headerless_bullets=%s torn_lines=%s quarantined=%s lock=%s marker=%s error=%s%s%s\n' \
+  printf 'ts=%s files_scanned=%s blocks=%s candidates=%s folded=%s deduped=%s evicted_by_cap=%s eviction_archive=%s dropped_oversize=%s deferred=%s headerless_bullets=%s torn_lines=%s quarantined=%s lock=%s marker=%s error=%s%s%s%s\n' \
     "$timestamp" "$files_scanned" "$blocks" "$candidates" "$folded" "$deduped" \
     "$evicted_by_cap" "$eviction_archive" "$dropped_oversize" "$deferred" \
     "$headerless_bullets" "$torn_lines" \
     "$quarantined" "$lock_status" "$marker_status" "$receipt_error" "$quarantined_paths" \
     "$last_session_receipt" \
+    "$caps_receipt" \
     >>"$receipt_file"
 }
 
@@ -259,12 +260,14 @@ quarantined=0
 quarantined_paths=
 receipt_error=none
 last_session_receipt=' last_session_fold=failed reason=not-run'
+caps_receipt=' caps_vf_evicted=0 caps_gr_evicted=0 caps_fold=failed caps_fold_reason=not-run'
 
 # Only old debris is swept so a concurrent process cannot lose a live temp file.
 find "$pending_dir" -maxdepth 1 -type f -name '.intake-*.tmp.*' -mtime +1 -delete
 
 if ! take_state_lock "$workspace" "$adapter_identity" "$lock_attempts" "$lock_sleep"; then
   last_session_receipt=' last_session_fold=failed reason=lock-busy'
+  caps_receipt=' caps_vf_evicted=0 caps_gr_evicted=0 caps_fold=failed caps_fold_reason=lock-busy'
   write_receipt busy untouched
   exit 0
 fi
@@ -284,7 +287,8 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-if fold_last_session_index "$workspace" "$state_file" "$work_dir" "$(date -u '+%Y-%m-%d')"; then
+today=$(date -u '+%Y-%m-%d')
+if fold_last_session_index "$workspace" "$state_file" "$work_dir" "$today"; then
   last_session_receipt=" last_session_entries=$LAST_SESSION_ENTRIES evicted=$LAST_SESSION_EVICTED synthesized_handoffs=$LAST_SESSION_SYNTHESIZED_HANDOFFS"
 else
   case "$LAST_SESSION_FOLD_REASON" in
@@ -296,6 +300,23 @@ else
       ;;
     *)
       last_session_receipt=" last_session_fold=skipped reason=$LAST_SESSION_FOLD_REASON"
+      ;;
+  esac
+fi
+
+if fold_declared_state_caps "$workspace" "$state_file" "$work_dir" \
+  "$adapter_identity" "$today"; then
+  caps_receipt=" caps_vf_evicted=$STATE_CAPS_VERIFIED_EVICTED caps_gr_evicted=$STATE_CAPS_RULES_EVICTED caps_fold=ok caps_fold_reason=none"
+else
+  case "$STATE_CAPS_FOLD_REASON" in
+    duplicate-heading|missing-sections|missing-verified-facts|missing-general-rules)
+      caps_receipt=" caps_vf_evicted=0 caps_gr_evicted=0 caps_fold=skipped caps_fold_reason=$STATE_CAPS_FOLD_REASON"
+      ;;
+    *)
+      caps_receipt=" caps_vf_evicted=0 caps_gr_evicted=0 caps_fold=failed caps_fold_reason=$STATE_CAPS_FOLD_REASON"
+      receipt_error=state-caps-fold
+      write_receipt acquired untouched
+      exit 1
       ;;
   esac
 fi
@@ -323,7 +344,6 @@ snapshot_state_normalized_candidates "$state_file" "$normalized_failures_state" 
 
 find "$pending_dir" -maxdepth 1 -type f -name 'flush-*.md' -print \
   | LC_ALL=C sort >"$files_file"
-today=$(date -u '+%Y-%m-%d')
 budget_used=0
 
 while IFS= read -r flush_file || [[ -n "$flush_file" ]]; do
