@@ -181,3 +181,93 @@ Those come from the rig's pre-registered scoring and adjudication, documented
 in [harness#100](https://github.com/caty-ai/caty-agent-harness/issues/100).
 For the figures the script covers, if the script's output disagrees with the
 prose, the prose is wrong.
+
+---
+
+<a id="ev-008"></a>
+
+## EV-008 — overflow sentinel, per-model activation profiles (2026-08)
+
+A separate sealed, pre-registered experiment on the **overflow sentinel**
+(adaptive activation — [design issue
+#159](https://github.com/caty-ai/caty-agent-harness/issues/159)): instead of
+running the harness always-on, a sentinel watches the measured per-turn
+context level and fires only when a threshold (80K tokens or 50 % of the
+window, whichever is lower) is crossed — stopping the run and decomposing the
+job before the context overflows.
+
+Setup: per model, 4 sealed cells (M/L sizes × 2 instances), arms **bare** /
+**always-on harness** / **sentinel**, 20 hidden-key questions per cell.
+Pre-registration, seal ledger, per-run ledgers and sentinel event logs live
+with the rig; the numbers below were regenerated deterministically from the
+primary ledgers (`step5-reconcile.py`) on 2026-08-25. Design and review
+records: [#159](https://github.com/caty-ai/caty-agent-harness/issues/159).
+
+### Result matrix
+
+| Model | Cells | Sentinel fires | Correctness (fired cells) | sentinel/bare token ratio (median of 4 pairs) |
+|---|---|---|---|---|
+| claude-sonnet-5 (confirmatory) | 4 | 4/4 | 20/20 all | **0.801** (0.286 / 0.710 / 0.892 / 1.114) |
+| claude-opus-5 (descriptive, post-GO) | 4 | 4/4 | 20/20 all | **0.923** (0.726 / 0.913 / 0.932 / 0.940) |
+| claude-haiku-4.5 (descriptive) | 4 | 4/4 | 19–20/20 | 0.35 (phase-confound caveat below) |
+| gpt-5.6-luna / Codex (confirmatory) | — | **0/127 turns** (M4 38 + diagnostics 45 + M4′ 44) | n/a (never fired) | tap-overhead geometric mean **0.9944** ≤ 1.05 (M4′, n=3/pair M-tier) |
+| qwen3.8-max (confirmatory no-fire) | 4 | **0/4** (max injected 68.8K–79.7K @ 80K) | n/a (never fired) | no-fire endpoint — ratio not the endpoint |
+| grok-4.6 (descriptive, candidate) | 4 | 4/4 (turns 6/6/6/8) | 20/20 all | **2.145** (1.611 / 1.775 / 2.514 / 4.057) — fires correctly, never pays |
+
+The default-on GO decision (2026-08-25) rests on four pre-registered
+conditions: codex fire rate 0 (0/127; rule-of-three 95 % upper bound
+2.4 %/turn) · codex tap-overhead GM ≤ 1.05 (0.9944) · sonnet all-pair median
+< 1.0 (0.801) · no consistent harmful false-fire (1/4 pairs only). qwen adds
+a second no-fire lane: 0 fires across ≈770 sentinel turns (95 % upper bound
+≈0.4 %/turn).
+
+### Read these before quoting (inseparable from the GO)
+
+1. **The codex condition FAILed first.** M4 (n=1 per pair) came out at
+   geometric mean **1.337** — a pre-registered FAIL, sent back per protocol.
+   Diagnostics attributed it to run-to-run variance (repeat ratios 0.44–1.81;
+   arm difference vanishes at pooled n=4). The passing 0.9944 comes from M4′
+   (n=3 per M-tier pair, a data-informed post-design sealed via a 3-seat
+   delta review). The FAIL is history to carry, not to erase.
+2. **The stretch goal was missed.** sonnet's median 0.801 met the decision
+   threshold (<1.0) but not the pre-registered stretch goal (<0.8) — by
+   0.001.
+3. **Residual uncertainty is real.** Standard cells are n=1 per pair (only
+   M4′ M-tier is n=3). Between-run SD ≈ 30–40 % of the mean at M-tier; even
+   at n=3 the ratio SE is ≈25 % — 0.9944 is "inside the threshold", not
+   "clearly below it".
+
+### Third finding — firing is not the same as paying
+
+grok-4.6 is the measured counter-example to "it fires, so switch it on": the
+sentinel fires early (turn 6–8), decomposition works, correctness holds
+20/20 — and the median cost ratio is still 2.145, because bare grok runs are
+extremely cheap (0.76–2.4M tokens where sonnet bare burns 2.9–16.6M). The
+default-on judgement is economic (sentinel vs bare), not mechanical (does it
+fire). Default-on is not recommended for this profile.
+
+### Blind telemetry paths
+
+Through the current shim, glm / muse report all-zero per-turn usage and kimi
+emits no usage at all. No live water level → no sentinel. Profiling a new
+model starts with one live run confirming every telemetry field carries real
+values (mock passes do not exercise the live path — measured the hard way).
+
+### Deviations and re-runs (all recorded in the rig's correction ledger)
+
+- Two cells were re-run under the pre-registered infra procedure (opus L-i3:
+  a hook mis-wiring blocked all Write tool calls, zero task writes possible;
+  qwen L-i2: provider quota interruption). Partial first-attempt evidence is
+  quarantined alongside the re-run records. A sensitivity check (2026-08-25)
+  confirms the core confirmatory numbers (0.801 / 0.9944 / 0/127) contain
+  **zero re-run data**.
+- haiku's lane predates a mid-experiment protocol revision: its sentinel arm
+  ran entirely after, bare/always entirely before (arm/phase confound).
+  Completion rates are flat across the boundary, but haiku's token-economy
+  figure cannot be fully deconfounded — treat 0.35 as descriptive only.
+- One primary ledger file (haiku L-i1 bare) is missing from the archive; its
+  token figure is carried from the module report (the score file survives).
+
+The full final report, pre-registration with its correction ledger, and the
+per-model module reports live with the rig and are surfaced through
+[#159](https://github.com/caty-ai/caty-agent-harness/issues/159).
