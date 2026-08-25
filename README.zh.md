@@ -182,7 +182,7 @@ flowchart LR
 
 ## 哪些模型能受益
 
-**overflow sentinel**（[设计 Issue #159](https://github.com/caty-ai/caty-agent-harness/issues/159)）监视实测的每轮上下文水位，超过阈值时就停止运行并分解任务，而不是任由上下文溢出。Sentinel v1 已作为 claude-code runtime 的 opt-in 功能在 v0.17.0 发布（[#180](https://github.com/caty-ai/caty-agent-harness/issues/180) 实现了 [#159](https://github.com/caty-ai/caty-agent-harness/issues/159)）；通过 [`OVF_SENTINEL=shadow|active`](adapters/claude-code/INSTALL.md) 启用，未设置 = 完全关闭（byte-identical passthrough）。default-on 仍属后续工作，将按模型对照 [#159](https://github.com/caty-ai/caty-agent-harness/issues/159) 的条件决定；详见[本节档案](#model-effects)与 [benchmark（英文）](docs/benchmark.md#ev-008)。EV-008 仍是该实现之前取得的 rig 预先测量，且尚未在已发布实现上重新测量。EV-008——一项密封、预先注册的基准测试（2026-08）——按模型实测了这种行为。效果的差异取决于运行时「读」的方式：
+**overflow sentinel**（[设计 Issue #159](https://github.com/caty-ai/caty-agent-harness/issues/159)）监视实测的每轮上下文水位，超过阈值时就停止运行并分解任务，而不是任由上下文溢出。Sentinel v1 已作为 claude-code runtime 的 opt-in 功能在 v0.17.0 发布（[#180](https://github.com/caty-ai/caty-agent-harness/issues/180) 实现了 [#159](https://github.com/caty-ai/caty-agent-harness/issues/159)）；通过 [`OVF_SENTINEL=shadow|active`](adapters/claude-code/INSTALL.md) 启用，未设置 = 完全关闭（byte-identical passthrough）。default-on 仍属后续工作，将按模型对照 [#159](https://github.com/caty-ai/caty-agent-harness/issues/159) 的条件决定；详见本节档案与 [benchmark（英文）](docs/benchmark.md#ev-008)。EV-008 仍是该实现之前取得的 rig 预先测量，且尚未在已发布实现上重新测量。EV-008——一项密封、预先注册的基准测试（2026-08）——按模型实测了这种行为。效果的差异取决于运行时「读」的方式：
 
 | 运行时类型 | 实测模型 | 行为 | 判定 |
 |---|---|---|---|

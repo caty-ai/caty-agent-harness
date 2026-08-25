@@ -183,7 +183,7 @@ workspace としてインストールし、ヘルスチェックを実行し、�
 
 ## 効くモデル・効かないモデル
 
-**オーバーフロー・センチネル**（[設計 Issue #159](https://github.com/caty-ai/caty-agent-harness/issues/159)）は、ターンごとに実測したコンテキスト水位を見張り、閾値を超えたら実行を止めて仕事を分解します — コンテキストが溢れてから慌てるのではなく、溢れる前に。Sentinel v1 は claude-code runtime 向けの opt-in 機能として v0.17.0 で出荷済みです（[#180](https://github.com/caty-ai/caty-agent-harness/issues/180) は [#159](https://github.com/caty-ai/caty-agent-harness/issues/159) を実装）。有効化は [`OVF_SENTINEL=shadow|active`](adapters/claude-code/INSTALL.md)、未設定 = 完全オフ（byte-identical passthrough）です。default-on は今後の課題で、[#159](https://github.com/caty-ai/caty-agent-harness/issues/159) の条件に照らしてモデルごとに判断します。詳しくは [本節のプロファイル](#model-effects) と [benchmark](docs/benchmark.ja.md#ev-008) を参照してください。EV-008 はその実装に先立つリグ事前測定であり、出荷済み実装ではまだ再測定していません。EV-008（封印付き・事前登録ベンチマーク・2026-08）で、この振る舞いをモデル別に実測しました。効き方は、ランタイムの「読み方」で分かれます:
+**オーバーフロー・センチネル**（[設計 Issue #159](https://github.com/caty-ai/caty-agent-harness/issues/159)）は、ターンごとに実測したコンテキスト水位を見張り、閾値を超えたら実行を止めて仕事を分解します — コンテキストが溢れてから慌てるのではなく、溢れる前に。Sentinel v1 は claude-code runtime 向けの opt-in 機能として v0.17.0 で出荷済みです（[#180](https://github.com/caty-ai/caty-agent-harness/issues/180) は [#159](https://github.com/caty-ai/caty-agent-harness/issues/159) を実装）。有効化は [`OVF_SENTINEL=shadow|active`](adapters/claude-code/INSTALL.md)、未設定 = 完全オフ（byte-identical passthrough）です。default-on は今後の課題で、[#159](https://github.com/caty-ai/caty-agent-harness/issues/159) の条件に照らしてモデルごとに判断します。詳しくは本節のプロファイルと [benchmark](docs/benchmark.ja.md#ev-008) を参照してください。EV-008 はその実装に先立つリグ事前測定であり、出荷済み実装ではまだ再測定していません。EV-008（封印付き・事前登録ベンチマーク・2026-08）で、この振る舞いをモデル別に実測しました。効き方は、ランタイムの「読み方」で分かれます:
 
 | ランタイム型 | 実測したモデル | 振る舞い | 判定 |
 |---|---|---|---|
