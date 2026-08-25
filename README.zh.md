@@ -185,7 +185,7 @@ flowchart LR
 
 | 运行时类型 | 实测模型 | 行为 | 判定 |
 |---|---|---|---|
-| **全量读取型** — 上下文单调增长 | claude-haiku-4.5 · claude-sonnet-5 · claude-opus-5 | 任务进行到一半时触发 → 分解 → 完成；正确率保持（sonnet/opus= 触发的每个单元均为 20/20・haiku= 19–20/20） | **这里是收益所在。** 任务越大收益越大（sonnet 的 L 档最大）。sonnet 的 sentinel/bare 中位数为 **0.801**（最佳单元 token 减少 −71%）・opus 为 **0.923**・haiku 为 0.35（描述性・存在 arm/phase 混杂——参见 [benchmark](docs/benchmark.md#ev-008)） |
+| **全量读取型** — 上下文单调增长 | claude-haiku-4.5 · claude-sonnet-5 · claude-opus-5 | 任务进行到一半时触发 → 分解 → 完成；正确率保持（sonnet/opus= 触发的每个单元均为 20/20・haiku= 19–20/20） | **这里是收益所在。** 对 sonnet 而言，任务越大收益越大（L 档最大）。sonnet 的 sentinel/bare 中位数为 **0.801**（最佳单元 token 减少 −71%）・opus 为 **0.923**・haiku 为 0.35（描述性・存在 arm/phase 混杂——参见 [benchmark](docs/benchmark.md#ev-008)） |
 | **检索型** — 在观测范围内趋于平台 | gpt-5.6-luna（Codex）· qwen3.8-max | 在实测的所有运行中触发次数为零：codex **0/127 turns**・qwen 0/4 单元（实测最大值 79.7K，阈值为 80K——余量很薄，此处仅作为观测范围的记述） | **在观测范围内的不触发正是设计意图** — 这本身就是 default-on 的安全条件。若在此触发，就是误报、需要打回设计 |
 | **触发但不划算型** — 上下文增长，但 bare 很便宜 | grok-4.6 | 4/4 触发，分解并正确完成（20/20）——但 bare 运行太便宜，分解反而更贵（比值中位数 **2.145**） | 机制在这个运行时上已被证实有效；**但不建议 default-on**。判断标准是相对 bare 的经济性，而不是是否触发 |
 
