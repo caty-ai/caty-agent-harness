@@ -85,6 +85,44 @@ The flush intake consumer's accounting ledger is `loop/pending/intake-runs.log`.
   `TR_PUSH_CMD` are whitespace-split into argv arrays and may use PATH-resolved
   regular executable names.
 
+### Claude Code overflow sentinel environment
+
+The Claude Code adapter validates these values before spawning the CLI. Invalid
+values exit 2. With `OVF_SENTINEL` unset or empty, all other sentinel behavior is
+off: the CLI receives `prompt.md` on stdin directly, stdout remains unchanged,
+and no sentinel artifact is created.
+
+| Variable | Contract |
+| --- | --- |
+| `OVF_SENTINEL` | unset/empty = off; otherwise exactly `shadow` or `active` |
+| `OVF_T_ABS` | integer >= 1; default `80000` tokens |
+| `OVF_W_PCT` | integer 1–99; default `50`, converted by dividing by 100 |
+| `OVF_CTX_WINDOW` | optional integer >= 1; first context-window ladder rung |
+| `OVF_HF_CONFIG` | optional local non-symlink HF `config.json` path (or its directory); no network lookup |
+| `OVF_COMPACTION_OWNER` | `sentinel` or `host`; unset warns and selects `sentinel`; `host` records `disabled-host` |
+| `OVF_STEP_CMD` | whitespace-split CLI argv; default `claude -p --output-format stream-json --verbose` |
+| `OVF_FINALIZE_TIMEOUT_S` | integer >= 1; default `10`; bounded monitor join after CLI exit |
+
+Context-window resolution is config, validated local HF config, a Claude-family
+prefix catalog, then the 200k default. The selected source is logged as `config`,
+`hf-config`, `catalog`, or `default`.
+
+TTFB is run start to the first `assistant` stream line. The token tiers are 90s,
+150s when the prior attempt's last injected MA is strictly above 50k, and 240s
+when strictly above 100k. No prior state and unlisted models use 240s. Named
+reasoning floors are: `claude-opus*` 240s, `qwen3*` 180s, `qwq*` 300s,
+`glm-5*` 300s, `grok-*` 300s, `deepseek-r1*` 600s, and `o1*`/`o3*` 600s.
+These floors create `alert` records only; they never terminate the CLI.
+
+`sentinel-events.jsonl` is append-only and contains `turn`, `fire`, `alert`, and
+per-run `attempt_end` records. The task-level `task_end` event is deferred to the
+ledger-confluence integration. `attempt.json` is atomically finalized with exactly
+these fields: `schema_version`, `task_id`, `attempt`, `mode`, `model`,
+`ctx_window`, `ctx_window_source`, `started_at`, nullable `first_byte_at`,
+`cli_exit_code`, `tap_status_final`, `fired`, and `events_path`. See §3–§6 of the
+[overflow sentinel DESIGN](design/159-overflow-sentinel/DESIGN.md) for the
+event-field contracts.
+
 ---
 
 ## Contract documents
@@ -93,6 +131,7 @@ The flush intake consumer's accounting ledger is `loop/pending/intake-runs.log`.
 | --- | --- |
 | [DESIGN.md](design/DESIGN.md) | learning-loop contracts, verification seam, promotion rules, and adapter contracts |
 | [DESIGN-task-runner.md](design/DESIGN-task-runner.md) | task-runner contract, budgets, DLQ, and metrics |
+| [159 overflow sentinel DESIGN](design/159-overflow-sentinel/DESIGN.md) | overflow predicate, tap, TTFB, event, and nudge contracts |
 | [governance-rules.md](governance-rules.md) | family adoption governance canon (governance R1–R14; amendment status and effectiveness gates) |
 | [plugin-convention.md](plugin-convention.md) | plugin seam contract and extraction policy |
 | [plugins.md](plugins.md) | known plugin registry and attachment status |

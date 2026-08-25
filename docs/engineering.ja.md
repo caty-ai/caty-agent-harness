@@ -133,6 +133,28 @@ fold 経路は workspace につき 1 本だけです。この consumer か、Ope
 
 詳しいセットアップ手順・ledger の形式・schedule の詳細は [adapters/claude-code/INSTALL.md](../adapters/claude-code/INSTALL.md) を参照してください。
 
+### Overflow sentinel
+
+Claude Code の step adapter は、passive な overflow sentinel を opt-in で利用できます。
+sentinel は Claude の `stream-json` を tail し、assistant message を identity で dedup した上で、
+各 prompt を input・cache-read・cache-creation token の排他的な合計として測定します。
+shadow mode は判断を記録するだけで、active mode は次の task-runner step へ渡す 5 点の delta nudge も
+準備します。model を中断・signal することはなく、model 終了後の bounded な記録確定 join を除いて
+model を block しません。
+
+sentinel は healthy tap、cache accounting 不足、tap absent、全ゼロの blind tap を区別します。
+runtime host が compaction を所有する場合は `OVF_COMPACTION_OWNER=host` を設定します。この場合は
+水位述語を実行せず `disabled-host` を記録します。有効時に owner を未設定のままにすると warning を出し、
+sentinel heuristic を選びます。
+
+監視対象の各 attempt は `turn`、`fire`、`alert`、`attempt_end` を独立した
+`sentinel-events.jsonl` へ append します。task-runner ledger に confluence point ができるまでは
+このファイルを分離して保持します。次 step 境界で nudge を配送するため、発火した attempt で task が
+終了すると pending nudge を受け取る runtime がない、という既知の制限があります。`suppressed` の
+fire/terminal disposition により、この未配送は計測可能です。passive な `claude -p` stream からは
+run start と最初の assistant byte しか観測できず、request ごとの境界は観測できないため、inter-turn
+TTFB stall も後続版へ延期します。
+
 ---
 
 <a id="pause"></a>

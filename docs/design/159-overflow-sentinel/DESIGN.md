@@ -1,6 +1,6 @@
 # DESIGN: #159 overflow sentinel — 文脈圧力の実測で task-runner を発火する
 
-status: **v0.5.2**（2026-08-25・Alpha・L1-9 r3 PASS〔3席 CUMULATIVE GO 収束・blocking 残0〕+
+status: **v0.5.3**（2026-08-25・Alpha・L1-9 r3 PASS〔3席 CUMULATIVE GO 収束・blocking 残0〕+
 **EV-008 完了・default-on GO 宣言済み（案A・2026-08-25）を「設計の現在地」として反映**・サイズ H）
 inputs: PILOT.md（訂正節含む）/ REPORT-runtime-context-survey.md / REPORT-pattern4-rootcause.md /
 REPORT-hermes-provider-layer.md / REPORT-hermes-provider-deep-research.md / REPORT-qwen38-artifacts.md /
@@ -138,7 +138,7 @@ alert       = ts_first_byte 不在のまま TTFB 床超過（fire とは別イ�
 ```
 
 **OR の実効挙動を明記**（Opus NB1）: 実効水位閾値は `min(T_abs, w×ctx_window)` であり、
-**ctx_window ≥ T_abs/w（設計時初期値 T_abs=40k・w=50% なら 80k。製品既定は §5= TBD）のモデルでは絶対項が常に先に効く**。相対項が主役になるのは
+**ctx_window ≥ T_abs/w（製品既定 T_abs=80k・w=50% なら 160k）のモデルでは絶対項が常に先に効く**。相対項が主役になるのは
 小窓モデル（64k 級・EV-008 の人工縮小腕を含む）のみ。「相対=あふれ射影用」という v0.3 の説明は不正確
 だったため削除。
 
@@ -165,13 +165,13 @@ alert       = ts_first_byte 不在のまま TTFB 床超過（fire とは別イ�
 - 所有境界: **sentinel 軸= 生きている間の検出+alert / harness#162= 死んだ後の attempt 分類+早期 DLQ**。
   共有するのは byte tap のみ。kill/再接続の semantics は v2 で #162 側と合同設計。
 
-## 5. 閾値と ctx_window（D4: 設計時初期値 + config 上書き — 製品既定は実装 Issue で確定）
+## 5. 閾値と ctx_window（D4: 製品既定 + config 上書き）
 
 | パラメータ | 既定 | 由来 |
 |---|---|---|
 | N（移動平均窓） | 3 turns | pilot の bare 立ち上がり 2〜4 turn |
-| T_abs（絶対水位） | **TBD（EV-008 GO 実走= 80k・製品既定の最終確定は実装 Issue の clarify で行う）** — 設計時の初期値 40,000 tok/turn は較正候補 {40k, 80k, 120k} の下端として由来欄に残置。LITE Phase 0 replay で 40k は claude 系 bare のターン1即発火= 過敏と実測済み | EV-006 harness 上界の上端（F2）。**系譜注記（Fable r2）**: EV-006 の 20〜40k は harness の per-step fresh-context 注入量・sentinel の injected は累積プロンプト全体でレジームが異なる。40k は過敏側（200k 窓の実質全タスクが中盤で跨ぐ）の可能性があり、既定の最終確定は較正に委ねる |
-| w（窓比水位） | 50% | bare sonnet L帯 定常 ~56% の近傍。**導出ではなく同域の初期値** — EV-008 は実走 50% で GO 成立（ライブ sweep は prereg v0.3 で replay 較正に置換）。製品既定の最終確定は T_abs と同じく実装 Issue の clarify |
+| T_abs（絶対水位） | **80,000 tok/turn** | EV-008 GO 実走値。設計時の初期値 40,000 tok/turn は較正候補 {40k, 80k, 120k} の下端として由来欄に残置。LITE Phase 0 replay で 40k は claude 系 bare のターン1即発火= 過敏と実測済み。**系譜注記（Fable r2）**: EV-006 の 20〜40k は harness の per-step fresh-context 注入量・sentinel の injected は累積プロンプト全体でレジームが異なる |
+| w（窓比水位） | **50%** | bare sonnet L帯 定常 ~56% の近傍。**導出ではなく同域の初期値** — EV-008 は実走 50% で GO 成立（ライブ sweep は prereg v0.3 で replay 較正に置換） |
 | M（射影ホライズン） | 10 turns | 保守的（v1 の誤発火コスト= ログ1行+ナッジ1回） |
 | TTFB 床 | 90/150/240s + reasoning floor 表 + unknown=240s | Hermes 実装値 + hermes#89241 の逆張り |
 
@@ -285,3 +285,8 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
   方法論」の列挙形に精密化 / README の
   「3席 cumulative GO」を裁定記録ベースと明示（r3 確認ログ非保全の開示と整合）/ §4 の「既定なら 80k」と
   §5 見出しを TBD 化と整合 / §10 r1 訂正注記の版表記を v0.5 までに修正
+- v0.5.3（2026-08-25・#180 実装 writeback）: §5 の製品既定を T_abs=80k / w=50% に確定。
+  v1 claude-code integration は monitored run ごとの terminal record として `attempt_end` を emit し、
+  task-level `task_end` は ledger-confluence follow-up へ延期する。nudge delivery は next-step boundary のため、
+  発火 attempt で task が終了した場合は nudge 未配送となる。TTFB v1 は run-start→first assistant byte のみで、
+  inter-turn stall detection は passive stream で request boundary を観測できる joint-design follow-up へ延期する

@@ -133,6 +133,31 @@ Exactly one fold route may run per workspace: this consumer, or OpenClaw's `dist
 
 See [adapters/claude-code/INSTALL.md](../adapters/claude-code/INSTALL.md) for the full setup steps, ledger format, and scheduling detail.
 
+### Overflow sentinel
+
+The Claude Code step adapter can opt into a passive overflow sentinel. It tails
+Claude `stream-json`, deduplicates assistant messages by identity, and measures
+each prompt as the exclusive sum of input, cache-read, and cache-creation
+tokens. Shadow mode logs decisions; active mode additionally prepares a
+five-point delta nudge for the next task-runner step. It never interrupts,
+signals, or blocks the model beyond a bounded post-exit record-finalization
+join.
+
+The sentinel distinguishes a healthy tap, missing cache accounting, an absent
+tap, and an all-zero blind tap. Set `OVF_COMPACTION_OWNER=host` when the runtime
+host owns compaction; this records `disabled-host` instead of running the water
+level predicate. Leaving the owner unset while enabled warns and selects the
+sentinel heuristic.
+
+Each monitored attempt appends `turn`, `fire`, `alert`, and `attempt_end` records
+to its standalone `sentinel-events.jsonl`. This file remains separate until the
+task-runner ledger has a confluence point. The next-step delivery boundary has
+one known limitation: a task that ends on its firing attempt cannot receive the
+pending nudge. The `suppressed` fire/terminal disposition makes that miss
+measurable. Inter-turn TTFB stalls are likewise deferred because a passive
+`claude -p` stream exposes run start and first assistant byte, but not individual
+request boundaries.
+
 ---
 
 <a id="pause"></a>

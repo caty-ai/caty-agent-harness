@@ -2,6 +2,8 @@
 adapters/claude-code/checkpoint-stop-hook.sh	guarded	hook-payload.cwd	exit-0-silent	interactive-hook	caty_pause_workspace_state	mkdir -p "$guard_dir"
 adapters/claude-code/flush-intake.sh	guarded	argv	exit-0-status	automated-state-fold	caty_pause_workspace_state	source "$repo_root/scripts/flush-intake.sh"
 adapters/claude-code/precompact-flush-hook.sh	guarded	hook-payload.cwd	exit-0-silent	interactive-hook	caty_pause_workspace_state	mkdir -p "$guard_dir"
+adapters/claude-code/spawn_step.sh	guarded	argv.workspace	exit-0-status	automated-model-call-with-overflow-sentinel	caty_pause_workspace_state	run_bounded "$ovf_step_timeout_s"
+adapters/claude-code/overflow_sentinel_monitor.py	exempt	none	not-applicable	passive-overflow-sentinel-monitor	-	-
 adapters/codex/checkpoint-stop-hook.sh	guarded	hook-payload.cwd	exit-0-silent	interactive-hook	caty_pause_workspace_state	mkdir -p "$guard_dir"
 adapters/hermes/examples/verifier-probe.sh	exempt	none	not-applicable	provider-conformance-example	-	-
 adapters/hermes/examples/verifier-probe-cli.sh	exempt	none	not-applicable	provider-conformance-example	-	-
@@ -29,6 +31,7 @@ scripts/lib-command-argv.sh	exempt	none	not-applicable	sourced-library	-	-
 scripts/lib-classify.sh	exempt	none	not-applicable	sourced-library	-	-
 scripts/lib-donecheck.sh	exempt	none	not-applicable	sourced-library	-	-
 scripts/lib-pause.sh	exempt	explicit-function-argument	not-applicable	sourced-library	-	-
+scripts/lib_overflow_sentinel.py	exempt	none	not-applicable	importable-overflow-sentinel-library	-	-
 scripts/lib-secrets-env.sh	exempt	none	not-applicable	sourced-library	-	-
 scripts/lib-state-fold.sh	exempt	explicit-function-argument	not-applicable	sourced-library	-	-
 scripts/lib-wrapper-conformance.sh	exempt	none	not-applicable	sourced-library	-	-
