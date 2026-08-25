@@ -75,7 +75,10 @@ and byte-counts the same prompt and lists its files without calling a reviewer o
 advancing the late-arrival watermark, and never writes or dispatches a notification.
 Exit `0` means a validated run, `NO_GROUPS`, or a
 pause skip; `1` means attempted review failed closed; `2` means usage/configuration did
-not permit review. Every reachable workspace exit writes `loop/promotions/runs.log`.
+not permit review. Every reachable workspace exit writes `loop/promotions/runs.log`;
+its `error=` field uses `none`, `skipped-paused`, `lock-busy`, `chain-exhausted`,
+`config`, `prompt-too-large`, or `source-normalization` (a cited raw file could not be
+normalized for citation validation — fails closed like the chain classes).
 THEME blocks may be separated by blank lines, but blank lines inside a block are invalid.
 Each member citation must normalize to 8–200 characters and match the start of a normalized
 source line; shorter, mid-line-only, or fabricated citations reject the complete block.

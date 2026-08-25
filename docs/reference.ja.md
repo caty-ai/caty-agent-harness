@@ -75,7 +75,10 @@ reviewer call と遅着 watermark 更新を行わず、notification の書き込
 exit `0` は検証済み実行、
 `NO_GROUPS`、または pause skip、`1` は review 試行後の fail-closed、`2` は usage/config
 により review を開始できなかったことを示します。workspace を特定できる全 exit path は
-`loop/promotions/runs.log` に receipt を残します。
+`loop/promotions/runs.log` に receipt を残します。receipt の `error=` は `none` /
+`skipped-paused` / `lock-busy` / `chain-exhausted` / `config` / `prompt-too-large` /
+`source-normalization`（citation 検証用の raw file 正規化に失敗。chain 系と同じく
+fail-closed）のいずれかです。
 THEME block 間の空行は許容しますが、block 内の空行は不正です。各 member citation は
 正規化後 8〜200 文字で、正規化済み source line の先頭に一致する必要があります。
 短すぎる citation、行途中だけの一致、fabrication は block 全体を reject します。
