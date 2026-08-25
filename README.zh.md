@@ -25,19 +25,20 @@ Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决�
 
 **一个会自我成长、并学会把你交办的任务一路跑到「完成」的工具。**
 
-**实测** — 针对上下文溢出类工作负载的密封、预先注册的基准测试（2026-08）：
+**实测** — 针对上下文溢出任务的两项密封、预先注册实验（2026-08）：
 
-| 模型 | 已验证完成率（裸跑 → harness） | 完成幻觉¹ | 用时与 token |
+| 模型 | 完成幻觉¹ | 已验证结果 | token 相对裸跑 |
 |---|---|---|---|
-| Claude Haiku 4.5 | 13% → **43%**（+30 pt，p=0.0079） | 98% → **8%** | **token 减少 59% ・用时减少 40–46%** |
-| GPT-5.6 Luna（Codex） | 计划中 | — | — |
-| 本地模型（Ollama） | 计划中 | — | — |
+| claude-haiku-4.5 ² | 98% → 8% | 13% → 43%（p=0.0079） | −59% |
+| claude-sonnet-5 ³ | — | 无下降 | −20%（各单元 −71%…+11%） |
+| claude-opus-5 ³ ⁴ | — | 无下降 | −8% |
 
-<sub>该表格是裸跑 vs harness 的**完走率**赛道（赛道追加由 [#129](https://github.com/caty-ai/caty-agent-harness/issues/129) 追踪）。Codex、qwen、grok 和 opus 已经在下方的[overflow sentinel 小节](#model-effects)中实测——这是回答另一个问题的独立实验（EV-008），因此这里的「计划中」与那边的实测数字并不矛盾。</sub>
+<sub>¹ 尚未读完工作内容便宣称「完成」——根据工具调用 transcript 进行机器评分，而非自我报告（宣称 222 次 → 2 次，每臂 30 次运行）：[完整数据与局限（英文）](docs/benchmark.md)</sub>
+<br><sub>² EV-006 — 裸跑 vs **已发布 harness**；每臂30次运行（M/L 规模）的已验证完成率</sub>
+<br><sub>³ EV-008 — 裸跑 vs **overflow sentinel**；该功能仍在设计中（[#159](https://github.com/caty-ai/caty-agent-harness/issues/159)），**尚未发布**，这些是在实现之前取得的 rig 测量。`无下降` = 每个单元的两臂均按隐藏答案取得 20/20；`token 相对裸跑` = 1 − 四个密封单元的 median(sentinel/bare)：sonnet **0.801** → −20%，opus **0.923** → −8%；`—` = 本赛道未测量</sub>
+<br><sub>⁴ 描述性、post-GO</sub>
 
-<sub>¹ 还没读完工作内容就宣称「完成」——依据工具调用记录测量，而非自我报告：在 15 万至 30 万 token 的任务上（每组配对运行 30 次，全部由机器评分），此类宣称从 222 次降至 2 次。包含薄弱环节：[完整数据与局限（英文）](docs/benchmark.md)。</sub>
-
-**实测 — overflow sentinel**（密封 EV-008，2026-08-25）：sentinel 开启时，claude-sonnet-5 在上下文溢出类任务上保持 20/20 正确率，同时削减 token（sentinel/bare 中位数 0.801・最佳单元 −71%）；claude-opus-5 为 0.923。检索型运行时在实测的所有运行中触发次数为零——这是设计使然（Codex 0/127 turns）。sentinel 本身仍在设计与实现中（[#159](https://github.com/caty-ai/caty-agent-harness/issues/159)），尚未随产品发布——这些是实现之前在实验 rig 上取得的实测值。哪些模型能受益——哪些不该开启：[各模型档案](#model-effects) ・ [完整数字与历史（英文）](docs/benchmark.md#ev-008)。
+<sub>Codex、qwen、grok、gemini 以及遥测不可见的运行时（glm/muse/kimi）也已测量——包括 sentinel 成本高于裸跑的单元：[各模型档案](#model-effects) ・ [完整数字与历史（英文）](docs/benchmark.md#ev-008) ・含本地模型（Ollama）的计划赛道：[#129](https://github.com/caty-ai/caty-agent-harness/issues/129)</sub>
 
 🔧 [工程指南（英文）](docs/engineering.md) ｜ 📘 [详细规范（英文）](docs/reference.md)
 
