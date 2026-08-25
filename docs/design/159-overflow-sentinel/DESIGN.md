@@ -5,7 +5,7 @@ status: **v0.5**（2026-08-25・Alpha・L1-9 r3 PASS〔3席 CUMULATIVE GO 収束
 inputs: PILOT.md（訂正節含む）/ REPORT-runtime-context-survey.md / REPORT-pattern4-rootcause.md /
 REPORT-hermes-provider-layer.md / REPORT-hermes-provider-deep-research.md / REPORT-qwen38-artifacts.md /
 #159 clarify 決裁5点 / L1-9 r1〜r3 裁定（reviews/ADJUDICATION-r1〜r3-FINAL.md）/
-セロ一次証言（family-vault 20_projects/family-os-external-proof/cero-hearing-task-runner-20260823.md）/
+セロ一次証言（maintainer 聞き取り 2026-08-23・非公開記録）/
 **EV-008 確定報告（experiments/ev006/EV008-FINAL-REPORT.md・数字の正= step5-reconcile.py 出力）+
 GO 宣言（EV008-GO-DECLARATION.md・翔さん決裁）**
 関連: harness#162（zero-output attempt の事後分類・早期 DLQ）/ EV-008 事前登録= 別紙 `EV008-PREREG.md` /
@@ -38,7 +38,8 @@ GO 宣言（EV008-GO-DECLARATION.md・翔さん決裁）**
   PASS・4/4 発火→分解→完走・全ペアで sentinel が安い側）
 - **検索型= 無発火が仕様**: codex 累計 **0/127 turns**・GM 0.9944 / qwen sentinel 4/4 **無発火**
   （max injected 68,805–79,696 @80k・M-i2 は閾値まで304トークン→「観測範囲で無発火」に留める・
-  0発火/約770ターン= 95%上限 ≈0.4%/turn）
+  0発火/671 sentinel ターン〔103+117+205+246〕= 95%上限 ≈0.45%/turn。FINAL-REPORT の「約770」は
+  内訳合計 671 と不整合のため本文書は内訳側を採用・源泉への訂正記録は別途）
 - **第3類型（grok・descriptive）**: 発火型だが経済メリットなし — 4/4 発火→分解→完走（機構の頑健性を
   別ランタイムで実証）する一方、bare が極めて安く（763k〜2.4M）ペア比中央値 **2.145 >1.0**。
   「**成長型×低 bare 単価= default-on 不向き**」。
@@ -47,7 +48,9 @@ GO 宣言（EV008-GO-DECLARATION.md・翔さん決裁）**
 **EV-008 結果から昇格する設計制約（v1 実装に対して規範）**:
 - **C-1 per-model 適用判定**: default-on の適用範囲はモデル別経済プロファイルで決める。発火・分解・
   正答維持が正しく動くこと（grok で実証済み）は導入判断と独立 — 判断は **bare 対比の経済**で行う。
-  grok 型（成長型×低 bare 単価）には default-on を適用しない。
+  grok 型（成長型×低 bare 単価）には default-on を適用しない。**C-1 は配備適格性（enablement）の
+  ポリシーであり、発火時の class prior の再導入ではない** — §4 の発火述語は unknown 一択・実測のみの
+  まま、§9 の非目標（静的分類表の保守）も不変。
 - **C-2 blind-path ガード**: per-turn usage の実値が得られない経路では sentinel を有効化しない。
   実測の盲目経路= glm/muse（shim 経由で per-turn usage 全ゼロ）・kimi（usage 非放出）。全ゼロ usage の
   検出時は起動拒否（または明示的 disabled 記録）とし、§3 の `tap_status: absent` と同様に
@@ -58,6 +61,9 @@ GO 宣言（EV008-GO-DECLARATION.md・翔さん決裁）**
   （switcher config）の包含は実装 Issue の clarify で確定。
 
 GO 宣言の射程= claude 系ランタイム + codex は「無発火・課金非上乗せ」の安全条件で同居可。
+宣言文書の射程条項をそのまま引き継ぐ2点: **opus 帯（1M 窓・網羅読み）への一般化は外挿**であり
+M5 は descriptive の post-GO 監視（PASS したが確証4条件には算入しない）。**qwen は GO 中立** —
+発火時は prior 設計の差し戻し材料であって宣言の撤回条件ではない（harmful 条項がバックストップ）。
 出荷順序（opt-in 先行か default-on 即時か）は GO 宣言（機構の可否）と別判断で、実装 Issue 側で決める。
 
 ## 1. Why — なぜ作るのか・作らないと何が起きるか
@@ -163,8 +169,8 @@ alert       = ts_first_byte 不在のまま TTFB 床超過（fire とは別イ�
 | パラメータ | 既定 | 由来 |
 |---|---|---|
 | N（移動平均窓） | 3 turns | pilot の bare 立ち上がり 2〜4 turn |
-| T_abs（絶対水位） | 40,000 tok/turn（較正候補 {40k, 80k, 120k}。**EV-008 実走は 80k/50% を全期間使用し GO 成立（§0）— 製品既定の最終確定は実装 Issue の clarify で行う**） | EV-006 harness 上界の上端（F2）。**系譜注記（Fable r2）**: EV-006 の 20〜40k は harness の per-step fresh-context 注入量・sentinel の injected は累積プロンプト全体でレジームが異なる。40k は過敏側（200k 窓の実質全タスクが中盤で跨ぐ）の可能性があり、既定の最終確定は較正に委ねる |
-| w（窓比水位） | 50% | bare sonnet L帯 定常 ~56% の近傍。**導出ではなく同域の初期値** — EV-008 sweep で確定（Kimi r1 指摘の言い直し） |
+| T_abs（絶対水位） | **TBD（EV-008 GO 実走= 80k・製品既定の最終確定は実装 Issue の clarify で行う）** — 設計時の初期値 40,000 tok/turn は較正候補 {40k, 80k, 120k} の下端として由来欄に残置。LITE Phase 0 replay で 40k は claude 系 bare のターン1即発火= 過敏と実測済み | EV-006 harness 上界の上端（F2）。**系譜注記（Fable r2）**: EV-006 の 20〜40k は harness の per-step fresh-context 注入量・sentinel の injected は累積プロンプト全体でレジームが異なる。40k は過敏側（200k 窓の実質全タスクが中盤で跨ぐ）の可能性があり、既定の最終確定は較正に委ねる |
+| w（窓比水位） | 50% | bare sonnet L帯 定常 ~56% の近傍。**導出ではなく同域の初期値** — EV-008 は実走 50% で GO 成立（ライブ sweep は prereg v0.3 で replay 較正に置換）。製品既定の最終確定は T_abs と同じく実装 Issue の clarify |
 | M（射影ホライズン） | 10 turns | 保守的（v1 の誤発火コスト= ログ1行+ナッジ1回） |
 | TTFB 床 | 90/150/240s + reasoning floor 表 + unknown=240s | Hermes 実装値 + hermes#89241 の逆張り |
 
@@ -212,8 +218,10 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
 
 ## 7. EV-008（D5）— 事前登録は別紙・**実施済み（結果は §0）**
 
-事前登録の正本= `EV008-PREREG.md`（v0.2・翔さん決裁済み・実走完了 2026-08-25。結果と GO 宣言は §0、
-確定数字は experiments/ev006/EV008-FINAL-REPORT.md が正）。設計時の骨子（記録として保持）:
+同梱の `EV008-PREREG.md` は**封緘前のローリングドラフト snapshot（DRAFT v0.3・3席 delta 未実施時点）**
+であり、封緘済みの実走正本ではない。封緘版= `EV008-PREREG-DRAFT.md` SEALED v1.0 + r4/r5 裁定 +
+モジュール封印台帳（私設リグ・非公開・README の公開方針どおり）。実走完了 2026-08-25。結果と GO 宣言は
+§0、確定数字は experiments/ev006/EV008-FINAL-REPORT.md が正。設計時の骨子（記録として保持）:
 主比較は**同一の封緘済み計画**を bare / always-harness / sentinel の3腕に渡して実行持続効果を分離
 （セロ提案と一致）。分解者 B/C（本人分解/強モデル分解）は入れ子の別セル。強制オーバーフロー副腕
 （窓 64k 人工縮小）で見逃し率を実測。codex 腕は「発火率0」自体が合格条件。qwen on claude CLI を
@@ -243,19 +251,30 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
 
 ## 10. レビュー履歴
 
-- r1（2026-08-23・kimi-k3/grok-4.6/glm-5.3・GWC/NO-GO/NO-GO）: F1 述語一意化→§4 /
+- r1（2026-08-23・kimi-k3/grok-4.6/glm-5.3・**NO-GO/NO-GO/GWC**〔v0.4 までの本節が席順に対して
+  GWC/NO-GO/NO-GO と誤記・ADJUDICATION-r1 の実票に合わせ訂正 2026-08-25〕）: F1 述語一意化→§4 /
   F2 絶対閾値併置→§4-§5 / F3 EV-008 凍結→別紙 / F4 TTFB alert-only→§4-1 /
-  F5 ログ分離→§6 / F6 細部→§3-§5。裁定= reviews-159-L19/ADJUDICATION-r1.md
+  F5 ログ分離→§6 / F6 細部→§3-§5。裁定= reviews/ADJUDICATION-r1.md
 - v0.3 追加入力: セロ一次証言（Why 節・ナッジ中身・v2 軸・非目標）・翔さん指示「Why を入れる」
 - r2（2026-08-23・正席3= NO-GO/GWC/NO-GO + 参考3= codex/fable/opus・翔さん依頼）: slope 凍結・
   min() 実効挙動の正文化・alert イベント分離・turn 系列保存・window_error/compaction 分離・
   スキーマ増補（both/started_at/value_kind/run_meta）・ヒステリシス・T_abs 系譜注記・§9-1 新設。
   EV-008 側は prereg v0.2 で shadow 評価・replay 較正・判定手続き凍結・橋渡し条項・handoff 契約。
-  裁定= reviews-159-L19/ADJUDICATION-r2.md
+  裁定= reviews/ADJUDICATION-r2.md
 - r3（2026-08-23・kimi-k3/glm-5.3= CUMULATIVE GWC + grok-4.6= 狭い NO-GO〔B1 のみ〕→指定修正の
   逐語適用+マイクロ確認で RESOLVED — cumulative GO）: **L1-9 上流レビュー PASS・blocking 残0**。
-  裁定= reviews/ADJUDICATION-r3-FINAL.md
+  裁定= reviews/ADJUDICATION-r3-FINAL.md。**来歴注記（2026-08-25）**: grok マイクロ確認の逐語ログ
+  （裁定が参照する prompt-grok-confirm.md への直答）はファイルとして非保全 — RESOLVED 判定の根拠は
+  当時の裁定記録の記載のみ。誇張を避けるためこの限界を明示する
+- 記録の読み方: レビュー記録内の「EV-007 / EV007-PREREG」は本実験 EV-008 の当時の作業名（r 系裁定は
+  改番前に書かれた逐語記録のため未編集で保持）
 - v0.5（2026-08-25・Alpha）: EV-008 完了・default-on GO 宣言（案A・翔さん決裁）を §0 として反映。
   設計制約 C-1（per-model 適用判定・grok 第3類型）/ C-2（blind-path ガード）/ C-3（ホスト圧縮同居）を
   昇格。§5 T_abs に実走値 80k/50% を注記・§7 を実施済みへ更新。数字の正= EV008-FINAL-REPORT.md +
   step5-reconcile.py（必須併記3点は省略禁止のまま転記）
+- v0.5.1（2026-08-25・Alpha・merge 前公開ゲート異種5席〔codex/glm/grok/gemini/muse・writer=Alpha と
+  全席異系統〕の指摘反映）: §7 prereg 来歴を実物（封緘前 snapshot）に訂正 / §10 r1 票の席割り誤記訂正・
+  旧作業 dir パス修正・r3 確認ログ非保全の来歴注記・EV-007 改番注記 / §0 qwen ターン数を内訳整合値
+  671 に訂正（≈0.45%/turn）・GO 射程に opus 外挿・qwen GO 中立を明記 / C-1 に「class prior ではない」
+  明確化 / §5 T_abs 既定を TBD 化・w 行の時制整合 / 同梱 prereg のアカウント運用情報 redact・README
+  現行化・LITE に位置づけバナー（各席の out= レビュー記録として別途保全）
