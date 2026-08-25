@@ -35,7 +35,7 @@ Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决�
 
 <sub>¹ 尚未读完工作内容便宣称「完成」——根据工具调用 transcript 进行机器评分，而非自我报告（宣称 222 次 → 2 次，每臂 30 次运行）：[完整数据与局限（英文）](docs/benchmark.md)</sub>
 <br><sub>² EV-006 — 裸跑 vs **已发布 harness**；每臂30次运行（M/L 规模）的已验证完成率</sub>
-<br><sub>³ EV-008 — 裸跑 vs **overflow sentinel**；该功能仍在设计中（[#159](https://github.com/caty-ai/caty-agent-harness/issues/159)），**尚未发布**，这些是在实现之前取得的 rig 测量。`无下降` = 每个单元的两臂均按隐藏答案取得 20/20；`token 相对裸跑` = 1 − 四个密封单元的 median(sentinel/bare)：sonnet **0.801** → −20%，opus **0.923** → −8%；`—` = 本赛道未测量</sub>
+<br><sub>³ EV-008 — 裸跑 vs **overflow sentinel**；Sentinel v1 已作为 claude-code runtime 的 opt-in 功能在 v0.17.0 发布（[#180](https://github.com/caty-ai/caty-agent-harness/issues/180) 实现了 [#159](https://github.com/caty-ai/caty-agent-harness/issues/159)）；通过 [`OVF_SENTINEL=shadow|active`](adapters/claude-code/INSTALL.md) 启用，未设置 = 完全关闭（byte-identical passthrough）。default-on 仍属后续工作，将按模型对照 [#159](https://github.com/caty-ai/caty-agent-harness/issues/159) 的条件决定；详见[各模型档案](#model-effects)。EV-008 仍是该实现之前取得的 rig 预先测量，且尚未在已发布实现上重新测量。`无下降` = 每个单元的两臂均按隐藏答案取得 20/20；`token 相对裸跑` = 1 − 四个密封单元的 median(sentinel/bare)：sonnet **0.801** → −20%，opus **0.923** → −8%；`—` = 本赛道未测量</sub>
 <br><sub>⁴ 描述性、post-GO</sub>
 
 <sub>Codex、qwen、grok、gemini 以及遥测不可见的运行时（glm/muse/kimi）也已测量——包括 sentinel 成本高于裸跑的单元：[各模型档案](#model-effects) ・ [完整数字与历史（英文）](docs/benchmark.md#ev-008) ・含本地模型（Ollama）的计划赛道：[#129](https://github.com/caty-ai/caty-agent-harness/issues/129)</sub>
@@ -182,7 +182,7 @@ flowchart LR
 
 ## 哪些模型能受益
 
-**overflow sentinel**（[设计 Issue #159](https://github.com/caty-ai/caty-agent-harness/issues/159)）监视实测的每轮上下文水位，超过阈值时就停止运行并分解任务，而不是任由上下文溢出。sentinel 本身仍在该 Issue 中进行设计与实现（设计文档 = [PR #166](https://github.com/caty-ai/caty-agent-harness/pull/166)），尚未进入已发布的产品。EV-008 是在该实现落地之前、用来测试 default-on 可行性的预先测量，本节即是其实测画像。EV-008——一项密封、预先注册的基准测试（2026-08）——按模型实测了这种行为。效果的差异取决于运行时「读」的方式：
+**overflow sentinel**（[设计 Issue #159](https://github.com/caty-ai/caty-agent-harness/issues/159)）监视实测的每轮上下文水位，超过阈值时就停止运行并分解任务，而不是任由上下文溢出。Sentinel v1 已作为 claude-code runtime 的 opt-in 功能在 v0.17.0 发布（[#180](https://github.com/caty-ai/caty-agent-harness/issues/180) 实现了 [#159](https://github.com/caty-ai/caty-agent-harness/issues/159)）；通过 [`OVF_SENTINEL=shadow|active`](adapters/claude-code/INSTALL.md) 启用，未设置 = 完全关闭（byte-identical passthrough）。default-on 仍属后续工作，将按模型对照 [#159](https://github.com/caty-ai/caty-agent-harness/issues/159) 的条件决定；详见[本节档案](#model-effects)与 [benchmark（英文）](docs/benchmark.md#ev-008)。EV-008 仍是该实现之前取得的 rig 预先测量，且尚未在已发布实现上重新测量。EV-008——一项密封、预先注册的基准测试（2026-08）——按模型实测了这种行为。效果的差异取决于运行时「读」的方式：
 
 | 运行时类型 | 实测模型 | 行为 | 判定 |
 |---|---|---|---|

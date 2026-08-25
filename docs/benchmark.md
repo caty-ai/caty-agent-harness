@@ -200,7 +200,12 @@ A separate sealed, pre-registered experiment on the **overflow sentinel**
 running the harness always-on, a sentinel watches the measured per-turn
 context level and fires only when a threshold (80K tokens or 50 % of the
 window, whichever is lower) is crossed — stopping the run and decomposing the
-job before the context overflows.
+job before the context overflows. Sentinel v1 later shipped as an opt-in
+feature for the claude-code runtime in v0.17.0
+([#180](https://github.com/caty-ai/caty-agent-harness/issues/180),
+implementing [#159](https://github.com/caty-ai/caty-agent-harness/issues/159)),
+but the EV-008 numbers here remain rig pre-measurements taken ahead of that
+implementation and have not been re-measured on the shipped implementation.
 
 Setup: per model, 4 sealed cells (M/L sizes × 2 instances), arms **bare** /
 **always-on harness** / **sentinel**, 20 hidden-key questions per cell.
