@@ -1,11 +1,64 @@
 # DESIGN: #159 overflow sentinel — 文脈圧力の実測で task-runner を発火する
 
-status: DRAFT **v0.4**（2026-08-23・Alpha・L1-9 r2（正席3+参考3）反映版・r3 delta 待ち・サイズ H）
+status: **v0.5**（2026-08-25・Alpha・L1-9 r3 PASS〔3席 CUMULATIVE GO 収束・blocking 残0〕+
+**EV-008 完了・default-on GO 宣言済み（案A・2026-08-25）を「設計の現在地」として反映**・サイズ H）
 inputs: PILOT.md（訂正節含む）/ REPORT-runtime-context-survey.md / REPORT-pattern4-rootcause.md /
 REPORT-hermes-provider-layer.md / REPORT-hermes-provider-deep-research.md / REPORT-qwen38-artifacts.md /
-#159 clarify 決裁5点 / L1-9 r1 裁定（reviews-159-L19/ADJUDICATION-r1.md・F1〜F6）/
-セロ一次証言（family-vault 20_projects/family-os-external-proof/cero-hearing-task-runner-20260823.md）
-関連: harness#162（zero-output attempt の事後分類・早期 DLQ）/ EV-008 事前登録= 別紙 `EV008-PREREG-DRAFT.md`
+#159 clarify 決裁5点 / L1-9 r1〜r3 裁定（reviews/ADJUDICATION-r1〜r3-FINAL.md）/
+セロ一次証言（family-vault 20_projects/family-os-external-proof/cero-hearing-task-runner-20260823.md）/
+**EV-008 確定報告（experiments/ev006/EV008-FINAL-REPORT.md・数字の正= step5-reconcile.py 出力）+
+GO 宣言（EV008-GO-DECLARATION.md・翔さん決裁）**
+関連: harness#162（zero-output attempt の事後分類・早期 DLQ）/ EV-008 事前登録= 別紙 `EV008-PREREG.md` /
+公開反映済み= PR #176（README `#model-effects` / docs/benchmark.md `#ev-008`・v0.14.1）
+
+## 0. 設計の現在地 — EV-008 完了・default-on GO 宣言済み（2026-08-25）
+
+本設計の検証実験 EV-008 は完了し、**default-on GO が宣言された**（案A・翔さん決裁 2026-08-25・
+正本= EV008-GO-DECLARATION.md）。GO 4条件と結果:
+
+| 条件 | 結果 | 証拠 |
+|---|---|---|
+| ① codex 発火率 0 | **0/127 turns**（rule of three 95%上限 2.4%/turn） | M4 0/38 + 診断 0/45 + M4' 0/44 |
+| ② codex トークン比 GM ≤ 1.05 | **0.9944** | M4' n=3 反復平均（3席 delta 経由封印） |
+| ③ sonnet 全ペア中央値 < 1.0 | **0.801** | M2 標準12本 |
+| ④ harmful false-fire 全ペア一貫なし | **1/4 ペアのみ** | M2 §1 A1 層別 |
+
+**必須併記3点（GO 宣言と不可分・省略禁止）**:
+1. **M4 の歴史**: codex 比条件は M4（n=1）で GM **1.337 FAIL** となり条文どおり差し戻された。
+   ②は「M4 n=1 FAIL（歴史）∧ M4'（n=3 反復平均・data-informed 事後設計・3席 delta レビュー経由で
+   封印）で成立（現行）」であり、M4 FAIL の抹消ではない。
+2. **努力目標未達**: sonnet 中央値の努力目標 <0.8 に対し **0.801 で僅差未達**（判定閾値 <1.0 は成立）。
+3. **残余不確実性**: 標準セルのペア比は n=1/ペア（M4' M帯のみ n=3）。M帯の走行間 SD≈平均の30〜40%・
+   n=3 でも比 SE≈25%級 = 0.9944 は「閾値の内側」であり「明確に下回る」ではない。
+
+**モデル別実測サマリ**（全数字= EV008-FINAL-REPORT.md / step5-reconcile.py 突合済み・実験パラメータは
+全期間 T_abs=80k / w=50%）:
+- **全読み込み型= 主戦場**: haiku 中央値 0.35（descriptive・4/4 発火）/ sonnet 中央値 **0.801**
+  （4/4 発火→分解→child 完走・正答維持・L-i2 は 0.286=71%減）/ opus 中央値 **0.923**（post-GO 監視
+  PASS・4/4 発火→分解→完走・全ペアで sentinel が安い側）
+- **検索型= 無発火が仕様**: codex 累計 **0/127 turns**・GM 0.9944 / qwen sentinel 4/4 **無発火**
+  （max injected 68,805–79,696 @80k・M-i2 は閾値まで304トークン→「観測範囲で無発火」に留める・
+  0発火/約770ターン= 95%上限 ≈0.4%/turn）
+- **第3類型（grok・descriptive）**: 発火型だが経済メリットなし — 4/4 発火→分解→完走（機構の頑健性を
+  別ランタイムで実証）する一方、bare が極めて安く（763k〜2.4M）ペア比中央値 **2.145 >1.0**。
+  「**成長型×低 bare 単価= default-on 不向き**」。
+- 副腕1（64k 強制オーバーフロー・プロキシレーン）= **継続中**（GO 4条件の対象外・完了時は追補扱い）。
+
+**EV-008 結果から昇格する設計制約（v1 実装に対して規範）**:
+- **C-1 per-model 適用判定**: default-on の適用範囲はモデル別経済プロファイルで決める。発火・分解・
+  正答維持が正しく動くこと（grok で実証済み）は導入判断と独立 — 判断は **bare 対比の経済**で行う。
+  grok 型（成長型×低 bare 単価）には default-on を適用しない。
+- **C-2 blind-path ガード**: per-turn usage の実値が得られない経路では sentinel を有効化しない。
+  実測の盲目経路= glm/muse（shim 経由で per-turn usage 全ゼロ）・kimi（usage 非放出）。全ゼロ usage の
+  検出時は起動拒否（または明示的 disabled 記録）とし、§3 の `tap_status: absent` と同様に
+  「発火しなかった」と「見えていなかった」を区別可能な形でログに残す。
+- **C-3 ホスト圧縮との同居**: 水位管理者は同時に1人（独自コンパクションを持つホストでは
+  ①ホスト圧縮先行→sentinel 恒久不発火の飾り化 ②二重介入、の両リスク）。検知土台は既存
+  （task_end の runtime_compaction / compaction_suspected・本走全走行で false 実測）。実装形
+  （switcher config）の包含は実装 Issue の clarify で確定。
+
+GO 宣言の射程= claude 系ランタイム + codex は「無発火・課金非上乗せ」の安全条件で同居可。
+出荷順序（opt-in 先行か default-on 即時か）は GO 宣言（機構の可否）と別判断で、実装 Issue 側で決める。
 
 ## 1. Why — なぜ作るのか・作らないと何が起きるか
 
@@ -110,7 +163,7 @@ alert       = ts_first_byte 不在のまま TTFB 床超過（fire とは別イ�
 | パラメータ | 既定 | 由来 |
 |---|---|---|
 | N（移動平均窓） | 3 turns | pilot の bare 立ち上がり 2〜4 turn |
-| T_abs（絶対水位） | 40,000 tok/turn（**較正候補 {40k, 80k, 120k}・EV-008 replay で確定**） | EV-006 harness 上界の上端（F2）。**系譜注記（Fable r2）**: EV-006 の 20〜40k は harness の per-step fresh-context 注入量・sentinel の injected は累積プロンプト全体でレジームが異なる。40k は過敏側（200k 窓の実質全タスクが中盤で跨ぐ）の可能性があり、既定の最終確定は較正に委ねる |
+| T_abs（絶対水位） | 40,000 tok/turn（較正候補 {40k, 80k, 120k}。**EV-008 実走は 80k/50% を全期間使用し GO 成立（§0）— 製品既定の最終確定は実装 Issue の clarify で行う**） | EV-006 harness 上界の上端（F2）。**系譜注記（Fable r2）**: EV-006 の 20〜40k は harness の per-step fresh-context 注入量・sentinel の injected は累積プロンプト全体でレジームが異なる。40k は過敏側（200k 窓の実質全タスクが中盤で跨ぐ）の可能性があり、既定の最終確定は較正に委ねる |
 | w（窓比水位） | 50% | bare sonnet L帯 定常 ~56% の近傍。**導出ではなく同域の初期値** — EV-008 sweep で確定（Kimi r1 指摘の言い直し） |
 | M（射影ホライズン） | 10 turns | 保守的（v1 の誤発火コスト= ログ1行+ナッジ1回） |
 | TTFB 床 | 90/150/240s + reasoning floor 表 + unknown=240s | Hermes 実装値 + hermes#89241 の逆張り |
@@ -157,9 +210,10 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
 - attempt receipt にも `first_byte_at`（null 可）を必須化（CLAUDE_BIN 事故で最も欠けていた1フィールド。
   #162 のスキーマと語彙を揃える）。
 
-## 7. EV-008（D5）— 事前登録は別紙
+## 7. EV-008（D5）— 事前登録は別紙・**実施済み（結果は §0）**
 
-正本= `EV008-PREREG-DRAFT.md`（翔さん決裁対象）。骨子のみ:
+事前登録の正本= `EV008-PREREG.md`（v0.2・翔さん決裁済み・実走完了 2026-08-25。結果と GO 宣言は §0、
+確定数字は experiments/ev006/EV008-FINAL-REPORT.md が正）。設計時の骨子（記録として保持）:
 主比較は**同一の封緘済み計画**を bare / always-harness / sentinel の3腕に渡して実行持続効果を分離
 （セロ提案と一致）。分解者 B/C（本人分解/強モデル分解）は入れ子の別セル。強制オーバーフロー副腕
 （窓 64k 人工縮小）で見逃し率を実測。codex 腕は「発火率0」自体が合格条件。qwen on claude CLI を
@@ -198,3 +252,10 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
   スキーマ増補（both/started_at/value_kind/run_meta）・ヒステリシス・T_abs 系譜注記・§9-1 新設。
   EV-008 側は prereg v0.2 で shadow 評価・replay 較正・判定手続き凍結・橋渡し条項・handoff 契約。
   裁定= reviews-159-L19/ADJUDICATION-r2.md
+- r3（2026-08-23・kimi-k3/glm-5.3= CUMULATIVE GWC + grok-4.6= 狭い NO-GO〔B1 のみ〕→指定修正の
+  逐語適用+マイクロ確認で RESOLVED — cumulative GO）: **L1-9 上流レビュー PASS・blocking 残0**。
+  裁定= reviews/ADJUDICATION-r3-FINAL.md
+- v0.5（2026-08-25・Alpha）: EV-008 完了・default-on GO 宣言（案A・翔さん決裁）を §0 として反映。
+  設計制約 C-1（per-model 適用判定・grok 第3類型）/ C-2（blind-path ガード）/ C-3（ホスト圧縮同居）を
+  昇格。§5 T_abs に実走値 80k/50% を注記・§7 を実施済みへ更新。数字の正= EV008-FINAL-REPORT.md +
+  step5-reconcile.py（必須併記3点は省略禁止のまま転記）
