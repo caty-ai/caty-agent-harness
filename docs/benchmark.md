@@ -214,6 +214,21 @@ records: [#159](https://github.com/caty-ai/caty-agent-harness/issues/159).
 | qwen3.8-max (confirmatory no-fire) | 4 | **0/4** (max injected 68.8K–79.7K @ 80K) | n/a (never fired) | no-fire endpoint — ratio not the endpoint |
 | grok-4.6 (descriptive, candidate) | 4 | 4/4 (turns 6/6/6/8) | 20/20 all | **2.145** (1.611 / 1.775 / 2.514 / 4.057) — fires correctly, never pays |
 
+Absolute token charge per cell (sonnet / opus, bare → sentinel; transcribed
+from the `step5-reconcile.py` re-run of 2026-08-25):
+
+| Cell | sonnet bare → sentinel | opus bare → sentinel |
+|---|---|---|
+| M-i2 | 2,904,275 → 3,236,215 (+11 %) | 4,562,380 → 4,254,102 (−7 %) |
+| M-i3 | 3,475,997 → 3,101,258 (−11 %) | 4,302,965 → 3,927,008 (−9 %) |
+| L-i2 | 16,597,756 → 4,746,361 (−71 %) | 11,288,180 → 8,192,586 (−27 %) |
+| L-i3 | 7,581,249 → 5,385,942 (−29 %) | 6,992,297 → 6,574,909 (−6 %) |
+
+The saving scales with job size: sonnet's L-band cells cut 71 % / 29 % while
+its M-band cells sit at −11 % / +11 % — a bare run that overflows has to
+re-read what fell out of context, so the bigger the job, the more waste the
+sentinel's decomposition avoids.
+
 The default-on GO decision (2026-08-25) rests on four pre-registered
 conditions: codex fire rate 0 (0/127; rule-of-three 95 % upper bound
 2.4 %/turn) · codex tap-overhead GM ≤ 1.05 (0.9944) · sonnet all-pair median

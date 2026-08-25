@@ -33,11 +33,11 @@ Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决�
 | GPT-5.6 Luna（Codex） | 计划中 | — | — |
 | 本地模型（Ollama） | 计划中 | — | — |
 
-<sub>该表格是裸跑 vs harness 的**完走率**赛道（赛道追加见 [#129](https://github.com/caty-ai/caty-agent-harness/issues/129) 追踪）。Codex、qwen、grok 和 opus 已经在下方的[overflow sentinel 小节](#model-effects)中实测——这是回答另一个问题的独立实验（EV-008），因此这里的「计划中」与那边的实测数字并不矛盾。</sub>
+<sub>该表格是裸跑 vs harness 的**完走率**赛道（赛道追加由 [#129](https://github.com/caty-ai/caty-agent-harness/issues/129) 追踪）。Codex、qwen、grok 和 opus 已经在下方的[overflow sentinel 小节](#model-effects)中实测——这是回答另一个问题的独立实验（EV-008），因此这里的「计划中」与那边的实测数字并不矛盾。</sub>
 
 <sub>¹ 还没读完工作内容就宣称「完成」——依据工具调用记录测量，而非自我报告：在 15 万至 30 万 token 的任务上（每组配对运行 30 次，全部由机器评分），此类宣称从 222 次降至 2 次。包含薄弱环节：[完整数据与局限（英文）](docs/benchmark.md)。</sub>
 
-**实测 — overflow sentinel**（密封 EV-008，2026-08-25）：sentinel 开启时，claude-sonnet-5 在上下文溢出类任务上保持 20/20 正确率，同时削减 token（sentinel/bare 中位数 0.801・最佳单元 −71%）；claude-opus-5 为 0.923。检索型运行时在实测的所有运行中触发次数为零——这是设计使然（Codex 0/127 turns）。哪些模型能受益——哪些不该开启：[各模型档案](#model-effects) ・ [完整数字与历史（英文）](docs/benchmark.md#ev-008)。
+**实测 — overflow sentinel**（密封 EV-008，2026-08-25）：sentinel 开启时，claude-sonnet-5 在上下文溢出类任务上保持 20/20 正确率，同时削减 token（sentinel/bare 中位数 0.801・最佳单元 −71%）；claude-opus-5 为 0.923。检索型运行时在实测的所有运行中触发次数为零——这是设计使然（Codex 0/127 turns）。sentinel 本身仍在设计与实现中（[#159](https://github.com/caty-ai/caty-agent-harness/issues/159)），尚未随产品发布——这些是实现之前在实验 rig 上取得的实测值。哪些模型能受益——哪些不该开启：[各模型档案](#model-effects) ・ [完整数字与历史（英文）](docs/benchmark.md#ev-008)。
 
 🔧 [工程指南（英文）](docs/engineering.md) ｜ 📘 [详细规范（英文）](docs/reference.md)
 
@@ -181,11 +181,11 @@ flowchart LR
 
 ## 哪些模型能受益
 
-**overflow sentinel**（[设计 Issue #159](https://github.com/caty-ai/caty-agent-harness/issues/159)）监视实测的每轮上下文水位，超过阈值时就停止运行并分解任务，而不是任由上下文溢出。sentinel 本身仍在该 Issue 中设计与实现中（设计文档 = [PR #166](https://github.com/caty-ai/caty-agent-harness/pull/166)），尚未进入已发布的产品。EV-008 是在该实现落地之前、用来测试 default-on 可行性的预先测量，本节即是其实测画像。EV-008——一项密封、预先注册的基准测试（2026-08）——按模型实测了这种行为。效果的差异取决于运行时「读」的方式：
+**overflow sentinel**（[设计 Issue #159](https://github.com/caty-ai/caty-agent-harness/issues/159)）监视实测的每轮上下文水位，超过阈值时就停止运行并分解任务，而不是任由上下文溢出。sentinel 本身仍在该 Issue 中进行设计与实现（设计文档 = [PR #166](https://github.com/caty-ai/caty-agent-harness/pull/166)），尚未进入已发布的产品。EV-008 是在该实现落地之前、用来测试 default-on 可行性的预先测量，本节即是其实测画像。EV-008——一项密封、预先注册的基准测试（2026-08）——按模型实测了这种行为。效果的差异取决于运行时「读」的方式：
 
 | 运行时类型 | 实测模型 | 行为 | 判定 |
 |---|---|---|---|
-| **全量读取型** — 上下文单调增长 | claude-haiku-4.5 · claude-sonnet-5 · claude-opus-5 | 任务进行到一半时触发 → 分解 → 完成；正确率保持（sonnet/opus= 触发的每个单元均为 20/20・haiku= 19–20/20） | **这里是收益所在。** sonnet 的 sentinel/bare 中位数为 **0.801**（最佳单元 token 减少 −71%）・opus 为 **0.923**・haiku 为 0.35（描述性・存在 arm/phase 混杂——参见 [benchmark](docs/benchmark.md#ev-008)） |
+| **全量读取型** — 上下文单调增长 | claude-haiku-4.5 · claude-sonnet-5 · claude-opus-5 | 任务进行到一半时触发 → 分解 → 完成；正确率保持（sonnet/opus= 触发的每个单元均为 20/20・haiku= 19–20/20） | **这里是收益所在。** 任务越大收益越大（L 档最大）。sonnet 的 sentinel/bare 中位数为 **0.801**（最佳单元 token 减少 −71%）・opus 为 **0.923**・haiku 为 0.35（描述性・存在 arm/phase 混杂——参见 [benchmark](docs/benchmark.md#ev-008)） |
 | **检索型** — 在观测范围内趋于平台 | gpt-5.6-luna（Codex）· qwen3.8-max | 在实测的所有运行中触发次数为零：codex **0/127 turns**・qwen 0/4 单元（实测最大值 79.7K，阈值为 80K——余量很薄，此处仅作为观测范围的记述） | **在观测范围内的不触发正是设计意图** — 这本身就是 default-on 的安全条件。若在此触发，就是误报、需要打回设计 |
 | **触发但不划算型** — 上下文增长，但 bare 很便宜 | grok-4.6 | 4/4 触发，分解并正确完成（20/20）——但 bare 运行太便宜，分解反而更贵（比值中位数 **2.145**） | 机制在这个运行时上已被证实有效；**但不建议 default-on**。判断标准是相对 bare 的经济性，而不是是否触发 |
 
@@ -193,7 +193,7 @@ flowchart LR
 
 **盲态遥测路径——未经实测前不要开启。** 通过目前的 shim，glm / muse 报告的每轮 usage 全部为零，kimi 则完全不输出 usage。看不到实时遥测的运行时，绝不能把 sentinel 设为 default-on：因为根本没有水位可看。
 
-**同一时间只能有一个水位管理者。** 如果宿主自身已有自动压缩（Hermes、OpenClaw、某个 agent CLI 内置的压缩……），那么管理上下文水位的只能是宿主**或** sentinel 二选一——绝不能两者都管。两个管理者同时存在，要么宿主先压缩、sentinel 变得形同虚设，要么两者同时介入同一次溢出。请二选一：当 sentinel 为 default-on 时关闭宿主的自动压缩，或者当宿主主导时把 sentinel 降级为仅记录。sentinel 的事件日志已经把 `runtime_compaction` / `compaction_suspected`（在所有 EV-008 运行中均为 false）作为判定依据记录下来。
+**同一时间只能有一个水位管理者。** 如果宿主自身已有自动压缩（Hermes、OpenClaw、某个 agent CLI 内置的压缩……），那么管理上下文水位的只能是宿主**或** sentinel 二选一——绝不能两者都管。两个管理者同时存在，要么宿主先压缩、sentinel 变得形同虚设，要么两者同时介入同一次溢出。请二选一：当 sentinel 为 default-on 时关闭宿主的自动压缩，或者当宿主主导时把 sentinel 降级为仅记录。sentinel 的事件日志（在 EV-008 rig 上）已经把 `runtime_compaction` / `compaction_suspected`（在所有 EV-008 运行中均为 false）作为判定依据记录下来。
 
 **如何为新模型做 profile**（在做出任何 default-on 决定之前）：
 
