@@ -149,6 +149,10 @@ host owns compaction; this records `disabled-host` instead of running the water
 level predicate. Leaving the owner unset while enabled warns and selects the
 sentinel heuristic.
 
+An explicit Claude `system/compact_boundary` event resets the measured series;
+when that event is unavailable, the injected-token drop heuristic remains the
+fallback.
+
 Each monitored attempt appends `turn`, `fire`, `alert`, and `attempt_end` records
 to its standalone `sentinel-events.jsonl`. This file remains separate until the
 task-runner ledger has a confluence point. The next-step delivery boundary has

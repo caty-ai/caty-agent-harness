@@ -88,9 +88,11 @@ The flush intake consumer's accounting ledger is `loop/pending/intake-runs.log`.
 ### Claude Code overflow sentinel environment
 
 The Claude Code adapter validates these values before spawning the CLI. Invalid
-values exit 2. With `OVF_SENTINEL` unset or empty, all other sentinel behavior is
-off: the CLI receives `prompt.md` on stdin directly, stdout remains unchanged,
-and no sentinel artifact is created.
+values exit 2. With `OVF_SENTINEL` unset or empty, sentinel settings other than
+the CLI selector `OVF_STEP_CMD` are ignored and sentinel behavior is off: the CLI
+receives `prompt.md` on stdin directly, keeps the full exported
+`TR_STEP_TIMEOUT_S` budget, stdout remains unchanged, and no sentinel artifact
+is created.
 
 | Variable | Contract |
 | --- | --- |
@@ -102,10 +104,12 @@ and no sentinel artifact is created.
 | `OVF_COMPACTION_OWNER` | `sentinel` or `host`; unset warns and selects `sentinel`; `host` records `disabled-host` |
 | `OVF_STEP_CMD` | whitespace-split CLI argv; default `claude -p --output-format stream-json --verbose` |
 | `OVF_FINALIZE_TIMEOUT_S` | integer >= 1; default `10`; bounded monitor join after CLI exit |
+| `CLAUDE_MODEL` | actual Claude model identifier; unset records `claude-unknown`, treated as unknown rather than matching the `claude-` catalog prefix |
 
 Context-window resolution is config, validated local HF config, a Claude-family
 prefix catalog, then the 200k default. The selected source is logged as `config`,
-`hf-config`, `catalog`, or `default`.
+`hf-config`, `catalog`, or `default`; the `claude-unknown` placeholder always uses
+`default`.
 
 TTFB is run start to the first `assistant` stream line. The token tiers are 90s,
 150s when the prior attempt's last injected MA is strictly above 50k, and 240s
@@ -114,12 +118,26 @@ reasoning floors are: `claude-opus*` 240s, `qwen3*` 180s, `qwq*` 300s,
 `glm-5*` 300s, `grok-*` 300s, `deepseek-r1*` 600s, and `o1*`/`o3*` 600s.
 These floors create `alert` records only; they never terminate the CLI.
 
+An observed `system/compact_boundary` resets the measured series, withdraws a
+pending nudge, and sets `runtime_compaction=true`. When that event is absent, the
+strict greater-than-40% injected drop remains the fallback heuristic. This
+mixed-magnitude heuristic can suppress one otherwise valid nudge; that bounded
+false positive is an accepted v1 cost.
+
+Hysteresis-blocked predicate crossings intentionally append no `fire` event to
+avoid event floods. They remain reconstructable from the append-only `turn`
+series. On slope-only fires, `threshold_hit` is omitted because neither level
+threshold crossed.
+
 `sentinel-events.jsonl` is append-only and contains `turn`, `fire`, `alert`, and
 per-run `attempt_end` records. The task-level `task_end` event is deferred to the
 ledger-confluence integration. `attempt.json` is atomically finalized with exactly
 these fields: `schema_version`, `task_id`, `attempt`, `mode`, `model`,
 `ctx_window`, `ctx_window_source`, `started_at`, nullable `first_byte_at`,
-`cli_exit_code`, `tap_status_final`, `fired`, and `events_path`. See §3–§6 of the
+`cli_exit_code`, `tap_status_final`, `fired`, and `events_path`. Attempt identity
+is the zero-padded attempt-directory basename string. A timeout or signal death
+quarantines a model-written `step-result.json` as `step-result.json.partial`.
+See §3–§6 of the
 [overflow sentinel DESIGN](design/159-overflow-sentinel/DESIGN.md) for the
 event-field contracts.
 

@@ -57,6 +57,20 @@ run_monitor_fixture() {
     --mode "$mode" --model claude-sonnet-4-5 --t-abs 80000 --w 0.50
 }
 
+run_unterminated_monitor_fixture() {
+  local fixture=$1
+  local attempt_dir=$2
+  printf '%s' "$(cat "$FIXTURES/$fixture")" >"$attempt_dir/stream.jsonl"
+  printf '0\n' >"$attempt_dir/overflow-stream.eof"
+  python3 -B "$MONITOR" \
+    --stream "$attempt_dir/stream.jsonl" \
+    --eof "$attempt_dir/overflow-stream.eof" \
+    --attempt-dir "$attempt_dir" \
+    --artifact-dir "$(cd "$attempt_dir/../.." && pwd)" \
+    --task-id fixture-task --attempt "$(basename "$attempt_dir")" \
+    --mode shadow --model claude-sonnet-4-5 --t-abs 80000 --w 0.50
+}
+
 case_root="$TMP_ROOT/realistic"
 make_attempt "$case_root"
 run_monitor_fixture realistic.jsonl "$case_root/artifact/attempts/001"
@@ -79,8 +93,79 @@ assert_python "attempt.json has the complete pinned field set and non-null first
 p=json.loads(pathlib.Path(sys.argv[1]).read_text())
 expected={"schema_version","task_id","attempt","mode","model","ctx_window","ctx_window_source","started_at","first_byte_at","cli_exit_code","tap_status_final","fired","events_path"}
 assert set(p)==expected and p["first_byte_at"]=="2026-08-25T00:00:01Z"
-assert p["tap_status_final"]=="no-cache-accounting"
+assert p["tap_status_final"]=="no-cache-accounting" and p["attempt"]=="001"
 ' "$case_root/artifact/attempts/001/attempt.json"
+
+case_root="$TMP_ROOT/cache-boundary"
+make_attempt "$case_root"
+run_monitor_fixture cache-boundary.jsonl "$case_root/artifact/attempts/001"
+assert_python "cache-heavy boundary fires only above the true exclusive-sum threshold" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+turns=[x for x in events if x["event"]=="turn"]
+end=next(x for x in events if x["event"]=="attempt_end")
+assert len(turns)==2
+assert [x["input_tokens"]+x["cache_read_tokens"]+x["cache_creation_tokens"] for x in turns]==[80000,80001]
+assert end["fired_turns"]==[2]
+assert end["injected_summary"]=={"max":80001,"last3_mean":80000.5}
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
+
+case_root="$TMP_ROOT/subagent-interleave"
+make_attempt "$case_root"
+run_monitor_fixture subagent-interleave.jsonl "$case_root/artifact/attempts/001" active
+assert_python "sub-agent assistant events do not enter or compact the main-session series" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+turns=[x for x in events if x["event"]=="turn"]
+end=next(x for x in events if x["event"]=="attempt_end")
+assert [x["input_tokens"] for x in turns]==[90000,90001]
+assert end["compaction_suspected"] is False and end["runtime_compaction"] is False
+assert end["injected_summary"]=={"max":90001,"last3_mean":90000.5}
+assert end["fired_turns"]==[1] and pathlib.Path(sys.argv[2]).is_file()
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl" "$case_root/artifact/attempts/001/overflow-nudge.pending"
+
+case_root="$TMP_ROOT/compact-boundary"
+make_attempt "$case_root"
+run_monitor_fixture compact-boundary.jsonl "$case_root/artifact/attempts/001" active
+assert_python "runtime compact_boundary resets the series and withdraws a pending nudge" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+end=next(x for x in events if x["event"]=="attempt_end")
+assert end["runtime_compaction"] is True and end["compaction_suspected"] is False
+assert end["injected_summary"]=={"max":50000,"last3_mean":50000.0}
+assert not pathlib.Path(sys.argv[2]).exists()
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl" "$case_root/artifact/attempts/001/overflow-nudge.pending"
+
+case_root="$TMP_ROOT/no-trailing-newline"
+make_attempt "$case_root"
+run_unterminated_monitor_fixture no-trailing-newline.jsonl "$case_root/artifact/attempts/001"
+assert_python "post-EOF drain parses an unterminated final assistant line" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+assert len([x for x in events if x["event"]=="turn"])==1
+end=next(x for x in events if x["event"]=="attempt_end")
+assert end["fired_turns"]==[1] and end["injected_summary"]=={"max":90000,"last3_mean":90000.0}
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
+
+case_root="$TMP_ROOT/zero-and-invalid"
+make_attempt "$case_root"
+run_monitor_fixture zero-and-invalid.jsonl "$case_root/artifact/attempts/001"
+assert_python "zero-injected and unparsable usage never corrupt the measured series" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+turns=[x for x in events if x["event"]=="turn"]
+end=next(x for x in events if x["event"]=="attempt_end")
+assert [x["input_tokens"] for x in turns]==[90000,0,90001]
+assert not any(x.get("cache_read_tokens")=="garbage" for x in turns)
+assert end["compaction_suspected"] is False
+assert end["injected_summary"]=={"max":90001,"last3_mean":90000.5}
+assert end["tap_status"]=="no-cache-accounting"
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
+
+case_root="$TMP_ROOT/slope-only"
+make_attempt "$case_root"
+run_monitor_fixture slope-only.jsonl "$case_root/artifact/attempts/001"
+assert_python "slope-only fire omits the level threshold_hit field" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+fires=[x for x in events if x["event"]=="fire"]
+assert len(fires)==1 and fires[0]["axis"]=="slope"
+assert fires[0]["projection_turns"] <= 10 and "threshold_hit" not in fires[0]
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
 
 case_root="$TMP_ROOT/blind-three"
 make_attempt "$case_root"
@@ -96,15 +181,25 @@ assert end["tap_status"]=="blind" and end["injected_summary"]=={"max":0,"last3_m
 
 case_root="$TMP_ROOT/blind-short"
 make_attempt "$case_root"
+printf '%s\n' '{"last_fire_ma":{"level":91000.0},"last_run_injected_ma":87000.0,"schema_version":1}' \
+  >"$case_root/artifact/overflow-sentinel-state.json"
+blind_state_before=$(shasum -a 256 "$case_root/artifact/overflow-sentinel-state.json" | awk '{print $1}')
 run_monitor_fixture blind-short.jsonl "$case_root/artifact/attempts/001"
 assert_python "short all-zero run is reported blind immediately" '
 events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
 assert [x for x in events if x["event"]=="attempt_end"][0]["tap_status"]=="blind"
 assert all(x["tap_status"]=="blind" for x in events if x["event"]=="turn")
 ' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
+blind_state_after=$(shasum -a 256 "$case_root/artifact/overflow-sentinel-state.json" | awk '{print $1}')
+[[ "$blind_state_before" == "$blind_state_after" ]] \
+  && pass "blind run preserves prior hysteresis state bytes" \
+  || fail_case "blind run preserves prior hysteresis state bytes" "digest changed"
 
 case_root="$TMP_ROOT/absent"
 make_attempt "$case_root"
+printf '%s\n' '{"last_fire_ma":{"slope":70000.0},"last_run_injected_ma":65000.0,"schema_version":1}' \
+  >"$case_root/artifact/overflow-sentinel-state.json"
+absent_state_before=$(shasum -a 256 "$case_root/artifact/overflow-sentinel-state.json" | awk '{print $1}')
 run_monitor_fixture absent.jsonl "$case_root/artifact/attempts/001"
 assert_python "absent usage remains distinct and first_byte_at is null" '
 events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
@@ -113,6 +208,10 @@ receipt=json.loads(pathlib.Path(sys.argv[2]).read_text())
 assert end["tap_status"]=="absent" and not [x for x in events if x["event"]=="turn"]
 assert receipt["first_byte_at"] is None
 ' "$case_root/artifact/attempts/001/sentinel-events.jsonl" "$case_root/artifact/attempts/001/attempt.json"
+absent_state_after=$(shasum -a 256 "$case_root/artifact/overflow-sentinel-state.json" | awk '{print $1}')
+[[ "$absent_state_before" == "$absent_state_after" ]] \
+  && pass "absent run preserves prior hysteresis state bytes" \
+  || fail_case "absent run preserves prior hysteresis state bytes" "digest changed"
 
 case_root="$TMP_ROOT/compaction"
 make_attempt "$case_root"
@@ -161,14 +260,16 @@ off_root="$TMP_ROOT/off"
 make_attempt "$off_root"
 off_attempt="$off_root/artifact/attempts/001"
 set +e
+OVF_T_ABS=garbage OVF_W_PCT=garbage OVF_CTX_WINDOW=garbage \
+OVF_COMPACTION_OWNER=garbage OVF_FINALIZE_TIMEOUT_S=garbage OVF_HF_CONFIG="$TMP_ROOT/missing.json" \
 OVF_STEP_CMD="$MOCK_CLI" MOCK_STDOUT='raw model stdout' MOCK_STDERR='off stderr' \
   "$ADAPTER" "$off_root/workspace/task.md" "$off_root/workspace" "$off_attempt" 1 \
   >"$off_root/stdout" 2>"$off_root/stderr"
 off_rc=$?
 set -e
 [[ "$off_rc" -eq 0 && "$(cat "$off_root/stdout")" == 'raw model stdout' ]] \
-  && pass "OVF_SENTINEL unset preserves direct stdout" \
-  || fail_case "OVF_SENTINEL unset preserves direct stdout" "rc=$off_rc stdout=$(cat "$off_root/stdout")"
+  && pass "OVF_SENTINEL unset ignores stray OVF configuration and preserves direct stdout" \
+  || fail_case "OVF_SENTINEL unset ignores stray OVF configuration and preserves direct stdout" "rc=$off_rc stdout=$(cat "$off_root/stdout")"
 if find "$off_root/artifact" -name 'sentinel-events.jsonl' -o -name 'overflow-nudge.pending' \
   -o -name 'attempt.json' -o -name 'stream.jsonl' -o -name 'overflow-stream.eof' \
   -o -name 'overflow-sentinel-state.json' | grep -q .; then
@@ -176,6 +277,19 @@ if find "$off_root/artifact" -name 'sentinel-events.jsonl' -o -name 'overflow-nu
 else
   pass "OVF_SENTINEL unset creates zero sentinel artifacts"
 fi
+
+off_budget_root="$TMP_ROOT/off-budget"
+make_attempt "$off_budget_root"
+set +e
+TR_STEP_TIMEOUT_S=2 OVF_FINALIZE_TIMEOUT_S=garbage OVF_T_ABS=garbage \
+OVF_STEP_CMD="$MOCK_CLI" MOCK_SLEEP_S=1.2 MOCK_STDOUT='budget preserved' \
+  "$ADAPTER" "$off_budget_root/workspace/task.md" "$off_budget_root/workspace" \
+  "$off_budget_root/artifact/attempts/001" 1 >"$off_budget_root/out" 2>"$off_budget_root/err"
+off_budget_rc=$?
+set -e
+[[ "$off_budget_rc" -eq 0 && "$(cat "$off_budget_root/out")" == 'budget preserved' ]] \
+  && pass "OVF_SENTINEL unset retains the full exported TR step budget" \
+  || fail_case "OVF_SENTINEL unset retains the full exported TR step budget" "rc=$off_budget_rc"
 
 invalid_root="$TMP_ROOT/invalid"
 make_attempt "$invalid_root"
@@ -230,6 +344,17 @@ grep -Fqx 'warning: OVF_COMPACTION_OWNER is unset; overflow sentinel owns compac
   && pass "unset compaction owner emits exact lowercase warning" \
   || fail_case "unset compaction owner emits exact lowercase warning" "$(cat "$warning_root/err")"
 
+small_budget_root="$TMP_ROOT/small-budget"
+make_attempt "$small_budget_root"
+TR_STEP_TIMEOUT_S=20 OVF_FINALIZE_TIMEOUT_S=10 OVF_SENTINEL=shadow \
+OVF_COMPACTION_OWNER=sentinel OVF_STEP_CMD="$MOCK_CLI" MOCK_STREAM_FILE="$FIXTURES/absent.jsonl" \
+  "$ADAPTER" "$small_budget_root/workspace/task.md" "$small_budget_root/workspace" \
+  "$small_budget_root/artifact/attempts/001" 1 >"$small_budget_root/out" 2>"$small_budget_root/err"
+grep -Fqx 'warning: overflow sentinel derived CLI budget is only 9s after finalize reservation' \
+  "$small_budget_root/err" \
+  && pass "implausibly small derived CLI budget emits a warning" \
+  || fail_case "implausibly small derived CLI budget emits a warning" "$(cat "$small_budget_root/err")"
+
 host_root="$TMP_ROOT/host"
 make_attempt "$host_root"
 OVF_SENTINEL=active OVF_COMPACTION_OWNER=host OVF_STEP_CMD="$MOCK_CLI" MOCK_STREAM_FILE="$FIXTURES/fire.jsonl" \
@@ -279,6 +404,25 @@ end=[x for x in events if x["event"]=="attempt_end"][0]
 assert end["nudge_disposition_final"]=="shown" and not end["fired_turns"]
 ' "$second_attempt/sentinel-events.jsonl"
 
+numeric_root="$TMP_ROOT/numeric-pending"
+make_attempt "$numeric_root" 011
+mkdir -p "$numeric_root/artifact/attempts/9" "$numeric_root/artifact/attempts/010"
+printf 'older numeric pending\n' >"$numeric_root/artifact/attempts/9/overflow-nudge.pending"
+printf 'newer numeric pending\n' >"$numeric_root/artifact/attempts/010/overflow-nudge.pending"
+numeric_capture="$numeric_root/numeric.prompt"
+OVF_SENTINEL=active OVF_COMPACTION_OWNER=sentinel OVF_STEP_CMD="$MOCK_CLI" \
+MOCK_STREAM_FILE="$FIXTURES/absent.jsonl" MOCK_STDIN_PATH="$numeric_capture" \
+  "$ADAPTER" "$numeric_root/workspace/task.md" "$numeric_root/workspace" \
+  "$numeric_root/artifact/attempts/011" 1 >"$numeric_root/out" 2>"$numeric_root/err"
+if grep -Fq 'newer numeric pending' "$numeric_capture" \
+  && ! grep -Fq 'older numeric pending' "$numeric_capture" \
+  && [[ -f "$numeric_root/artifact/attempts/9/overflow-nudge.pending" ]] \
+  && [[ ! -e "$numeric_root/artifact/attempts/010/overflow-nudge.pending" ]]; then
+  pass "pending nudge selection orders attempt basenames numerically"
+else
+  fail_case "pending nudge selection orders attempt basenames numerically" "wrong pending selected"
+fi
+
 w_root="$TMP_ROOT/w-pct"
 make_attempt "$w_root"
 OVF_SENTINEL=shadow OVF_COMPACTION_OWNER=sentinel OVF_W_PCT=5 OVF_CTX_WINDOW=10000 \
@@ -300,6 +444,51 @@ MOCK_STREAM_FILE="$FIXTURES/absent.jsonl" \
 exit_rc=$?
 set -e
 [[ "$exit_rc" -eq 7 ]] && pass "mock CLI exit code N propagates exactly" || fail_case "mock CLI exit code N propagates exactly" "$exit_rc"
+
+partial_timeout_root="$TMP_ROOT/partial-timeout"
+make_attempt "$partial_timeout_root"
+set +e
+TR_STEP_TIMEOUT_S=4 OVF_FINALIZE_TIMEOUT_S=1 OVF_SENTINEL=shadow \
+OVF_COMPACTION_OWNER=sentinel OVF_STEP_CMD="$MOCK_CLI" MOCK_STREAM_FILE="$FIXTURES/absent.jsonl" \
+MOCK_STEP_RESULT='{"step_comp"' MOCK_SLEEP_S=60 \
+  "$ADAPTER" "$partial_timeout_root/workspace/task.md" "$partial_timeout_root/workspace" \
+  "$partial_timeout_root/artifact/attempts/001" 1 >"$partial_timeout_root/out" 2>"$partial_timeout_root/err"
+partial_timeout_rc=$?
+set -e
+if [[ "$partial_timeout_rc" -eq 124 ]] \
+  && [[ ! -e "$partial_timeout_root/artifact/attempts/001/step-result.json" ]] \
+  && [[ -f "$partial_timeout_root/artifact/attempts/001/step-result.json.partial" ]]; then
+  pass "timed-out model output is quarantined as step-result.json.partial"
+else
+  fail_case "timed-out model output is quarantined as step-result.json.partial" "rc=$partial_timeout_rc"
+fi
+
+partial_signal_root="$TMP_ROOT/partial-signal"
+make_attempt "$partial_signal_root"
+TR_STEP_TIMEOUT_S=30 OVF_FINALIZE_TIMEOUT_S=1 OVF_SENTINEL=shadow \
+OVF_COMPACTION_OWNER=sentinel OVF_STEP_CMD="$MOCK_CLI" MOCK_STREAM_FILE="$FIXTURES/absent.jsonl" \
+MOCK_STEP_RESULT='{"step_comp"' MOCK_SLEEP_S=60 \
+  "$ADAPTER" "$partial_signal_root/workspace/task.md" "$partial_signal_root/workspace" \
+  "$partial_signal_root/artifact/attempts/001" 1 >"$partial_signal_root/out" 2>"$partial_signal_root/err" &
+partial_signal_pid=$!
+partial_signal_tries=0
+while [[ ! -f "$partial_signal_root/artifact/attempts/001/step-result.json" ]] \
+  && (( partial_signal_tries < 50 )); do
+  sleep 0.1
+  partial_signal_tries=$((partial_signal_tries + 1))
+done
+kill -TERM "$partial_signal_pid" 2>/dev/null || true
+set +e
+wait "$partial_signal_pid"
+partial_signal_rc=$?
+set -e
+if [[ "$partial_signal_rc" -eq 143 ]] \
+  && [[ ! -e "$partial_signal_root/artifact/attempts/001/step-result.json" ]] \
+  && [[ -f "$partial_signal_root/artifact/attempts/001/step-result.json.partial" ]]; then
+  pass "signal-killed model output is quarantined as step-result.json.partial"
+else
+  fail_case "signal-killed model output is quarantined as step-result.json.partial" "rc=$partial_signal_rc"
+fi
 
 hang_root="$TMP_ROOT/hang"
 make_attempt "$hang_root"
@@ -362,7 +551,7 @@ make_attempt "$timeout_root"
 set +e
 _CATY_TESTING=1 _CATY_OVF_TEST_HANG_FINALIZE=1 OVF_FINALIZE_TIMEOUT_S=1 \
 OVF_SENTINEL=shadow OVF_COMPACTION_OWNER=sentinel OVF_STEP_CMD="$MOCK_CLI" MOCK_EXIT=7 \
-MOCK_STREAM_FILE="$FIXTURES/absent.jsonl" \
+MOCK_STREAM_FILE="$FIXTURES/fire.jsonl" \
   "$ADAPTER" "$timeout_root/workspace/task.md" "$timeout_root/workspace" \
   "$timeout_root/artifact/attempts/001" 1 >"$timeout_root/out" 2>"$timeout_root/err"
 timeout_rc=$?
@@ -372,6 +561,10 @@ if [[ "$timeout_rc" -eq 7 ]] && grep -Fqx 'warning: overflow sentinel finalize t
 else
   fail_case "hung monitor timeout warns without changing CLI exit code" "rc=$timeout_rc stderr=$(cat "$timeout_root/err")"
 fi
+assert_python "fire-time state survives a monitor finalize timeout" '
+state=json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert state["last_fire_ma"]=={"level":90000.0}
+' "$timeout_root/artifact/overflow-sentinel-state.json"
 
 if (( failures )); then
   printf '%s overflow sentinel tap test(s) failed; %s passed\n' "$failures" "$passes" >&2

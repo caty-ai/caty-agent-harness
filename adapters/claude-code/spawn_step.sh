@@ -49,6 +49,48 @@ case "$ovf_mode" in
   *) config_fail 'OVF_SENTINEL must be unset, shadow, or active' ;;
 esac
 
+ovf_step_cmd=${OVF_STEP_CMD:-claude -p --output-format stream-json --verbose}
+if ! validate_cmd_argv OVF_STEP_CMD "$ovf_step_cmd"; then
+  config_fail "OVF_STEP_CMD: $_validated_reason"
+fi
+if ! resolve_cmd_argv0 OVF_STEP_CMD; then
+  config_fail "OVF_STEP_CMD: $_validated_reason"
+fi
+step_argv=("${_validated_argv[@]+"${_validated_argv[@]}"}")
+
+export TASK_FILE="$task_file" ATTEMPT_DIR="$attempt_dir" WORKSPACE="$workspace"
+artifact_dir=$(cd "$attempt_dir/../.." && pwd)
+export ARTIFACT_DIR="$artifact_dir"
+cd "$workspace"
+
+step_call_finished=1
+_overflow_quarantine_partial() {
+  if [[ "${step_call_finished:-0}" -eq 0 ]] && [[ -f "${attempt_dir:-}/step-result.json" ]]; then
+    mv -f "$attempt_dir/step-result.json" "$attempt_dir/step-result.json.partial"
+  fi
+}
+trap _overflow_quarantine_partial EXIT
+
+# Fully-off means no Python, no tee, and no overflow-sentinel artifacts.
+if [[ -z "$ovf_mode" ]]; then
+  ovf_step_timeout_s=540
+  if [[ -n "${TR_STEP_TIMEOUT_S:-}" && "$TR_STEP_TIMEOUT_S" =~ ^[1-9][0-9]*$ ]]; then
+    ovf_step_timeout_s=$TR_STEP_TIMEOUT_S
+  fi
+  step_call_finished=0
+  set +e
+  run_bounded "$ovf_step_timeout_s" 10 /bin/bash -c \
+    'prompt=$1; shift; exec "$@" <"$prompt"' _ "$prompt_file" \
+    "${step_argv[@]+"${step_argv[@]}"}"
+  step_status=$?
+  set -e
+  step_call_finished=1
+  if [[ "$step_status" -eq 124 || "$step_status" -gt 128 ]] && [[ -f "$attempt_dir/step-result.json" ]]; then
+    mv -f "$attempt_dir/step-result.json" "$attempt_dir/step-result.json.partial"
+  fi
+  exit "$step_status"
+fi
+
 ovf_t_abs=${OVF_T_ABS:-80000}
 case "$ovf_t_abs" in
   ''|*[!0-9]*|0|0[0-9]*) config_fail 'OVF_T_ABS must be an integer >= 1' ;;
@@ -79,24 +121,10 @@ case "$ovf_owner" in
 esac
 
 ovf_hf_config=${OVF_HF_CONFIG:-}
-if [[ -n "$ovf_mode" && -n "$ovf_hf_config" ]]; then
+if [[ -n "$ovf_hf_config" ]]; then
   python3 -B "$repo_root/scripts/lib_overflow_sentinel.py" validate-hf "$ovf_hf_config" >/dev/null \
     || config_fail 'OVF_HF_CONFIG must name a validated local HF config.json'
 fi
-
-ovf_step_cmd=${OVF_STEP_CMD:-claude -p --output-format stream-json --verbose}
-if ! validate_cmd_argv OVF_STEP_CMD "$ovf_step_cmd"; then
-  config_fail "OVF_STEP_CMD: $_validated_reason"
-fi
-if ! resolve_cmd_argv0 OVF_STEP_CMD; then
-  config_fail "OVF_STEP_CMD: $_validated_reason"
-fi
-step_argv=("${_validated_argv[@]+"${_validated_argv[@]}"}")
-
-export TASK_FILE="$task_file" ATTEMPT_DIR="$attempt_dir" WORKSPACE="$workspace"
-artifact_dir=$(cd "$attempt_dir/../.." && pwd)
-export ARTIFACT_DIR="$artifact_dir"
-cd "$workspace"
 
 ovf_step_timeout_s=540
 if [[ -n "${TR_STEP_TIMEOUT_S:-}" && "$TR_STEP_TIMEOUT_S" =~ ^[1-9][0-9]*$ ]]; then
@@ -105,17 +133,10 @@ if [[ -n "${TR_STEP_TIMEOUT_S:-}" && "$TR_STEP_TIMEOUT_S" =~ ^[1-9][0-9]*$ ]]; t
   else
     ovf_step_timeout_s=1
   fi
-fi
-
-# Fully-off means no Python, no tee, and no overflow-sentinel artifacts.
-if [[ -z "$ovf_mode" ]]; then
-  set +e
-  run_bounded "$ovf_step_timeout_s" 10 /bin/bash -c \
-    'prompt=$1; shift; exec "$@" <"$prompt"' _ "$prompt_file" \
-    "${step_argv[@]+"${step_argv[@]}"}"
-  step_status=$?
-  set -e
-  exit "$step_status"
+  if (( ovf_step_timeout_s <= 30 )); then
+    printf 'warning: overflow sentinel derived CLI budget is only %ss after finalize reservation\n' \
+      "$ovf_step_timeout_s" >&2
+  fi
 fi
 
 if [[ -z "$ovf_owner" ]]; then
@@ -142,17 +163,25 @@ _overflow_spawn_exit_quarantine() {
   fi
   [[ -z "${augmented_prompt:-}" ]] || rm -f "$augmented_prompt"
   rm -f "$eof_tmp" "$monitor_stderr"
+  _overflow_quarantine_partial
 }
 trap _overflow_spawn_exit_quarantine EXIT
 
 nudge_shown=0
 prior_pending=
+prior_pending_number=-1
 if [[ -d "$artifact_dir/attempts" ]]; then
   for pending_candidate in "$artifact_dir"/attempts/*/overflow-nudge.pending; do
     [[ -f "$pending_candidate" && ! -L "$pending_candidate" ]] || continue
     [[ "$(dirname "$pending_candidate")" != "$attempt_dir" ]] || continue
-    if [[ -z "$prior_pending" || "$pending_candidate" > "$prior_pending" ]]; then
+    pending_attempt=$(basename "$(dirname "$pending_candidate")")
+    case "$pending_attempt" in
+      ''|*[!0-9]*) continue ;;
+    esac
+    pending_number=$((10#$pending_attempt))
+    if (( pending_number > prior_pending_number )); then
       prior_pending=$pending_candidate
+      prior_pending_number=$pending_number
     fi
   done
 fi
@@ -189,6 +218,7 @@ monitor_args=(
 python3 -B "${monitor_args[@]}" 2>"$monitor_stderr" &
 monitor_pid=$!
 
+step_call_finished=0
 set +e
 run_bounded "$ovf_step_timeout_s" 10 /bin/bash -c \
   'prompt=$1; shift; exec "$@" <"$prompt"' _ "$prompt_file" \
@@ -196,6 +226,11 @@ run_bounded "$ovf_step_timeout_s" 10 /bin/bash -c \
   | tee "$stream_path"
 step_status=${PIPESTATUS[0]}
 set -e
+step_call_finished=1
+
+if [[ "$step_status" -eq 124 || "$step_status" -gt 128 ]] && [[ -f "$attempt_dir/step-result.json" ]]; then
+  mv -f "$attempt_dir/step-result.json" "$attempt_dir/step-result.json.partial"
+fi
 
 printf '%s\n' "$step_status" >"$eof_tmp"
 mv -f "$eof_tmp" "$eof_path"

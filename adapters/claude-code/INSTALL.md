@@ -227,10 +227,18 @@ Start in shadow mode:
 
 ```sh
 export TR_SPAWN_STEP=/path/to/caty-agent-harness/adapters/claude-code/spawn_step.sh
+export TR_STEP_TIMEOUT_S=600
 export OVF_SENTINEL=shadow
 export OVF_COMPACTION_OWNER=sentinel
+export CLAUDE_MODEL=claude-sonnet-4-5
 scripts/task-runner.sh "$WS"
 ```
+
+`TR_STEP_TIMEOUT_S` must be exported; a shell-local task-runner setting is not
+visible to this child adapter. Set `CLAUDE_MODEL` to the actual model identifier
+so the context-window catalog and TTFB floor can select a known entry. If it is
+unset, the adapter records `claude-unknown`, which deliberately uses the default
+context window and conservative 240-second TTFB floor.
 
 After inspecting `sentinel-events.jsonl`, select `OVF_SENTINEL=active` to allow
 the adapter to prepare a five-point delta nudge. The nudge is shown at the next
@@ -244,6 +252,12 @@ and sends `prompt.md` on stdin. `OVF_STEP_CMD` defaults to
 `claude -p --output-format stream-json --verbose`; command strings are
 whitespace-split argv, never shell-expanded. The model session—not this
 adapter—owns `step-result.json`.
+
+Known pause limitation: startup pause is handled before the model starts, but a
+workspace paused while this adapter is already running is currently classified
+by the task-runner driver against the Hermes pause label. That mid-run pause can
+therefore be misclassified. Driver-side pause-label parameterization is a
+follow-up; this adapter does not change `task-runner.sh` in v1.
 
 The passive monitor writes `stream.jsonl`, `overflow-stream.eof`,
 `sentinel-events.jsonl`, `attempt.json`, and, after an active fire,

@@ -147,6 +147,9 @@ runtime host が compaction を所有する場合は `OVF_COMPACTION_OWNER=host`
 水位述語を実行せず `disabled-host` を記録します。有効時に owner を未設定のままにすると warning を出し、
 sentinel heuristic を選びます。
 
+Claude の明示的な `system/compact_boundary` event を観測すると measured series を reset します。
+この event が得られない場合は injected-token の急落 heuristic が fallback のままです。
+
 監視対象の各 attempt は `turn`、`fire`、`alert`、`attempt_end` を独立した
 `sentinel-events.jsonl` へ append します。task-runner ledger に confluence point ができるまでは
 このファイルを分離して保持します。次 step 境界で nudge を配送するため、発火した attempt で task が

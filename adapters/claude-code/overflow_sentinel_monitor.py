@@ -87,11 +87,13 @@ def _usage_from_assistant(event: Dict[str, Any]) -> Optional[Tuple[Dict[str, Any
     return message, usage
 
 
-def _safe_int(value: Any) -> int:
+def _usage_int(value: Any) -> Optional[int]:
+    if isinstance(value, bool):
+        return None
     try:
         result = int(value or 0)
     except (TypeError, ValueError):
-        return 0
+        return None
     return max(0, result)
 
 
@@ -182,6 +184,7 @@ def monitor(args: argparse.Namespace) -> int:
     fired_turns = []
     alert_turns = []
     compaction_seen = False
+    runtime_compaction_seen = False
     last_injected = None
     turn_count = 0
     blind_seen = False
@@ -192,12 +195,31 @@ def monitor(args: argparse.Namespace) -> int:
 
     while True:
         lines, offset, pending = _read_complete_lines(stream_path, offset, pending)
+        cli_exit_code = _read_eof(eof_path)
+        eof_seen = cli_exit_code is not None
+        if eof_seen:
+            final_lines, offset, pending = _read_complete_lines(stream_path, offset, pending)
+            lines.extend(final_lines)
+            if pending:
+                lines.append(pending.decode("utf-8", errors="replace"))
+                pending = b""
         for raw in lines:
             try:
                 event = json.loads(raw)
             except (ValueError, TypeError):
                 continue
-            if not isinstance(event, dict) or event.get("type") != "assistant":
+            if not isinstance(event, dict):
+                continue
+            if event.get("type") == "system" and event.get("subtype") == "compact_boundary":
+                runtime_compaction_seen = True
+                series = []
+                last_injected = None
+                try:
+                    pending_path.unlink()
+                except FileNotFoundError:
+                    pass
+                continue
+            if event.get("type") != "assistant" or event.get("parent_tool_use_id") is not None:
                 continue
             if first_byte_at is None:
                 first_byte_at = str(event.get("timestamp") or now_utc())
@@ -211,11 +233,14 @@ def monitor(args: argparse.Namespace) -> int:
                     continue
                 seen_ids.add(identity)
             saw_usage = True
-            input_tokens = _safe_int(usage.get("input_tokens"))
-            cache_read = _safe_int(usage.get("cache_read_input_tokens"))
-            cache_creation = _safe_int(usage.get("cache_creation_input_tokens"))
-            output_tokens = _safe_int(usage.get("output_tokens"))
             has_cache = "cache_read_input_tokens" in usage and "cache_creation_input_tokens" in usage
+            input_tokens = _usage_int(usage.get("input_tokens"))
+            cache_read = _usage_int(usage.get("cache_read_input_tokens", 0))
+            cache_creation = _usage_int(usage.get("cache_creation_input_tokens", 0))
+            output_tokens = _usage_int(usage.get("output_tokens", 0))
+            if None in (input_tokens, cache_read, cache_creation, output_tokens):
+                saw_no_cache = True
+                continue
             injected = input_tokens + cache_read + cache_creation
             blind = has_cache and injected == 0 and output_tokens == 0
             if blind:
@@ -249,6 +274,8 @@ def monitor(args: argparse.Namespace) -> int:
                 if consecutive_blind >= 3:
                     evaluation_disabled = True
                 continue
+            if injected == 0:
+                continue
             if evaluation_disabled:
                 continue
             if compaction_suspected(last_injected, injected):
@@ -267,6 +294,7 @@ def monitor(args: argparse.Namespace) -> int:
             fire_axis = axis_name(axes)
             for fire_candidate in axes:
                 last_fire_ma[fire_candidate] = turn["injected_ma"]
+            save_state(state_path, last_fire_ma, state["last_run_injected_ma"])
             fire_event = {
                 "event": "fire",
                 "schema_version": SCHEMA_VERSION,
@@ -279,7 +307,6 @@ def monitor(args: argparse.Namespace) -> int:
                 "injected_ma": turn["injected_ma"],
                 "injected_last": turn["injected_last"],
                 "value_kind": "measured",
-                "threshold_hit": turn["threshold_hit"],
                 "ctx_window": ctx_window,
                 "ctx_window_source": ctx_source,
                 "slope": turn["slope"],
@@ -291,6 +318,8 @@ def monitor(args: argparse.Namespace) -> int:
                 "tap_status": "no-cache-accounting" if saw_no_cache else "ok",
                 "run_meta": meta,
             }
+            if "threshold_hit" in turn:
+                fire_event["threshold_hit"] = turn["threshold_hit"]
             append_event(events_path, fire_event)
             fired_turns.append(turn_count)
             if args.mode == "active":
@@ -316,8 +345,7 @@ def monitor(args: argparse.Namespace) -> int:
             )
             alert_written = True
             alert_turns.append(alert_turn)
-        cli_exit_code = _read_eof(eof_path)
-        if cli_exit_code is not None:
+        if eof_seen:
             break
         time.sleep(args.poll_interval)
 
@@ -337,10 +365,8 @@ def monitor(args: argparse.Namespace) -> int:
         tap_status_final = "absent"
 
     last_run_ma = sum(series[-N:]) / float(len(series[-N:])) if series else None
-    state_last_run_ma = (
-        state["last_run_injected_ma"] if args.tap_status == "disabled-host" else last_run_ma
-    )
-    save_state(state_path, last_fire_ma, state_last_run_ma)
+    if last_run_ma is not None:
+        save_state(state_path, last_fire_ma, last_run_ma)
     result = _read_step_result(attempt_dir / "step-result.json")
     outcome = outcome_from_result(cli_exit_code, result)
     window_error = outcome == "overflowed"
@@ -359,7 +385,7 @@ def monitor(args: argparse.Namespace) -> int:
         "attempt": args.attempt,
         "outcome": outcome,
         "window_error": window_error,
-        "runtime_compaction": False,
+        "runtime_compaction": runtime_compaction_seen,
         "compaction_suspected": compaction_seen,
         "total_tokens": total_tokens,
         "injected_summary": {
@@ -402,7 +428,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--attempt-dir", required=True)
     parser.add_argument("--artifact-dir", required=True)
     parser.add_argument("--task-id", required=True)
-    parser.add_argument("--attempt", required=True, type=int)
+    parser.add_argument("--attempt", required=True)
     parser.add_argument("--mode", required=True, choices=("shadow", "active"))
     parser.add_argument("--model", default="claude-unknown")
     parser.add_argument("--t-abs", required=True, type=int)

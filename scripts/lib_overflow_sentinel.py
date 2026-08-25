@@ -109,11 +109,7 @@ def _threshold_hit(ma_value: float, t_abs: int, ratio_threshold: float) -> str:
         return "both"
     if hits:
         return hits[0]
-    # A slope-only fire has crossed neither level threshold. The wire schema has
-    # no "none" value, so identify the threshold that currently governs min().
-    if t_abs == ratio_threshold:
-        return "both"
-    return "abs" if t_abs < ratio_threshold else "ratio"
+    raise ValueError("threshold_hit requested without a level crossing")
 
 
 def evaluate_series(
@@ -154,7 +150,7 @@ def evaluate_series(
             "axis": axis,
             "threshold": threshold,
         }
-        if axis is not None:
+        if level_fire:
             turn["threshold_hit"] = _threshold_hit(ma_value, t_abs, ratio_threshold)
         turns.append(turn)
     return {
@@ -225,6 +221,8 @@ def resolve_ctx_window(
     if hf_config:
         return _hf_window(Path(hf_config)), "hf-config"
     normalized = model.lower().split("/")[-1]
+    if normalized == "claude-unknown":
+        return DEFAULT_CTX_WINDOW, "default"
     for prefix, window in CTX_WINDOW_CATALOG:
         if normalized.startswith(prefix):
             return window, "catalog"
@@ -233,6 +231,8 @@ def resolve_ctx_window(
 
 def ttfb_floor_seconds(previous_injected_ma: Optional[float], model: str) -> int:
     normalized = model.lower().split("/")[-1]
+    if normalized == "claude-unknown":
+        return 240
     for prefix, floor in REASONING_TTFB_FLOORS:
         if normalized.startswith(prefix):
             return floor

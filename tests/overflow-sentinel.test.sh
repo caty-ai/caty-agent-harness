@@ -51,6 +51,23 @@ run_python_case "slope is undefined before turn 4 and slope fire works" '
 turns = evaluate_series([10000, 20000, 30000, 40000], t_abs=90000, w=.9, ctx=50000)["turns"]
 assert all(turn["slope"] is None for turn in turns[:3])
 assert turns[3]["axis"] == "slope" and turns[3]["projection_turns"] <= 10
+assert "threshold_hit" not in turns[3]
+'
+
+run_python_case "slope uses the moving-average series rather than raw injected values" '
+turn = evaluate_series([10000, 10000, 10000, 62000], t_abs=80000, w=.5, ctx=200000)["turns"][-1]
+raw_slope = (62000 - 10000) / 3.0
+raw_projection = (200000 - (82000 / 3.0)) / raw_slope
+assert raw_projection <= M
+assert turn["injected_ma"] == 82000 / 3.0
+assert turn["projection_turns"] > M and turn["axis"] is None
+'
+
+run_python_case "slope projection fires at exact M and not just above M" '
+at = evaluate_series([100, 400, 400, 400], t_abs=5000, w=.99, ctx=1400)["turns"][-1]
+above = evaluate_series([100, 400, 400, 399], t_abs=5000, w=.99, ctx=1400)["turns"][-1]
+assert at["projection_turns"] == M and at["axis"] == "slope"
+assert above["projection_turns"] > M and above["axis"] is None
 '
 
 run_python_case "axis both is emitted when level and slope fire" '
@@ -79,6 +96,7 @@ hf.write_text(json.dumps({"max_position_embeddings": 131072}), encoding="utf-8")
 assert resolve_ctx_window(64000, str(hf), "claude-x") == (64000, "config")
 assert resolve_ctx_window(None, str(hf), "claude-x") == (131072, "hf-config")
 assert resolve_ctx_window(None, None, "claude-sonnet-4-5") == (200000, "catalog")
+assert resolve_ctx_window(None, None, "claude-unknown") == (200000, "default")
 assert resolve_ctx_window(None, None, "unlisted") == (200000, "default")
 '
 
@@ -89,6 +107,7 @@ assert ttfb_floor_seconds(50001, "claude-sonnet-4-5") == 150
 assert ttfb_floor_seconds(100000, "claude-sonnet-4-5") == 150
 assert ttfb_floor_seconds(100001, "claude-sonnet-4-5") == 240
 assert ttfb_floor_seconds(100, "unknown-model") == 240
+assert ttfb_floor_seconds(100, "claude-unknown") == 240
 assert ttfb_floor_seconds(100, "glm-5.3") == 300
 '
 

@@ -193,7 +193,7 @@ alert       = ts_first_byte 不在のまま TTFB 床超過（fire とは別イ�
 turn:     （§3 の tap イベントをそのまま ledger に毎ターン保存。replay・miss 判定・事後再計算の材料。
            Opus r2 B2: 要約だけでは「あふれ何ターン前に閾値を跨いだか」を復元できない）
 fire:     {ts, started_at, task_id, turn_idx, axis: level|slope|both, injected_ma, injected_last,
-           value_kind: measured|estimated, threshold_hit: abs|ratio|both, ctx_window, ctx_window_source,
+           value_kind: measured|estimated, threshold_hit?: abs|ratio|both（level crossing 時のみ）, ctx_window, ctx_window_source,
            slope, projection_turns, decision: nudge, nudge_disposition: shown|suppressed|shadow,
            model, runtime, tap_status, run_meta: {arm?, seed?, shuffle_seed?, T_abs, w, N, M, K},
            schema_version}
@@ -248,7 +248,7 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
 - tap 適合 golden-file テスト（アダプタ毎: 排他加算・cached 内包の除去・SSE ping 除外を固定入力で検証。
   Fable r2: 契約は「書けば守られる」側に倒れやすい — 違反は水位の系統誤差として静かに入るため）
 - reasoning floor 表の実体収載（v1 表= 90/150/240s + 記名 override。無記名モデル= reasoning 含め 240s）
-- TTFB 床の tier キー= 前ターンの injected（byte イベントに optional `request_size_estimate` を追加可）
+- TTFB 床の tier キー= 前 monitored run の last injected MA（v0.5.3 実装 delta で旧「前ターン」表現を訂正）
 
 ## 10. レビュー履歴
 
