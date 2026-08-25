@@ -364,25 +364,21 @@ if [[ "$dry_run" -eq 1 ]]; then
   exit 1
 fi
 
-build_normalized_source_cache() {
-  local cache_root=$tmp_root/normalized-sources
-  mkdir -p "$cache_root"
-  python3 -B - "$workspace" "$tmp_root/files" "$cache_root" <<'PY'
-from pathlib import Path
+citation_canonicalize_stream() {
+  python3 -B -c '
 import re
 import sys
 import unicodedata
 
-workspace, file_list, cache_root = map(Path, sys.argv[1:])
-smart_quotes = str.maketrans({
-    "\u2018": "'",
-    "\u2019": "'",
-    "\u201c": '"',
-    "\u201d": '"',
+SMART_QUOTES = str.maketrans({
+    "\u2018": "\x27",
+    "\u2019": "\x27",
+    "\u201c": "\x22",
+    "\u201d": "\x22",
 })
 
 def field_fold(value):
-    # Mirror awk's default-field rebuild in normalize_state_candidate.
+    # Mirror the default-field rebuild in normalize_state_candidate.
     return re.sub(r"[ \t]+", " ", value).strip(" \t")
 
 def normalize(value):
@@ -391,20 +387,32 @@ def normalize(value):
     value = re.sub(r"[ \t]+\[mech_check: (?:yes|no)\]$", "", value, count=1)
     value = re.sub(r"[ \t]+\(source: [a-z-]+\)$", "", value, count=1)
     value = field_fold(value)
-    value = unicodedata.normalize("NFKC", value).translate(smart_quotes)
+    value = unicodedata.normalize("NFKC", value).translate(SMART_QUOTES)
     return re.sub(r" +", " ", value).strip(" ")
 
-for relative in file_list.read_text(encoding="utf-8").splitlines():
-    if not relative:
-        continue
-    source = workspace / relative
-    target = cache_root / relative
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with source.open("r", encoding="utf-8", errors="surrogateescape") as handle:
-        normalized = [normalize(line.rstrip("\r\n")) for line in handle]
-    with target.open("w", encoding="utf-8", errors="surrogateescape") as handle:
-        handle.write("\n".join(normalized) + ("\n" if normalized else ""))
-PY
+def canonicalize(value):
+    value = re.sub(r"^[-*] ", "", value, count=1)
+    value = re.sub(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}:?[ \t]*", "", value, count=1)
+    return normalize(value.replace("*", ""))
+
+for raw_line in sys.stdin.buffer:
+    value = raw_line.rstrip(b"\r\n").decode("utf-8", errors="surrogateescape")
+    rendered = canonicalize(value) + "\n"
+    sys.stdout.buffer.write(rendered.encode("utf-8", errors="surrogateescape"))
+'
+}
+
+build_normalized_source_cache() {
+  local cache_root=$tmp_root/normalized-sources
+  local relative source target
+  mkdir -p "$cache_root"
+  while IFS= read -r relative || [[ -n "$relative" ]]; do
+    [[ -n "$relative" ]] || continue
+    source=$workspace/$relative
+    target=$cache_root/$relative
+    mkdir -p "${target%/*}" || return 1
+    citation_canonicalize_stream <"$source" >"$target" || return 1
+  done <"$tmp_root/files"
 }
 
 build_normalized_source_cache || finish_failure 1 source-normalization
@@ -620,7 +628,7 @@ PY
 
 validate_parsed_blocks() {
   local parse_dir=$1 accepted_dir=$2 rejects_file=$3
-  local block_dir member basename quote source_path source_cache normalized_quote normalized_source
+  local block_dir member basename quote source_path source_cache normalized_quote canonical_quote canonical_source
   local block_bad member_week member_hash
   # Short normalized prefixes collide too easily; empty prefixes match every
   # line. Eight characters is the minimum useful citation discriminator.
@@ -665,7 +673,11 @@ validate_parsed_blocks() {
         block_bad=1
         continue
       }
-      if (( ${#normalized_quote} < minimum_quote_chars )); then
+      canonical_quote=$(printf '%s\n' "$quote" | citation_canonicalize_stream) || {
+        block_bad=1
+        continue
+      }
+      if (( ${#canonical_quote} < minimum_quote_chars )); then
         block_bad=1
         continue
       fi
@@ -675,8 +687,8 @@ validate_parsed_blocks() {
         continue
       fi
       citation_found=0
-      while IFS= read -r normalized_source || [[ -n "$normalized_source" ]]; do
-        if [[ "$normalized_source" == "$normalized_quote"* ]]; then
+      while IFS= read -r canonical_source || [[ -n "$canonical_source" ]]; do
+        if [[ "$canonical_source" == "$canonical_quote"* ]]; then
           citation_found=1
           break
         fi

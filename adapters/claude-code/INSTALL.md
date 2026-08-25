@@ -169,6 +169,11 @@ window; a direct API command is typically far faster). A timeout is recorded as 
 entry's failure and, with a one-entry chain, becomes a nightly `chain-exhausted`
 notification.
 
+Also give the reviewer route enough output tokens for about 30 THEME blocks; for a
+claude-CLI-wrapped chain, size `CLAUDE_CODE_MAX_OUTPUT_TOKENS` accordingly. An output cap
+may surface as one unfenced `API Error: ...` line, which the harness correctly rejects as
+grammar (fail-closed); fix the route configuration rather than the harness.
+
 Each parsed bullet is limited to `INTAKE_MAX_BULLET_BYTES` bytes (default `512` after
 control-character stripping); an oversized bullet is dropped whole and counted as
 `dropped_oversize` in the run receipt. Lessons displaced by the STATE cap are appended

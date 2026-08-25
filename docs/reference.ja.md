@@ -83,6 +83,11 @@ THEME block 間の空行は許容しますが、block 内の空行は不正で�
 正規化後 8〜200 文字で、正規化済み source line の先頭に一致する必要があります。
 短すぎる citation、行途中だけの一致、fabrication は block 全体を reject します。
 
+reviewer route には約 30 個の THEME block を返せる output token 数を設定してください。
+claude CLI で wrap した chain では `CLAUDE_CODE_MAX_OUTPUT_TOKENS` も十分な値にします。
+output cap に達した route が fence 外の `API Error: ...` 1 行だけを出すと、その call は
+grammar 不正として fail-closed になります。修正対象は harness ではなく route 設定です。
+
 同梱の `loop/review.conf` は全行 comment のため情報表示だけの未配線状態です。
 `review-config` warning は部分配線または不正な設定だけに使います。`producer=` と `reviewer` を
 uncomment する操作は、schedule 実行ごとに選択された raw lesson file **全文**を、その

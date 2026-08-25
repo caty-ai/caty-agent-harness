@@ -111,10 +111,13 @@ fi
 receipt=$(tail -n 1 "$ws/loop/promotions/runs.log")
 actual_bytes=$(wc -c <"$capture" | tr -d '[:space:]')
 recorded_bytes=$(printf '%s\n' "$receipt" | sed -n 's/.* prompt_bytes=\([0-9][0-9]*\) .*/\1/p')
-if [[ "$recorded_bytes" == "$actual_bytes" && "$receipt" == *' mode=retro '* && "$receipt" == *' error=none' ]]; then
-  pass '[2] prompt_bytes accounts for the complete prompt and retro receipt fields are pinned'
+if [[ "$recorded_bytes" == "$actual_bytes" && "$receipt" == *' mode=retro '* && "$receipt" == *' error=none' ]] \
+  && grep -Fq 'Emit no more than 30 THEME blocks' "$capture" \
+  && grep -Fq 'at most five MEMBERS citations per theme' "$capture" \
+  && grep -Fq 'keep the quote at 200 characters or fewer' "$capture"; then
+  pass '[2] prompt bytes, output budget, and retro receipt fields are pinned'
 else
-  fail_case '[2] prompt_bytes accounts for the complete prompt and retro receipt fields are pinned' "actual=$actual_bytes receipt=$receipt"
+  fail_case '[2] prompt bytes, output budget, and retro receipt fields are pinned' "actual=$actual_bytes receipt=$receipt"
 fi
 
 ws=$(new_ws dry)
@@ -332,6 +335,105 @@ if [[ "$empty_rc" -eq 0 && "$short_rc" -eq 0 && "$eight_rc" -eq 0 \
   pass '[R1-1] normalized quotes below eight characters reject while an eight-character prefix passes'
 else
   fail_case '[R1-1] normalized quotes below eight characters reject while an eight-character prefix passes' "rcs=$empty_rc/$short_rc/$eight_rc receipts=$(tail -n 1 "$ws_empty/loop/promotions/runs.log") | $(tail -n 1 "$ws_short/loop/promotions/runs.log") | $(tail -n 1 "$ws_eight/loop/promotions/runs.log")"
+fi
+
+REAL_SHAPE=$TMP_ROOT/real-shape-reviewer
+write_reviewer "$REAL_SHAPE" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: linked worktree commits
+CLASS: capability-fact
+MEMBERS:
+- flush-2026-08-01.md:codex exec `-s workspace-write` は linked git worktree 内で `git commit` できない
+WEEKS: 2026-W31
+EVIDENCE: Honest lesson-content prefix without storage decoration.
+PROMOTE: not-yet
+THEME: star bullet and date without colon
+CLASS: rule
+MEMBERS:
+- flush-2026-08-01.md:2026-08-01 **star bullet date without colon remains citable**
+WEEKS: 2026-W31
+EVIDENCE: Both source and quote require the same comparison canonicalization.
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+ws_real_shape=$(new_ws real-shape)
+printf '%s\n' \
+  '- 2026-08-01: **codex exec `-s workspace-write` は linked git worktree 内で `git commit` できない** — tail' \
+  '* 2026-08-01 **star bullet date without colon remains citable** — tail' \
+  >"$ws_real_shape/loop/archive/flush-2026-08-01.md"
+write_conf "$ws_real_shape" producer-model "real-shape $REAL_SHAPE"
+"$RAW_REVIEW" --workspace "$ws_real_shape" --week 2026-W31 >/dev/null 2>"$TMP_ROOT/real-shape.err"
+real_shape_rc=$?
+variant_hash=$(python3 -B -c 'import hashlib, sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest())' \
+  '2026-08-01 **star bullet date without colon remains citable**')
+if [[ "$real_shape_rc" -eq 0 \
+  && "$(tail -n 1 "$ws_real_shape/loop/promotions/runs.log")" == *' blocks=2 '* \
+  && "$(tail -n 1 "$ws_real_shape/loop/promotions/runs.log")" == *' fabricated=0 '* \
+  && "$(tail -n 1 "$ws_real_shape/loop/promotions/runs.log")" == *' candidates=2 '* ]] \
+  && grep -Fq "member-hash: $variant_hash" "$(latest_candidate "$ws_real_shape")"; then
+  pass '[R2-1] real lesson shape and bullet/date/emphasis variants authenticate content prefixes'
+else
+  fail_case '[R2-1] real lesson shape and bullet/date/emphasis variants authenticate content prefixes' "rc=$real_shape_rc receipt=$(tail -n 1 "$ws_real_shape/loop/promotions/runs.log") stderr=$(cat "$TMP_ROOT/real-shape.err")"
+fi
+
+CANONICAL_REJECTS=$TMP_ROOT/canonical-rejects-reviewer
+write_reviewer "$CANONICAL_REJECTS" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: canonicalized mid-line fragment
+CLASS: rule
+MEMBERS:
+- flush-2026-08-01.md:workspace-write` は linked
+WEEKS: 2026-W31
+EVIDENCE: Canonicalization must preserve prefix anchoring.
+PROMOTE: not-yet
+THEME: canonicalized whitespace
+CLASS: rule
+MEMBERS:
+- flush-2026-08-01.md:- 2026-08-01: **   **
+WEEKS: 2026-W31
+EVIDENCE: Minimum length applies after comparison canonicalization.
+PROMOTE: not-yet
+THEME: cross-line splice
+CLASS: rule
+MEMBERS:
+- flush-2026-08-01.md:codex exec `-s workspace-write` は linked git worktree 内で `git commit` できないmeaningful content
+WEEKS: 2026-W31
+EVIDENCE: A quote may not join canonicalized source lines.
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+ws_canonical_rejects=$(new_ws canonical-rejects)
+printf '%s\n' \
+  '- 2026-08-01: **codex exec `-s workspace-write` は linked git worktree 内で `git commit` できない** — tail' \
+  '- 2026-08-01: **meaningful content**' \
+  >"$ws_canonical_rejects/loop/archive/flush-2026-08-01.md"
+write_conf "$ws_canonical_rejects" producer-model "canonical-rejects $CANONICAL_REJECTS"
+"$RAW_REVIEW" --workspace "$ws_canonical_rejects" --week 2026-W31 >/dev/null 2>"$TMP_ROOT/canonical-rejects.err"
+canonical_rejects_rc=$?
+if [[ "$canonical_rejects_rc" -eq 1 \
+  && "$(tail -n 1 "$ws_canonical_rejects/loop/promotions/runs.log")" == *' fabricated=3 '* \
+  && "$(tail -n 1 "$ws_canonical_rejects/loop/promotions/runs.log")" == *' error=chain-exhausted' ]]; then
+  pass '[R2-2] canonicalized mid-line, whitespace-only, and cross-line quotes remain rejected'
+else
+  fail_case '[R2-2] canonicalized mid-line, whitespace-only, and cross-line quotes remain rejected' "rc=$canonical_rejects_rc receipt=$(tail -n 1 "$ws_canonical_rejects/loop/promotions/runs.log")"
+fi
+
+OUTPUT_CAP_ERROR=$TMP_ROOT/output-cap-error-reviewer
+write_reviewer "$OUTPUT_CAP_ERROR" 'cat >/dev/null
+printf "%s\n" "API Error: Claude'"'"'s response exceeded the 32000 output token maximum."'
+ws_output_cap=$(new_ws output-cap)
+seed_two_weeks "$ws_output_cap"
+write_conf "$ws_output_cap" producer-model "output-cap $OUTPUT_CAP_ERROR"
+"$RAW_REVIEW" --workspace "$ws_output_cap" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/output-cap.err"
+output_cap_rc=$?
+if [[ "$output_cap_rc" -eq 1 \
+  && "$(tail -n 1 "$ws_output_cap/loop/promotions/runs.log")" == *' error=chain-exhausted' ]] \
+  && grep -Fqx 'reviewer_failed=output-cap reason=grammar' "$TMP_ROOT/output-cap.err"; then
+  pass '[R2-3] an unfenced output-cap API error fails the reviewer call as grammar'
+else
+  fail_case '[R2-3] an unfenced output-cap API error fails the reviewer call as grammar' "rc=$output_cap_rc stderr=$(cat "$TMP_ROOT/output-cap.err")"
 fi
 
 BLANK_ONE=$TMP_ROOT/blank-one-reviewer
