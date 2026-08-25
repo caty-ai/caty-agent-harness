@@ -13,6 +13,16 @@ jobs:
     permissions: {contents: read, issues: read, pull-requests: write}
     with:
       risk_paths_billing: 'none' # 課金・支出コードなし (#30 で明示宣言)
-      risk_paths_outbound: 'none' # 対外送信コード実在なし — curl/wget/webhook 等 grep 確認 (#30 で明示宣言)
-      risk_paths_gates: 'none' # Makefile は reusable 側 DEFAULT が覆う・tests/** は一級市民コードで通常レビュー対象 (#30 で明示宣言)
+      # OUTBOUND: #30 の 'none' (2026-08-10) は #56 (2026-08-13) の hermes verifier example が
+      # 実 outbound HTTP POST (Anthropic Messages API へ artifact bundle + API key) を持ち込んだ
+      # 時点で不成立 — #136 で宣言。1行1パターン (行内空白は 0 マッチの静かな fail-open)。
+      risk_paths_outbound: |
+        adapters/hermes/examples/verifier-provider.py
+      # GATES: make lint が呼ぶ scripts/check-bash32-ansi-c-escapes と、ci-matrix.yml が
+      # source する scripts/lib-updater-verify.sh は scripts/ 直下で reusable DEFAULT
+      # (Makefile / scripts/ci/**) に覆われない — #136 で宣言 (後者は #175 GLM 席指摘)。
+      # tests/** は一級市民コードで通常レビュー対象のまま (#30 の判断を維持)。
+      risk_paths_gates: |
+        scripts/check-bash32-ansi-c-escapes
+        scripts/lib-updater-verify.sh
       risk_paths_auth: 'none' # 認証コードなし (handbook#31 v0.9.2 同期の明示宣言)

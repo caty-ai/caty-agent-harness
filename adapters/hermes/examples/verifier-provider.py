@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Single-call Anthropic Messages verifier provider for the Hermes example."""
+# Declared OUTBOUND risk path (review-labels.yml, #136): this file performs real
+# outbound HTTP to the Anthropic API — changes here require the risk-review gate.
 
 import json
 import os
