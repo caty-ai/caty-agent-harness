@@ -35,7 +35,7 @@ Caty Agent Harness は、その全部をただのテキストファイルと確�
 
 <sub>¹ 仕事を読み切っていないのに「done」と申告すること — 自己申告ではなくツール呼び出し記録から機械採点（申告 222件 → 2件・各腕30走行）: [全数字と弱点](docs/benchmark.ja.md)</sub>
 <br><sub>² EV-006 — 素 vs **出荷済みハーネス**・各腕30走行（M/L サイズ）の検証済み完了率</sub>
-<br><sub>³ EV-008 — 素 vs **オーバーフロー・センチネル**。まだ設計中の機能（[#159](https://github.com/caty-ai/caty-agent-harness/issues/159)）で、**まだ出荷されていません**。これは実装に先立つリグ測定です。`低下なし` = 全セルで両腕とも隠し答案 20/20。`素とのトークン差` = 封印4セルの median(sentinel/bare) を 1 から引いた値: sonnet **0.801** → −20%、opus **0.923** → −8%。`—` = このレーンでは未測定</sub>
+<br><sub>³ EV-008 — 素 vs **オーバーフロー・センチネル**。Sentinel v1 は claude-code runtime 向けの opt-in 機能として v0.17.0 で出荷済みです（[#180](https://github.com/caty-ai/caty-agent-harness/issues/180) は [#159](https://github.com/caty-ai/caty-agent-harness/issues/159) を実装）。有効化は [`OVF_SENTINEL=shadow|active`](adapters/claude-code/INSTALL.md)、未設定 = 完全オフ（byte-identical passthrough）です。default-on は今後の課題で、[#159](https://github.com/caty-ai/caty-agent-harness/issues/159) の条件に照らしてモデルごとに判断します。詳しくは [モデル別プロファイル](#model-effects) を参照してください。EV-008 はその実装に先立つリグ事前測定であり、出荷済み実装ではまだ再測定していません。`低下なし` = 全セルで両腕とも隠し答案 20/20。`素とのトークン差` = 封印4セルの median(sentinel/bare) を 1 から引いた値: sonnet **0.801** → −20%、opus **0.923** → −8%。`—` = このレーンでは未測定</sub>
 <br><sub>⁴ descriptive・post-GO</sub>
 
 <sub>Codex・qwen・grok・gemini と、テレメトリが見えないランタイム（glm/muse/kimi）も測定済みです — sentinel の方が素より高コストだったセルも含みます: [モデル別プロファイル](#model-effects) ・ [全数字と経緯](docs/benchmark.ja.md#ev-008) ・ローカルモデル（Ollama）を含む計画レーン: [#129](https://github.com/caty-ai/caty-agent-harness/issues/129)</sub>
@@ -183,7 +183,7 @@ workspace としてインストールし、ヘルスチェックを実行し、�
 
 ## 効くモデル・効かないモデル
 
-**オーバーフロー・センチネル**（[設計 Issue #159](https://github.com/caty-ai/caty-agent-harness/issues/159)）は、ターンごとに実測したコンテキスト水位を見張り、閾値を超えたら実行を止めて仕事を分解します — コンテキストが溢れてから慌てるのではなく、溢れる前に。センチネル本体はこの Issue で設計・実装中で（設計文書 = [PR #166](https://github.com/caty-ai/caty-agent-harness/pull/166)）、まだ製品には入っていません。EV-008 は default-on の可否を実装に先立って測った事前測定で、本セクションはその実測プロファイルです。EV-008（封印付き・事前登録ベンチマーク・2026-08）で、この振る舞いをモデル別に実測しました。効き方は、ランタイムの「読み方」で分かれます:
+**オーバーフロー・センチネル**（[設計 Issue #159](https://github.com/caty-ai/caty-agent-harness/issues/159)）は、ターンごとに実測したコンテキスト水位を見張り、閾値を超えたら実行を止めて仕事を分解します — コンテキストが溢れてから慌てるのではなく、溢れる前に。Sentinel v1 は claude-code runtime 向けの opt-in 機能として v0.17.0 で出荷済みです（[#180](https://github.com/caty-ai/caty-agent-harness/issues/180) は [#159](https://github.com/caty-ai/caty-agent-harness/issues/159) を実装）。有効化は [`OVF_SENTINEL=shadow|active`](adapters/claude-code/INSTALL.md)、未設定 = 完全オフ（byte-identical passthrough）です。default-on は今後の課題で、[#159](https://github.com/caty-ai/caty-agent-harness/issues/159) の条件に照らしてモデルごとに判断します。詳しくは本節のプロファイルと [benchmark](docs/benchmark.ja.md#ev-008) を参照してください。EV-008 はその実装に先立つリグ事前測定であり、出荷済み実装ではまだ再測定していません。EV-008（封印付き・事前登録ベンチマーク・2026-08）で、この振る舞いをモデル別に実測しました。効き方は、ランタイムの「読み方」で分かれます:
 
 | ランタイム型 | 実測したモデル | 振る舞い | 判定 |
 |---|---|---|---|
