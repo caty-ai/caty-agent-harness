@@ -33,6 +33,8 @@ Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决�
 | GPT-5.6 Luna（Codex） | 计划中 | — | — |
 | 本地模型（Ollama） | 计划中 | — | — |
 
+<sub>该表格是裸跑 vs harness 的**完走率**赛道（赛道追加见 [#129](https://github.com/caty-ai/caty-agent-harness/issues/129) 追踪）。Codex、qwen、grok 和 opus 已经在下方的[overflow sentinel 小节](#model-effects)中实测——这是回答另一个问题的独立实验（EV-008），因此这里的「计划中」与那边的实测数字并不矛盾。</sub>
+
 <sub>¹ 还没读完工作内容就宣称「完成」——依据工具调用记录测量，而非自我报告：在 15 万至 30 万 token 的任务上（每组配对运行 30 次，全部由机器评分），此类宣称从 222 次降至 2 次。包含薄弱环节：[完整数据与局限（英文）](docs/benchmark.md)。</sub>
 
 **实测 — overflow sentinel**（密封 EV-008，2026-08-25）：sentinel 开启时，claude-sonnet-5 在上下文溢出类任务上保持 20/20 正确率，同时削减 token（sentinel/bare 中位数 0.801・最佳单元 −71%）；claude-opus-5 为 0.923。检索型运行时在实测的所有运行中触发次数为零——这是设计使然（Codex 0/127 turns）。哪些模型能受益——哪些不该开启：[各模型档案](#model-effects) ・ [完整数字与历史（英文）](docs/benchmark.md#ev-008)。
@@ -179,7 +181,7 @@ flowchart LR
 
 ## 哪些模型能受益
 
-**overflow sentinel**（[设计 Issue #159](https://github.com/caty-ai/caty-agent-harness/issues/159)）监视实测的每轮上下文水位，超过阈值时就停止运行并分解任务，而不是任由上下文溢出。EV-008——一项密封、预先注册的基准测试（2026-08）——按模型实测了这种行为。效果的差异取决于运行时「读」的方式：
+**overflow sentinel**（[设计 Issue #159](https://github.com/caty-ai/caty-agent-harness/issues/159)）监视实测的每轮上下文水位，超过阈值时就停止运行并分解任务，而不是任由上下文溢出。sentinel 本身仍在该 Issue 中设计与实现中（设计文档 = [PR #166](https://github.com/caty-ai/caty-agent-harness/pull/166)），尚未进入已发布的产品。EV-008 是在该实现落地之前、用来测试 default-on 可行性的预先测量，本节即是其实测画像。EV-008——一项密封、预先注册的基准测试（2026-08）——按模型实测了这种行为。效果的差异取决于运行时「读」的方式：
 
 | 运行时类型 | 实测模型 | 行为 | 判定 |
 |---|---|---|---|
