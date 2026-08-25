@@ -162,6 +162,13 @@ LaunchAgent under the rule below. Cron is safe only for reviewer chains that do 
 need Claude CLI Keychain access. `notify_cmd`, when configured, receives the appended
 notification file path as `$1` rather than message text.
 
+Size `reviewer_timeout_s` to a measured run of your actual reviewer command over a
+real two-week window before scheduling: CLI-wrapper chains can need well over the
+shipped example (a measured claude-CLI-wrapped reviewer took 15+ minutes on a ~110 KB
+window; a direct API command is typically far faster). A timeout is recorded as that
+entry's failure and, with a one-entry chain, becomes a nightly `chain-exhausted`
+notification.
+
 Each parsed bullet is limited to `INTAKE_MAX_BULLET_BYTES` bytes (default `512` after
 control-character stripping); an oversized bullet is dropped whole and counted as
 `dropped_oversize` in the run receipt. Lessons displaced by the STATE cap are appended
