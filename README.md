@@ -35,6 +35,8 @@ a small system, wrapped around the AI you already use.
 
 <sub>¹ Claiming "done" without having read the work — measured from tool-call transcripts, not self-reports: 222 → 2 such claims on the 150K–300K-token jobs (30 runs per arm, machine-scored). Weak spots included: [full numbers & limitations](docs/benchmark.md).</sub>
 
+**Measured — overflow sentinel** (sealed EV-008, 2026-08-25): with the sentinel on, claude-sonnet-5 held 20/20 correctness on overflow jobs while cutting tokens (median sentinel/bare 0.801 · best cell −71%); claude-opus-5 0.923. Search-type runtimes never fire — by design (Codex 0/127 turns). Which models benefit — and which shouldn't switch it on: [per-model profiles](#model-effects) · [full numbers & history](docs/benchmark.md#ev-008).
+
 🔧 [Engineering guide](docs/engineering.md) ｜ 📘 [Reference](docs/reference.md)
 
 </div>
@@ -44,6 +46,7 @@ a small system, wrapped around the AI you already use.
 - [What you need](#environments)
 - [Get started](#get-started)
 - [Why it's safe to try](#safety)
+- [Which models benefit](#model-effects)
 - [Dig deeper](#shelf)
 - [Part of Family OS](#family-os)
 - [License](#license)
@@ -170,6 +173,33 @@ Still hesitant to paste it? The next section explains why nothing gets broken.
 - **You can read everything** — lessons, progress, and evidence all live in plain text files, so you can see what's happening with your own eyes.
 
 That's the short version. The depth is all below.
+
+---
+
+<a id="model-effects"></a>
+
+## Which models benefit
+
+The **overflow sentinel** ([design issue #159](https://github.com/caty-ai/caty-agent-harness/issues/159)) watches the measured per-turn context level and, past a threshold, stops the run and decomposes the job instead of letting the context overflow. EV-008 — a sealed, pre-registered benchmark (2026-08) — measured how that behaves per model. The effect splits by how a runtime reads:
+
+| Runtime type | Measured models | Behaviour | Verdict |
+|---|---|---|---|
+| **Full-read** — context grows monotonically | claude-haiku-4.5 · claude-sonnet-5 · claude-opus-5 | fires mid-task → decomposes → completes; correctness held 20/20 in every fired cell | **This is where the benefit lives.** sonnet median sentinel/bare **0.801** (best cell −71 % tokens) · opus **0.923** · haiku 0.35 (descriptive lane) |
+| **Search-type** — context plateaus below the threshold | gpt-5.6-luna (Codex) · qwen3.8-max | never fires: codex **0/127 turns** · qwen 0/4 cells (max observed 79.7K @ 80K threshold) | **No-fire is by design** — it is the default-on safety condition itself. A fire here would be a false positive and a design send-back |
+| **Fires but uneconomic** — grows, yet bare is cheap | grok-4.6 | fires 4/4, decomposes and completes correctly (20/20) — but bare runs are so cheap that decomposition costs more (median ratio **2.145**) | The mechanism is proven on this runtime; **default-on is not recommended**. Judge by economics vs bare, not by whether it fires |
+
+<sub>Ratios are sentinel/bare token cost (lower = cheaper), median of 4 sealed cells per model, measured 2026-08-25. Read before quoting: ① the codex condition first **FAILed** (M4, n=1, geometric mean 1.337) and passed only on the pre-registered n=3 repeat (0.9944 ≤ 1.05) — the FAIL is history, not erased; ② sonnet's 0.801 met the decision threshold (<1.0) but narrowly missed the stretch goal (<0.8); ③ most per-pair ratios are n=1 — run-to-run variance is real (≈25 % SE on the codex mean). [Full numbers, method and caveats](docs/benchmark.md#ev-008).</sub>
+
+**Blind telemetry paths — do not switch these on unmeasured.** Through the current shim, glm / muse report all-zero per-turn usage, and kimi emits no usage at all. A runtime whose live telemetry cannot be seen must not run the sentinel default-on: there is no water level to watch.
+
+**One water-level manager at a time.** If the host has its own auto-compaction (Hermes, OpenClaw, an agent CLI's built-in compaction…), either the host **or** the sentinel manages the context level — never both. Two managers means either the host compacts first and the sentinel becomes decorative, or both intervene on the same overflow. Pick one: disable host auto-compaction when the sentinel is default-on, or demote the sentinel to record-only when the host leads. The sentinel's event log already records `runtime_compaction` / `compaction_suspected` (false across all EV-008 runs) as the detection basis.
+
+**How to profile a new model** (before any default-on decision):
+
+1. Run **one live job with telemetry on** and confirm every usage field carries real values — a mock pass is not enough; blind paths look healthy until live.
+2. Measure the injected-context curve over turns.
+3. **Plateau** → search-type: verify no-fire holds (a fire is a design send-back). **Monotonic growth** → full-read: run the 3-arm comparison (bare / always-on / sentinel).
+4. Compare sentinel/bare cost before enabling — a firing sentinel earns default-on only if decomposing is cheaper than pushing through (grok is the measured counter-example).
 
 ---
 
