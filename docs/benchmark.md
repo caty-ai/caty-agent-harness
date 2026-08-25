@@ -213,6 +213,7 @@ records: [#159](https://github.com/caty-ai/caty-agent-harness/issues/159).
 | gpt-5.6-luna / Codex (confirmatory) | — | **0/127 turns** (M4 38 + diagnostics 45 + M4′ 44) | n/a (never fired) | tap-overhead geometric mean **0.9944** ≤ 1.05 (M4′, n=3/pair M-tier) |
 | qwen3.8-max (confirmatory no-fire) | 4 | **0/4** (max injected 68.8K–79.7K @ 80K) | n/a (never fired) | no-fire endpoint — ratio not the endpoint |
 | grok-4.6 (descriptive, candidate) | 4 | 4/4 (turns 6/6/6/8) | 20/20 all | **2.145** (1.611 / 1.775 / 2.514 / 4.057) — fires correctly, never pays |
+| gemini-3.7-flash (descriptive, M6 addendum — outside the pre-registered GO conditions) | 4 | 4/4 (turns 31/36/75/82; max injected 82.1K–90.6K @ 80K) | mixed — see the per-cell table below | ratio median not quoted: only 1 pair (M-i2) completed on both arms — cannot support an efficiency claim |
 
 Absolute token charge per cell (sonnet / opus, bare → sentinel; transcribed
 from the `step5-reconcile.py` re-run of 2026-08-25):
@@ -228,6 +229,24 @@ The saving scales with job size: sonnet's L-band cells cut 71 % / 29 % while
 its M-band cells sit at −11 % / +11 % — a bare run that overflows has to
 re-read what fell out of context, so the bigger the job, the more waste the
 sentinel's decomposition avoids.
+
+gemini-3.7-flash per cell (descriptive, firing type — early onset; outside
+the pre-registered GO conditions; transcribed from the M6 addendum reconcile,
+2026-08-25):
+
+| Cell | bare charge (correct) | sentinel charge (correct) | note |
+|---|---|---|---|
+| M-i2 | 24,293,164 (20/20) | 11,000,858 (20/20) | both arms completed |
+| M-i3 | 10,505,090 (19/20) | 11,169,170 (0/20) | sentinel child steps stalled (headless command-permission denial loop — model behaviour, not a rig fault) |
+| L-i2 | 24,978,973 (0/20 — token-budget collapse) | 7,514,166 (0/20) | bare collapsed; sentinel child stalled (same cause as M-i3) |
+| L-i3 | 33,149,893 (0/20 — token-budget collapse) | 19,619,857 (20/20) | **decomposition rescued completion** |
+
+Read honestly: bare gemini collapses in the L band (2/2 cells hit the token
+budget with no answers written). The sentinel fired 4/4 and rescued L-i3
+outright — but 2 of 4 sentinel cells still scored 0 because the decomposed
+child steps kept requesting the shell permission that headless execution
+auto-denies. No token-ratio median is quoted for this model: with only one
+pair completed on both arms, the ratio cannot support an efficiency claim.
 
 The default-on GO decision (2026-08-25) rests on four pre-registered
 conditions: codex fire rate 0 (0/127; rule-of-three 95 % upper bound
