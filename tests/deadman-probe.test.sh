@@ -28,8 +28,8 @@ fail_case() {
 
 new_ws() {
   local ws=$TMP_ROOT/$1
-  mkdir -p "$ws/loop/.deadman"
-  printf '# State\n## Open failures\n## Last session\n' >"$ws/STATE.md"
+  mkdir -p "$ws/loop/.deadman" "$ws/loop/handoffs"
+  printf '# State\n## Open failures\n## Last session        (cap 20 entries — newest first; entry 1 carries the 4 fields inline)\n' >"$ws/STATE.md"
   printf '%s\n' "$ws"
 }
 
@@ -661,7 +661,7 @@ else
 fi
 
 ws=$(new_ws missing-open-failures)
-printf '# State\n## Last session\n' >"$ws/STATE.md"
+printf '# State\n## Last session        (cap 20 entries — newest first; entry 1 carries the 4 fields inline)\n' >"$ws/STATE.md"
 touch -t 202001010000 "$ws/loop/.deadman/tick.marker"
 run_probe "$ws"; rc=$?
 if [ "$rc" -eq 1 ] && [ "$(grep -Fc -- '## Open failures' "$ws/STATE.md")" -eq 1 ] \

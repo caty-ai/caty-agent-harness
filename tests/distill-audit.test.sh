@@ -28,7 +28,7 @@ fail_case() {
 
 make_ws() {
   ws=$TMP_ROOT/ws-$1
-  mkdir -p "$ws/loop/pending" "$ws/skills/_staging"
+  mkdir -p "$ws/loop/pending" "$ws/loop/handoffs" "$ws/skills/_staging"
   {
     printf '%s\n' '## Verified facts'
     printf '%s\n' '## General rules'
@@ -44,7 +44,7 @@ make_ws() {
       printf -- '- 2026-07-05 old lesson %03d (source: distill-audit)\n' "$i"
       i=$((i + 1))
     done
-    printf '%s\n' '## Last session'
+    printf '%s\n' '## Last session        (cap 20 entries — newest first; entry 1 carries the 4 fields inline)'
   } >"$ws/STATE.md"
   mkdir -p "$ws/input"
   printf 'transcript\n' >"$ws/input/session.log"
@@ -436,13 +436,13 @@ fi
 # Claude-code capture surface, behaviorally: run the PreCompact hook with a mock
 # flush command that dumps the prompt it receives on stdin.
 hook_ws=$TMP_ROOT/hook-ws
-mkdir -p "$hook_ws/loop/pending"
+mkdir -p "$hook_ws/loop/pending" "$hook_ws/loop/handoffs"
 {
   printf '%s\n' '## Verified facts'
   printf '%s\n' '## General rules'
   printf '%s\n' '## Open failures'
   printf '%s\n' '## Lessons learned'
-  printf '%s\n' '## Last session'
+  printf '%s\n' '## Last session        (cap 20 entries — newest first; entry 1 carries the 4 fields inline)'
 } >"$hook_ws/STATE.md"
 hook_mock=$TMP_ROOT/flush-mock.sh
 cat >"$hook_mock" <<'SH'

@@ -62,6 +62,7 @@ the missing verification discipline; neither runtime's native machinery is dupli
     pending/          # host-staged, unverified candidates from parallel actors (§3.4)
     artifacts/        # artifact bundles per task (Appendix A), quarantine lives here
     archive/          # retained raw-layer inputs; append-only
+    handoffs/         # session narratives referenced by the Last session index
 ```
 
 The **raw layer** is the append-only population formed by exactly two streams of regular
@@ -102,13 +103,23 @@ STATE.md sections (fixed order, machine-locatable by `## ` headers):
 ## General rules       (cap 80)
 ## Open failures       (cap 100)
 ## Lessons learned     (cap 60)
-## Last session        (cap 20 — restricted to: task id, next action, blockers,
-                        last verified artifact path)
+## Last session        (cap 20 entries — newest first; entry 1 carries task id,
+                        next action, blockers, artifact, and handoff pointer inline)
 ```
 
 Every entry: one fact per bullet, absolute date (YYYY-MM-DD), provenance (source task or
 job id, and verifier id if verified). Entries may carry `invalidated-by:` pointers —
 a later entry can invalidate an earlier one without history rewriting (§3.3).
+
+`## Last session` is a session index, not an ordinary line-capped fact section. A
+new-format boundary is `- YYYY-MM-DD | ` at column 0; the migration parser also accepts
+legacy `- task id:` boundaries. Content before the first boundary is template-owned
+preamble and stays in place. Entry 1 carries the four restart fields plus `handoff:`;
+entries 2..20 are one-line pointers. Entry 21 and later append verbatim to
+`loop/archive/last-session-<ISO-year-week>.md` before leaving STATE.md. Oversize entries
+are never filtered by intake bullet limits. In a mixed new-format and legacy block,
+the host synthesizes one handoff per retained legacy entry; the single shared
+`-migrated.md` handoff remains the pure-legacy path.
 
 ### 3.2 The loop (per task)
 
@@ -137,10 +148,13 @@ VERIFY.log  every verdict appended: UTC timestamp, task id, verifier id (model+v
             verdict, one-line reason.
 DISTILL     on pass: candidate observations appended to loop/pending/ (or STATE.md
             directly if this actor is the single writer, §3.4). Promotion rules: §3.3.
-CHECKPOINT  rewrite "## Last session" (restricted fields only). Non-negotiable; enforced
-            by a session-end hook where the runtime has one (§4). On next CONSULT, if
-            Last session is older than the newest entry in VERIFY.log.md → treat as
-            cold start and do not trust the pointer (R14).
+CHECKPOINT  write `loop/handoffs/<UTC-date>-<task-slug>.md`, insert a new entry 1 with
+            the four restart fields and its handoff pointer, and push every previous
+            entry down verbatim. The model never collapses, summarizes, or deletes an
+            existing entry; the locked host fold does that work. Non-negotiable;
+            enforced by a session-end hook where the runtime has one (§4). On next
+            CONSULT, if entry 1 is older than the newest VERIFY.log.md entry, or its
+            handoff pointer targets a missing file, treat this as a cold start (R14).
 ```
 
 For task-runner-managed tasks, CONSULT also renders a deterministic index of promoted
@@ -217,6 +231,13 @@ degraded no-template fallback does not render this block.
 - `VERIFY.log.md` is append-only verifier history: the harness neither rewrites
   existing verdict entries nor implements retention or pruning. Any future bounded
   lifecycle requires an evidence-based retention policy and a separate loss-safe design.
+- The flush-intake host folds `## Last session` on every intake under this same lock,
+  outside the accepted-candidate gate. It snapshots STATE.md, rejects a concurrent
+  writer before creating handoffs, publishes any synthesized handoffs exclusively,
+  appends evicted entries to the weekly archive, and only then atomically replaces
+  STATE.md. Entry 1 is never collapsed unless a newer entry exists above it. Existing
+  bytes in `loop/archive/` are never rewritten or pruned automatically: Last-session
+  eviction extends the same local append-only retention promise as consumed flush input.
 - OpenClaw retrospective distillation treats an empty result as correct when the inputs
   contain no durable learning. Its model prompt forbids invented observations, requires
   each emitted observation to be worded as `success`, `partial`, `fail`, or `uncertain`,
@@ -239,21 +260,28 @@ semantics.
 
 ### 3.6 STATE.md hygiene
 
-Per-section line caps as in §3.1 (protects "Last session" from crowd-out). On overflow
-of a section: delete resolved/stale entries of that section, oldest first. That is all —
-no archive file, no time-windowed aging in v0.1 (cut per review; revisit in v0.2+ if
-deletion proves lossy). Caps count rendered lines including code blocks.
+The fact sections retain the per-section line caps in §3.1; their existing cap behavior
+is unchanged. `## Last session` instead follows its session-boundary index contract:
+the host keeps the newest 20 entries, synthesizes a handoff before collapsing any
+pointerless or missing-target retained entry, and appends the evicted tail verbatim to
+the weekly Last-session archive before atomically replacing STATE.md. Neither the
+weekly Last-session archive nor the rest of `loop/archive/` is pruned automatically.
 
 ### 3.7 Resume convention (v0.3 note)
 
 An interrupted task resumes from a fresh session by reading three existing sources, in
 order. First: the task's artifact bundle (Appendix A layout), accepting whatever files
 exist so far. Second: the `## Last session` pointer in STATE.md: task id, next action,
-blockers, and last verified artifact path only, per the §3.1 cap. Third, on Cero only:
+blockers, last verified artifact path, and handoff pointer from entry 1, per the §3.1
+index contract. If that pointer target is missing, resume is a cold start. Third, on Cero only:
 the job's `claimed` entry in the agjob ledger. Resume on Cero means re-claim from that
 ledger; staged commands live in the job payload, not in a new sidecar file. This
 convention introduces no new persistence substrate. It is only a reading order over the
 artifact bundle, STATE.md pointer, and runtime-native ledger entry.
+
+Known checkpoint-hook interaction: an intake STATE.md replacement updates its mtime and
+can quiet the checkpoint nag for that session. This is accepted because the fold just
+preserved the handover; revisit if operational evidence shows handoff skips increasing.
 
 ## 4. Adapters (thin by design; each specifies its verifier launch seam)
 
@@ -354,7 +382,8 @@ not part of the spec.
 
 ## 7. Risks & mitigations
 
-1. **STATE.md bloat** → per-section caps + delete-on-overflow (§3.6).
+1. **STATE.md bloat** → fact-section caps plus the capped Last-session index and
+   lossless archive fold (§3.1, §3.6).
 2. **Rubric gaming by the maker** → rubric-invalid authority + required fields (§3.2).
 3. **Bad facts/rules compounding** → n=1 → Lessons only; k≥2 for rules; invalidation
    pointers + deprecated status for rollback (§3.3).

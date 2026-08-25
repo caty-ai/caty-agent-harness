@@ -6,6 +6,10 @@ STATE_FOLD_FAILURES_CAP_DEFAULT=100
 STATE_FOLD_LOCK_DIR=
 STATE_FOLD_LOCK_OWNED=0
 STATE_FOLD_LOCK_STALE_S=${DISTILL_STATE_LOCK_STALE_S:-1800}
+LAST_SESSION_ENTRIES=0
+LAST_SESSION_EVICTED=0
+LAST_SESSION_SYNTHESIZED_HANDOFFS=0
+LAST_SESSION_FOLD_REASON=none
 
 file_mtime_epoch() {
   local path=$1
@@ -402,6 +406,353 @@ atomic_write_file() {
   tmp_file="$destination_dir/.$destination_name.tmp.$$"
   cp "$source_file" "$tmp_file"
   mv -f "$tmp_file" "$destination"
+}
+
+last_session_parse_snapshot() {
+  local snapshot=$1
+  local parse_dir=$2
+
+  : >"$parse_dir/before"
+  : >"$parse_dir/preamble"
+  : >"$parse_dir/after"
+  awk -v parse_dir="$parse_dir" '
+    function is_boundary(value) {
+      return value ~ /^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] \| / \
+        || value ~ /^- task id:/
+    }
+    {
+      if (!saw_heading && index($0, "## Last session") == 1) {
+        saw_heading = 1
+        in_section = 1
+        print > (parse_dir "/before")
+        next
+      }
+      if (!saw_heading) {
+        print > (parse_dir "/before")
+        next
+      }
+      if (in_section && /^## /) {
+        in_section = 0
+      }
+      if (!in_section) {
+        print > (parse_dir "/after")
+        next
+      }
+      if (is_boundary($0)) {
+        entries++
+        if ($0 ~ /^- task id:/) legacy++
+        else current++
+      }
+      if (entries == 0) {
+        print > (parse_dir "/preamble")
+      } else {
+        print > sprintf("%s/entry.%04d", parse_dir, entries)
+      }
+    }
+    END {
+      printf "%d %d %d %d\n", saw_heading + 0, entries + 0, legacy + 0, current + 0
+    }
+  ' "$snapshot" >"$parse_dir/summary"
+}
+
+last_session_first_date() {
+  local entry=$1
+  local fallback=$2
+  local value
+
+  value=$({ grep -Eo '[0-9]{4}-[0-9]{2}-[0-9]{2}' "$entry" || true; } | head -n 1)
+  printf '%s\n' "${value:-$fallback}"
+}
+
+last_session_task_id() {
+  local entry=$1
+  local value
+
+  value=$(awk -F '|' '
+    NR == 1 && $0 ~ /^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] \| / {
+      value = $2
+      sub(/^[[:space:]]*/, "", value)
+      sub(/[[:space:]]*$/, "", value)
+      print value
+      exit
+    }
+  ' "$entry")
+  if [[ -z "$value" ]]; then
+    value=$(sed -n 's/.*task id:[[:space:]]*\([^;]*\).*/\1/p' "$entry" | head -n 1)
+  fi
+  value=$(printf '%s\n' "$value" | awk '{$1 = $1; print}')
+  printf '%s\n' "${value:-unknown}"
+}
+
+last_session_legacy_field() {
+  local entry=$1
+  local label=$2
+  local fallback=$3
+  local value
+
+  value=$(sed -n "s/.*$label:[[:space:]]*\([^;]*\).*/\\1/p" "$entry" | head -n 1)
+  value=$(printf '%s\n' "$value" | awk '{$1 = $1; print}')
+  printf '%s\n' "${value:-$fallback}"
+}
+
+last_session_pointer() {
+  local entry=$1
+
+  sed -n 's/.*handoff:[[:space:]]*\([^ |]*\).*/\1/p' "$entry" | head -n 1
+}
+
+last_session_pointer_is_usable() {
+  local workspace=$1
+  local pointer=$2
+  local basename
+
+  case "$pointer" in
+    loop/handoffs/*.md) ;;
+    *) return 1 ;;
+  esac
+  basename=${pointer#loop/handoffs/}
+  [[ -n "$basename" && "$basename" != */* && "$basename" != *..* \
+    && -f "$workspace/$pointer" && ! -L "$workspace/$pointer" ]]
+}
+
+last_session_create_handoff() {
+  local workspace=$1
+  local source_file=$2
+  local entry_date=$3
+  local handoff_dir="$workspace/loop/handoffs"
+  local suffix=
+  local candidate
+  local target
+  local tmp_file
+  local attempt=1
+
+  mkdir -p "$handoff_dir" || return 1
+  while :; do
+    if (( attempt == 1 )); then
+      suffix=
+    else
+      suffix="-$attempt"
+    fi
+    candidate="$entry_date-migrated$suffix.md"
+    target="$handoff_dir/$candidate"
+    tmp_file="$handoff_dir/.${candidate}.tmp.$$"
+    cp "$source_file" "$tmp_file" || {
+      rm -f "$tmp_file"
+      return 1
+    }
+    # Publishing a fully written temp file with link(2) gives portable,
+    # atomic exclusive-create behavior on bash 3.2-era systems.
+    if ln "$tmp_file" "$target" 2>/dev/null; then
+      rm -f "$tmp_file"
+      LAST_SESSION_CREATED_HANDOFF="$target"
+      LAST_SESSION_CREATED_POINTER="loop/handoffs/$candidate"
+      return 0
+    fi
+    rm -f "$tmp_file"
+    if [[ ! -e "$target" && ! -L "$target" ]]; then
+      return 1
+    fi
+    attempt=$((attempt + 1))
+  done
+}
+
+last_session_atomic_archive_append() {
+  local source_file=$1
+  local archive_file=$2
+  local archive_dir
+  local archive_name
+  local tmp_file
+  local before_bytes=0
+  local source_bytes
+  local expected_bytes
+  local actual_bytes
+
+  archive_dir=$(cd "$(dirname "$archive_file")" && pwd)
+  archive_name=${archive_file##*/}
+  tmp_file="$archive_dir/.$archive_name.tmp.$$"
+  if [[ -f "$archive_file" ]]; then
+    cp "$archive_file" "$tmp_file" || return 1
+    before_bytes=$(wc -c <"$archive_file" | tr -d '[:space:]')
+  else
+    : >"$tmp_file" || return 1
+  fi
+  source_bytes=$(wc -c <"$source_file" | tr -d '[:space:]')
+  cat "$source_file" >>"$tmp_file" || {
+    rm -f "$tmp_file"
+    return 1
+  }
+  expected_bytes=$((before_bytes + source_bytes))
+  actual_bytes=$(wc -c <"$tmp_file" | tr -d '[:space:]')
+  if [[ "$actual_bytes" -ne "$expected_bytes" ]]; then
+    rm -f "$tmp_file"
+    return 1
+  fi
+  mv -f "$tmp_file" "$archive_file"
+}
+
+fold_last_session_index() {
+  local workspace=$1
+  local state_file=$2
+  local work_dir=$3
+  local fold_date=${4:-$(date -u '+%Y-%m-%d')}
+  local mode=${5:-all}
+  local parse_dir="$work_dir/last-session"
+  local snapshot="$work_dir/last-session.snapshot"
+  local rebuilt="$work_dir/last-session.rebuilt"
+  local archive_entries="$work_dir/last-session.archive"
+  local migration_body="$work_dir/last-session.migration"
+  local summary
+  local has_heading
+  local entry_count
+  local legacy_count
+  local current_count
+  local migration=0
+  local kept_count
+  local i
+  local entry_file
+  local pointer
+  local entry_date
+  local task_id
+  local next_action
+  local blockers
+  local artifact
+  local archive_week
+  local archive_file
+  local created_files="$work_dir/last-session.created"
+
+  LAST_SESSION_ENTRIES=0
+  LAST_SESSION_EVICTED=0
+  LAST_SESSION_SYNTHESIZED_HANDOFFS=0
+  LAST_SESSION_FOLD_REASON=none
+  LAST_SESSION_CREATED_HANDOFF=
+  LAST_SESSION_CREATED_POINTER=
+  mkdir -p "$parse_dir" "$workspace/loop/handoffs" || {
+    LAST_SESSION_FOLD_REASON=handoff-dir
+    return 1
+  }
+  : >"$created_files"
+  : >"$archive_entries"
+  : >"$migration_body"
+  cp "$state_file" "$snapshot" || {
+    LAST_SESSION_FOLD_REASON=snapshot
+    return 1
+  }
+  last_session_parse_snapshot "$snapshot" "$parse_dir" || {
+    LAST_SESSION_FOLD_REASON=parse
+    return 1
+  }
+  summary=$(cat "$parse_dir/summary")
+  read -r has_heading entry_count legacy_count current_count <<EOF
+$summary
+EOF
+  if [[ "$has_heading" -ne 1 ]]; then
+    LAST_SESSION_FOLD_REASON=missing-section
+    return 1
+  fi
+  if [[ "$entry_count" -eq 0 ]]; then
+    return 0
+  fi
+  if [[ "$legacy_count" -gt 1 && "$current_count" -eq 0 ]]; then
+    migration=1
+  elif [[ "$mode" == legacy-only ]]; then
+    LAST_SESSION_ENTRIES=$entry_count
+    return 0
+  fi
+
+  if ! cmp -s "$snapshot" "$state_file"; then
+    LAST_SESSION_FOLD_REASON=concurrent-writer
+    return 1
+  fi
+
+  kept_count=$entry_count
+  (( kept_count > 20 )) && kept_count=20
+  LAST_SESSION_ENTRIES=$kept_count
+  if [[ "$migration" -eq 1 ]]; then
+    i=1
+    while (( i <= entry_count )); do
+      cat "$(printf '%s/entry.%04d' "$parse_dir" "$i")" >>"$migration_body"
+      i=$((i + 1))
+    done
+    entry_date=$(last_session_first_date "$parse_dir/entry.0001" "$fold_date")
+    if ! last_session_create_handoff "$workspace" "$migration_body" "$entry_date"; then
+      LAST_SESSION_FOLD_REASON=handoff-write
+      return 1
+    fi
+    printf '%s\n' "$LAST_SESSION_CREATED_HANDOFF" >>"$created_files"
+    pointer=$LAST_SESSION_CREATED_POINTER
+    LAST_SESSION_SYNTHESIZED_HANDOFFS=1
+    cat "$parse_dir/before" "$parse_dir/preamble" >"$rebuilt"
+    task_id=$(last_session_task_id "$parse_dir/entry.0001")
+    next_action=$(last_session_legacy_field "$parse_dir/entry.0001" 'next action' none)
+    blockers=$(last_session_legacy_field "$parse_dir/entry.0001" blockers none)
+    artifact=$(last_session_legacy_field "$parse_dir/entry.0001" 'last verified artifact path' none)
+    printf -- '- %s | %s | next: %s | blockers: %s | artifact: %s | handoff: %s\n' \
+      "$entry_date" "$task_id" "$next_action" "$blockers" "$artifact" "$pointer" >>"$rebuilt"
+    i=2
+    while (( i <= kept_count )); do
+      entry_file=$(printf '%s/entry.%04d' "$parse_dir" "$i")
+      entry_date=$(last_session_first_date "$entry_file" "$fold_date")
+      task_id=$(last_session_task_id "$entry_file")
+      printf -- '- %s | %s | handoff: %s\n' "$entry_date" "$task_id" "$pointer" >>"$rebuilt"
+      i=$((i + 1))
+    done
+    cat "$parse_dir/after" >>"$rebuilt"
+    cp "$migration_body" "$archive_entries"
+    LAST_SESSION_EVICTED=$entry_count
+  else
+    cat "$parse_dir/before" "$parse_dir/preamble" "$parse_dir/entry.0001" >"$rebuilt"
+    i=2
+    while (( i <= kept_count )); do
+      entry_file=$(printf '%s/entry.%04d' "$parse_dir" "$i")
+      pointer=$(last_session_pointer "$entry_file")
+      if ! last_session_pointer_is_usable "$workspace" "$pointer"; then
+        entry_date=$(last_session_first_date "$entry_file" "$fold_date")
+        if ! last_session_create_handoff "$workspace" "$entry_file" "$entry_date"; then
+          while IFS= read -r LAST_SESSION_CREATED_HANDOFF; do
+            [[ -n "$LAST_SESSION_CREATED_HANDOFF" ]] && rm -f "$LAST_SESSION_CREATED_HANDOFF"
+          done <"$created_files"
+          LAST_SESSION_FOLD_REASON=handoff-write
+          return 1
+        fi
+        printf '%s\n' "$LAST_SESSION_CREATED_HANDOFF" >>"$created_files"
+        pointer=$LAST_SESSION_CREATED_POINTER
+        LAST_SESSION_SYNTHESIZED_HANDOFFS=$((LAST_SESSION_SYNTHESIZED_HANDOFFS + 1))
+      fi
+      entry_date=$(last_session_first_date "$entry_file" "$fold_date")
+      task_id=$(last_session_task_id "$entry_file")
+      printf -- '- %s | %s | handoff: %s\n' "$entry_date" "$task_id" "$pointer" >>"$rebuilt"
+      i=$((i + 1))
+    done
+    cat "$parse_dir/after" >>"$rebuilt"
+    if (( entry_count > 20 )); then
+      i=21
+      while (( i <= entry_count )); do
+        cat "$(printf '%s/entry.%04d' "$parse_dir" "$i")" >>"$archive_entries"
+        i=$((i + 1))
+      done
+      LAST_SESSION_EVICTED=$((entry_count - 20))
+    fi
+  fi
+
+  if [[ -s "$archive_entries" ]]; then
+    archive_week=$(date -u '+%G-W%V')
+    archive_file="$workspace/loop/archive/last-session-$archive_week.md"
+    if ! last_session_atomic_archive_append "$archive_entries" "$archive_file"; then
+      while IFS= read -r LAST_SESSION_CREATED_HANDOFF; do
+        [[ -n "$LAST_SESSION_CREATED_HANDOFF" ]] && rm -f "$LAST_SESSION_CREATED_HANDOFF"
+      done <"$created_files"
+      LAST_SESSION_FOLD_REASON=archive-append
+      return 1
+    fi
+  fi
+  if ! atomic_write_file "$rebuilt" "$state_file"; then
+    while IFS= read -r LAST_SESSION_CREATED_HANDOFF; do
+      [[ -n "$LAST_SESSION_CREATED_HANDOFF" ]] && rm -f "$LAST_SESSION_CREATED_HANDOFF"
+    done <"$created_files"
+    LAST_SESSION_FOLD_REASON=state-rename
+    return 1
+  fi
+  return 0
 }
 
 take_state_lock() {

@@ -80,4 +80,5 @@ create_file_from_template "$template_dir/RUBRIC.tmpl.md" "$workspace/loop/RUBRIC
 create_dir "$workspace/loop/pending"
 create_dir "$workspace/loop/artifacts"
 create_dir "$workspace/loop/archive"
+create_dir "$workspace/loop/handoffs"
 create_file_with_content "$workspace/loop/VERIFY.log.md" "# VERIFY log — append-only verifier verdict history"

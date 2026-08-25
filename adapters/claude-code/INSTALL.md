@@ -38,8 +38,9 @@ instruction-driven and therefore softer than the shell guards.
 
 What it does: when the assistant ends a turn in a cwd for a Caty Agent Harness
 workspace that contains `STATE.md` and workspace files changed after `STATE.md`
-was last written, it blocks ONCE per session (exit 2) with a reminder to update
-`## Last session`. Silent in every other case: no STATE.md, nothing changed,
+was last written, it blocks ONCE per session (exit 2) with a reminder to write a
+`loop/handoffs/` handoff, insert the new entry 1, and push existing `## Last session`
+entries down verbatim. Silent in every other case: no STATE.md, nothing changed,
 already nagged this session, stop-hook-forced continuation, or any environment
 problem (a guard hook must never crash the hook chain). Its reminder also
 demands a delta-only, unverified flush append when there are genuinely new
@@ -152,6 +153,13 @@ control-character stripping); an oversized bullet is dropped whole and counted a
 `dropped_oversize` in the run receipt. Lessons displaced by the STATE cap are appended
 to `loop/archive/intake-evictions-<UTC-date>.md`, while `evicted_by_cap` and the archive
 path remain visible in the receipt.
+
+On every intake under the shared STATE lock, including scans with zero flush files,
+the host folds `## Last session` into a newest-first index capped at 20 entries. Entry
+1 keeps the four restart fields inline; older retained entries become handoff pointers;
+evicted tails append verbatim to `loop/archive/last-session-<ISO-year-week>.md`. The
+host alone collapses entries. A missing pointer target is synthesized before collapse,
+and any fold failure leaves STATE.md untouched and is recorded in the intake receipt.
 
 The consumer itself touches `loop/.deadman/distill.marker` only after acquiring the
 shared STATE lock and completing without an infrastructure error. The checked-in
