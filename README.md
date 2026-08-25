@@ -25,19 +25,20 @@ a small system, wrapped around the AI you already use.
 
 **A tool that grows on its own — and learns to run your tasks all the way to done.**
 
-**Measured** — sealed, pre-registered benchmark on context-overflow workloads (2026-08):
+**Measured** — two sealed, pre-registered experiments on context-overflow jobs (2026-08):
 
-| Model | Verified completion (bare → harness) | Completion hallucination¹ | Time & tokens |
+| Model | Completion hallucination¹ | Verified outcome | Tokens vs bare |
 |---|---|---|---|
-| Claude Haiku 4.5 | 13% → **43%** (+30 pt, p=0.0079) | 98% → **8%** | **59% fewer tokens · 40–46% less time** |
-| GPT-5.6 Luna (Codex) | planned | — | — |
-| Local models (Ollama) | planned | — | — |
+| claude-haiku-4.5 ² | 98% → 8% | 13% → 43% (p=0.0079) | −59% |
+| claude-sonnet-5 ³ | — | no loss | −20% (cells −71%…+11%) |
+| claude-opus-5 ³ ⁴ | — | no loss | −8% |
 
-<sub>This table is the bare-vs-harness **completion-rate** lane (lane additions tracked in [#129](https://github.com/caty-ai/caty-agent-harness/issues/129)). Codex, qwen, grok and opus are already measured in the [overflow-sentinel section](#model-effects) below — a separate experiment (EV-008) answering a different question, so "planned" here and measured numbers there are not a contradiction.</sub>
+<sub>¹ Claiming "done" without having read the work — machine-scored from tool-call transcripts, not self-reports (222 → 2 claims, 30 runs/arm): [full numbers & limitations](docs/benchmark.md)</sub>
+<br><sub>² EV-006 — bare vs **shipped harness**; verified completion rate over 30 runs/arm (M/L sizes)</sub>
+<br><sub>³ EV-008 — bare vs **overflow sentinel**, a feature still in design ([#159](https://github.com/caty-ai/caty-agent-harness/issues/159)) and **not yet shipped**; rig measurement ahead of implementation. `no loss` = both arms scored 20/20 (hidden key) in every cell; `Tokens vs bare` = 1 − median(sentinel/bare) over 4 sealed cells: sonnet **0.801** → −20%, opus **0.923** → −8%. `—` = not measured in this lane</sub>
+<br><sub>⁴ descriptive, post-GO</sub>
 
-<sub>¹ Claiming "done" without having read the work — measured from tool-call transcripts, not self-reports: 222 → 2 such claims on the 150K–300K-token jobs (30 runs per arm, machine-scored). Weak spots included: [full numbers & limitations](docs/benchmark.md).</sub>
-
-**Measured — overflow sentinel** (sealed EV-008, 2026-08-25): with the sentinel on, claude-sonnet-5 held 20/20 correctness on overflow jobs while cutting tokens (median sentinel/bare 0.801 · best cell −71%); claude-opus-5 0.923. Search-type runtimes fired in zero measured runs — by design (Codex 0/127 turns). The sentinel itself is design-in-progress ([#159](https://github.com/caty-ai/caty-agent-harness/issues/159)) and not yet shipped — these are rig measurements taken ahead of implementation. Which models benefit — and which shouldn't switch it on: [per-model profiles](#model-effects) · [full numbers & history](docs/benchmark.md#ev-008).
+<sub>Codex, qwen, grok, gemini and the blind-telemetry runtimes (glm/muse/kimi) are measured too — including cells where the sentinel cost more than bare: [per-model profiles](#model-effects) · [full numbers & history](docs/benchmark.md#ev-008) · planned lanes incl. local models (Ollama): [#129](https://github.com/caty-ai/caty-agent-harness/issues/129)</sub>
 
 🔧 [Engineering guide](docs/engineering.md) ｜ 📘 [Reference](docs/reference.md)
 

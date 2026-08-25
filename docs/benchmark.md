@@ -117,9 +117,11 @@ faster while completing 3× as often**.
   tests extraction/transcription only.
 - **S size shows no advantage** (67% vs 60%): if the job fits comfortably, the
   bare model is fine. The product's value starts where context overflows.
-- **Single model.** Everything above is Haiku 4.5. Other model lanes are
-  planned ([#129](https://github.com/caty-ai/caty-agent-harness/issues/129))
-  and will be added to the README table as they are measured.
+- **Single model.** Everything above is Haiku 4.5. Further completion-rate
+  lanes are tracked in
+  [#129](https://github.com/caty-ai/caty-agent-harness/issues/129); measured
+  cross-model EV-008 profiles live in the [matrix below](#ev-008) and the
+  README's per-model section.
 - **43% is not 100%.** The harness failed 17/30 M/L runs — honestly (verified
   stop or gate-rejected delivery), but it failed. The claim is *verified
   completion and honest reporting*, not perfection.
@@ -170,6 +172,10 @@ Verified completion by size
   S: bare 10/15 (67%), harness 9/15 (60%)
   M: bare 4/15 (27%), harness 8/15 (53%)
   L: bare 0/15 (0%), harness 5/15 (33%)
+EV-006 charge tokens
+  M: bare 122,050,790 → harness 49,631,455 (−59.3%)
+  L: bare 241,179,467 → harness 98,312,729 (−59.2%)
+  M/L pooled: bare 363,230,257 → harness 147,944,184 (−59.3%)
 ```
 
 That vendored aggregate backs the headline verified-completion and completion-
@@ -215,6 +221,10 @@ records: [#159](https://github.com/caty-ai/caty-agent-harness/issues/159).
 | grok-4.6 (descriptive, candidate) | 4 | 4/4 (turns 6/6/6/8) | 20/20 all | **2.145** (1.611 / 1.775 / 2.514 / 4.057) — fires correctly, never pays |
 | gemini-3.7-flash (descriptive, M6 addendum — outside the pre-registered GO conditions) | 4 | 4/4 (turns 31/36/75/82; max injected 82.1K–90.6K @ 80K) | mixed — see the per-cell table below | ratio median not quoted: only 1 pair (M-i2) completed on both arms — cannot support an efficiency claim |
 
+The hero's `Tokens vs bare` converts the ratio to a reduction as
+`1 − median(sentinel/bare)`, with the minus sign showing lower token charge:
+sonnet **0.801** → −20%; opus **0.923** → −8% (rounded to whole percent).
+
 Absolute token charge per cell (sonnet / opus, bare → sentinel; transcribed
 from the `step5-reconcile.py` re-run of 2026-08-25):
 
@@ -224,6 +234,10 @@ from the `step5-reconcile.py` re-run of 2026-08-25):
 | M-i3 | 3,475,997 → 3,101,258 (−11 %) | 4,302,965 → 3,927,008 (−9 %) |
 | L-i2 | 16,597,756 → 4,746,361 (−71 %) | 11,288,180 → 8,192,586 (−27 %) |
 | L-i3 | 7,581,249 → 5,385,942 (−29 %) | 6,992,297 → 6,574,909 (−6 %) |
+
+Bare-arm correctness in that 2026-08-25 reconcile was 20/20 for both sonnet
+and opus in every cell (M-i2, M-i3, L-i2, L-i3); their sentinel arms likewise
+scored 20/20 in all four cells.
 
 The saving scales with job size: sonnet's L-band cells cut 71 % / 29 % while
 its M-band cells sit at −11 % / +11 % — a bare run that overflows has to

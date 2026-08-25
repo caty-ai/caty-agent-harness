@@ -27,6 +27,10 @@ def ratio(part, whole):
     return f"{part}/{whole} ({percentage(part, whole)}%)"
 
 
+def percent_change(part, whole):
+    return f"{100 * (part / whole - 1):+.1f}%".replace("-", "−")
+
+
 def main():
     try:
         aggregate_bytes = AGGREGATE_PATH.read_bytes()
@@ -86,6 +90,21 @@ def main():
             resolved = sum(cell["resolved"] for cell in arm_cells)
             results.append(f"{arm} {ratio(resolved, len(arm_cells))}")
         print(f"  {tier}: {', '.join(results)}")
+
+    print("EV-006 charge tokens")
+    for label, tiers in (("M", ("M",)), ("L", ("L",)), ("M/L pooled", ("M", "L"))):
+        totals = {
+            arm: sum(
+                cell["charge_tokens"]
+                for cell in cells
+                if cell["arm"] == arm and cell["tier"] in tiers
+            )
+            for arm in arms
+        }
+        print(
+            f"  {label}: bare {totals['bare']:,} → harness {totals['harness']:,} "
+            f"({percent_change(totals['harness'], totals['bare'])})"
+        )
 
     return 0
 
