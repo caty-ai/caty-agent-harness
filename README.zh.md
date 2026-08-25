@@ -35,6 +35,8 @@ Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决�
 
 <sub>¹ 还没读完工作内容就宣称「完成」——依据工具调用记录测量，而非自我报告：在 15 万至 30 万 token 的任务上（每组配对运行 30 次，全部由机器评分），此类宣称从 222 次降至 2 次。包含薄弱环节：[完整数据与局限（英文）](docs/benchmark.md)。</sub>
 
+**实测 — overflow sentinel**（密封 EV-008，2026-08-25）：sentinel 开启时，claude-sonnet-5 在上下文溢出类任务上保持 20/20 正确率，同时削减 token（sentinel/bare 中位数 0.801・最佳单元 −71%）；claude-opus-5 为 0.923。检索型运行时从不触发——这是设计使然（Codex 0/127 turns）。哪些模型能受益——哪些不该开启：[各模型档案](#model-effects) ・ [完整数字与历史（英文）](docs/benchmark.md#ev-008)。
+
 🔧 [工程指南（英文）](docs/engineering.md) ｜ 📘 [详细规范（英文）](docs/reference.md)
 
 </div>
@@ -44,6 +46,7 @@ Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决�
 - [使用前提](#environments)
 - [开始使用](#get-started)
 - [为什么可以放心一试](#safety)
+- [哪些模型能受益](#model-effects)
 - [更深入了解](#shelf)
 - [Family OS 中的一员](#family-os)
 - [许可证](#license)
@@ -169,6 +172,33 @@ flowchart LR
 - **所有内容都能亲眼读到** — 经验、进度、凭证全部存在纯文本文件里，发生了什么你可以亲眼确认。
 
 到这里是简版。深度全在下面。
+
+---
+
+<a id="model-effects"></a>
+
+## 哪些模型能受益
+
+**overflow sentinel**（[设计 Issue #159](https://github.com/caty-ai/caty-agent-harness/issues/159)）监视实测的每轮上下文水位，超过阈值时就停止运行并分解任务，而不是任由上下文溢出。EV-008——一项密封、预先注册的基准测试（2026-08）——按模型实测了这种行为。效果的差异取决于运行时「读」的方式：
+
+| 运行时类型 | 实测模型 | 行为 | 判定 |
+|---|---|---|---|
+| **全量读取型** — 上下文单调增长 | claude-haiku-4.5 · claude-sonnet-5 · claude-opus-5 | 任务进行到一半时触发 → 分解 → 完成；在每个触发的单元中正确率均保持 20/20 | **这里是收益所在。** sonnet 的 sentinel/bare 中位数为 **0.801**（最佳单元 token 减少 −71%）・opus 为 **0.923**・haiku 为 0.35（描述性 lane） |
+| **检索型** — 上下文在阈值以下趋于平台 | gpt-5.6-luna（Codex）· qwen3.8-max | 从不触发：codex **0/127 turns**・qwen 0/4 单元（实测最大值 79.7K，阈值为 80K） | **不触发正是设计所在** — 这本身就是 default-on 的安全条件。若在此触发，就是误报、需要打回设计 |
+| **触发但不划算型** — 上下文增长，但 bare 很便宜 | grok-4.6 | 4/4 触发，分解并正确完成（20/20）——但 bare 运行太便宜，分解反而更贵（比值中位数 **2.145**） | 机制在这个运行时上已被证实有效；**但不建议 default-on**。判断标准是相对 bare 的经济性，而不是是否触发 |
+
+<sub>比值为 sentinel/bare 的 token 成本（数值越低越省）・每个模型 4 个密封单元的中位数・实测于 2026-08-25。引用前请先读：① codex 条件最初 **FAIL**（M4，n=1，几何平均 1.337），只有在预先注册的 n=3 重复测试中才通过（0.9944 ≤ 1.05）——FAIL 是历史，不会被抹去；② sonnet 的 0.801 达到了判定阈值（<1.0），但以微弱差距未达到努力目标（<0.8）；③ 大多数逐对比值都是 n=1——run 与 run 之间的方差是真实存在的（codex 平均值的 SE ≈25%）。[完整数字、方法与注意事项（英文）](docs/benchmark.md#ev-008)。</sub>
+
+**盲态遥测路径——未经实测前不要开启。** 通过目前的 shim，glm / muse 报告的每轮 usage 全部为零，kimi 则完全不输出 usage。看不到实时遥测的运行时，绝不能把 sentinel 设为 default-on：因为根本没有水位可看。
+
+**同一时间只能有一个水位管理者。** 如果宿主自身已有自动压缩（Hermes、OpenClaw、某个 agent CLI 内置的压缩……），那么管理上下文水位的只能是宿主**或** sentinel 二选一——绝不能两者都管。两个管理者同时存在，要么宿主先压缩、sentinel 变得形同虚设，要么两者同时介入同一次溢出。请二选一：当 sentinel 为 default-on 时关闭宿主的自动压缩，或者当宿主主导时把 sentinel 降级为仅记录。sentinel 的事件日志已经把 `runtime_compaction` / `compaction_suspected`（在所有 EV-008 运行中均为 false）作为判定依据记录下来。
+
+**如何为新模型做 profile**（在做出任何 default-on 决定之前）：
+
+1. 运行**一个开启遥测的 live 任务**，确认每个 usage 字段都带有真实数值——mock 测试通过是不够的；盲态路径在真正 live 之前看起来都很正常。
+2. 实测跨 turn 的注入上下文曲线。
+3. **趋于平台** → 检索型：验证不触发的状态能否保持（触发就是需要打回设计）。**单调增长** → 全量读取型：运行三臂对比（bare / always-on / sentinel）。
+4. 在启用之前比较 sentinel/bare 的成本——只有当分解比硬扛更便宜时，会触发的 sentinel 才值得 default-on（grok 就是实测到的反例）。
 
 ---
 
