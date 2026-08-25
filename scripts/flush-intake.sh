@@ -309,7 +309,7 @@ if fold_declared_state_caps "$workspace" "$state_file" "$work_dir" \
   caps_receipt=" caps_vf_evicted=$STATE_CAPS_VERIFIED_EVICTED caps_gr_evicted=$STATE_CAPS_RULES_EVICTED caps_fold=ok caps_fold_reason=none"
 else
   case "$STATE_CAPS_FOLD_REASON" in
-    missing-sections|missing-verified-facts|missing-general-rules)
+    duplicate-heading|missing-sections|missing-verified-facts|missing-general-rules)
       caps_receipt=" caps_vf_evicted=0 caps_gr_evicted=0 caps_fold=skipped caps_fold_reason=$STATE_CAPS_FOLD_REASON"
       ;;
     *)
