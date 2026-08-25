@@ -281,6 +281,7 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
   現行化・LITE に位置づけバナー（各席の out= レビュー記録として別途保全）
 - v0.5.2（2026-08-25・Alpha・delta レビュー〔codex/grok/glm〕の flip 条件反映）: §0 qwen ターン数を
   一次ログ実数 **669**（102+116+205+246・2系統の独立再計数一致・「約770」は出所不明で棄却）へ再訂正 /
-  prereg の残存リセット日付と本垢運用記述を redact（redaction notice を真に）/ README の
+  prereg の残存リセット日付と本垢運用記述を redact し、notice を「redact したもの/意図的に保持した
+  方法論」の列挙形に精密化 / README の
   「3席 cumulative GO」を裁定記録ベースと明示（r3 確認ログ非保全の開示と整合）/ §4 の「既定なら 80k」と
   §5 見出しを TBD 化と整合 / §10 r1 訂正注記の版表記を v0.5 までに修正
