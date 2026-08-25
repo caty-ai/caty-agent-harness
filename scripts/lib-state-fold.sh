@@ -606,19 +606,28 @@ fold_declared_state_caps() {
   local verified_evictions="$work_dir/state-caps.verified"
   local rules_evictions="$work_dir/state-caps.rules"
   local archive_payload="$work_dir/state-caps.archive"
+  local archived_payload="$work_dir/state-caps.archived"
   local summary_file="$work_dir/state-caps.summary"
   local summary
   local has_verified
   local has_rules
   local archive_file
   local timestamp
+  local payload_lines_before
+  local payload_lines_after
+  local archive_payload_lines
+  local verified_archived_lines=0
+  local rules_archived_lines=0
 
   STATE_CAPS_VERIFIED_EVICTED=0
   STATE_CAPS_RULES_EVICTED=0
   STATE_CAPS_FOLD_REASON=none
   : >"$verified_evictions"
   : >"$rules_evictions"
-  : >"$archive_payload"
+  : >"$archive_payload" || {
+    STATE_CAPS_FOLD_REASON=archive-payload
+    return 1
+  }
   cp "$state_file" "$snapshot" || {
     STATE_CAPS_FOLD_REASON=snapshot
     return 1
@@ -639,7 +648,7 @@ fold_declared_state_caps() {
       start = 1
       if (section_count > cap) start = section_count - cap + 1
       for (i = 1; i < start; i++) {
-        print section_lines[i] > eviction_file
+        print section_lines[i] >> eviction_file
         if (section == "verified") verified_evicted++
         else rules_evicted++
       }
@@ -655,13 +664,13 @@ fold_declared_state_caps() {
         print
         if (index($0, "## Verified facts") == 1) {
           section = "verified"
-          has_verified = 1
+          has_verified++
           preamble = 1
           next
         }
         if (index($0, "## General rules") == 1) {
           section = "rules"
-          has_rules = 1
+          has_rules++
           preamble = 1
           next
         }
@@ -693,6 +702,10 @@ fold_declared_state_caps() {
     STATE_CAPS_RULES_EVICTED <<EOF
 $summary
 EOF
+  if [[ "$has_verified" -gt 1 || "$has_rules" -gt 1 ]]; then
+    STATE_CAPS_FOLD_REASON=duplicate-heading
+    return 1
+  fi
   if [[ "$has_verified" -ne 1 && "$has_rules" -ne 1 ]]; then
     STATE_CAPS_FOLD_REASON=missing-sections
     return 1
@@ -714,24 +727,71 @@ EOF
     return 1
   fi
 
+  archive_file="$workspace/loop/archive/intake-evictions-$fold_date.md"
+  if [[ -e "$archive_file" || -L "$archive_file" ]]; then
+    if [[ ! -f "$archive_file" || -L "$archive_file" ]]; then
+      STATE_CAPS_FOLD_REASON=archive-target
+      return 1
+    fi
+  fi
   timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
   if [[ "$STATE_CAPS_VERIFIED_EVICTED" -gt 0 ]]; then
-    printf '<!-- caps eviction section=verified-facts adapter=%s ts=%s -->\n' \
-      "$adapter" "$timestamp" >>"$archive_payload"
-    cat "$verified_evictions" >>"$archive_payload"
+    payload_lines_before=$(wc -l <"$archive_payload" | tr -d '[:space:]') || {
+      STATE_CAPS_FOLD_REASON=archive-payload
+      return 1
+    }
+    if ! printf '<!-- caps eviction section=verified-facts adapter=%s ts=%s -->\n' \
+      "$adapter" "$timestamp" >>"$archive_payload"; then
+      STATE_CAPS_FOLD_REASON=archive-payload
+      return 1
+    fi
+    if ! cat "$verified_evictions" >>"$archive_payload"; then
+      STATE_CAPS_FOLD_REASON=archive-payload
+      return 1
+    fi
+    payload_lines_after=$(wc -l <"$archive_payload" | tr -d '[:space:]') || {
+      STATE_CAPS_FOLD_REASON=archive-payload
+      return 1
+    }
+    verified_archived_lines=$((payload_lines_after - payload_lines_before - 1))
   fi
   if [[ "$STATE_CAPS_RULES_EVICTED" -gt 0 ]]; then
-    printf '<!-- caps eviction section=general-rules adapter=%s ts=%s -->\n' \
-      "$adapter" "$timestamp" >>"$archive_payload"
-    cat "$rules_evictions" >>"$archive_payload"
+    payload_lines_before=$(wc -l <"$archive_payload" | tr -d '[:space:]') || {
+      STATE_CAPS_FOLD_REASON=archive-payload
+      return 1
+    }
+    if ! printf '<!-- caps eviction section=general-rules adapter=%s ts=%s -->\n' \
+      "$adapter" "$timestamp" >>"$archive_payload"; then
+      STATE_CAPS_FOLD_REASON=archive-payload
+      return 1
+    fi
+    if ! cat "$rules_evictions" >>"$archive_payload"; then
+      STATE_CAPS_FOLD_REASON=archive-payload
+      return 1
+    fi
+    payload_lines_after=$(wc -l <"$archive_payload" | tr -d '[:space:]') || {
+      STATE_CAPS_FOLD_REASON=archive-payload
+      return 1
+    }
+    rules_archived_lines=$((payload_lines_after - payload_lines_before - 1))
   fi
-  archive_file="$workspace/loop/archive/intake-evictions-$fold_date.md"
   if ! state_fold_atomic_archive_append "$archive_payload" "$archive_file"; then
     STATE_CAPS_FOLD_REASON=archive-append
     return 1
   fi
   if ! cmp -s "$snapshot" "$state_file"; then
     STATE_CAPS_FOLD_REASON=concurrent-writer
+    return 1
+  fi
+  archive_payload_lines=$(wc -l <"$archive_payload" | tr -d '[:space:]') || {
+    STATE_CAPS_FOLD_REASON=archive-integrity
+    return 1
+  }
+  if ! tail -n "$archive_payload_lines" "$archive_file" >"$archived_payload" \
+    || ! cmp -s "$archive_payload" "$archived_payload" \
+    || [[ "$verified_archived_lines" -ne "$STATE_CAPS_VERIFIED_EVICTED" ]] \
+    || [[ "$rules_archived_lines" -ne "$STATE_CAPS_RULES_EVICTED" ]]; then
+    STATE_CAPS_FOLD_REASON=archive-integrity
     return 1
   fi
   if ! atomic_write_file "$rebuilt" "$state_file"; then
