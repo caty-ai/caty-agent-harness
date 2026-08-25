@@ -216,6 +216,57 @@ Contract for claude-code spawn adapters:
   disable a hook globally to make the loop pass — the bypass must be scoped to
   the headless session.
 
+## Overflow sentinel step adapter
+
+`adapters/claude-code/spawn_step.sh` is an optional `TR_SPAWN_STEP` adapter for
+Claude-family, full-context-reading sessions. Do not enable it for search-style
+or Grok-class sessions: the v1 calibration and tap contract do not cover those
+behaviors.
+
+Start in shadow mode:
+
+```sh
+export TR_SPAWN_STEP=/path/to/caty-agent-harness/adapters/claude-code/spawn_step.sh
+export TR_STEP_TIMEOUT_S=600
+export OVF_SENTINEL=shadow
+export OVF_COMPACTION_OWNER=sentinel
+export CLAUDE_MODEL=claude-sonnet-4-5
+scripts/task-runner.sh "$WS"
+```
+
+`TR_STEP_TIMEOUT_S` must be exported; a shell-local task-runner setting is not
+visible to this child adapter. Set `CLAUDE_MODEL` to the actual model identifier
+so the context-window catalog and TTFB floor can select a known entry. If it is
+unset, the adapter records `claude-unknown`, which deliberately uses the default
+context window and conservative 240-second TTFB floor.
+
+After inspecting `sentinel-events.jsonl`, select `OVF_SENTINEL=active` to allow
+the adapter to prepare a five-point delta nudge. The nudge is shown at the next
+task-runner step boundary, not injected into the running `claude -p` process.
+The firing attempt therefore records `suppressed`; if the task terminates on
+that attempt, no runtime remains to receive the nudge. A later attempt that
+shows it records `shown` and deletes the pending file.
+
+The adapter runs the CLI in the workspace cwd, passes the existing environment,
+and sends `prompt.md` on stdin. `OVF_STEP_CMD` defaults to
+`claude -p --output-format stream-json --verbose`; command strings are
+whitespace-split argv, never shell-expanded. The model session—not this
+adapter—owns `step-result.json`.
+
+Known pause limitation: startup pause is handled before the model starts, but a
+workspace paused while this adapter is already running is currently classified
+by the task-runner driver against the Hermes pause label. That mid-run pause can
+therefore be misclassified. Driver-side pause-label parameterization is a
+follow-up; this adapter does not change `task-runner.sh` in v1.
+
+The passive monitor writes `stream.jsonl`, `overflow-stream.eof`,
+`sentinel-events.jsonl`, `attempt.json`, and, after an active fire,
+`overflow-nudge.pending` in the attempt directory. Task-scoped hysteresis state
+is `overflow-sentinel-state.json` in the task artifact directory. Event logs are
+append-only: consumers must never edit, replace, or fold existing event lines in
+place. This standalone log exists because the task-runner ledger confluence
+point is not implemented in v1.
+
 ## Scope note
 
 The hook keys on the session cwd. Sessions started inside a project dir (the normal

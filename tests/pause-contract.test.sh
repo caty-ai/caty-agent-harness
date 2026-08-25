@@ -282,6 +282,15 @@ assert_paused_automation_capture "paused Hermes spawn" "$ws" hermes-spawn-step
 assert_eq "paused Hermes spawn leaves exact workspace snapshot" "$spawn_before" "$(snapshot_workspace "$ws")"
 cover adapters/hermes/spawn_step.sh exit-0-status
 
+overflow_spawn_before=$(snapshot_workspace "$ws")
+capture_run overflow-spawn-paused env MODEL_SENTINEL="$model_sentinel" OVF_STEP_CMD="$fake_model" \
+  "$ROOT/adapters/claude-code/spawn_step.sh" "$TMP/missing-task-is-allowed-while-paused.md" "$ws" \
+  "$TMP/missing-attempt-is-allowed-while-paused" 1
+assert_paused_automation_capture "paused Claude Code overflow spawn" "$ws" overflow-spawn-step
+assert_eq "paused Claude Code overflow spawn leaves exact workspace snapshot" \
+  "$overflow_spawn_before" "$(snapshot_workspace "$ws")"
+cover adapters/claude-code/spawn_step.sh exit-0-status
+
 bundle_dir="$ws/loop/artifacts/pause-verify"
 mkdir -p "$bundle_dir"
 verify_before=$(snapshot_workspace "$ws")

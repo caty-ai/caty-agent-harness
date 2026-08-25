@@ -1,0 +1,4 @@
+{"type":"assistant","message":{"id":"slope-1","model":"claude-sonnet-4-5","usage":{"input_tokens":1000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}
+{"type":"assistant","message":{"id":"slope-2","model":"claude-sonnet-4-5","usage":{"input_tokens":1000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}
+{"type":"assistant","message":{"id":"slope-3","model":"claude-sonnet-4-5","usage":{"input_tokens":1000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}
+{"type":"assistant","message":{"id":"slope-4","model":"claude-sonnet-4-5","usage":{"input_tokens":150000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}

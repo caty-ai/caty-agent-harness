@@ -1,0 +1,3 @@
+{"type":"assistant","message":{"id":"before-runtime-compact","model":"claude-sonnet-4-5","usage":{"input_tokens":90000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}
+{"type":"system","subtype":"compact_boundary"}
+{"type":"assistant","message":{"id":"after-runtime-compact","model":"claude-sonnet-4-5","usage":{"input_tokens":50000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}
