@@ -420,6 +420,111 @@ else
   fail_case '[R2-2] canonicalized mid-line, whitespace-only, and cross-line quotes remain rejected' "rc=$canonical_rejects_rc receipt=$(tail -n 1 "$ws_canonical_rejects/loop/promotions/runs.log")"
 fi
 
+BRACKET_TAGS_VALID=$TMP_ROOT/bracket-tags-valid-reviewer
+write_reviewer "$BRACKET_TAGS_VALID" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: bracket tag content prefix
+CLASS: rule
+MEMBERS:
+- flush-2026-07-19.md:stdin 二重リダイレクトの罠: `codex exec - < brief.md
+WEEKS: 2026-W29
+EVIDENCE: Content-anchored quotes should validate after leading date and tag markers.
+PROMOTE: not-yet
+THEME: quote may include matching tag
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:[session-806] content with a shared leading tag still validates
+WEEKS: 2026-W30
+EVIDENCE: Shared comparison canonicalization must allow tags on both sides too.
+PROMOTE: not-yet
+THEME: two leading tags before content
+CLASS: rule
+MEMBERS:
+- flush-2026-07-21.md:content survives two leading tags
+WEEKS: 2026-W30
+EVIDENCE: Up to two leading tags are comparison-only decoration.
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+ws_bracket_tags_valid=$(new_ws bracket-tags-valid)
+cat <<'EOF_RAW' >"$ws_bracket_tags_valid/loop/archive/flush-2026-07-19.md"
+- 2026-07-19 [session-839] stdin 二重リダイレクトの罠: `codex exec - < brief.md ...` は最後のリダイレクトが勝ち brief が空になる（source tail）
+EOF_RAW
+cat <<'EOF_RAW' >"$ws_bracket_tags_valid/loop/archive/flush-2026-07-20.md"
+- [session-806] content with a shared leading tag still validates
+EOF_RAW
+cat <<'EOF_RAW' >"$ws_bracket_tags_valid/loop/archive/flush-2026-07-21.md"
+- 2026-07-21 [a] [b] content survives two leading tags
+EOF_RAW
+write_conf "$ws_bracket_tags_valid" producer-model "bracket-tags-valid $BRACKET_TAGS_VALID"
+"$RAW_REVIEW" --workspace "$ws_bracket_tags_valid" --week 2026-W30 >/dev/null 2>"$TMP_ROOT/bracket-tags-valid.err"
+bracket_tags_valid_rc=$?
+if [[ "$bracket_tags_valid_rc" -eq 0 \
+  && "$(tail -n 1 "$ws_bracket_tags_valid/loop/promotions/runs.log")" == *' blocks=3 '* \
+  && "$(tail -n 1 "$ws_bracket_tags_valid/loop/promotions/runs.log")" == *' fabricated=0 '* \
+  && "$(tail -n 1 "$ws_bracket_tags_valid/loop/promotions/runs.log")" == *' candidates=3 '* ]]; then
+  pass '[R3-1] leading bracket tags canonicalize on both sides for content-anchored and tag-inclusive quotes'
+else
+  fail_case '[R3-1] leading bracket tags canonicalize on both sides for content-anchored and tag-inclusive quotes' "rc=$bracket_tags_valid_rc receipt=$(tail -n 1 "$ws_bracket_tags_valid/loop/promotions/runs.log") stderr=$(cat "$TMP_ROOT/bracket-tags-valid.err")"
+fi
+
+BRACKET_TAGS_MIDLINE=$TMP_ROOT/bracket-tags-midline-reviewer
+write_reviewer "$BRACKET_TAGS_MIDLINE" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: tagged mid-line fragment
+CLASS: rule
+MEMBERS:
+- flush-2026-07-19.md:最後のリダイレクトが勝ち brief
+WEEKS: 2026-W29
+EVIDENCE: Prefix anchoring still applies after tag stripping.
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+ws_bracket_tags_midline=$(new_ws bracket-tags-midline)
+cat <<'EOF_RAW' >"$ws_bracket_tags_midline/loop/archive/flush-2026-07-19.md"
+- 2026-07-19 [session-839] stdin 二重リダイレクトの罠: `codex exec - < brief.md ...` は最後のリダイレクトが勝ち brief が空になる（source tail）
+EOF_RAW
+write_conf "$ws_bracket_tags_midline" producer-model "bracket-tags-midline $BRACKET_TAGS_MIDLINE"
+"$RAW_REVIEW" --workspace "$ws_bracket_tags_midline" --week 2026-W29 >/dev/null 2>"$TMP_ROOT/bracket-tags-midline.err"
+bracket_tags_midline_rc=$?
+if [[ "$bracket_tags_midline_rc" -eq 0 \
+  && "$(tail -n 1 "$ws_bracket_tags_midline/loop/promotions/runs.log")" == *' fabricated=1 '* \
+  && "$(tail -n 1 "$ws_bracket_tags_midline/loop/promotions/runs.log")" == *' candidates=0 '* ]]; then
+  pass '[R3-2] bracket stripping does not relax prefix anchoring for mid-line fragments'
+else
+  fail_case '[R3-2] bracket stripping does not relax prefix anchoring for mid-line fragments' "rc=$bracket_tags_midline_rc receipt=$(tail -n 1 "$ws_bracket_tags_midline/loop/promotions/runs.log") stderr=$(cat "$TMP_ROOT/bracket-tags-midline.err")"
+fi
+
+BRACKET_TAGS_EMPTY=$TMP_ROOT/bracket-tags-empty-reviewer
+write_reviewer "$BRACKET_TAGS_EMPTY" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: tag-only quote
+CLASS: rule
+MEMBERS:
+- flush-2026-07-19.md:[session-839]
+WEEKS: 2026-W29
+EVIDENCE: Empty-after-tag quotes must still fail the minimum-length guard.
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+ws_bracket_tags_empty=$(new_ws bracket-tags-empty)
+cat <<'EOF_RAW' >"$ws_bracket_tags_empty/loop/archive/flush-2026-07-19.md"
+- 2026-07-19 [session-839] stdin 二重リダイレクトの罠: `codex exec - < brief.md ...` は最後のリダイレクトが勝ち brief が空になる（source tail）
+EOF_RAW
+write_conf "$ws_bracket_tags_empty" producer-model "bracket-tags-empty $BRACKET_TAGS_EMPTY"
+"$RAW_REVIEW" --workspace "$ws_bracket_tags_empty" --week 2026-W29 >/dev/null 2>"$TMP_ROOT/bracket-tags-empty.err"
+bracket_tags_empty_rc=$?
+if [[ "$bracket_tags_empty_rc" -eq 0 \
+  && "$(tail -n 1 "$ws_bracket_tags_empty/loop/promotions/runs.log")" == *' fabricated=1 '* \
+  && "$(tail -n 1 "$ws_bracket_tags_empty/loop/promotions/runs.log")" == *' candidates=0 '* ]]; then
+  pass '[R3-3] tag-only quotes still die after bracket stripping empties the canonicalized citation'
+else
+  fail_case '[R3-3] tag-only quotes still die after bracket stripping empties the canonicalized citation' "rc=$bracket_tags_empty_rc receipt=$(tail -n 1 "$ws_bracket_tags_empty/loop/promotions/runs.log") stderr=$(cat "$TMP_ROOT/bracket-tags-empty.err")"
+fi
+
 OUTPUT_CAP_ERROR=$TMP_ROOT/output-cap-error-reviewer
 write_reviewer "$OUTPUT_CAP_ERROR" 'cat >/dev/null
 printf "%s\n" "API Error: Claude'"'"'s response exceeded the 32000 output token maximum."'

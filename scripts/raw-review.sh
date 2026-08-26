@@ -393,6 +393,8 @@ def normalize(value):
 def canonicalize(value):
     value = re.sub(r"^[-*] ", "", value, count=1)
     value = re.sub(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}:?[ \t]*", "", value, count=1)
+    for _ in range(2):
+        value = re.sub(r"^\[[^\[\]]{1,40}\] ", "", value, count=1)
     return normalize(value.replace("*", ""))
 
 for raw_line in sys.stdin.buffer:

@@ -22,7 +22,7 @@ PROMOTE: yes | not-yet
 Repeat blocks directly or separate them with blank lines. Do not put blank lines inside
 a block. Include at most five MEMBERS citations per theme, choosing the clearest.
 Keep EVIDENCE to one to three lines. Quote each member verbatim from the start of the
-lesson content after any leading `- YYYY-MM-DD:` / `* YYYY-MM-DD:` and emphasis markers,
+lesson content after any leading bullet, date, `[tag]`, and emphasis markers,
 and keep the quote at 200 characters or fewer. When there are no groups, write
 `NO_GROUPS:` inside the markers and no THEME block. Put no extra prose beyond this
 grammar inside the markers, and put none outside them. Citation authenticity is checked

@@ -81,7 +81,8 @@ its `error=` field uses `none`, `skipped-paused`, `lock-busy`, `chain-exhausted`
 normalized for citation validation — fails closed like the chain classes).
 THEME blocks may be separated by blank lines, but blank lines inside a block are invalid.
 Each member citation must normalize to 8–200 characters and match the start of a normalized
-source line; shorter, mid-line-only, or fabricated citations reject the complete block.
+source line after leading bullet/date/`[tag]` markers are stripped for comparison; shorter,
+mid-line-only, or fabricated citations reject the complete block.
 
 Configure the reviewer route with enough output tokens for about 30 THEME blocks; for
 claude-CLI-wrapped chains, size `CLAUDE_CODE_MAX_OUTPUT_TOKENS` accordingly. An output-capped
