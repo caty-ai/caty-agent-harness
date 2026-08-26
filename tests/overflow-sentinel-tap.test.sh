@@ -278,10 +278,14 @@ else
   pass "OVF_SENTINEL unset creates zero sentinel artifacts"
 fi
 
+# Measured bound for #204 from ci-matrix macOS run 33007204524: adapter overhead
+# (elapsed minus the 1.2s mock sleep) was 0.92-1.16s, so the old 2s budget left
+# only 0.8s headroom and flaked intermittently. 12s leaves 10.8s headroom while
+# staying <= finalize(10)+2, so a wrongly shaved sentinel budget is still 1s < 1.2s.
 off_budget_root="$TMP_ROOT/off-budget"
 make_attempt "$off_budget_root"
 set +e
-TR_STEP_TIMEOUT_S=2 OVF_FINALIZE_TIMEOUT_S=garbage OVF_T_ABS=garbage \
+TR_STEP_TIMEOUT_S=12 OVF_FINALIZE_TIMEOUT_S=garbage OVF_T_ABS=garbage \
 OVF_STEP_CMD="$MOCK_CLI" MOCK_SLEEP_S=1.2 MOCK_STDOUT='budget preserved' \
   "$ADAPTER" "$off_budget_root/workspace/task.md" "$off_budget_root/workspace" \
   "$off_budget_root/artifact/attempts/001" 1 >"$off_budget_root/out" 2>"$off_budget_root/err"
