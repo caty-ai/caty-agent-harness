@@ -1,4 +1,4 @@
-# Design lane: #159 overflow sentinel (design record — not yet shipped as a product feature)
+# Design lane: #159 overflow sentinel (design record — v1 shipped opt-in in v0.17.0; default-on still open)
 
 Status: design **v0.5.2** — upstream design review passed (3 heterogeneous seats, 3 rounds,
 cumulative GO **as recorded in the adjudication** — see `reviews/ADJUDICATION-r3-FINAL.md`; the
