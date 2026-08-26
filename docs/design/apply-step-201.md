@@ -1,8 +1,9 @@
 # Apply step — reviewed candidates → durable-tier writeback (#201)
 
-Status: DRAFT v2 for L1-9 delta review (v1 reviewed 2026-08-27 by Kimi K3 / Grok 4.6 /
-GLM 5.3, all NO-GO on specification gaps; this revision lands every flip condition —
-adjudication record on #201)
+Status: DRAFT v3 (v1 reviewed 2026-08-27 by Kimi K3 / Grok 4.6 / GLM 5.3, all NO-GO;
+v2 landed all round-1 flip conditions — delta verdicts Kimi GO / Grok GO / GLM NO-GO on
+one remaining supersedes cell; v3 lands that cell plus all round-2 non-blocking
+observations — adjudication records on #201)
 Author: Alpha (orchestrator). Implementation writer will be Codex (Sol), per lane plan.
 Refs: #148 (candidate generation, merged v0.18.0), #144 (promotion layer gap), #149
 (monthly stocktake boundary), #170 (durable-tier caps), #182 (atomic_write_file guard,
@@ -62,8 +63,11 @@ Acquisition order is fixed: apply.lock → then promotions lock or state lock, *
 promotions and state simultaneously**. Current peers hold only one lock each
 (flush-intake: state; raw-review: promotions), so no cycle exists.
 
-Lock-acquisition failure at any point = **abort before any STATE.md byte is written**,
-exit non-zero. If the promotions lock can still be taken, append
+Lock-acquisition failure in phase 1 or 2 = **abort before any STATE.md byte is
+written**, exit non-zero. Phase-3 promotions-lock failure is the one case where STATE
+and the index are already durably published: receipts are then the only loss, the
+dangling `run-start` is the operator signal, and the index prevents replay — exit
+non-zero so the caller knows receipts are incomplete. If the promotions lock can still be taken, append
 `decision=run-summary reason=lock-busy`; if not, O_APPEND the summary line directly
 (raw-review.sh's existing lock-busy receipt precedent). Intake's lock-busy `exit 0` is
 explicitly **not** copied.
@@ -81,7 +85,12 @@ explicitly **not** copied.
    b. perform all mutations (appends, `invalidated-by:` annotations) **on the temp**;
    c. enforce caps by **refusal, not eviction** (§6): a section whose post-append line
       count would exceed its cap takes no further appends this run
-      (`skipped reason=section-full`);
+      (`skipped reason=section-full`). Section identity and line counting use the same
+      rules as the fold (`lib-state-fold.sh`): heading = prefix match on
+      `## Verified facts` / `## General rules` at line start, count = every
+      non-preamble section line. Duplicate or missing VF/GR headings → **abort the
+      run** (`caps-read-failed`), zero STATE bytes — the fold's own heading validation
+      is lost when the fold is not called, so apply re-implements it fail-closed;
    d. one single `atomic_write_file <temp> STATE.md`. `fold_declared_state_caps` is
       **never called by apply** and is never pointed at live STATE.md (its no-eviction
       path is a no-op that would leave a live append unguarded — v1 CRITICAL);
@@ -128,7 +137,7 @@ rule; violation → `skipped reason=hygiene` for the whole theme:
 | Field | Rule |
 |---|---|
 | theme-id | must match `^theme-[0-9]{8}T[0-9]{6}Z-[0-9]+-[0-9]{3}$` **and** its runid must equal the runid token of the candidates filename it came from (cross-file spoof block) |
-| theme text | single line, non-empty, ≤ 240 bytes, no control characters, must not start with `#`, `-`, or whitespace, and must not contain any of the literal tokens: `source:`, `reviewer:`, `weeks:`, `k=`, `invalidated-by:`, `confirmations:`, `dedup_key:`, `mech_check:`, `<!--`, `-->` |
+| theme text | single line, non-empty, ≤ 240 bytes, no control characters, must not start with `#`, `-`, or whitespace, and must not contain any of the literal tokens: `source:`, `reviewer:`, `weeks:`, `k=`, `approver:`, `invalidated-by:`, `confirmations:`, `dedup_key:`, `mech_check:`, `<!--`, `-->` |
 | reviewer | `^[A-Za-z0-9._+-]+$` |
 | weeks / union-k | `weeks:` must match the ISO-week list grammar raw-review validates (`^[0-9]{4}-W[0-9]{2}(,[0-9]{4}-W[0-9]{2})*$`); **k is recounted by apply as the number of distinct weeks** — the file's `union-k:` integer and `promote:` field are never trusted as the gate (v1 mis-stated the producer gate; apply's own fail-closed check is recounted k ≥ 2) |
 | class | closed enum; NOTE: the class value is **model-chosen** upstream — see §4 residual |
@@ -144,13 +153,18 @@ are host constants, not candidate fields.
 ### 3.4 Per-theme resolution states
 
 Terminal (never revisited): `promoted`, `rolled-back`, `duplicate-content`, `hygiene`,
-`parse`, `superseded` (only once the superseder is itself promoted — §5), `k-below-2`
-(terminal because recurrence emits a **new** theme-id in a later run; a frozen id's k
-never changes), `stub-exists`, `unknown-approval`.
+`parse`, `superseded` (assigned the moment its superseder promotes — same batch or
+cross-run, §5), `k-below-2` (terminal because recurrence emits a **new** theme-id in a
+later run; a frozen id's k never changes — §9 has a fixture asserting the re-emitted
+id, not the frozen one, is what gets reconsidered), `stub-exists`, `unknown-approval`.
 
 Revisit (pending): `awaiting-approval`, `section-full`, `volume-guard`,
-`supersedes-ambiguous`, `supersedes-unresolved` (these last two re-resolve only if a
-later batch changes the facts; they never promote silently).
+`supersedes-ambiguous` (re-resolves only if a later batch changes the facts; never
+promotes silently).
+
+`supersedes-unresolved` is a **receipt annotation only** (`note=supersedes-unresolved`
+on the promoted superseder's receipt line) — no theme ever holds it as a decision
+state (v2 let two readings diverge here; this closes it).
 
 Resolution is computed from `apply-index.tsv` (primary) with `apply.log` as the
 operator view; `apply.log` missing → treated as empty (the index is authoritative);
@@ -177,8 +191,9 @@ routes the approval gate through a value the reviewed model chose):
 - `--auto-capability-facts`: promotes hygiene-passing, recounted-k≥2 capability-facts
   into `## Verified facts` without per-theme approval. This is the flag EV-007 arm C
   passes inside the loop. Auto-promoted lines carry `approver=auto` in the receipt and
-  ` (auto)` in the provenance trailer so #149 stocktake and rollback sweeps can target
-  them as a class. Bounded by `APPLY_MAX_AUTO`.
+  `approver: auto` in the provenance trailer — the entry-format block below is the
+  **single canonical trailer grammar**; #149 stocktake and rollback sweeps grep the
+  literal `approver: auto`. Bounded by `APPLY_MAX_AUTO`.
 - `--approve theme-<id>` (repeatable) / `--approve-file <manifest>`: promotes the named
   themes (`rule` → `## General rules`, `capability-fact` → `## Verified facts`).
   Manifest grammar: UTF-8 text, one theme-id per line, `#` comments, blank lines
@@ -197,8 +212,10 @@ routes the approval gate through a value the reviewed model chose):
 
 Skill stubs: frontmatter carries a host-written `source: theme-<id>` line; the
 existence guard is the directory **and** that frontmatter stamp. Crash-replay after
-`mkdir` but before receipt → `decision=promoted reason=stub-replay` (not
-`stub-exists`), so replay converges.
+`mkdir` (with or without `SKILL.md` yet written) → complete the stub and receipt
+`decision=promoted reason=stub-replay` (not `stub-exists`), so replay converges.
+Stub creation does not count against `APPLY_MAX_PER_SECTION` (stubs are never
+CONSULT-loaded).
 
 Entry format written (matches the `templates/STATE.md` comment grammar):
 
@@ -234,10 +251,13 @@ Guard order, pinned (first hit wins):
    leading `- YYYY-MM-DD `, strip the trailing ` (source: …)` trailer by the anchored
    trailer regex (the existing `normalize_state_candidate` strips only the short
    legacy trailer and is NOT reused for this), collapse whitespace, case-preserve →
-   `duplicate-content`
+   `duplicate-content`. Legacy lines with differently-shaped stamps will not
+   dedup-match a re-entered identical theme — conservative by intent (misses some
+   dupes, never false-positives; #149 owns legacy consolidation)
 5. supersedes resolution (table below)
-6. approval / auto gate (§4) → `awaiting-approval`
-7. k recount → `k-below-2`
+6. k recount → `k-below-2` (before the approval gate, so an unapproved k<2 theme
+   terminates instead of lingering as `awaiting-approval` forever)
+7. approval / auto gate (§4) → `awaiting-approval`
 8. caps headroom (§6) → `section-full`
 9. volume guard → `volume-guard`
 10. promote
@@ -247,9 +267,10 @@ Supersedes table (v1 left every non-happy path to the implementer):
 | Case | Behavior |
 |---|---|
 | superseded theme applied earlier, line present with apply stamp | promote new line + in-place ` invalidated-by: theme-<new>` on the old line, same phase-2 hold; annotation is idempotent (skip if already present, never double-append) |
-| superseded theme in apply-index but line evicted/absent from STATE | promote new line, receipt notes `supersedes-unresolved` on the receipt line (old line legitimately gone; nothing to annotate) |
+| superseded theme in apply-index as `promoted`/`rolled-back` but line evicted/absent from STATE | promote new line, receipt carries `note=supersedes-unresolved` (old line legitimately gone; nothing to annotate) |
+| superseded theme in apply-index with a **pending** decision (e.g. `awaiting-approval`), no STATE line | superseder promotes (subject to its own guards) **and** the target's index row is updated to `superseded` (terminal) in the same state-lock hold — a later `--approve` of the target is then `skipped reason=unknown-approval` (non-pending). Closes the round-2 ordering inversion: a stale pending theme can never promote after its successor |
 | supersedes target present in STATE **without** an apply stamp | promote nothing for this theme: `skipped reason=supersedes-not-owned` (#149 territory; apply must not edit non-apply lines) |
-| supersedes target unknown everywhere (not in index, not in STATE, not in batch) | promote the new line, receipt notes `supersedes-unresolved` |
+| supersedes target unknown everywhere (not in index, not in STATE, not in batch) | promote the new line, receipt carries `note=supersedes-unresolved` |
 | same batch: superseded + superseder both present | superseded theme is skipped `reason=superseded` **only if the superseder is promoted in this run**; if the superseder is skipped (hygiene/approval/…), the superseded theme is evaluated on its own merits this run |
 | cycles, or two superseders naming one victim, or chain ambiguity | promote **neither** side: `skipped reason=supersedes-ambiguous` (upstream raw-review collapses multi-matches last-match-wins — noted for #148 follow-up; apply cannot reconstruct the chain, so it stops) |
 
@@ -262,7 +283,9 @@ would push a section past its cap (`STATE_FOLD_VERIFIED_CAP_DEFAULT`=120 /
 Consequences, stated: live STATE.md is never over-cap even transiently; apply never
 calls `fold_declared_state_caps`; untrusted input can no longer choose which trusted
 lines leave (v1's per-run eviction bound is superseded by this strictly stronger
-invariant); the cap numbers are never raised by apply.
+invariant); the cap numbers are never raised by apply. `caps-read-failed` fires when
+the cap constants cannot be sourced/parsed from `lib-state-fold.sh` or the §2.2c
+heading validation fails — in both cases the run aborts with zero STATE bytes.
 
 Rollback's `## Open failures` append is not covered by the VF/GR fold; the failures
 cap (100) is enforced by the intake path on the next intake. Bounded by promotion
@@ -276,7 +299,7 @@ resolution authority). Lines:
 - `decision=run-start applyid=<id> inputs=<n>` (phase 1)
 - per-theme **transitions only** (a theme that stays `awaiting-approval` across 300
   nightly runs produces one line, not 300; the run-summary carries still-pending
-  counts): `ts=<UTC> applyid=<id> theme=<theme-id> class=<class> decision=promoted|skipped|rolled-back reason=<token> approver=<alpha|auto|-> target=<section|staging-path> line_sha=<sha256 of written line|->`
+  counts): `ts=<UTC> applyid=<id> theme=<theme-id> class=<class> decision=promoted|skipped|rolled-back reason=<token> note=<supersedes-unresolved|-> approver=<alpha|auto|-> target=<section|staging-path> line_sha=<sha256 of written line|->`
 - `decision=run-summary` with counts promoted/skipped-by-reason/pending, always
   appended on every completed run (0-consumed stays operator-visible; a `run-start`
   with no `run-summary` marks a crashed run).
@@ -289,6 +312,9 @@ skipped-paused already-rolled-back` — §9 requires a fixture per token.
 
 Rollback (`apply-promotions.sh --rollback <theme-id> --reason <ref>`):
 
+- Runs under the same `.apply.lock` as a promotion run (whole-operation exclusive), so
+  an apply run's phase-2 index rewrite can never clobber a concurrent rollback's row
+  update.
 - STATE line: locate by anchored stamp (exactly one match or abort), append
   ` invalidated-by: <ref>` in place, add a dated `## Open failures` entry naming what
   the review missed (DESIGN §3.3), single atomic rewrite + index update in the same
@@ -339,7 +365,13 @@ Rollback (`apply-promotions.sh --rollback <theme-id> --reason <ref>`):
   live STATE at any point (assert no intermediate write); volume guard across two
   sequential runs of the same file; auto sub-cap.
 - Supersedes: every row of the §5 table, including cycle and not-owned; annotation
-  idempotency (no double `invalidated-by:`).
+  idempotency (no double `invalidated-by:`); **cross-run pending target**: pending
+  target + cross-run superseder promotion + later `--approve` of the target → must
+  skip (`unknown-approval`), never promote.
+- k-below-2 lifecycle: frozen theme-id stays terminal; a later run re-emitting the
+  recurred theme under a new id is what gets reconsidered.
+- Duplicate or missing VF/GR headings in STATE.md → run aborts (`caps-read-failed`),
+  zero STATE bytes.
 - Locks: lock-busy on each of the three locks → zero STATE bytes + correct receipt/
   exit; paused workspace → `skipped-paused`.
 - At least one replay against a real `candidates-<runid>.md` from the 34-day corpus
@@ -364,7 +396,7 @@ Rollback (`apply-promotions.sh --rollback <theme-id> --reason <ref>`):
 
 | # | Failure mode | Mitigations (§) | Residual after v2 |
 |---|---|---|---|
-| 1 | Durable-tier poisoning / section flush | anchored input enum excl. rejects (3.1); allowlist encoding of every interpolated field + banned-token list + theme-id↔filename binding (3.3); no-eviction promotion — untrusted input cannot evict trusted lines (6); slug from validated id only + exclusive mkdir (3.3); stubs never CONSULT-loaded (4) | a well-cited, hygiene-passing but *maliciously worded* capability-fact recurring across 2 ISO weeks still auto-promotes under `--auto-capability-facts`: `class:` and theme wording are model-chosen, and k≥2 + citation authenticity ≠ benign intent. Bounded by `APPLY_MAX_AUTO`, the ` (auto)` provenance marker (sweepable), rollback, and #149. Accepted by owner decision; EV-007 measures the real-world rate. |
+| 1 | Durable-tier poisoning / section flush | anchored input enum excl. rejects (3.1); allowlist encoding of every interpolated field + banned-token list + theme-id↔filename binding (3.3); no-eviction promotion — untrusted input cannot evict trusted lines (6); slug from validated id only + exclusive mkdir (3.3); stubs never CONSULT-loaded (4) | a well-cited, hygiene-passing but *maliciously worded* capability-fact recurring across 2 ISO weeks still auto-promotes under `--auto-capability-facts`: `class:` and theme wording are model-chosen, and k≥2 + citation authenticity ≠ benign intent. Bounded by `APPLY_MAX_AUTO`, the `approver: auto` provenance marker (sweepable), rollback, and #149. Accepted by owner decision; EV-007 measures the real-world rate. |
 | 2 | Broken idempotency / resurrection | apply-index written atomically in the same lock hold as STATE (5); guard order pinned (5); `rolled-back` terminal (7); stub frontmatter stamp + `stub-replay` (4) | index + STATE + log all lost simultaneously (full workspace loss) — unrecoverable by design anywhere; content dedup blocks a *new* theme-id with identical normalized wording even when legitimate (operators reword or use #149) |
 | 3 | Fail-open | closed reason-token set with terminal/revisit split (3.4); torn index aborts (3.4); approval cannot override gates (4); ambiguous supersedes stops (5); lock failure aborts before write (2.1) | none known at design level; §9 pins each with a fixture |
 | 4 | Lock/crash windows | apply-exclusive lock (2.1); fixed acquisition order, never promotions+state together (2.1); single atomic publish + same-hold index (2.2); run-start/run-summary crash detection (7) | #182's `cp` window inside `atomic_write_file` (inherited, adjacent); stale-lock steal at 1800 s against a live-but-slow holder (existing `take_state_lock` property, unchanged) |
