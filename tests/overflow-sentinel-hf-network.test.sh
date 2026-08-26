@@ -158,6 +158,62 @@ assert "cache entry is not readable JSON" in log
 assert "offline" in log
 '
 
+run_python_case "cached entry at the exact size cap is accepted" '
+root = Path(os.environ["TMP_ROOT"])
+cache_dir = root / "cache-exact-cap"
+cache_dir.mkdir(parents=True)
+cache_path = lib._hf_cache_file(cache_dir, "org/model")
+payload = {
+    "schema_version": lib.HF_CACHE_SCHEMA_VERSION,
+    "model_id": "org/model",
+    "fetched_at": 1,
+    "max_position_embeddings": 131072,
+    "padding": "",
+}
+raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+payload["padding"] = "x" * (lib.HF_NETWORK_MAX_BYTES - len(raw))
+raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+assert len(raw) == lib.HF_NETWORK_MAX_BYTES
+cache_path.write_bytes(raw)
+
+stderr = io.StringIO()
+with contextlib.redirect_stderr(stderr):
+    result = resolve_ctx_window(
+        None,
+        None,
+        "org/model",
+        hf_network=True,
+        hf_cache_dir=str(cache_dir),
+    )
+
+assert result == (131072, "hf-network-cached")
+assert stderr.getvalue() == ""
+'
+
+run_python_case "oversized cached entry warns and falls through" '
+root = Path(os.environ["TMP_ROOT"])
+cache_dir = root / "cache-oversize"
+cache_dir.mkdir(parents=True)
+cache_path = lib._hf_cache_file(cache_dir, "org/model")
+cache_path.write_bytes(b"x" * (lib.HF_NETWORK_MAX_BYTES + 1))
+
+stderr = io.StringIO()
+with contextlib.redirect_stderr(stderr):
+    result = resolve_ctx_window(
+        None,
+        None,
+        "org/model",
+        hf_network=True,
+        hf_cache_dir=str(cache_dir),
+        hf_fetcher=lambda _: (_ for _ in ()).throw(OSError("offline")),
+    )
+
+assert result == (200000, "default")
+log = stderr.getvalue()
+assert "cache entry exceeds size limit" in log
+assert "offline" in log
+'
+
 run_python_case "HTTPError during fetch warns and falls through without creating cache" '
 root = Path(os.environ["TMP_ROOT"])
 cache_dir = root / "cache-http-error"
@@ -184,6 +240,44 @@ with contextlib.redirect_stderr(stderr):
 
 assert result == (200000, "default")
 assert "HTTP Error 404: not found" in stderr.getvalue()
+assert list(cache_dir.glob("*.json")) == []
+'
+
+run_python_case "oversized fetched payload warns and falls through" '
+root = Path(os.environ["TMP_ROOT"])
+cache_dir = root / "cache-fetch-oversize"
+stderr = io.StringIO()
+
+class FakeResponse:
+    def __init__(self, payload):
+        self.payload = payload
+    def read(self, _):
+        return self.payload
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+def fake_urlopen(request, timeout):
+    assert timeout == lib.HF_NETWORK_TIMEOUT_S
+    return FakeResponse(b"x" * (lib.HF_NETWORK_MAX_BYTES + 1))
+
+old_urlopen = lib.urllib.request.urlopen
+lib.urllib.request.urlopen = fake_urlopen
+try:
+    with contextlib.redirect_stderr(stderr):
+        result = resolve_ctx_window(
+            None,
+            None,
+            "org/model",
+            hf_network=True,
+            hf_cache_dir=str(cache_dir),
+        )
+finally:
+    lib.urllib.request.urlopen = old_urlopen
+
+assert result == (200000, "default")
+assert "HF network config exceeds size limit" in stderr.getvalue()
 assert list(cache_dir.glob("*.json")) == []
 '
 
@@ -263,6 +357,67 @@ assert "HF network config has no positive supported context-window field" in std
 assert list(cache_dir.glob("*.json")) == []
 '
 
+run_python_case "cache entry symlinks are rejected and fall through" '
+root = Path(os.environ["TMP_ROOT"])
+cache_dir = root / "cache-entry-symlink"
+cache_dir.mkdir(parents=True)
+os.chmod(cache_dir, 0o700)
+target = root / "cache-entry-target.json"
+target.write_text(json.dumps({
+    "schema_version": lib.HF_CACHE_SCHEMA_VERSION,
+    "model_id": "org/model",
+    "fetched_at": 1,
+    "max_position_embeddings": 131072,
+}) + "\n", encoding="utf-8")
+cache_path = lib._hf_cache_file(cache_dir, "org/model")
+cache_path.symlink_to(target)
+
+stderr = io.StringIO()
+with contextlib.redirect_stderr(stderr):
+    result = resolve_ctx_window(
+        None,
+        None,
+        "org/model",
+        hf_network=True,
+        hf_cache_dir=str(cache_dir),
+        hf_fetcher=lambda _: (_ for _ in ()).throw(OSError("offline")),
+    )
+
+assert result == (200000, "default")
+log = stderr.getvalue()
+assert "cache entry must be a non-symlink regular file" in log
+assert "offline" in log
+'
+
+run_python_case "cached model mismatches warn and fall through" '
+root = Path(os.environ["TMP_ROOT"])
+cache_dir = root / "cache-model-mismatch"
+cache_dir.mkdir(parents=True)
+cache_path = lib._hf_cache_file(cache_dir, "org/model")
+cache_path.write_text(json.dumps({
+    "schema_version": lib.HF_CACHE_SCHEMA_VERSION,
+    "model_id": "other/model",
+    "fetched_at": 1,
+    "max_position_embeddings": 131072,
+}) + "\n", encoding="utf-8")
+
+stderr = io.StringIO()
+with contextlib.redirect_stderr(stderr):
+    result = resolve_ctx_window(
+        None,
+        None,
+        "org/model",
+        hf_network=True,
+        hf_cache_dir=str(cache_dir),
+        hf_fetcher=lambda _: (_ for _ in ()).throw(OSError("offline")),
+    )
+
+assert result == (200000, "default")
+log = stderr.getvalue()
+assert "cache entry model mismatch" in log
+assert "offline" in log
+'
+
 run_python_case "invalid model ids and unsafe cache dirs warn and fall through without escaping" '
 root = Path(os.environ["TMP_ROOT"])
 target = root / "cache-target"
@@ -285,6 +440,48 @@ assert symlink_cache == (200000, "default")
 assert "HF model id must be a plain repo id such as namespace/name" in log
 assert "HF cache dir must be non-empty" in log
 assert "HF cache dir must not be a symlink" in log
+'
+
+run_python_case "symlinked ancestors are accepted for cache prep and network reuse" '
+root = Path(os.environ["TMP_ROOT"])
+real_parent = root / "real-parent"
+real_parent.mkdir(parents=True)
+linked_parent = root / "linked-parent"
+linked_parent.symlink_to(real_parent, target_is_directory=True)
+cache_dir = linked_parent / "nested" / "cache"
+calls = []
+
+def fetcher(model_id):
+    calls.append(model_id)
+    return 131072
+
+prepared = lib.prepare_hf_cache_dir(str(cache_dir))
+stderr = io.StringIO()
+with contextlib.redirect_stderr(stderr):
+    first = resolve_ctx_window(
+        None,
+        None,
+        "org/model",
+        hf_network=True,
+        hf_cache_dir=str(cache_dir),
+        hf_fetcher=fetcher,
+    )
+    second = resolve_ctx_window(
+        None,
+        None,
+        "org/model",
+        hf_network=True,
+        hf_cache_dir=str(cache_dir),
+        hf_fetcher=lambda _: (_ for _ in ()).throw(RuntimeError("should not refetch")),
+    )
+
+assert prepared == cache_dir
+assert first == (131072, "hf-network-cached")
+assert second == (131072, "hf-network-cached")
+assert stderr.getvalue() == ""
+assert calls == ["org/model"]
+assert cache_dir.is_dir()
+assert stat.S_IMODE(cache_dir.stat().st_mode) == 0o700
 '
 
 run_python_case "malicious HF ids are rejected before fetch" '
@@ -371,7 +568,11 @@ assert elapsed < 0.3
 assert "HF network fetch exceeded hard timeout" in stderr.getvalue()
 '
 
-prep_cache="$TMP_ROOT/prepared-cache"
+prep_real_parent="$TMP_ROOT/prepare-real-parent"
+prep_link_parent="$TMP_ROOT/prepare-link-parent"
+mkdir -p "$prep_real_parent"
+ln -s "$prep_real_parent" "$prep_link_parent"
+prep_cache="$prep_link_parent/prepared-cache"
 prep_output=$(python3 -B "$ROOT/scripts/lib_overflow_sentinel.py" prepare-hf-cache "$prep_cache")
 prep_mode=$(python3 -B - "$prep_cache" <<'PY'
 import os
@@ -381,9 +582,9 @@ print(oct(stat.S_IMODE(os.stat(sys.argv[1]).st_mode)))
 PY
 )
 if [[ "$prep_output" == "$prep_cache" ]] && [[ "$prep_mode" == "0o700" ]]; then
-  pass "prepare-hf-cache creates and normalizes a private cache directory"
+  pass "prepare-hf-cache accepts symlinked ancestors and normalizes a private cache directory"
 else
-  fail_case "prepare-hf-cache creates and normalizes a private cache directory"
+  fail_case "prepare-hf-cache accepts symlinked ancestors and normalizes a private cache directory"
 fi
 
 set +e

@@ -259,15 +259,9 @@ def validate_hf_model_id(model_id: str) -> str:
     return normalized
 
 
-def _validate_non_symlink_path(path: Path, label: str) -> None:
-    current = path
-    while True:
-        if current.is_symlink():
-            raise ValueError(f"{label} must not be a symlink: {current}")
-        parent = current.parent
-        if parent == current:
-            return
-        current = parent
+def _validate_non_symlink_leaf(path: Path, label: str) -> None:
+    if path.is_symlink():
+        raise ValueError(f"{label} must not be a symlink: {path}")
 
 
 def prepare_hf_cache_dir(cache_dir: str) -> Path:
@@ -275,7 +269,7 @@ def prepare_hf_cache_dir(cache_dir: str) -> Path:
     if not raw_cache_dir:
         raise ValueError("HF cache dir must be non-empty")
     candidate = Path(raw_cache_dir)
-    _validate_non_symlink_path(candidate, "HF cache dir")
+    _validate_non_symlink_leaf(candidate, "HF cache dir")
     try:
         candidate.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
@@ -299,15 +293,21 @@ def _read_hf_network_cache(cache_path: Path, model_id: str) -> int:
         raise ValueError("cache miss")
     if cache_path.is_symlink() or not cache_path.is_file():
         raise ValueError("cache entry must be a non-symlink regular file")
-    _validate_non_symlink_path(cache_path.parent, "HF cache dir")
+    _validate_non_symlink_leaf(cache_path.parent, "HF cache dir")
     if not cache_path.parent.is_dir():
         raise ValueError("cache dir must be a directory")
     if cache_path.parent.stat().st_mode & 0o077:
         raise ValueError("cache dir must be mode 0700")
     try:
-        with cache_path.open(encoding="utf-8") as handle:
-            payload = json.load(handle)
+        with cache_path.open("rb") as handle:
+            raw_payload = handle.read(HF_NETWORK_MAX_BYTES + 1)
     except (OSError, ValueError, TypeError) as exc:
+        raise ValueError("cache entry is not readable JSON") from exc
+    if len(raw_payload) > HF_NETWORK_MAX_BYTES:
+        raise ValueError("cache entry exceeds size limit")
+    try:
+        payload = json.loads(raw_payload)
+    except (ValueError, TypeError) as exc:
         raise ValueError("cache entry is not readable JSON") from exc
     if not isinstance(payload, dict) or payload.get("schema_version") != HF_CACHE_SCHEMA_VERSION:
         raise ValueError("cache entry schema mismatch")

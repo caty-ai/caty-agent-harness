@@ -148,20 +148,22 @@ sentinel の動作も無効です。CLI は `prompt.md` を stdin から直接�
 | `OVF_CTX_WINDOW` | optional の 1 以上の整数。context-window 梯子の第 1 段 |
 | `OVF_HF_CONFIG` | optional の local・non-symlink HF `config.json` path（またはその directory）。network lookup なし |
 | `OVF_HF_NETWORK` | unset/空/`0` = 無効、`1` = best-effort の HF network rung を有効化 |
-| `OVF_HF_CACHE_DIR` | `OVF_HF_NETWORK=1` のとき必須。writable・non-symlink の cache dir。作成時/再利用時に mode `0700` を強制 |
+| `OVF_HF_CACHE_DIR` | `OVF_HF_NETWORK=1` のとき必須。leaf path 自体は symlink でない writable cache dir で、cache-entry file の leaf も symlink 不可（ancestor の symlink は許容）。作成時/再利用時に mode `0700` を強制 |
 | `OVF_COMPACTION_OWNER` | `sentinel` または `host`。unset は warning 後 `sentinel`、`host` は `disabled-host` を記録 |
 | `OVF_STEP_CMD` | whitespace 分割の CLI argv。既定 `claude -p --output-format stream-json --verbose` |
 | `OVF_FINALIZE_TIMEOUT_S` | 1 以上の整数。既定 `10`。CLI 終了後の monitor join 上限 |
-| `CLAUDE_MODEL` | 実際の model identifier。unset は `claude-unknown` を記録し、`claude-` catalog prefix には一致しない unknown として扱う |
+| `CLAUDE_MODEL` | 実際の model identifier。unset は `claude-unknown` を記録し、catalog lookup 前に `default` へ short-circuit されるため `claude-` catalog prefix には一致しない |
 
 context-window は config、検証済み local HF config、opt-in の HF network cache rung、
 Claude-family prefix catalog、200k 既定の順で解決します。network rung は `CLAUDE_MODEL` を
 plain な HF repo id として検証し、stdlib `urllib` で
 `https://huggingface.co/<model>/resolve/main/config.json` を hard 5 秒 timeout で 1 回だけ取得し、
 `OVF_HF_CACHE_DIR` 配下の flat な `sha256(model).json` cache entry へ atomic に書いてから、
-その cache entry を再読込して採用します。採用 source は `config`、`hf-config`、
+その cache entry を同じ 1 MiB 制限で再読込して採用します。cache directory の leaf と
+cache-entry file の leaf はどちらも symlink 不可で、ancestor の symlink は許容します。
+network payload と cached entry はどちらもその上限ちょうどまでは受け入れ、1 byte でも大きければ reject します。採用 source は `config`、`hf-config`、
 `hf-network-cached`、`catalog`、`default` のいずれかで記録します。placeholder の
-`claude-unknown` は常に `default` を使います。HF id の検証、cache の検証、cache I/O、
+`claude-unknown` は catalog lookup 前に `default` へ short-circuit されます。HF id の検証、cache の検証、cache I/O、
 fetch の失敗は stderr へ warning を 1 行出したうえで、model-step の exit status を変えずに
 catalog/default へ fall through します。
 

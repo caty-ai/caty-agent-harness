@@ -263,19 +263,23 @@ scripts/task-runner.sh "$WS"
 `TR_STEP_TIMEOUT_S` must be exported; a shell-local task-runner setting is not
 visible to this child adapter. Set `CLAUDE_MODEL` to the actual model identifier
 so the context-window catalog and TTFB floor can select a known entry. If it is
-unset, the adapter records `claude-unknown`, which deliberately uses the default
-context window and conservative 240-second TTFB floor.
+unset, the adapter records `claude-unknown`, which is short-circuited to the
+default context window before catalog lookup and uses the conservative
+240-second TTFB floor.
 
 `OVF_HF_NETWORK=1` adds one best-effort HF config rung after `OVF_HF_CONFIG` and
 before the catalog fallback. When enabled, `OVF_HF_CACHE_DIR` is required and is
-validated as a writable non-symlink directory, created if missing, and forced to
-mode `0700` before the step starts. The monitor then validates `CLAUDE_MODEL` as
-a plain HF repo id, fetches exactly one
+validated as a writable cache directory whose leaf path is not a symlink
+(symlinked ancestors are accepted), created if missing, and forced to mode
+`0700` before the step starts. The cache entry file leaf is also required to be
+non-symlink while symlinked ancestors remain accepted. The monitor then
+validates `CLAUDE_MODEL` as a plain HF repo id, fetches exactly one
 `https://huggingface.co/<model>/resolve/main/config.json` with stdlib `urllib`
 and a hard 5-second timeout, writes a flat `sha256(model).json` cache entry, and
-uses it only after re-reading that cache entry successfully. Any HF id, cache,
-or fetch failure warns and falls through to the catalog/default ladder without
-changing the model-step exit status.
+uses it only after a bounded re-read of that cache entry succeeds. Both the
+download and cache re-read accept payloads up to exactly 1 MiB and reject
+anything larger. Any HF id, cache, or fetch failure warns and falls through to
+the catalog/default ladder without changing the model-step exit status.
 
 Optional snippet:
 
