@@ -126,6 +126,18 @@ if [[ -n "$ovf_hf_config" ]]; then
     || config_fail 'OVF_HF_CONFIG must name a validated local HF config.json'
 fi
 
+ovf_hf_network=${OVF_HF_NETWORK:-}
+case "$ovf_hf_network" in
+  ''|0|1) ;;
+  *) config_fail 'OVF_HF_NETWORK must be unset, 0, or 1' ;;
+esac
+ovf_hf_cache_dir=${OVF_HF_CACHE_DIR:-}
+if [[ "$ovf_hf_network" == 1 ]]; then
+  [[ -n "$ovf_hf_cache_dir" ]] || config_fail 'OVF_HF_CACHE_DIR must be set when OVF_HF_NETWORK=1'
+  python3 -B "$repo_root/scripts/lib_overflow_sentinel.py" prepare-hf-cache "$ovf_hf_cache_dir" >/dev/null \
+    || config_fail 'OVF_HF_CACHE_DIR must name a writable non-symlink cache directory'
+fi
+
 ovf_step_timeout_s=540
 if [[ -n "${TR_STEP_TIMEOUT_S:-}" && "$TR_STEP_TIMEOUT_S" =~ ^[1-9][0-9]*$ ]]; then
   if (( TR_STEP_TIMEOUT_S > ovf_finalize_timeout_s + 2 )); then
@@ -212,6 +224,9 @@ monitor_args=(
 )
 [[ -z "$ovf_ctx_window" ]] || monitor_args+=(--ctx-window "$ovf_ctx_window")
 [[ -z "$ovf_hf_config" ]] || monitor_args+=(--hf-config "$ovf_hf_config")
+if [[ "$ovf_hf_network" == 1 ]]; then
+  monitor_args+=(--hf-network --hf-cache-dir "$ovf_hf_cache_dir")
+fi
 [[ "$ovf_owner" != host ]] || monitor_args+=(--tap-status disabled-host)
 (( nudge_shown == 0 )) || monitor_args+=(--nudge-shown)
 
@@ -256,6 +271,8 @@ if (( monitor_timed_out == 1 )); then
 elif (( monitor_status != 0 )); then
   printf 'warning: overflow sentinel monitor failed; continuing without complete sentinel records\n' >&2
   [[ ! -s "$monitor_stderr" ]] || cat "$monitor_stderr" >&2
+elif [[ -s "$monitor_stderr" ]]; then
+  cat "$monitor_stderr" >&2
 fi
 
 exit "$step_status"

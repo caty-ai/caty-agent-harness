@@ -167,7 +167,13 @@ def monitor(args: argparse.Namespace) -> int:
         started_monotonic -= max(0.0, float(os.environ["_CATY_OVF_TEST_ELAPSED_S"]))
     state = load_state(state_path)
     last_fire_ma = dict(state["last_fire_ma"])
-    ctx_window, ctx_source = resolve_ctx_window(args.ctx_window, args.hf_config, args.model)
+    ctx_window, ctx_source = resolve_ctx_window(
+        args.ctx_window,
+        args.hf_config,
+        args.model,
+        hf_network=args.hf_network,
+        hf_cache_dir=args.hf_cache_dir,
+    )
     floor_s = ttfb_floor_seconds(state["last_run_injected_ma"], args.model)
     if os.environ.get("_CATY_TESTING") == "1" and os.environ.get("_CATY_OVF_TEST_TTFB_FLOOR_S"):
         floor_s = max(0, int(os.environ["_CATY_OVF_TEST_TTFB_FLOOR_S"]))
@@ -435,6 +441,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--w", required=True, type=float)
     parser.add_argument("--ctx-window", type=int)
     parser.add_argument("--hf-config")
+    parser.add_argument("--hf-network", action="store_true")
+    parser.add_argument("--hf-cache-dir")
     parser.add_argument("--tap-status", default="enabled", choices=("enabled", "disabled-host"))
     parser.add_argument("--nudge-shown", action="store_true")
     parser.add_argument("--poll-interval", type=float, default=0.02)

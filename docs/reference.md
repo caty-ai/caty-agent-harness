@@ -149,15 +149,30 @@ is created.
 | `OVF_W_PCT` | integer 1–99; default `50`, converted by dividing by 100 |
 | `OVF_CTX_WINDOW` | optional integer >= 1; first context-window ladder rung |
 | `OVF_HF_CONFIG` | optional local non-symlink HF `config.json` path (or its directory); no network lookup |
+| `OVF_HF_NETWORK` | unset/empty/`0` = disabled; `1` enables one best-effort HF network rung |
+| `OVF_HF_CACHE_DIR` | required when `OVF_HF_NETWORK=1`; writable cache dir whose leaf path is not a symlink, with a non-symlink cache-entry file leaf as well (symlinked ancestors allowed), created/forced as mode `0700` |
 | `OVF_COMPACTION_OWNER` | `sentinel` or `host`; unset warns and selects `sentinel`; `host` records `disabled-host` |
 | `OVF_STEP_CMD` | whitespace-split CLI argv; default `claude -p --output-format stream-json --verbose` |
 | `OVF_FINALIZE_TIMEOUT_S` | integer >= 1; default `10`; bounded monitor join after CLI exit |
-| `CLAUDE_MODEL` | actual Claude model identifier; unset records `claude-unknown`, treated as unknown rather than matching the `claude-` catalog prefix |
+| `CLAUDE_MODEL` | actual model identifier; unset records `claude-unknown`, which is short-circuited to `default` before catalog lookup rather than matching the `claude-` catalog prefix |
 
-Context-window resolution is config, validated local HF config, a Claude-family
-prefix catalog, then the 200k default. The selected source is logged as `config`,
-`hf-config`, `catalog`, or `default`; the `claude-unknown` placeholder always uses
-`default`.
+Context-window resolution is config, validated local HF config, an opt-in HF
+network cache rung, a Claude-family prefix catalog, then the 200k default. The
+network rung validates `CLAUDE_MODEL` as a plain HF repo id, performs one
+stdlib `urllib` fetch against
+`https://huggingface.co/<model>/resolve/main/config.json` with a hard 5-second
+timeout, writes a flat `sha256(model).json` cache entry under `OVF_HF_CACHE_DIR`,
+then re-reads that cache entry with the same 1 MiB limit before accepting it.
+Both the cache directory leaf and the cache entry file leaf must not be
+symlinks, while symlinked ancestors are accepted. Both the network payload and
+cached entry accept bytes up to that exact limit and reject anything larger. The
+selected source is
+logged as `config`, `hf-config`, `hf-network-cached`, `catalog`, or `default`;
+the `claude-unknown` placeholder is short-circuited to `default` before catalog
+lookup. Any HF id validation, cache validation, cache I/O, or fetch failure emits
+one warning to stderr and
+falls through to the catalog/default ladder without changing the model-step exit
+status.
 
 TTFB is run start to the first `assistant` stream line. The token tiers are 90s,
 150s when the prior attempt's last injected MA is strictly above 50k, and 240s

@@ -4,9 +4,16 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import queue
+import re
 import tempfile
+import threading
+import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -18,6 +25,11 @@ M = 10
 DEFAULT_T_ABS = 80000
 DEFAULT_W = 0.50
 DEFAULT_CTX_WINDOW = 200000
+HF_CACHE_SCHEMA_VERSION = 1
+HF_NETWORK_TIMEOUT_S = 5
+HF_NETWORK_MAX_BYTES = 1024 * 1024
+HF_MODEL_ID_RE = re.compile(r"^(?:[A-Za-z0-9][A-Za-z0-9._-]*/)?[A-Za-z0-9][A-Za-z0-9._-]*$")
+HF_CTX_WINDOW_KEYS = ("max_position_embeddings", "n_positions", "max_seq_len", "model_max_length")
 
 # Prefix catalog only.  Provider training limits are deliberately not inferred.
 CTX_WINDOW_CATALOG = (
@@ -55,6 +67,29 @@ def atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
         except OSError:
             pass
         raise
+
+
+def atomic_write_private_json(path: Path, payload: Mapping[str, Any]) -> None:
+    """Write private JSON data atomically with a 0600 file mode."""
+    fd, temporary = tempfile.mkstemp(prefix=path.name + ".", dir=str(path.parent))
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=True, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, str(path))
+    except BaseException:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
+
+
+def warn_ctx_window_fallback(message: str) -> None:
+    print(f"warning: overflow sentinel HF fallback: {message}", file=os.sys.stderr)
 
 
 def load_state(path: Path) -> Dict[str, Any]:
@@ -193,6 +228,16 @@ def compaction_suspected(previous: Optional[int], current: int) -> bool:
     return previous is not None and current < 0.60 * previous
 
 
+def _window_from_payload(payload: Any, source_name: str) -> int:
+    if not isinstance(payload, dict):
+        raise ValueError(f"{source_name} must contain a JSON object")
+    for key in HF_CTX_WINDOW_KEYS:
+        value = payload.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 1:
+            return value
+    raise ValueError(f"{source_name} has no positive supported context-window field")
+
+
 def _hf_window(config_path: Path) -> int:
     candidate = config_path / "config.json" if config_path.is_dir() else config_path
     if not candidate.is_file() or candidate.is_symlink():
@@ -202,17 +247,175 @@ def _hf_window(config_path: Path) -> int:
             payload = json.load(handle)
     except (OSError, ValueError) as exc:
         raise ValueError("HF config is not readable JSON") from exc
-    if not isinstance(payload, dict):
-        raise ValueError("HF config must contain a JSON object")
-    for key in ("max_position_embeddings", "n_positions", "max_seq_len", "model_max_length"):
-        value = payload.get(key)
-        if isinstance(value, int) and not isinstance(value, bool) and value >= 1:
-            return value
-    raise ValueError("HF config has no positive supported context-window field")
+    return _window_from_payload(payload, "HF config")
+
+
+def validate_hf_model_id(model_id: str) -> str:
+    normalized = str(model_id or "").strip()
+    if not normalized:
+        raise ValueError("HF model id must be non-empty")
+    if HF_MODEL_ID_RE.fullmatch(normalized) is None:
+        raise ValueError("HF model id must be a plain repo id such as namespace/name")
+    return normalized
+
+
+def _validate_non_symlink_leaf(path: Path, label: str) -> None:
+    if path.is_symlink():
+        raise ValueError(f"{label} must not be a symlink: {path}")
+
+
+def prepare_hf_cache_dir(cache_dir: str) -> Path:
+    raw_cache_dir = str(cache_dir or "").strip()
+    if not raw_cache_dir:
+        raise ValueError("HF cache dir must be non-empty")
+    candidate = Path(raw_cache_dir)
+    _validate_non_symlink_leaf(candidate, "HF cache dir")
+    try:
+        candidate.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ValueError(f"HF cache dir is not writable: {candidate}") from exc
+    if candidate.is_symlink() or not candidate.is_dir():
+        raise ValueError(f"HF cache dir must be a non-symlink directory: {candidate}")
+    try:
+        os.chmod(candidate, 0o700)
+    except OSError as exc:
+        raise ValueError(f"HF cache dir mode cannot be set: {candidate}") from exc
+    return candidate
+
+
+def _hf_cache_file(cache_dir: Path, model_id: str) -> Path:
+    digest = hashlib.sha256(model_id.encode("utf-8")).hexdigest()
+    return cache_dir / f"{digest}.json"
+
+
+def _read_hf_network_cache(cache_path: Path, model_id: str) -> int:
+    if not cache_path.exists():
+        raise ValueError("cache miss")
+    if cache_path.is_symlink() or not cache_path.is_file():
+        raise ValueError("cache entry must be a non-symlink regular file")
+    _validate_non_symlink_leaf(cache_path.parent, "HF cache dir")
+    if not cache_path.parent.is_dir():
+        raise ValueError("cache dir must be a directory")
+    if cache_path.parent.stat().st_mode & 0o077:
+        raise ValueError("cache dir must be mode 0700")
+    try:
+        with cache_path.open("rb") as handle:
+            raw_payload = handle.read(HF_NETWORK_MAX_BYTES + 1)
+    except (OSError, ValueError, TypeError) as exc:
+        raise ValueError("cache entry is not readable JSON") from exc
+    if len(raw_payload) > HF_NETWORK_MAX_BYTES:
+        raise ValueError("cache entry exceeds size limit")
+    try:
+        payload = json.loads(raw_payload)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("cache entry is not readable JSON") from exc
+    if not isinstance(payload, dict) or payload.get("schema_version") != HF_CACHE_SCHEMA_VERSION:
+        raise ValueError("cache entry schema mismatch")
+    if payload.get("model_id") != model_id:
+        raise ValueError("cache entry model mismatch")
+    return _window_from_payload(payload, "HF network cache")
+
+
+def _read_cached_hf_window(cache_path: Path, model_id: str) -> Optional[int]:
+    try:
+        return _read_hf_network_cache(cache_path, model_id)
+    except Exception as exc:
+        if str(exc) != "cache miss":
+            raise
+        return None
+
+
+def _write_hf_network_cache(cache_path: Path, model_id: str, ctx_window: int) -> None:
+    payload = {
+        "schema_version": HF_CACHE_SCHEMA_VERSION,
+        "model_id": model_id,
+        "fetched_at": time.time(),
+        "max_position_embeddings": ctx_window,
+    }
+    atomic_write_private_json(cache_path, payload)
+
+
+def _hf_network_url(model_id: str) -> str:
+    segments = [urllib.parse.quote(part, safe="._-") for part in model_id.split("/")]
+    return "https://huggingface.co/{}/resolve/main/config.json".format("/".join(segments))
+
+
+def _fetch_hf_window(model_id: str) -> int:
+    request = urllib.request.Request(
+        _hf_network_url(model_id),
+        headers={"Accept": "application/json", "User-Agent": "caty-overflow-sentinel/1"},
+    )
+    with urllib.request.urlopen(request, timeout=HF_NETWORK_TIMEOUT_S) as response:
+        raw_payload = response.read(HF_NETWORK_MAX_BYTES + 1)
+    if len(raw_payload) > HF_NETWORK_MAX_BYTES:
+        raise ValueError("HF network config exceeds size limit")
+    payload = json.loads(raw_payload)
+    return _window_from_payload(payload, "HF network config")
+
+
+def _fetch_hf_window_with_deadline(model_id: str, fetcher: Any, timeout_s: float) -> int:
+    result_queue: "queue.Queue[Tuple[bool, Any]]" = queue.Queue(maxsize=1)
+
+    def run_fetch() -> None:
+        try:
+            result_queue.put((True, fetcher(model_id)))
+        except Exception as exc:
+            result_queue.put((False, exc))
+
+    thread = threading.Thread(target=run_fetch, daemon=True)
+    thread.start()
+    try:
+        ok, payload = result_queue.get(timeout=timeout_s)
+    except queue.Empty as exc:
+        raise TimeoutError("HF network fetch exceeded hard timeout") from exc
+    if ok:
+        return payload
+    raise payload
+
+
+def _resolve_hf_network_ctx_window(
+    hf_model_id: str,
+    hf_cache_dir: str,
+    fetcher: Any = None,
+    fetch_timeout_s: float = HF_NETWORK_TIMEOUT_S,
+) -> Optional[Tuple[int, str]]:
+    try:
+        try:
+            model_id = validate_hf_model_id(hf_model_id)
+            cache_dir = prepare_hf_cache_dir(hf_cache_dir)
+            cache_path = _hf_cache_file(cache_dir, model_id)
+        except Exception as exc:
+            warn_ctx_window_fallback(str(exc) or exc.__class__.__name__)
+            return None
+        try:
+            cached_window = _read_cached_hf_window(cache_path, model_id)
+        except Exception as exc:
+            warn_ctx_window_fallback(str(exc) or exc.__class__.__name__)
+            cached_window = None
+        if cached_window is not None:
+            return cached_window, "hf-network-cached"
+        fetch = _fetch_hf_window if fetcher is None else fetcher
+        try:
+            ctx_window = _fetch_hf_window_with_deadline(model_id, fetch, fetch_timeout_s)
+            _write_hf_network_cache(cache_path, model_id, ctx_window)
+            cached_window = _read_hf_network_cache(cache_path, model_id)
+        except Exception as exc:
+            warn_ctx_window_fallback(str(exc) or exc.__class__.__name__)
+            return None
+        return cached_window, "hf-network-cached"
+    except Exception as exc:
+        warn_ctx_window_fallback(str(exc) or exc.__class__.__name__)
+        return None
 
 
 def resolve_ctx_window(
-    configured: Optional[int], hf_config: Optional[str], model: str
+    configured: Optional[int],
+    hf_config: Optional[str],
+    model: str,
+    hf_network: bool = False,
+    hf_cache_dir: Optional[str] = None,
+    hf_fetcher: Any = None,
+    hf_fetch_timeout_s: float = HF_NETWORK_TIMEOUT_S,
 ) -> Tuple[int, str]:
     if configured is not None:
         if configured < 1:
@@ -220,6 +423,15 @@ def resolve_ctx_window(
         return configured, "config"
     if hf_config:
         return _hf_window(Path(hf_config)), "hf-config"
+    if hf_network:
+        network_window = _resolve_hf_network_ctx_window(
+            model,
+            hf_cache_dir or "",
+            fetcher=hf_fetcher,
+            fetch_timeout_s=hf_fetch_timeout_s,
+        )
+        if network_window is not None:
+            return network_window
     normalized = model.lower().split("/")[-1]
     if normalized == "claude-unknown":
         return DEFAULT_CTX_WINDOW, "default"
@@ -267,10 +479,19 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
     evaluate.add_argument("--ctx", type=int, default=DEFAULT_CTX_WINDOW)
     validate_hf = sub.add_parser("validate-hf")
     validate_hf.add_argument("path")
+    prepare_hf_cache = sub.add_parser("prepare-hf-cache")
+    prepare_hf_cache.add_argument("path")
     args = parser.parse_args(argv)
     if args.command == "eval-series":
         values = [int(part) for part in args.series.split(",") if part]
         print(json.dumps(evaluate_series(values, args.t_abs, args.w, args.ctx), sort_keys=True))
+        return 0
+    if args.command == "prepare-hf-cache":
+        try:
+            print(prepare_hf_cache_dir(args.path))
+        except ValueError as exc:
+            print(str(exc), file=os.sys.stderr)
+            return 2
         return 0
     try:
         print(_hf_window(Path(args.path)))
