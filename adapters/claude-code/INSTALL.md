@@ -222,6 +222,18 @@ launchctl bootout gui/501/<label>    # to stop/remove
 
 (`501` is the typical first-user uid; use `$(id -u)` if unsure.)
 
+## Linux/WSL2 scheduling: cron or a systemd user timer
+
+The Keychain rationale above is macOS-specific: on Linux and WSL2 the claude CLI
+discovers its credentials under `$HOME` on disk, so the same cron-wrapper can be
+scheduled from plain cron or a systemd user timer. Two Linux-specific traps are
+documented in the [WSL2 support note](../../docs/wsl2-support.md#scheduling-on-linuxwsl2):
+cron does **not** autostart in a stock WSL2 distro (enable `systemd=true` in
+`/etc/wsl.conf`, or `service cron start` per boot), and the wrapper's pinned
+`PATH` misses user-local CLI installs (`~/.nvm/...`, `~/.npm-global/bin`,
+`~/.local/bin`) — set `CATY_WRAPPER_EXTRA_PATH` in the crontab or unit
+environment. That note carries the full crontab and unit/timer examples.
+
 ## Host hook isolation for headless spawn sessions
 
 Headless `claude -p` sessions inherit the user-level hooks in

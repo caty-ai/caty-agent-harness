@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# fable-loop cron wrapper template v2
+# Legacy health-check signature (remove only with the install.sh v2 migration):
 # fable-loop cron wrapper template v1
 #
 # Copy this file to the target workspace scripts/ directory, set TARGET and
 # CATY_HARNESS_ROOT to absolute paths, and pass the target arguments to this wrapper.
+# Optional CATY_WRAPPER_EXTRA_PATH appends absolute directories to the pinned
+# system PATH for user-local CLI installs on Linux/WSL2. Appending prevents those
+# directories from shadowing system tools.
 # Optional SECRETS_ENV is parsed as data-only KEY=VALUE assignments, one per
 # physical line, when the file exists, is not a symlink, is owned by the current
 # uid, and has 0600 or 0400 permissions. No shell code is executed. One matching
@@ -15,7 +20,36 @@ set -euo pipefail
 # boundary. Portable Bash 3.2 cannot open with O_NOFOLLOW, so a residual path
 # replacement race remains despite the pre/post-open identity checks.
 
+fail() {
+  printf 'cron-wrapper infra error: %s\n' "$1" >&2
+  exit 3
+}
+
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+if [[ -n "${CATY_WRAPPER_EXTRA_PATH:-}" ]]; then
+  extra_path_remainder=$CATY_WRAPPER_EXTRA_PATH
+  while :; do
+    case "$extra_path_remainder" in
+      *:*)
+        extra_path_entry=${extra_path_remainder%%:*}
+        extra_path_remainder=${extra_path_remainder#*:}
+        extra_path_has_more=1
+        ;;
+      *)
+        extra_path_entry=$extra_path_remainder
+        extra_path_remainder=
+        extra_path_has_more=0
+        ;;
+    esac
+    if [[ -z "$extra_path_entry" || "$extra_path_entry" != /* ]]; then
+      fail "CATY_WRAPPER_EXTRA_PATH entry must be non-empty and absolute: '$extra_path_entry'"
+    fi
+    if (( extra_path_has_more == 0 )); then
+      break
+    fi
+  done
+  PATH="$PATH:$CATY_WRAPPER_EXTRA_PATH"
+fi
 export PATH
 
 TARGET=${TARGET:-/absolute/path/to/caty-agent-harness-target}
@@ -25,11 +59,6 @@ SECRETS_ENV=${SECRETS_ENV:-}
 DEADMAN_MARKER=${DEADMAN_MARKER:-}
 DEADMAN_PROBE=${DEADMAN_PROBE:-}
 DEADMAN_PROBE_ARGS=${DEADMAN_PROBE_ARGS:-}
-
-fail() {
-  printf 'cron-wrapper infra error: %s\n' "$1" >&2
-  exit 3
-}
 
 validate_secrets_env() {
   local secrets_path=$1 shape_reasons shape_reason mode

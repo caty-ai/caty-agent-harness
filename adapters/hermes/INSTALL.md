@@ -135,8 +135,12 @@ The rules there apply in addition to the Hermes-specific wiring below.
 
    Because `PATH` is fixed, the CLI named by `VERIFIER_CLI_BIN` must be a
    self-contained executable or have its interpreter and any helper it spawns within
-   `/usr/bin:/bin`; an interpreter elsewhere, such as under a home directory or
-   Homebrew prefix, fails only when the production attest invokes it. Only the
+   `/usr/bin:/bin`; an interpreter elsewhere — a macOS Homebrew prefix, or on
+   Linux/WSL2 a user-local prefix such as `~/.nvm/versions/node/<version>/bin`,
+   `~/.npm-global/bin`, or `~/.local/bin` — fails only when the production attest
+   invokes it. This fixed `PATH` is deliberate and is **not** extended by
+   `CATY_WRAPPER_EXTRA_PATH` (that variable belongs to the cron wrapper templates
+   only); the required override here is a self-contained `VERIFIER_CLI_BIN`. Only the
    uppercase `HTTPS_PROXY`, `HTTP_PROXY`, and `ALL_PROXY` names are forwarded;
    `NO_PROXY` and lowercase `http_proxy`, `https_proxy`, and `all_proxy` are dropped,
    so any host that needs them must re-export the uppercase variables in the job
@@ -337,7 +341,12 @@ CATY_HARNESS_ROOT=/absolute/path/to/caty-agent-harness
 INTAKE_MAX_FOLD=5
 ```
 
-Set the LaunchAgent `StartInterval` to `28800`. Hermes jobs use
+Set the LaunchAgent `StartInterval` to `28800`. On Linux/WSL2 there is no
+LaunchAgent: schedule the same copied wrapper from cron (`0 */8 * * *`) or a
+systemd user timer (`OnUnitActiveSec=8h`) with the same environment values, and
+mind the two Linux traps — cron autostart and the wrapper's pinned `PATH`
+(`CATY_WRAPPER_EXTRA_PATH`) — documented in the
+[WSL2 support note](../../docs/wsl2-support.md#scheduling-on-linuxwsl2). Hermes jobs use
 `INTAKE_MAX_FOLD=5` so the cap-60 Lessons FIFO has a bounded, gradual eviction rate
 instead of replacing a large share in one run.
 

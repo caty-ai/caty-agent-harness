@@ -18,6 +18,7 @@ The tests are plain shell suites, but a few tools must be present:
 - **git 2.34+** — the updater suite exercises SSH signature verification, which older git cannot do
 - **ssh-keygen with `-Y` support** (OpenSSH 8.2+, the floor git documents for SSH signing) — the updater suite generates and verifies ed25519 signing keys; without it those cases cannot run
 - **python3** — several suites shell out to it for fixtures and checks (any recent 3.x)
+- **perl** — `scripts/task-runner.sh` detaches step sessions via `perl -MPOSIX=setsid`; when perl is absent, interpreter resolution (`scripts/lib-donecheck.sh`) fails closed with `cannot resolve interpreter` and task-runner steps cannot run. Stock macOS and Ubuntu ship perl; minimal WSL2/container images may not (CI installs it explicitly)
 - standard Unix tools (grep, sed, awk, mktemp) as shipped on macOS or Linux
 
 ## Running the tests

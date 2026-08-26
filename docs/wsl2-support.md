@@ -52,6 +52,73 @@ The WSL2 claim is real only under these conditions:
 5. **Wrapper-type files must not be group/world-writable.**
    Use modes like `0755`. Under `umask 002`, a bare `chmod +x` can leave wrappers at `0775`, and the harness correctly refuses those files. That refusal is intentional fail-closed behavior, not a bug.
 
+## Scheduling on Linux/WSL2
+
+The adapter scheduling docs were written macOS-first (LaunchAgent). The launchd rationale — macOS crontab sessions cannot reach the user Keychain, so `claude -p` exits with `Not logged in` under cron — is macOS-specific. On Linux and WSL2 the claude CLI discovers its credentials under `$HOME` on disk, so cron is a valid scheduler for the same tick wrappers. Two working options:
+
+### Option A: cron
+
+The WSL2-specific trap: **cron does not autostart** in a stock WSL2 distro. Either
+
+- enable systemd — put `[boot]`/`systemd=true` in `/etc/wsl.conf` inside the distro, then run `wsl --shutdown` from Windows and reopen; cron and systemd timers then start on distro boot — or
+- without systemd, start it per boot with `sudo service cron start` (manually, or via a `[boot]` `command=service cron start` line in `/etc/wsl.conf`).
+
+Either way, remember that a WSL2 distro only runs while Windows keeps it alive; a tick schedule assumes the distro is up at tick time.
+
+A crontab entry for the harness cron wrapper looks like:
+
+```crontab
+CATY_WRAPPER_EXTRA_PATH=/home/<user>/.local/bin:/home/<user>/.npm-global/bin
+TARGET=/absolute/path/to/caty-agent-harness/adapters/claude-code/flush-intake.sh
+CATY_HARNESS_ROOT=/absolute/path/to/caty-agent-harness
+0 */8 * * * /bin/bash /absolute/path/to/workspace/scripts/cron-wrapper.sh /absolute/path/to/workspace
+```
+
+### Wrapper PATH: `CATY_WRAPPER_EXTRA_PATH`
+
+Both wrapper templates (`templates/cron-wrapper.tmpl.sh`, `templates/updater-cron.tmpl.sh`) pin `PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`. On Linux/WSL2 the `claude`/`codex` CLIs are almost always under a user-local prefix — `~/.nvm/versions/node/<version>/bin`, `~/.npm-global/bin`, or `~/.local/bin` — none of which is on that list, so a tick can fail to find the CLI even though interactive shells work. Set `CATY_WRAPPER_EXTRA_PATH` in the crontab (or unit) environment to a colon-separated list of absolute directories. The wrapper validates each entry (absolute, non-empty; anything else is a fail-closed infra error, exit 3) and appends the list **after** the pinned baseline, so user directories can never shadow system tools. Find the real directory with `dirname "$(command -v claude)"` in an interactive shell; note that nvm paths are version-specific and move on `nvm install`, so prefer a stable prefix such as `~/.npm-global/bin` or `~/.local/bin` where you can.
+
+This variable is for the two wrapper templates only. The Hermes verifier provider intentionally keeps its own fixed `PATH=/usr/bin:/bin` and does not honor it; see `adapters/hermes/INSTALL.md` for that contract.
+
+### Option B: systemd user timer
+
+With `systemd=true` enabled, a user unit + timer pair fills the LaunchAgent role:
+
+```ini
+# ~/.config/systemd/user/caty-intake.service
+[Unit]
+Description=Caty harness flush intake tick
+
+[Service]
+Type=oneshot
+Environment=TARGET=/absolute/path/to/caty-agent-harness/adapters/claude-code/flush-intake.sh
+Environment=CATY_HARNESS_ROOT=/absolute/path/to/caty-agent-harness
+Environment=CATY_WRAPPER_EXTRA_PATH=/home/<user>/.local/bin
+ExecStart=/bin/bash /absolute/path/to/workspace/scripts/cron-wrapper.sh /absolute/path/to/workspace
+```
+
+```ini
+# ~/.config/systemd/user/caty-intake.timer
+[Unit]
+Description=Caty harness flush intake cadence
+
+[Timer]
+OnUnitActiveSec=8h
+OnBootSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+Enable with `systemctl --user enable --now caty-intake.timer`, and run `loginctl enable-linger <user>` so the user manager keeps running without an open session — on WSL2, sessions close often.
+
+## Known caveats
+
+- **mawk (`--check` freshness warning) — tracked as [issue #84](https://github.com/caty-ai/caty-agent-harness/issues/84).** Ubuntu's default `awk` is mawk, which does not support the ERE interval regex used by the `install.sh` freshness check, producing a spurious `cannot prove fresh` warning. Until #84 closes, treat that specific warning as unproven-not-stale under mawk, or install `gawk`.
+- **perl is a runtime prerequisite for task-runner.** Stock Ubuntu ships it; minimal WSL2/container images may not. See the prerequisites list in [CONTRIBUTING.md](../CONTRIBUTING.md) for the fail-closed behavior when it is absent.
+- **Locale coverage differs from CI in human runs.** `tests/pause-contract.test.sh` runs its `en_US.UTF-8` locale-path case only where that locale exists; its absence is a hard failure on macOS and a silent SKIP elsewhere, so a human WSL2 `make test` silently loses that coverage unless the locale is generated. CI restores it with `locale-gen`; for parity run `sudo locale-gen en_US.UTF-8` once in the distro.
+
 ## Why the `umask` axis matters
 
 The first fail-open lesson came from [issue #157](https://github.com/caty-ai/caty-agent-harness/issues/157) and commit `a58062a`, not from `umask`. Before that fix, mode detection assumed BSD-first `stat` handling; on GNU userlands it could yield invalid or empty mode data. WSL2 exposed that as the one remaining real suite failure after the ambient setup was corrected. At the same time, the existing CI GNU cells stayed green because the arithmetic path did not turn that bad mode data into a failing check, so those green cells were effectively fail-open. `#157` changed mode detection to GNU-first and validates a pure octal mode string before doing arithmetic, so invalid or empty data now fails closed instead of slipping through.
