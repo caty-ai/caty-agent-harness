@@ -80,9 +80,11 @@ exit `0` は検証済み実行、
 `source-normalization`（citation 検証用の raw file 正規化に失敗。chain 系と同じく
 fail-closed）のいずれかです。
 THEME block 間の空行は許容しますが、block 内の空行は不正です。各 member citation は
-比較時に先頭の bullet/date/`[tag]` marker を除いたうえで、正規化後 8〜200 文字で、
+比較時に先頭の indentation/bullet/date/`[tag]` marker を除いたうえで、正規化後 8〜200 文字で、
 正規化済み source line の先頭に一致する必要があります。
-短すぎる citation、行途中だけの一致、fabrication は block 全体を reject します。
+短すぎる citation、行途中だけの一致、fabrication は block 全体を reject します。fabricated block 数が
+`max(fabricated_floor, ceil(block 数の fabricated_pct%))` に達すると reviewer call 全体を fail にします。
+`fabricated_pct` の既定値は 50、許容範囲は 1〜100 です。
 
 reviewer route には約 30 個の THEME block を返せる output token 数を設定してください。
 claude CLI で wrap した chain では `CLAUDE_CODE_MAX_OUTPUT_TOKENS` も十分な値にします。

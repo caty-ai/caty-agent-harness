@@ -525,6 +525,211 @@ else
   fail_case '[R3-3] tag-only quotes still die after bracket stripping empties the canonicalized citation' "rc=$bracket_tags_empty_rc receipt=$(tail -n 1 "$ws_bracket_tags_empty/loop/promotions/runs.log") stderr=$(cat "$TMP_ROOT/bracket-tags-empty.err")"
 fi
 
+CANONICAL_RESIDUE=$TMP_ROOT/canonical-residue-reviewer
+write_reviewer "$CANONICAL_RESIDUE" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: indented sub-bullet content
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:Parallel supervisor briefs MUST include "write only your file"
+WEEKS: 2026-W30
+EVIDENCE: Leading indentation before a bullet is comparison-only decoration.
+PROMOTE: not-yet
+THEME: indented marker on both sides
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:  - Parallel supervisor briefs MUST include "write only your file"
+WEEKS: 2026-W30
+EVIDENCE: Source and quote use the same indented-bullet canonicalization.
+PROMOTE: not-yet
+THEME: literal shell ellipsis
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:bash trap: command `$( ... )` retains stdout
+WEEKS: 2026-W30
+EVIDENCE: A source-authenticated literal ellipsis is not model truncation.
+PROMOTE: not-yet
+THEME: literal lens ellipsis
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:glm-panel lens "custom: ..." remains a verbatim prefix
+WEEKS: 2026-W30
+EVIDENCE: Exact source matching authenticates the punctuation.
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+ws_canonical_residue=$(new_ws canonical-residue)
+cat <<'EOF_RAW' >"$ws_canonical_residue/loop/archive/flush-2026-07-20.md"
+  - Parallel supervisor briefs MUST include "write only your file" before delegation.
+- 2026-07-21 bash trap: command `$( ... )` retains stdout until descendants close it.
+- glm-panel lens "custom: ..." remains a verbatim prefix in the source.
+EOF_RAW
+write_conf "$ws_canonical_residue" producer-model "canonical-residue $CANONICAL_RESIDUE"
+"$RAW_REVIEW" --workspace "$ws_canonical_residue" --week 2026-W30 >/dev/null 2>"$TMP_ROOT/canonical-residue.err"
+canonical_residue_rc=$?
+if [[ "$canonical_residue_rc" -eq 0 \
+  && "$(tail -n 1 "$ws_canonical_residue/loop/promotions/runs.log")" == *' blocks=4 '* \
+  && "$(tail -n 1 "$ws_canonical_residue/loop/promotions/runs.log")" == *' fabricated=0 '* \
+  && "$(tail -n 1 "$ws_canonical_residue/loop/promotions/runs.log")" == *' candidates=4 '* ]]; then
+  pass '[R4-1] indented bullets and source-literal ellipses authenticate as exact prefixes'
+else
+  fail_case '[R4-1] indented bullets and source-literal ellipses authenticate as exact prefixes' "rc=$canonical_residue_rc receipt=$(tail -n 1 "$ws_canonical_residue/loop/promotions/runs.log") stderr=$(cat "$TMP_ROOT/canonical-residue.err")"
+fi
+
+INDENTED_DECOY=$TMP_ROOT/indented-decoy-reviewer
+write_reviewer "$INDENTED_DECOY" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: too-short indented decoy
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:  - Authent
+WEEKS: 2026-W30
+EVIDENCE: Bullet stripping must not bypass the eight-character floor.
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+ws_indented_decoy=$(new_ws indented-decoy)
+printf '%s\n' '  - Authentic source content remains longer than the decoy.' \
+  >"$ws_indented_decoy/loop/archive/flush-2026-07-20.md"
+write_conf "$ws_indented_decoy" producer-model "indented-decoy $INDENTED_DECOY"
+"$RAW_REVIEW" --workspace "$ws_indented_decoy" --week 2026-W30 >/dev/null 2>"$TMP_ROOT/indented-decoy.err"
+indented_decoy_rc=$?
+if [[ "$indented_decoy_rc" -eq 0 \
+  && "$(tail -n 1 "$ws_indented_decoy/loop/promotions/runs.log")" == *' fabricated=1 '* \
+  && "$(tail -n 1 "$ws_indented_decoy/loop/promotions/runs.log")" == *' candidates=0 '* ]]; then
+  pass '[R4-2] indented bullet stripping preserves the eight-character citation floor'
+else
+  fail_case '[R4-2] indented bullet stripping preserves the eight-character citation floor' "rc=$indented_decoy_rc receipt=$(tail -n 1 "$ws_indented_decoy/loop/promotions/runs.log")"
+fi
+
+CLASSIFIED_REJECTIONS=$TMP_ROOT/classified-rejections-reviewer
+write_reviewer "$CLASSIFIED_REJECTIONS" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: wrong file with unbounded ellipsis
+CLASS: rule
+MEMBERS:
+- flush-2026-07-18.md:stdin trap: `codex exec - < brief.md ... < /dev/null` loses input
+WEEKS: 2026-W29
+EVIDENCE: An unbounded ellipsis remains unauthenticated.
+PROMOTE: not-yet
+THEME: omitted terminal punctuation
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:Fugu degraded-day mode: retry later can succeed
+WEEKS: 2026-W30
+EVIDENCE: A near-full quote may not silently drop only terminal punctuation.
+PROMOTE: not-yet
+THEME: free-form label skip
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:review diff misses untracked files
+WEEKS: 2026-W30
+EVIDENCE: Arbitrary labels are not safely strippable.
+PROMOTE: not-yet
+THEME: mid-line quote
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:side effect starts here
+WEEKS: 2026-W30
+EVIDENCE: Prefix anchoring remains mandatory.
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+ws_classified_rejections=$(new_ws classified-rejections)
+cat <<'EOF_RAW' >"$ws_classified_rejections/loop/archive/flush-2026-07-18.md"
+- 2026-07-19 stdin trap: `codex exec - < brief.md ... < /dev/null` loses input.
+EOF_RAW
+cat <<'EOF_RAW' >"$ws_classified_rejections/loop/archive/flush-2026-07-20.md"
+  - Fugu degraded-day mode: retry later can succeed.
+- caty-cloud #7: review diff misses untracked files.
+- root cause first; side effect starts here.
+EOF_RAW
+write_conf "$ws_classified_rejections" producer-model "classified-rejections $CLASSIFIED_REJECTIONS"
+"$RAW_REVIEW" --workspace "$ws_classified_rejections" --week 2026-W30 >/dev/null 2>"$TMP_ROOT/classified-rejections.err"
+classified_rejections_rc=$?
+if [[ "$classified_rejections_rc" -eq 1 \
+  && "$(tail -n 1 "$ws_classified_rejections/loop/promotions/runs.log")" == *' blocks=4 '* \
+  && "$(tail -n 1 "$ws_classified_rejections/loop/promotions/runs.log")" == *' fabricated=4 '* \
+  && "$(tail -n 1 "$ws_classified_rejections/loop/promotions/runs.log")" == *' error=chain-exhausted' ]]; then
+  pass '[R4-3] classified wrong-file, paraphrase, label-skip, and mid-line quotes remain rejected'
+else
+  fail_case '[R4-3] classified wrong-file, paraphrase, label-skip, and mid-line quotes remain rejected' "rc=$classified_rejections_rc receipt=$(tail -n 1 "$ws_classified_rejections/loop/promotions/runs.log")"
+fi
+
+FABRICATION_BOUNDARY=$TMP_ROOT/fabrication-boundary-reviewer
+write_reviewer "$FABRICATION_BOUNDARY" 'fabricated_count=$1
+cat >/dev/null
+printf "%s\n" RAW-REVIEW-OUTPUT-BEGIN
+i=1
+while [ "$i" -le 25 ]; do
+  printf "THEME: boundary block %s\n" "$i"
+  printf "%s\n" "CLASS: rule" MEMBERS:
+  if [ "$i" -le "$fabricated_count" ]; then
+    printf -- "- flush-2026-08-10.md:fabricated quote %s\n" "$i"
+  else
+    printf "%s\n" "- flush-2026-08-10.md:Durable r"
+  fi
+  printf "%s\n" "WEEKS: 2026-W33" "EVIDENCE: boundary" "PROMOTE: not-yet"
+  i=$((i + 1))
+done
+printf "%s\n" RAW-REVIEW-OUTPUT-END'
+ws_boundary_ten=$(new_ws boundary-ten)
+seed_two_weeks "$ws_boundary_ten"
+write_conf "$ws_boundary_ten" producer-model "boundary-ten $FABRICATION_BOUNDARY 10"
+"$RAW_REVIEW" --workspace "$ws_boundary_ten" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/boundary-ten.err"
+boundary_ten_rc=$?
+ws_boundary_thirteen=$(new_ws boundary-thirteen)
+seed_two_weeks "$ws_boundary_thirteen"
+write_conf "$ws_boundary_thirteen" producer-model "boundary-thirteen $FABRICATION_BOUNDARY 13"
+"$RAW_REVIEW" --workspace "$ws_boundary_thirteen" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/boundary-thirteen.err"
+boundary_thirteen_rc=$?
+boundary_ten_candidate=$(latest_candidate "$ws_boundary_ten")
+if [[ "$boundary_ten_rc" -eq 0 && -f "$boundary_ten_candidate" \
+  && "$(grep -c '^## theme-' "$boundary_ten_candidate")" -eq 15 \
+  && "$(tail -n 1 "$ws_boundary_ten/loop/promotions/runs.log")" == *' blocks=25 '* \
+  && "$(tail -n 1 "$ws_boundary_ten/loop/promotions/runs.log")" == *' fabricated=10 '* \
+  && "$(tail -n 1 "$ws_boundary_ten/loop/promotions/runs.log")" == *' candidates=15 '* \
+  && "$boundary_thirteen_rc" -eq 1 \
+  && "$(tail -n 1 "$ws_boundary_thirteen/loop/promotions/runs.log")" == *' blocks=25 '* \
+  && "$(tail -n 1 "$ws_boundary_thirteen/loop/promotions/runs.log")" == *' fabricated=13 '* \
+  && "$(tail -n 1 "$ws_boundary_thirteen/loop/promotions/runs.log")" == *' error=chain-exhausted' ]]; then
+  pass '[R4-4] default whole-call guard accepts 25/10 and fails at the 25/13 half boundary'
+else
+  fail_case '[R4-4] default whole-call guard accepts 25/10 and fails at the 25/13 half boundary' "rcs=$boundary_ten_rc/$boundary_thirteen_rc ten=$(tail -n 1 "$ws_boundary_ten/loop/promotions/runs.log") thirteen=$(tail -n 1 "$ws_boundary_thirteen/loop/promotions/runs.log")"
+fi
+
+ws_pct_zero=$(new_ws pct-zero)
+seed_two_weeks "$ws_pct_zero"
+write_conf "$ws_pct_zero" producer-model "fixture $GOOD"
+printf '%s\n' 'fabricated_pct=0' >>"$ws_pct_zero/loop/review.conf"
+"$RAW_REVIEW" --workspace "$ws_pct_zero" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/pct-zero.err"
+pct_zero_rc=$?
+ws_pct_over=$(new_ws pct-over)
+seed_two_weeks "$ws_pct_over"
+write_conf "$ws_pct_over" producer-model "fixture $GOOD"
+printf '%s\n' 'fabricated_pct=101' >>"$ws_pct_over/loop/review.conf"
+"$RAW_REVIEW" --workspace "$ws_pct_over" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/pct-over.err"
+pct_over_rc=$?
+ws_pct_valid=$(new_ws pct-valid)
+seed_two_weeks "$ws_pct_valid"
+write_conf "$ws_pct_valid" producer-model "pct-valid $FABRICATION_BOUNDARY 13"
+printf '%s\n' 'fabricated_pct=60' >>"$ws_pct_valid/loop/review.conf"
+"$RAW_REVIEW" --workspace "$ws_pct_valid" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/pct-valid.err"
+pct_valid_rc=$?
+if [[ "$pct_zero_rc" -eq 2 && "$pct_over_rc" -eq 2 && "$pct_valid_rc" -eq 0 \
+  && "$(tail -n 1 "$ws_pct_zero/loop/promotions/runs.log")" == *' error=config' \
+  && "$(tail -n 1 "$ws_pct_over/loop/promotions/runs.log")" == *' error=config' \
+  && "$(tail -n 1 "$ws_pct_valid/loop/promotions/runs.log")" == *' fabricated=13 '* \
+  && "$(tail -n 1 "$ws_pct_valid/loop/promotions/runs.log")" == *' candidates=12 '* \
+  && "$(tail -n 1 "$ws_pct_valid/loop/promotions/runs.log")" == *' error=none' ]]; then
+  pass '[R4-5] fabricated_pct accepts 1-100 and controls the whole-call boundary'
+else
+  fail_case '[R4-5] fabricated_pct accepts 1-100 and controls the whole-call boundary' "rcs=$pct_zero_rc/$pct_over_rc/$pct_valid_rc"
+fi
+
 OUTPUT_CAP_ERROR=$TMP_ROOT/output-cap-error-reviewer
 write_reviewer "$OUTPUT_CAP_ERROR" 'cat >/dev/null
 printf "%s\n" "API Error: Claude'"'"'s response exceeded the 32000 output token maximum."'

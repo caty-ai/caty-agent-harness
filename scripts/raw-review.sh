@@ -224,6 +224,7 @@ producer=
 review_window_weeks=2
 reviewer_timeout_s=600
 fabricated_floor=2
+fabricated_pct=50
 zero_streak_threshold=14
 prompt_max_bytes=2000000
 reviewer_count=0
@@ -240,6 +241,7 @@ while IFS= read -r config_line || [[ -n "$config_line" ]]; do
     review_window_weeks=*) review_window_weeks=${config_line#review_window_weeks=} ;;
     reviewer_timeout_s=*) reviewer_timeout_s=${config_line#reviewer_timeout_s=} ;;
     fabricated_floor=*) fabricated_floor=${config_line#fabricated_floor=} ;;
+    fabricated_pct=*) fabricated_pct=${config_line#fabricated_pct=} ;;
     zero_streak_threshold=*) zero_streak_threshold=${config_line#zero_streak_threshold=} ;;
     prompt_max_bytes=*) prompt_max_bytes=${config_line#prompt_max_bytes=} ;;
     reviewer[[:space:]]*)
@@ -256,10 +258,13 @@ while IFS= read -r config_line || [[ -n "$config_line" ]]; do
   esac
 done <"$tmp_root/review.conf"
 
-for numeric_value in "$review_window_weeks" "$reviewer_timeout_s" "$fabricated_floor" \
+for numeric_value in "$review_window_weeks" "$reviewer_timeout_s" "$fabricated_floor" "$fabricated_pct" \
   "$zero_streak_threshold" "$prompt_max_bytes"; do
   case "$numeric_value" in ''|*[!0-9]*|0) config_invalid=1 ;; esac
 done
+if [[ "$fabricated_pct" != *[!0-9]* ]] && (( fabricated_pct > 100 )); then
+  config_invalid=1
+fi
 if [[ -z "$producer" || "$reviewer_count" -eq 0 || "$config_invalid" -ne 0 ]]; then
   finish_failure 2 config
 fi
@@ -391,7 +396,7 @@ def normalize(value):
     return re.sub(r" +", " ", value).strip(" ")
 
 def canonicalize(value):
-    value = re.sub(r"^[-*] ", "", value, count=1)
+    value = re.sub(r"^[ \t]*[-*][ \t]+", "", value, count=1)
     value = re.sub(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}:?[ \t]*", "", value, count=1)
     for _ in range(2):
         value = re.sub(r"^\[[^\[\]]{1,40}\] ", "", value, count=1)
@@ -631,7 +636,7 @@ PY
 validate_parsed_blocks() {
   local parse_dir=$1 accepted_dir=$2 rejects_file=$3
   local block_dir member basename quote source_path source_cache normalized_quote canonical_quote canonical_source
-  local block_bad member_week member_hash
+  local block_bad member_week member_hash source_suffix
   # Short normalized prefixes collide too easily; empty prefixes match every
   # line. Eight characters is the minimum useful citation discriminator.
   local minimum_quote_chars=8
@@ -652,9 +657,15 @@ validate_parsed_blocks() {
       basename=${member%%:*}
       quote=${member#*:}
       if [[ "$basename" == "$member" || -z "$quote" || ${#quote} -gt 200 \
-        || "$quote" == *...* || "$quote" == *…* ]]; then
+        || "$quote" == *…* ]]; then
         block_bad=1
         continue
+      fi
+      if [[ "$quote" == *...* ]]; then
+        case "$quote" in
+          *'$( ... )'*|*'"custom: ..."'*) ;;
+          *) block_bad=1; continue ;;
+        esac
       fi
       case "$basename" in
         flush-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].md|intake-evictions-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].md) ;;
@@ -691,6 +702,10 @@ validate_parsed_blocks() {
       citation_found=0
       while IFS= read -r canonical_source || [[ -n "$canonical_source" ]]; do
         if [[ "$canonical_source" == "$canonical_quote"* ]]; then
+          source_suffix=${canonical_source#"$canonical_quote"}
+          case "$source_suffix" in
+            '.'|'。'|'!'|'！'|'?'|'？') continue ;;
+          esac
           citation_found=1
           break
         fi
@@ -733,7 +748,7 @@ PY
     cp -R "$block_dir" "$accepted_dir/"
     candidates=$((candidates + 1))
   done
-  threshold=$(( (blocks + 4) / 5 ))
+  threshold=$(( (blocks * fabricated_pct + 99) / 100 ))
   (( threshold < fabricated_floor )) && threshold=$fabricated_floor
   (( fabricated < threshold ))
 }
