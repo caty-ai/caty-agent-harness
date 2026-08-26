@@ -181,17 +181,22 @@ superseder promotes — same batch or cross-run, §5), `k-below-2` (terminal bec
 recurrence emits a **new** theme-id in a later run; a frozen id's k never changes —
 §9 has a fixture asserting the re-emitted id, not the frozen one, is what gets
 reconsidered), `stub-exists` (foreign/non-canonical stub dirs only — see §4),
-`unknown-approval`, **`supersedes-not-owned`** (the non-owned target line belongs to
+**`supersedes-not-owned`** (the non-owned target line belongs to
 #149's jurisdiction; a re-review of the theme mints a new id, so the frozen id never
-becomes promotable), `already-applied`, `already-rolled-back`.
+becomes promotable).
 
 Revisit (pending): `awaiting-approval`, `section-full`, `volume-guard`,
 `supersedes-ambiguous` (re-resolves only if a later batch changes the facts; never
 promotes silently).
 
-Run-level, never a per-theme index decision: `input-untrusted` (per-file),
-`caps-read-failed`, `lock-busy`, `skipped-paused`, `stub-dirty` (rollback-operation
-outcome). These never produce index rows.
+Run-level or receipt-only, never a per-theme index decision: `input-untrusted`
+(per-file), `caps-read-failed`, `lock-busy`, `skipped-paused`, `stub-dirty`
+(rollback-operation outcome), `unknown-approval`, `already-applied`,
+`already-rolled-back` (the latter three are guard outcomes about an id whose index
+row keeps its original decision — persisting them would rewrite history; v3.2 nit
+from the delta review: listing them as Terminal invited a future edit to persist
+them, which would reintroduce the vocabulary-mismatch CRITICAL). These never produce
+index rows.
 
 `supersedes-unresolved` is a **receipt annotation only** (`note=supersedes-unresolved`
 on the promoted superseder's receipt line) — no theme ever holds it as a decision
