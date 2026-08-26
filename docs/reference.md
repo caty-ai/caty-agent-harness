@@ -123,7 +123,12 @@ never consumes `.rejects.md`. A bare run leaves `STATE.md` unchanged, reports
 approval-pending facts and rules, and creates draft skill stubs. Explicit approval
 promotes a named fact or rule; `--auto-capability-facts` enables the separately
 bounded capability-fact path. `APPLY_MAX_PER_SECTION` defaults to 20 and
-`APPLY_MAX_AUTO` defaults to 10. Durable-section caps come from
+`APPLY_MAX_AUTO` defaults to 10. It also honors `APPLY_LOCK_ATTEMPTS`,
+`APPLY_PROMOTIONS_LOCK_ATTEMPTS`, `APPLY_STATE_LOCK_ATTEMPTS`,
+`APPLY_LOCK_SLEEP_S`, `APPLY_STATE_LOCK_SLEEP_S`, `APPLY_LOCK_STALE_S`, and the
+test-only seams `APPLY_TEST_CRASH_AFTER_STUB_MKDIR`,
+`APPLY_TEST_CRASH_BETWEEN_STATE_AND_INDEX`, `APPLY_TEST_CRASH_AFTER_PHASE2`, and
+`APPLY_TEST_FORCE_PHASE3_LOCK_BUSY`. Durable-section caps come from
 `lib-state-fold.sh` and are enforced by refusal. `loop/promotions/apply-index.tsv`
 is the idempotency authority, while append-only `apply.log` carries run-start,
 transition, and summary receipts. Rollback invalidates only an apply-stamped entry
