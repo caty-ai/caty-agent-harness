@@ -117,7 +117,7 @@ Enable with `systemctl --user enable --now caty-intake.timer`, and run `loginctl
 
 - **mawk (`--check` freshness warning) — tracked as [issue #84](https://github.com/caty-ai/caty-agent-harness/issues/84).** Ubuntu's default `awk` is mawk, which does not support the ERE interval regex used by the `install.sh` freshness check, producing a spurious `cannot prove fresh` warning. Until #84 closes, treat that specific warning as unproven-not-stale under mawk, or install `gawk`.
 - **perl is a runtime prerequisite for task-runner.** Stock Ubuntu ships it; minimal WSL2/container images may not. See the prerequisites list in [CONTRIBUTING.md](../CONTRIBUTING.md) for the fail-closed behavior when it is absent.
-- **Locale coverage differs from CI in human runs.** `tests/pause-contract.test.sh` hard-asserts its `en_US.UTF-8` locale-path case only on Darwin and skips it elsewhere, so a human WSL2 `make test` silently loses that coverage unless the locale exists. CI restores it with `locale-gen`; for parity run `sudo locale-gen en_US.UTF-8` once in the distro.
+- **Locale coverage differs from CI in human runs.** `tests/pause-contract.test.sh` runs its `en_US.UTF-8` locale-path case only where that locale exists; its absence is a hard failure on macOS and a silent SKIP elsewhere, so a human WSL2 `make test` silently loses that coverage unless the locale is generated. CI restores it with `locale-gen`; for parity run `sudo locale-gen en_US.UTF-8` once in the distro.
 
 ## Why the `umask` axis matters
 
