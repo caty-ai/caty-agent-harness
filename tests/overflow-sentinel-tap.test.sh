@@ -291,6 +291,28 @@ set -e
   && pass "OVF_SENTINEL unset retains the full exported TR step budget" \
   || fail_case "OVF_SENTINEL unset retains the full exported TR step budget" "rc=$off_budget_rc"
 
+# --- #204 measurement (measure/204-overhead branch only; never merged) ---
+# Times the exact off-budget invocation with a generous budget so the run
+# cannot hit rc=124; per-iteration overhead (elapsed minus the 1.2s mock
+# sleep) is printed for harvesting from ci-matrix logs on the macOS cells.
+measure_root="$TMP_ROOT/measure204"
+for measure_i in $(seq 1 12); do
+  rm -rf "$measure_root"
+  make_attempt "$measure_root"
+  measure_start=$(python3 -c 'import time;print(f"{time.monotonic():.3f}")')
+  set +e
+  TR_STEP_TIMEOUT_S=60 OVF_FINALIZE_TIMEOUT_S=garbage OVF_T_ABS=garbage \
+  OVF_STEP_CMD="$MOCK_CLI" MOCK_SLEEP_S=1.2 MOCK_STDOUT='budget preserved' \
+    "$ADAPTER" "$measure_root/workspace/task.md" "$measure_root/workspace" \
+    "$measure_root/artifact/attempts/001" 1 >"$measure_root/out" 2>"$measure_root/err"
+  measure_rc=$?
+  set -e
+  measure_end=$(python3 -c 'import time;print(f"{time.monotonic():.3f}")')
+  python3 -c "print(f'MEASURE204 iter=$measure_i rc=$measure_rc elapsed={$measure_end-$measure_start:.3f} overhead={$measure_end-$measure_start-1.2:.3f}')"
+done
+pass "measure204 overhead loop completed"
+# --- end #204 measurement ---
+
 invalid_root="$TMP_ROOT/invalid"
 make_attempt "$invalid_root"
 invalid_attempt="$invalid_root/artifact/attempts/001"
