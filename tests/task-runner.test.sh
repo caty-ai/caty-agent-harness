@@ -3236,6 +3236,64 @@ PY
   fi
 }
 
+case_ledger_reconcile_post_race_cache_self_heals() {
+  local name=ledger-reconcile-post-race-cache-self-heals ws artifact source fold cache first final i
+  ws=$(make_ws)
+  write_terminal_ledger_fixture "$ws" post-race delivered
+  artifact="$ws/loop/artifacts/post-race"
+  source="$artifact/attempts/001/sentinel-events.jsonl"
+  fold="$artifact/attempts/001/.ledger-fold.json"
+  cache="$artifact/.ledger-reconcile.json"
+  printf '%s\n' '{"event":"turn","turn_idx":1,"input_tokens":1,"cache_read_tokens":0,"cache_creation_tokens":0}' >"$source"
+  run_tick "$ws" >/dev/null
+  printf '%s\n' '{"event":"turn","turn_idx":2,"input_tokens":2,"cache_read_tokens":0,"cache_creation_tokens":0}' >>"$source"
+  python3 - "$source" "$fold" "$cache" <<'PY'
+import json, os, sys
+source_path, fold_path, cache_path = sys.argv[1:]
+source_stat = os.stat(source_path)
+fold = json.load(open(fold_path, encoding="utf-8"))
+cache = json.load(open(cache_path, encoding="utf-8"))
+assert fold["source_bytes_at_fold"] < source_stat.st_size
+attempt = cache["signature"]["attempts"][0]
+attempt["source_size"] = source_stat.st_size
+attempt["source_mtime_ns"] = source_stat.st_mtime_ns
+tmp = cache_path + ".tmp-test"
+with open(tmp, "w", encoding="utf-8") as handle:
+    json.dump(cache, handle, sort_keys=True, separators=(",", ":"))
+    handle.write("\n")
+os.replace(tmp, cache_path)
+PY
+  run_tick "$ws" >/dev/null
+  first=$(python3 - "$source" "$fold" "$artifact/task-end.json" "$artifact/ledger.jsonl" <<'PY'
+import json, os, sys
+source_path, fold_path, receipt_path, ledger_path = sys.argv[1:]
+source_size = os.path.getsize(source_path)
+folded_size = json.load(open(fold_path, encoding="utf-8"))["source_bytes_at_fold"]
+complete = json.load(open(receipt_path, encoding="utf-8"))["fold_complete"]
+turns = sum(1 for row in map(json.loads, open(ledger_path, encoding="utf-8")) if row.get("event") == "turn")
+print("%s:%s:%s:%s" % (source_size, folded_size, str(complete).lower(), turns))
+PY
+)
+  for i in 2 3 4 5; do run_tick "$ws" >/dev/null; done
+  final=$(python3 - "$source" "$fold" "$artifact/task-end.json" "$artifact/ledger.jsonl" <<'PY'
+import json, os, sys
+source_path, fold_path, receipt_path, ledger_path = sys.argv[1:]
+source_size = os.path.getsize(source_path)
+folded_size = json.load(open(fold_path, encoding="utf-8"))["source_bytes_at_fold"]
+complete = json.load(open(receipt_path, encoding="utf-8"))["fold_complete"]
+turns = sum(1 for row in map(json.loads, open(ledger_path, encoding="utf-8")) if row.get("event") == "turn")
+print("%s:%s:%s:%s" % (source_size, folded_size, str(complete).lower(), turns))
+PY
+)
+  if [[ "$first" = "$final" ]] \
+    && [[ "${first%%:*}" = "$(cut -d: -f2 <<<"$first")" ]] \
+    && [[ "$(cut -d: -f3-4 <<<"$first")" = "true:2" ]]; then
+    pass "$name"
+  else
+    fail "$name" "poisoned reconcile cache did not heal on the next tick: first=$first after_5=$final"
+  fi
+}
+
 case_ledger_receipt_tmp_crash_recovery() {
   local name=ledger-receipt-tmp-crash-recovery ws artifact
   ws=$(make_ws)
@@ -3576,6 +3634,7 @@ case_ledger_window_error_retries_then_overflows
 case_ledger_window_error_recovers_completed
 case_ledger_io_failure_is_fail_open
 case_ledger_orphan_tail_converges
+case_ledger_reconcile_post_race_cache_self_heals
 case_ledger_receipt_tmp_crash_recovery
 case_ledger_fingerprint_repair_after_emit_failure
 case_ledger_quiescence_only_repairs_receipt

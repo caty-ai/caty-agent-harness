@@ -299,4 +299,6 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
   per-task `ledger.jsonl` へ bounded・fail-open に fold し、driver の実 terminal state から distinct な
   task-level `task_end` と atomic `task-end.json` receipt を生成する ledger-confluence を適用。
   `window-error` は infra として fresh-session retry し、retry を焼き切った最終 driver も `window-error` の場合だけ exhausted DLQ を `overflowed` に写像する。
+  outcome ownership は裁定済み設計として FINAL burned attempt の分類に属し（codex r2 の any-attempt derivation は棄却）、途中に overflow evidence があっても最終 attempt が non-window failure の mixed run は `aborted` とし、overflow evidence は folded `attempt_end` records に保持する。
+  また `maximum context length` / `context window` は error-shape guard 付きのままとする（main の unguarded arm に対する deliberate prose-hardening であり、retry fix 後のコストは outcome label だけで retry budget には影響しない）。
   per-run `attempt_end` と monitor の schema/state は変更しない。

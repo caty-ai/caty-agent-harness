@@ -752,6 +752,43 @@ def reconcile_signature():
     }
 
 
+def reconcile_sources_are_folded(signature):
+    for attempt in signature.get("attempts", []):
+        source_size = attempt.get("source_size")
+        expected_size = 0 if source_size is None else source_size
+        fold_path = os.path.join(artifact_dir, attempt["path"], ".ledger-fold.json")
+        fold_state = read_json(fold_path) or {}
+        if bool(fold_state.get("exhausted")):
+            continue
+        folded_size = fold_state.get("source_bytes_at_fold", 0)
+        if not isinstance(folded_size, int) or folded_size != expected_size:
+            return False
+    return True
+
+
+def reconcile_signature_after_writes(entry_signature):
+    receipt_path = os.path.join(artifact_dir, "task-end.json")
+    receipt = read_json(receipt_path) or {}
+    receipt_stat = file_signature(receipt_path)
+    attempts = []
+    for entry_attempt in entry_signature.get("attempts", []):
+        attempt = dict(entry_attempt)
+        path = os.path.join(artifact_dir, attempt["path"])
+        attempt["fold_state"] = file_signature(os.path.join(path, ".ledger-fold.json"))
+        attempt["attempt_receipt"] = file_signature(os.path.join(path, "attempt.json"))
+        attempts.append(attempt)
+    signature = dict(entry_signature)
+    signature.update({
+        "ledger": file_signature(ledger_path),
+        "state": file_signature(os.path.join(artifact_dir, "state.json")),
+        "receipt_version": receipt.get("receipt_version"),
+        "receipt_mtime_ns": receipt_stat["mtime_ns"] if receipt_stat else None,
+        "receipt_size": receipt_stat["size"] if receipt_stat else None,
+        "attempts": attempts,
+    })
+    return signature
+
+
 def catchup():
     ensure_init()
     for path, number in all_attempt_dirs():
@@ -997,14 +1034,14 @@ def reconcile_terminal():
     reconcile_path = os.path.join(artifact_dir, ".ledger-reconcile.json")
     signature = reconcile_signature()
     previous = read_json(reconcile_path)
-    if previous and previous.get("signature") == signature:
+    if previous and previous.get("signature") == signature and reconcile_sources_are_folded(signature):
         return
     catchup()
     emit_receipt()
     project_receipt()
     atomic_json(reconcile_path, {
         "schema": 1,
-        "signature": reconcile_signature(),
+        "signature": reconcile_signature_after_writes(signature),
     })
 
 
