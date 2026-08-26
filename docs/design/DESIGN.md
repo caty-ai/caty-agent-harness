@@ -63,6 +63,8 @@ the missing verification discipline; neither runtime's native machinery is dupli
     artifacts/        # artifact bundles per task (Appendix A), quarantine lives here
     archive/          # retained raw-layer inputs; append-only
     handoffs/         # session narratives referenced by the Last session index
+    promotions/       # raw-review candidates, rejects, ledger, and receipts
+    notify/           # append-only operator notifications from raw review
 ```
 
 The **raw layer** is the append-only population formed by exactly two streams of regular
@@ -71,9 +73,9 @@ files: `loop/archive/flush-<UTC-date>.md` and
 symlinks and anything else placed in the same directory are outside the raw layer and
 have no retention guarantee under this contract.
 
-Agents do not read the raw layer during CONSULT. They read `STATE.md` and
-trigger-matching promoted skills; the raw layer is the population available to future
-promotion work, not task context. Accordingly, `## Lessons learned` (cap 60) is a
+Agents do not read the raw layer, `loop/promotions/`, or `loop/notify/` during CONSULT.
+They read `STATE.md` and trigger-matching promoted skills; these three trees are
+operational inputs and review outputs, not task context. Accordingly, `## Lessons learned` (cap 60) is a
 current window cut from the raw population, not the raw layer itself. Its cap is the
 prompt-injection budget for every step, not a statement of retention duration.
 
@@ -87,9 +89,10 @@ ISO-8601 weeks are the downstream comparison unit for recurrence, not a capacity
 measure. Finding the same topic in last week's raw and this week's raw establishes that
 it came from separate jobs without depending on task IDs or individual dates. Week
 membership is derived from each filename's UTC date, so the archive layout remains
-flat. `scripts/raw-week.sh` lists the raw-layer files for a requested ISO week. The
-downstream weekly review that uses this comparison is not yet implemented and is
-planned for #148.
+flat. `scripts/raw-week.sh` lists the raw-layer files for a requested ISO week.
+`scripts/raw-review.sh` sends whole files from the trailing review window to a declared
+non-producer model, validates its cited source-line prefixes, and records host-computed
+theme recurrence without writing STATE.md or skills.
 
 A pending flush enters the raw layer only after its UTC date has passed because
 `flush-intake.sh` archives dates strictly before `today`; deferred files enter later.
@@ -185,9 +188,15 @@ degraded no-template fallback does not render this block.
 
 - A single verify pass certifies task completion at n=1, nothing more (R5). It may
   write **Lessons learned** only.
-- **General rules** and **Verified facts** require k≥2 independent verify passes of the
-  same lesson (different tasks) OR explicit human promotion. The k-count lives with the
-  Lessons entry (`confirmations: 1`).
+- The former exact-lesson verify-pass k≥2 gate is retired because measurement found
+  **0 exact reoccurrences in 1,045 lessons**: the equality count had no promotion
+  population. **General rules** and **Verified facts** instead require theme-level
+  recurrence across at least two ISO weeks judged by a model different from the
+  workspace's declared current producer, or explicit promotion by the operational
+  agent. Raw flush headers do not carry per-lesson model lineage, so this guarantee is
+  deliberately no stronger than the declared producer wiring.
+- `lesson_hash` remains an intake deduplication key only; it is never recurrence
+  evidence. The existing `confirmations:` field is not redefined by raw review.
 - OpenClaw distillation records use a host-computed
   `dedup_key = task_id:lesson_hash`, where the task id identifies the sorted input batch
   and the lesson hash covers the whitespace-normalized dated candidate bullet, including
@@ -243,6 +252,12 @@ degraded no-template fallback does not render this block.
   each emitted observation to be worded as `success`, `partial`, `fail`, or `uncertain`,
   gives verified evidence priority over heuristic inference, and maps missing evidence
   to `uncertain`; these semantic labels are prompt requirements, not host validation.
+- The raw-review job owns `loop/promotions/.lock`, never holds it across a model call,
+  reads the raw layer only, and has no read or write path to STATE.md or `loop/pending/`.
+  It writes unique candidate/reject files and appends complete ledger blocks and receipt
+  lines while holding its short-lived lock; it never rewrites either append-only file.
+  A future apply step must treat `candidates-*.md` as untrusted data: citation
+  validation proves source authenticity, not benign intent.
 
 ### 3.5 Precedence vs native memory (R10)
 

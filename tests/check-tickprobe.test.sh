@@ -11,6 +11,10 @@ WARN_SAMEDAY='cannot prove fresh'
 WARN_SECRETS='SECRETS_ENV permissions should be 0600 or 0400'
 WARN_DUPLICATE_BOOTSTRAP='warning: instruction lint: duplicate bootstrap marker'
 WARN_LARGE_INSTRUCTIONS='warning: instruction lint: file exceeds 200 lines'
+WARN_REVIEW_CONFIG='warning: review-config:'
+WARN_REVIEW_NOTIFY='warning: review-notify-unread:'
+WARN_REVIEW_SILENT='warning: review-silent:'
+WARN_REVIEW_ZERO='warning: review-zero-streak:'
 PRECEDENCE_LINE='Instruction precedence: user request > runtime safety > loop gates > instruction files > bootstrap > STATE > skill.'
 LEARNING_PATH_PREFIX='learning path:'
 VERIFY_HEADER='# VERIFY log — append-only verifier verdict history'
@@ -333,6 +337,53 @@ assert_has_warning "oversized instruction file warns without failing check" "$ws
 ws=$(new_ws empty-queue)
 mkdir -p "$ws/loop/tasks/queue"
 assert_no_tick_warning "empty queue is silent" "$ws"
+
+ws=$(new_ws review-config)
+output=$(run_check "$ws")
+rc=$?
+if [[ "$rc" -eq 0 && "$output" == *'info: review not wired;'* \
+  && "$output" != *"$WARN_REVIEW_CONFIG"* ]]; then
+  pass "[R1-4] fully commented stock review config is informational, not a warning"
+else
+  fail_case "[R1-4] fully commented stock review config is informational, not a warning" "rc=$rc output=$output"
+fi
+
+ws=$(new_ws review-config-producer-only)
+printf '%s\n' 'producer=producer-model' >"$ws/loop/review.conf"
+assert_has_warning "producer-only review config warns as partially wired" "$ws" "$WARN_REVIEW_CONFIG"
+
+ws=$(new_ws review-config-reviewer-only)
+printf '%s\n' 'reviewer other-model /bin/true' >"$ws/loop/review.conf"
+assert_has_warning "reviewer-only review config warns as partially wired" "$ws" "$WARN_REVIEW_CONFIG"
+
+ws=$(new_ws review-config-invalid)
+printf '%s\n' 'this is not review configuration' >"$ws/loop/review.conf"
+assert_has_warning "unparseable non-comment review config warns" "$ws" "$WARN_REVIEW_CONFIG"
+
+ws=$(new_ws review-notify)
+mkdir -p "$ws/loop/notify"
+printf '%s\n' '# unread review failure' >"$ws/loop/notify/review-2026-08-25.md"
+assert_has_warning "unconsumed raw-review notification warns" "$ws" "$WARN_REVIEW_NOTIFY"
+
+ws=$(new_ws review-silent)
+printf '%s\n' 'producer=producer-model' 'reviewer other-model /bin/true' >"$ws/loop/review.conf"
+assert_has_warning "wired review without a receipt warns silent" "$ws" "$WARN_REVIEW_SILENT"
+
+ws=$(new_ws review-zero)
+printf '%s\n' 'producer=producer-model' 'reviewer other-model /bin/true' 'zero_streak_threshold=2' >"$ws/loop/review.conf"
+printf '%s\n' 'ts=2099-01-01T00:00:00Z runid=future mode=nightly window=- files=0 prompt_bytes=0 model_used=- chain_pos=0 blocks=0 fabricated=0 rejected=0 candidates=0 self_review_refused=- zero_streak=2 error=none' >"$ws/loop/promotions/runs.log"
+printf '2\n' >"$ws/loop/promotions/.zero-streak"
+assert_has_warning "zero streak at configured threshold warns" "$ws" "$WARN_REVIEW_ZERO"
+
+ws=$(new_ws review-unwired-old-layout)
+rm -rf "$ws/loop/promotions"
+output=$(run_check "$ws")
+rc=$?
+if [[ "$rc" -eq 0 && "$output" == *'info: review not wired;'* && "$output" != *'missing path: loop/promotions/'* ]]; then
+  pass "unwired legacy workspace reports review info without a missing-path failure"
+else
+  fail_case "unwired legacy workspace reports review info without a missing-path failure" "rc=$rc output=$output"
+fi
 
 ws=$(new_ws no-evidence)
 queue_task "$ws" task-one

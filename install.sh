@@ -802,6 +802,107 @@ check_instruction_files() {
   fi
 }
 
+check_raw_review() {
+  local workspace=$1
+  local conf="$workspace/loop/review.conf"
+  local promotions="$workspace/loop/promotions"
+  local notify="$workspace/loop/notify"
+  local wired=0
+  local producer_set=0
+  local reviewer_set=0
+  local config_invalid=0
+  local threshold=14
+  local streak=0
+  local newest_ts=
+  local newest_epoch=
+  local now_epoch
+  local configured_threshold
+  local config_line config_value carriage_return
+  local -a config_argv
+
+  if [[ -f "$conf" && ! -L "$conf" ]]; then
+    carriage_return=$(printf '\r')
+    while IFS= read -r config_line || [[ -n "$config_line" ]]; do
+      config_line=${config_line%"$carriage_return"}
+      config_line=${config_line#"${config_line%%[![:space:]]*}"}
+      case "$config_line" in
+        ''|'#'*) ;;
+        producer=*)
+          config_value=${config_line#producer=}
+          [[ -n "$config_value" ]] && producer_set=1 || config_invalid=1
+          ;;
+        reviewer[[:space:]]*)
+          read -r -a config_argv <<<"$config_line" || config_invalid=1
+          if (( ${#config_argv[@]} >= 3 )); then
+            reviewer_set=1
+          else
+            config_invalid=1
+          fi
+          ;;
+        notify_cmd=*) ;;
+        review_window_weeks=*|reviewer_timeout_s=*|fabricated_floor=*|prompt_max_bytes=*)
+          config_value=${config_line#*=}
+          case "$config_value" in ''|*[!0-9]*|0) config_invalid=1 ;; esac
+          ;;
+        zero_streak_threshold=*)
+          configured_threshold=${config_line#zero_streak_threshold=}
+          case "$configured_threshold" in
+            ''|*[!0-9]*|0) config_invalid=1 ;;
+            *) threshold=$configured_threshold ;;
+          esac
+          ;;
+        *) config_invalid=1 ;;
+      esac
+    done <"$conf"
+    if [[ "$producer_set" -eq 1 && "$reviewer_set" -eq 1 && "$config_invalid" -eq 0 ]]; then
+      wired=1
+    elif [[ "$config_invalid" -ne 0 || "$producer_set" -ne "$reviewer_set" ]]; then
+      printf 'warning: review-config: loop/review.conf requires producer and reviewer wiring\n' >&2
+    fi
+  fi
+
+  if [[ "$wired" -ne 1 && "$config_invalid" -eq 0 \
+    && "$producer_set" -eq 0 && "$reviewer_set" -eq 0 ]]; then
+    printf 'info: review not wired; loop/promotions/ is not required yet\n'
+  fi
+
+  if [[ -d "$notify" ]] && find "$notify" -maxdepth 1 -type f -name 'review-*.md' -print | grep -q .; then
+    printf 'warning: review-notify-unread: review notification files require operator consumption\n' >&2
+  fi
+
+  if [[ "$wired" -eq 1 ]]; then
+    if [[ -f "$promotions/runs.log" ]]; then
+      newest_ts=$(sed -n 's/^ts=\([^[:space:]]*\).*/\1/p' "$promotions/runs.log" | LC_ALL=C sort | tail -n 1)
+    fi
+    if [[ -z "$newest_ts" ]]; then
+      printf 'warning: review-silent: wired review has no run receipt\n' >&2
+    else
+      newest_epoch=$(python3 -B - "$newest_ts" <<'PY' 2>/dev/null
+import datetime
+import sys
+try:
+    value = datetime.datetime.strptime(sys.argv[1], "%Y-%m-%dT%H:%M:%SZ")
+except ValueError:
+    raise SystemExit(1)
+print(int(value.replace(tzinfo=datetime.timezone.utc).timestamp()))
+PY
+)
+      now_epoch=$(date '+%s')
+      if [[ -z "$newest_epoch" || $((now_epoch - newest_epoch)) -gt 172800 ]]; then
+        printf 'warning: review-silent: newest review receipt is older than 48 hours\n' >&2
+      fi
+    fi
+  fi
+
+  if [[ -f "$promotions/.zero-streak" ]]; then
+    streak=$(sed -n '1p' "$promotions/.zero-streak")
+    case "$streak" in ''|*[!0-9]*) streak=0 ;; esac
+    if (( streak >= threshold )); then
+      printf 'warning: review-zero-streak: %s consecutive eligible zero-candidate runs (threshold %s)\n' "$streak" "$threshold" >&2
+    fi
+  fi
+}
+
 probe_readable_contains() {
   local path=$1
   local expected=$2
@@ -1236,6 +1337,7 @@ EOF
 
   check_cron_wrappers "$workspace"
   check_instruction_files "$workspace"
+  check_raw_review "$workspace"
   check_learning_paths
 
   if [[ -d "$workspace/loop/tasks/queue" ]]; then

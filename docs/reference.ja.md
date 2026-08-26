@@ -62,6 +62,55 @@ validation と execution の両方で使う Bash / Perl の絶対パスを記録
 
 flush intake consumer の会計 ledger は `loop/pending/intake-runs.log` です。deadman の `distill` marker が証明するのは intake が実行されたことだけです。内容レベルの沈黙・dedup・deferral・eviction・quarantine の各件数は ledger で確認します。`loop/archive/` の raw 層は append-only で、自動で prune されることはありません。厳密な所属条件は [DESIGN.md §3.1](design/DESIGN.md#31-files-per-agent-workspace) を参照してください。ledger の詳しい形式と schedule は [adapters/claude-code/INSTALL.md](../adapters/claude-code/INSTALL.md) を参照してください。
 
+## Raw 層のクロスモデルレビュー
+
+```text
+scripts/raw-review.sh --workspace <path> [--week <YYYY-Www>] [--dry-run]
+```
+
+`--week` なしでは、現在の UTC ISO 週から設定された週数ぶんの raw file 全文と、
+前回の正常な nightly snapshot 後に遅着した file を review します。`--week` は指定週で
+終わる遡及 window、`--dry-run` は同じ prompt の構築・byte count・file 一覧だけを行い、
+reviewer call と遅着 watermark 更新を行わず、notification の書き込み・送信もしません。
+exit `0` は検証済み実行、
+`NO_GROUPS`、または pause skip、`1` は review 試行後の fail-closed、`2` は usage/config
+により review を開始できなかったことを示します。workspace を特定できる全 exit path は
+`loop/promotions/runs.log` に receipt を残します。receipt の `error=` は `none` /
+`skipped-paused` / `lock-busy` / `chain-exhausted` / `config` / `prompt-too-large` /
+`source-normalization`（citation 検証用の raw file 正規化に失敗。chain 系と同じく
+fail-closed）のいずれかです。
+THEME block 間の空行は許容しますが、block 内の空行は不正です。各 member citation は
+比較時に先頭の indentation、1 個の bullet marker、ISO date prefix、`[session-806]` /
+`[2026-07-20]` のように内部 whitespace を含まず、ASCII digit または `-` を少なくとも 1 つ含み、
+閉じ `]` の直後に space または tab が続く保守的な machine tag、`**bold**` / word-adjacent な
+`*bold*` のような paired emphasis marker を除いたうえで、正規化後 8〜200 文字で、
+正規化済み source line の先頭に一致する必要があります。
+`[IMPORTANT]` / `[NEVER]` のような human warning tag と、意味を持つ lone/glob `*` token は保持されます。
+短すぎる citation、行途中だけの一致、fabrication は block 全体を reject します。fabricated block 数が
+`max(fabricated_floor, ceil(block 数の fabricated_pct%))` に達すると reviewer call 全体を fail にします。
+`fabricated_pct` の既定値は 50、許容範囲は 1〜100 です。`loop/review.conf` の数値は 10 進として解釈するため、
+`08` と `0100` は 8 と 100 を意味します。
+
+reviewer route には約 30 個の THEME block を返せる output token 数を設定してください。
+claude CLI で wrap した chain では `CLAUDE_CODE_MAX_OUTPUT_TOKENS` も十分な値にします。
+output cap に達した route が fence 外の `API Error: ...` 1 行だけを出すと、その call は
+grammar 不正として fail-closed になります。修正対象は harness ではなく route 設定です。
+
+同梱の `loop/review.conf` は全行 comment のため情報表示だけの未配線状態です。
+`review-config` warning は部分配線または不正な設定だけに使います。`producer=` と `reviewer` を
+uncomment する操作は、schedule 実行ごとに選択された raw lesson file **全文**を、その
+reviewer に設定した provider（例の reviewer 名は GLM）へ送信する明示的 consent です。
+declared producer と reviewer は異なる必要があります。nightly invocation は任意の
+runtime-neutral scheduler に登録してください。macOS で reviewer command が `claude` を
+呼ぶ場合は LaunchAgent が必須です。Claude CLI の Keychain access を必要としない chain
+だけが cron を安全に利用できます。
+
+任意の `notify_cmd` は shell eval されない argv で、設定済み固定引数より先の `$1` として
+追記済み notification file path を受け取ります。`install.sh --check` は部分配線・不正設定の
+`review-config`、未消費の
+review notification、48時間を超える沈黙、設定 threshold 以上の zero-candidate streak を
+報告します。
+
 ## task-runner の実行境界
 
 - task frontmatter の `receipt:` は

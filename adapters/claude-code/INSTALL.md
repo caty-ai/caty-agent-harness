@@ -148,6 +148,32 @@ owner. List one ISO week's raw files with:
 "$HARNESS/scripts/raw-week.sh" --workspace "$WS" --week 2026-W34
 ```
 
+Nightly theme review over this raw layer is provided by
+`$HARNESS/scripts/raw-review.sh`; its exact flags, receipt semantics, and runtime-neutral
+schedule guidance are in [the reference](../../docs/reference.md#raw-layer-cross-model-review).
+The shipped `loop/review.conf` is intentionally unwired. Uncommenting its `producer=`
+and `reviewer` lines is explicit consent to send the selected raw lesson files whole,
+on every scheduled run, to the provider named by the configured reviewer chain (the
+example reviewer name is GLM). This guarantees only that the reviewer differs from the
+declared current producer; raw lesson headers do not carry per-lesson model lineage.
+
+If a reviewer entry invokes the Claude CLI on macOS, schedule raw review with a
+LaunchAgent under the rule below. Cron is safe only for reviewer chains that do not
+need Claude CLI Keychain access. `notify_cmd`, when configured, receives the appended
+notification file path as `$1` rather than message text.
+
+Size `reviewer_timeout_s` to a measured run of your actual reviewer command over a
+real two-week window before scheduling: CLI-wrapper chains can need well over the
+shipped example (a measured claude-CLI-wrapped reviewer took 15+ minutes on a ~110 KB
+window; a direct API command is typically far faster). A timeout is recorded as that
+entry's failure and, with a one-entry chain, becomes a nightly `chain-exhausted`
+notification.
+
+Also give the reviewer route enough output tokens for about 30 THEME blocks; for a
+claude-CLI-wrapped chain, size `CLAUDE_CODE_MAX_OUTPUT_TOKENS` accordingly. An output cap
+may surface as one unfenced `API Error: ...` line, which the harness correctly rejects as
+grammar (fail-closed); fix the route configuration rather than the harness.
+
 Each parsed bullet is limited to `INTAKE_MAX_BULLET_BYTES` bytes (default `512` after
 control-character stripping); an oversized bullet is dropped whole and counted as
 `dropped_oversize` in the run receipt. Lessons displaced by the STATE cap are appended

@@ -62,6 +62,54 @@ Pre-existing workspaces create it on first enqueue/runner use; invalid entries f
 
 The flush intake consumer's accounting ledger is `loop/pending/intake-runs.log`. The deadman `distill` marker proves only that intake ran; inspect the ledger for content-level silence, dedup, deferral, eviction, and quarantine counts. The `loop/archive/` raw layer is append-only and is never auto-pruned; see [DESIGN.md §3.1](design/DESIGN.md#31-files-per-agent-workspace) for its exact membership. See [adapters/claude-code/INSTALL.md](../adapters/claude-code/INSTALL.md) for the full ledger format and scheduling.
 
+## Raw-layer cross-model review
+
+```text
+scripts/raw-review.sh --workspace <path> [--week <YYYY-Www>] [--dry-run]
+```
+
+Without `--week`, the command reviews whole raw files from the current UTC ISO week and
+the preceding configured weeks, plus files arriving after the last successful nightly
+snapshot. `--week` selects a retroactive window ending at that week. `--dry-run` builds
+and byte-counts the same prompt and lists its files without calling a reviewer or
+advancing the late-arrival watermark, and never writes or dispatches a notification.
+Exit `0` means a validated run, `NO_GROUPS`, or a
+pause skip; `1` means attempted review failed closed; `2` means usage/configuration did
+not permit review. Every reachable workspace exit writes `loop/promotions/runs.log`;
+its `error=` field uses `none`, `skipped-paused`, `lock-busy`, `chain-exhausted`,
+`config`, `prompt-too-large`, or `source-normalization` (a cited raw file could not be
+normalized for citation validation — fails closed like the chain classes).
+THEME blocks may be separated by blank lines, but blank lines inside a block are invalid.
+Each member citation must normalize to 8–200 characters and match the start of a normalized
+source line after leading indentation, one bullet marker, an ISO date prefix, conservative
+machine tags with no internal whitespace that contain at least one ASCII digit or `-` and are
+followed by space or tab, and paired emphasis markers such as `**bold**` / word-adjacent
+`*bold*` are stripped for comparison. Human warning tags such as `[IMPORTANT]` or `[NEVER]`,
+and meaningful lone/glob `*` tokens, remain significant. Shorter, mid-line-only,
+or fabricated citations reject the complete block. The whole reviewer call fails when fabricated
+blocks reach `max(fabricated_floor, ceil(fabricated_pct% of blocks))`; `fabricated_pct`
+defaults to 50 and accepts values from 1 through 100. Numeric `loop/review.conf` values are
+parsed as decimal, so values such as `08` and `0100` mean 8 and 100.
+
+Configure the reviewer route with enough output tokens for about 30 THEME blocks; for
+claude-CLI-wrapped chains, size `CLAUDE_CODE_MAX_OUTPUT_TOKENS` accordingly. An output-capped
+route can print one unfenced `API Error: ...` line, which fails the call as invalid grammar
+(fail-closed); correct the route configuration rather than the harness.
+
+The shipped `loop/review.conf` is fully commented and therefore informationally unwired;
+`review-config` is reserved for partial or malformed wiring. Enabling an
+uncommented `producer=` and `reviewer` line is explicit consent for each scheduled run
+to send the selected raw lesson files **whole** to that reviewer's configured provider
+(the example reviewer name is GLM). The declared producer and reviewer must differ.
+Schedule one nightly invocation in the runtime-neutral scheduler of your choice. On
+macOS, use a LaunchAgent whenever any configured reviewer command invokes `claude`;
+cron is suitable only for chains that do not need Claude CLI Keychain access.
+
+`notify_cmd` is optional argv, never shell-evaluated, and receives the appended
+notification file path as `$1` (before any configured fixed arguments). `install.sh --check` reports
+`review-config` for partial or malformed wiring, unread review notifications, a wired review silent for over 48 hours,
+and a zero-candidate streak at its configured threshold.
+
 ## Task-runner execution boundary
 
 - Task frontmatter requires `receipt:` matching
