@@ -80,11 +80,16 @@ exit `0` は検証済み実行、
 `source-normalization`（citation 検証用の raw file 正規化に失敗。chain 系と同じく
 fail-closed）のいずれかです。
 THEME block 間の空行は許容しますが、block 内の空行は不正です。各 member citation は
-比較時に先頭の indentation/bullet/date/`[tag]` marker を除いたうえで、正規化後 8〜200 文字で、
+比較時に先頭の indentation、1 個の bullet marker、ISO date prefix、`[session-806]` /
+`[2026-07-20]` のように内部 whitespace を含まず、ASCII digit または `-` を少なくとも 1 つ含み、
+閉じ `]` の直後に space または tab が続く保守的な machine tag、`**bold**` / word-adjacent な
+`*bold*` のような paired emphasis marker を除いたうえで、正規化後 8〜200 文字で、
 正規化済み source line の先頭に一致する必要があります。
+`[IMPORTANT]` / `[NEVER]` のような human warning tag と、意味を持つ lone/glob `*` token は保持されます。
 短すぎる citation、行途中だけの一致、fabrication は block 全体を reject します。fabricated block 数が
 `max(fabricated_floor, ceil(block 数の fabricated_pct%))` に達すると reviewer call 全体を fail にします。
-`fabricated_pct` の既定値は 50、許容範囲は 1〜100 です。
+`fabricated_pct` の既定値は 50、許容範囲は 1〜100 です。`loop/review.conf` の数値は 10 進として解釈するため、
+`08` と `0100` は 8 と 100 を意味します。
 
 reviewer route には約 30 個の THEME block を返せる output token 数を設定してください。
 claude CLI で wrap した chain では `CLAUDE_CODE_MAX_OUTPUT_TOKENS` も十分な値にします。

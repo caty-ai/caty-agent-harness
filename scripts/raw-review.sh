@@ -110,6 +110,20 @@ record_value() {
   printf '%s' "$1" | tr '[:space:]' '_' | tr -cd '[:alnum:]_.:/,@+-'
 }
 
+parse_decimal_config() {
+  local raw=$1 minimum=$2 maximum=${3-}
+  local parsed
+  case "$raw" in ''|*[!0-9]*) return 1 ;; esac
+  parsed=$((10#$raw))
+  if (( parsed < minimum )); then
+    return 1
+  fi
+  if [[ -n "$maximum" ]] && (( parsed > maximum )); then
+    return 1
+  fi
+  printf '%s\n' "$parsed"
+}
+
 receipt_line() {
   printf 'ts=%s runid=%s mode=%s window=%s files=%s prompt_bytes=%s model_used=%s chain_pos=%s blocks=%s fabricated=%s rejected=%s candidates=%s self_review_refused=%s zero_streak=%s error=%s\n' \
     "$run_ts" "$run_id" "$mode" "$window" "$file_count" "$prompt_bytes" \
@@ -258,13 +272,12 @@ while IFS= read -r config_line || [[ -n "$config_line" ]]; do
   esac
 done <"$tmp_root/review.conf"
 
-for numeric_value in "$review_window_weeks" "$reviewer_timeout_s" "$fabricated_floor" "$fabricated_pct" \
-  "$zero_streak_threshold" "$prompt_max_bytes"; do
-  case "$numeric_value" in ''|*[!0-9]*|0) config_invalid=1 ;; esac
-done
-if [[ "$fabricated_pct" != *[!0-9]* ]] && (( fabricated_pct > 100 )); then
-  config_invalid=1
-fi
+review_window_weeks=$(parse_decimal_config "$review_window_weeks" 1) || config_invalid=1
+reviewer_timeout_s=$(parse_decimal_config "$reviewer_timeout_s" 1) || config_invalid=1
+fabricated_floor=$(parse_decimal_config "$fabricated_floor" 1) || config_invalid=1
+fabricated_pct=$(parse_decimal_config "$fabricated_pct" 1 100) || config_invalid=1
+zero_streak_threshold=$(parse_decimal_config "$zero_streak_threshold" 1) || config_invalid=1
+prompt_max_bytes=$(parse_decimal_config "$prompt_max_bytes" 1) || config_invalid=1
 if [[ -z "$producer" || "$reviewer_count" -eq 0 || "$config_invalid" -ne 0 ]]; then
   finish_failure 2 config
 fi
@@ -399,8 +412,18 @@ def canonicalize(value):
     value = re.sub(r"^[ \t]*[-*][ \t]+", "", value, count=1)
     value = re.sub(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}:?[ \t]*", "", value, count=1)
     for _ in range(2):
-        value = re.sub(r"^\[[^\[\]]{1,40}\] ", "", value, count=1)
-    return normalize(value.replace("*", ""))
+        match = re.match(r"^\[([^\[\]\s]{1,40})\][ \t]+", value)
+        if not match:
+            break
+        if not re.search(r"[0-9-]", match.group(1)):
+            break
+        value = value[match.end():]
+    previous = None
+    while value != previous:
+        previous = value
+        value = re.sub(r"\*\*([^\s*](?:[^*]*[^\s*])?)\*\*", r"\1", value)
+        value = re.sub(r"(?<!\*)\*(\w(?:[^*]*\w)?)\*(?!\*)", r"\1", value)
+    return normalize(value)
 
 for raw_line in sys.stdin.buffer:
     value = raw_line.rstrip(b"\r\n").decode("utf-8", errors="surrogateescape")
@@ -636,7 +659,7 @@ PY
 validate_parsed_blocks() {
   local parse_dir=$1 accepted_dir=$2 rejects_file=$3
   local block_dir member basename quote source_path source_cache normalized_quote canonical_quote canonical_source
-  local block_bad member_week member_hash source_suffix
+  local block_bad member_week member_hash truncated_quote truncated_canonical_quote citation_found source_suffix
   # Short normalized prefixes collide too easily; empty prefixes match every
   # line. Eight characters is the minimum useful citation discriminator.
   local minimum_quote_chars=8
@@ -656,16 +679,9 @@ validate_parsed_blocks() {
     while IFS= read -r member || [[ -n "$member" ]]; do
       basename=${member%%:*}
       quote=${member#*:}
-      if [[ "$basename" == "$member" || -z "$quote" || ${#quote} -gt 200 \
-        || "$quote" == *…* ]]; then
+      if [[ "$basename" == "$member" || -z "$quote" || ${#quote} -gt 200 ]]; then
         block_bad=1
         continue
-      fi
-      if [[ "$quote" == *...* ]]; then
-        case "$quote" in
-          *'$( ... )'*|*'"custom: ..."'*) ;;
-          *) block_bad=1; continue ;;
-        esac
       fi
       case "$basename" in
         flush-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].md|intake-evictions-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].md) ;;
@@ -704,12 +720,41 @@ validate_parsed_blocks() {
         if [[ "$canonical_source" == "$canonical_quote"* ]]; then
           source_suffix=${canonical_source#"$canonical_quote"}
           case "$source_suffix" in
-            '.'|'。'|'!'|'！'|'?'|'？') continue ;;
+            \**|' *'*) continue ;;
           esac
           citation_found=1
           break
         fi
       done <"$source_cache"
+      if [[ "$citation_found" -ne 1 ]]; then
+        truncated_quote=$(python3 -B - "$quote" <<'PY'
+import re
+import sys
+
+value = sys.argv[1]
+match = re.fullmatch(r"(.*?)(?:[ \t]*(?:\.\.\.|…))", value)
+if not match:
+    raise SystemExit(1)
+sys.stdout.write(match.group(1) + "\n")
+PY
+) || truncated_quote=
+        if [[ -n "$truncated_quote" ]]; then
+          truncated_canonical_quote=$(printf '%s\n' "$truncated_quote" | citation_canonicalize_stream) || truncated_canonical_quote=
+          if (( ${#truncated_canonical_quote} >= minimum_quote_chars )); then
+            while IFS= read -r canonical_source || [[ -n "$canonical_source" ]]; do
+              if [[ "$canonical_source" == "$truncated_canonical_quote"* ]]; then
+                source_suffix=${canonical_source#"$truncated_canonical_quote"}
+                case "$source_suffix" in
+                  \**|' *'*) continue ;;
+                esac
+                block_bad=1
+                break
+              fi
+            done <"$source_cache"
+            [[ "$block_bad" -ne 0 ]] && continue
+          fi
+        fi
+      fi
       if [[ "$citation_found" -ne 1 ]]; then
         block_bad=1
         continue
@@ -750,6 +795,9 @@ PY
   done
   threshold=$(( (blocks * fabricated_pct + 99) / 100 ))
   (( threshold < fabricated_floor )) && threshold=$fabricated_floor
+  if (( blocks > 0 && candidates == 0 )); then
+    return 1
+  fi
   (( fabricated < threshold ))
 }
 

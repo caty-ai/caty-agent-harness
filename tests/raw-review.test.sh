@@ -114,7 +114,9 @@ recorded_bytes=$(printf '%s\n' "$receipt" | sed -n 's/.* prompt_bytes=\([0-9][0-
 if [[ "$recorded_bytes" == "$actual_bytes" && "$receipt" == *' mode=retro '* && "$receipt" == *' error=none' ]] \
   && grep -Fq 'Emit no more than 30 THEME blocks' "$capture" \
   && grep -Fq 'at most five MEMBERS citations per theme' "$capture" \
-  && grep -Fq 'keep the quote at 200 characters or fewer' "$capture"; then
+  && grep -Fq 'conservative machine tags' "$capture" \
+  && grep -Fq 'paired emphasis markers' "$capture" \
+  && grep -Fq 'meaningful lone `*` token' "$capture"; then
   pass '[2] prompt bytes, output budget, and retro receipt fields are pinned'
 else
   fail_case '[2] prompt bytes, output budget, and retro receipt fields are pinned' "actual=$actual_bytes receipt=$receipt"
@@ -325,11 +327,11 @@ seed_two_weeks "$ws_eight"
 write_conf "$ws_eight" producer-model "eight $EIGHT_QUOTE"
 "$RAW_REVIEW" --workspace "$ws_eight" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/quote-eight.err"
 eight_rc=$?
-if [[ "$empty_rc" -eq 0 && "$short_rc" -eq 0 && "$eight_rc" -eq 0 \
+if [[ "$empty_rc" -eq 1 && "$short_rc" -eq 1 && "$eight_rc" -eq 0 \
   && "$(tail -n 1 "$ws_empty/loop/promotions/runs.log")" == *' fabricated=1 '* \
-  && "$(tail -n 1 "$ws_empty/loop/promotions/runs.log")" == *' candidates=0 '* \
+  && "$(tail -n 1 "$ws_empty/loop/promotions/runs.log")" == *' error=chain-exhausted' \
   && "$(tail -n 1 "$ws_short/loop/promotions/runs.log")" == *' fabricated=1 '* \
-  && "$(tail -n 1 "$ws_short/loop/promotions/runs.log")" == *' candidates=0 '* \
+  && "$(tail -n 1 "$ws_short/loop/promotions/runs.log")" == *' error=chain-exhausted' \
   && "$(tail -n 1 "$ws_eight/loop/promotions/runs.log")" == *' fabricated=0 '* \
   && "$(tail -n 1 "$ws_eight/loop/promotions/runs.log")" == *' candidates=1 '* ]]; then
   pass '[R1-1] normalized quotes below eight characters reject while an eight-character prefix passes'
@@ -441,9 +443,9 @@ PROMOTE: not-yet
 THEME: two leading tags before content
 CLASS: rule
 MEMBERS:
-- flush-2026-07-21.md:content survives two leading tags
+- flush-2026-07-21.md:content survives two machine tags
 WEEKS: 2026-W30
-EVIDENCE: Up to two leading tags are comparison-only decoration.
+EVIDENCE: Up to two machine-shaped leading tags are comparison-only decoration.
 PROMOTE: not-yet
 RAW-REVIEW-OUTPUT-END
 OUT'
@@ -455,7 +457,7 @@ cat <<'EOF_RAW' >"$ws_bracket_tags_valid/loop/archive/flush-2026-07-20.md"
 - [session-806] content with a shared leading tag still validates
 EOF_RAW
 cat <<'EOF_RAW' >"$ws_bracket_tags_valid/loop/archive/flush-2026-07-21.md"
-- 2026-07-21 [a] [b] content survives two leading tags
+- 2026-07-21 [2026-07-21] [session-42] content survives two machine tags
 EOF_RAW
 write_conf "$ws_bracket_tags_valid" producer-model "bracket-tags-valid $BRACKET_TAGS_VALID"
 "$RAW_REVIEW" --workspace "$ws_bracket_tags_valid" --week 2026-W30 >/dev/null 2>"$TMP_ROOT/bracket-tags-valid.err"
@@ -489,9 +491,9 @@ EOF_RAW
 write_conf "$ws_bracket_tags_midline" producer-model "bracket-tags-midline $BRACKET_TAGS_MIDLINE"
 "$RAW_REVIEW" --workspace "$ws_bracket_tags_midline" --week 2026-W29 >/dev/null 2>"$TMP_ROOT/bracket-tags-midline.err"
 bracket_tags_midline_rc=$?
-if [[ "$bracket_tags_midline_rc" -eq 0 \
+if [[ "$bracket_tags_midline_rc" -eq 1 \
   && "$(tail -n 1 "$ws_bracket_tags_midline/loop/promotions/runs.log")" == *' fabricated=1 '* \
-  && "$(tail -n 1 "$ws_bracket_tags_midline/loop/promotions/runs.log")" == *' candidates=0 '* ]]; then
+  && "$(tail -n 1 "$ws_bracket_tags_midline/loop/promotions/runs.log")" == *' error=chain-exhausted' ]]; then
   pass '[R3-2] bracket stripping does not relax prefix anchoring for mid-line fragments'
 else
   fail_case '[R3-2] bracket stripping does not relax prefix anchoring for mid-line fragments' "rc=$bracket_tags_midline_rc receipt=$(tail -n 1 "$ws_bracket_tags_midline/loop/promotions/runs.log") stderr=$(cat "$TMP_ROOT/bracket-tags-midline.err")"
@@ -517,9 +519,9 @@ EOF_RAW
 write_conf "$ws_bracket_tags_empty" producer-model "bracket-tags-empty $BRACKET_TAGS_EMPTY"
 "$RAW_REVIEW" --workspace "$ws_bracket_tags_empty" --week 2026-W29 >/dev/null 2>"$TMP_ROOT/bracket-tags-empty.err"
 bracket_tags_empty_rc=$?
-if [[ "$bracket_tags_empty_rc" -eq 0 \
+if [[ "$bracket_tags_empty_rc" -eq 1 \
   && "$(tail -n 1 "$ws_bracket_tags_empty/loop/promotions/runs.log")" == *' fabricated=1 '* \
-  && "$(tail -n 1 "$ws_bracket_tags_empty/loop/promotions/runs.log")" == *' candidates=0 '* ]]; then
+  && "$(tail -n 1 "$ws_bracket_tags_empty/loop/promotions/runs.log")" == *' error=chain-exhausted' ]]; then
   pass '[R3-3] tag-only quotes still die after bracket stripping empties the canonicalized citation'
 else
   fail_case '[R3-3] tag-only quotes still die after bracket stripping empties the canonicalized citation' "rc=$bracket_tags_empty_rc receipt=$(tail -n 1 "$ws_bracket_tags_empty/loop/promotions/runs.log") stderr=$(cat "$TMP_ROOT/bracket-tags-empty.err")"
@@ -596,9 +598,9 @@ printf '%s\n' '  - Authentic source content remains longer than the decoy.' \
 write_conf "$ws_indented_decoy" producer-model "indented-decoy $INDENTED_DECOY"
 "$RAW_REVIEW" --workspace "$ws_indented_decoy" --week 2026-W30 >/dev/null 2>"$TMP_ROOT/indented-decoy.err"
 indented_decoy_rc=$?
-if [[ "$indented_decoy_rc" -eq 0 \
+if [[ "$indented_decoy_rc" -eq 1 \
   && "$(tail -n 1 "$ws_indented_decoy/loop/promotions/runs.log")" == *' fabricated=1 '* \
-  && "$(tail -n 1 "$ws_indented_decoy/loop/promotions/runs.log")" == *' candidates=0 '* ]]; then
+  && "$(tail -n 1 "$ws_indented_decoy/loop/promotions/runs.log")" == *' error=chain-exhausted' ]]; then
   pass '[R4-2] indented bullet stripping preserves the eight-character citation floor'
 else
   fail_case '[R4-2] indented bullet stripping preserves the eight-character citation floor' "rc=$indented_decoy_rc receipt=$(tail -n 1 "$ws_indented_decoy/loop/promotions/runs.log")"
@@ -608,19 +610,12 @@ CLASSIFIED_REJECTIONS=$TMP_ROOT/classified-rejections-reviewer
 write_reviewer "$CLASSIFIED_REJECTIONS" 'cat >/dev/null
 cat <<"OUT"
 RAW-REVIEW-OUTPUT-BEGIN
-THEME: wrong file with unbounded ellipsis
+THEME: trailing truncation ellipsis
 CLASS: rule
 MEMBERS:
-- flush-2026-07-18.md:stdin trap: `codex exec - < brief.md ... < /dev/null` loses input
+- flush-2026-07-20.md:model-added truncation needs full text...
 WEEKS: 2026-W29
-EVIDENCE: An unbounded ellipsis remains unauthenticated.
-PROMOTE: not-yet
-THEME: omitted terminal punctuation
-CLASS: rule
-MEMBERS:
-- flush-2026-07-20.md:Fugu degraded-day mode: retry later can succeed
-WEEKS: 2026-W30
-EVIDENCE: A near-full quote may not silently drop only terminal punctuation.
+EVIDENCE: A trailing ellipsis that only authenticates after stripping is model-added truncation.
 PROMOTE: not-yet
 THEME: free-form label skip
 CLASS: rule
@@ -643,7 +638,7 @@ cat <<'EOF_RAW' >"$ws_classified_rejections/loop/archive/flush-2026-07-18.md"
 - 2026-07-19 stdin trap: `codex exec - < brief.md ... < /dev/null` loses input.
 EOF_RAW
 cat <<'EOF_RAW' >"$ws_classified_rejections/loop/archive/flush-2026-07-20.md"
-  - Fugu degraded-day mode: retry later can succeed.
+- model-added truncation needs full text after this point.
 - caty-cloud #7: review diff misses untracked files.
 - root cause first; side effect starts here.
 EOF_RAW
@@ -651,12 +646,12 @@ write_conf "$ws_classified_rejections" producer-model "classified-rejections $CL
 "$RAW_REVIEW" --workspace "$ws_classified_rejections" --week 2026-W30 >/dev/null 2>"$TMP_ROOT/classified-rejections.err"
 classified_rejections_rc=$?
 if [[ "$classified_rejections_rc" -eq 1 \
-  && "$(tail -n 1 "$ws_classified_rejections/loop/promotions/runs.log")" == *' blocks=4 '* \
-  && "$(tail -n 1 "$ws_classified_rejections/loop/promotions/runs.log")" == *' fabricated=4 '* \
+  && "$(tail -n 1 "$ws_classified_rejections/loop/promotions/runs.log")" == *' blocks=3 '* \
+  && "$(tail -n 1 "$ws_classified_rejections/loop/promotions/runs.log")" == *' fabricated=3 '* \
   && "$(tail -n 1 "$ws_classified_rejections/loop/promotions/runs.log")" == *' error=chain-exhausted' ]]; then
-  pass '[R4-3] classified wrong-file, paraphrase, label-skip, and mid-line quotes remain rejected'
+  pass '[R4-3] classified truncation, label-skip, and mid-line quotes remain rejected'
 else
-  fail_case '[R4-3] classified wrong-file, paraphrase, label-skip, and mid-line quotes remain rejected' "rc=$classified_rejections_rc receipt=$(tail -n 1 "$ws_classified_rejections/loop/promotions/runs.log")"
+  fail_case '[R4-3] classified truncation, label-skip, and mid-line quotes remain rejected' "rc=$classified_rejections_rc receipt=$(tail -n 1 "$ws_classified_rejections/loop/promotions/runs.log")"
 fi
 
 FABRICATION_BOUNDARY=$TMP_ROOT/fabrication-boundary-reviewer
@@ -728,6 +723,255 @@ if [[ "$pct_zero_rc" -eq 2 && "$pct_over_rc" -eq 2 && "$pct_valid_rc" -eq 0 \
   pass '[R4-5] fabricated_pct accepts 1-100 and controls the whole-call boundary'
 else
   fail_case '[R4-5] fabricated_pct accepts 1-100 and controls the whole-call boundary' "rcs=$pct_zero_rc/$pct_over_rc/$pct_valid_rc"
+fi
+
+PUNCTUATION_MINUS_FINAL=$TMP_ROOT/punctuation-minus-final-reviewer
+write_reviewer "$PUNCTUATION_MINUS_FINAL" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: punctuation-minus-final still authenticates
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:retry later can succeed
+WEEKS: 2026-W30
+EVIDENCE: Dropping only terminal punctuation must not reject an otherwise exact content prefix.
+PROMOTE: not-yet
+THEME: different tail still fabricates
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:retry later can recover
+WEEKS: 2026-W30
+EVIDENCE: A changed tail remains unauthenticated even after punctuation tolerance.
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+ws_punctuation_minus_final=$(new_ws punctuation-minus-final)
+printf '%s\n' '- retry later can succeed.' >"$ws_punctuation_minus_final/loop/archive/flush-2026-07-20.md"
+write_conf "$ws_punctuation_minus_final" producer-model "punctuation-minus-final $PUNCTUATION_MINUS_FINAL"
+"$RAW_REVIEW" --workspace "$ws_punctuation_minus_final" --week 2026-W30 >/dev/null 2>"$TMP_ROOT/punctuation-minus-final.err"
+punctuation_minus_final_rc=$?
+if [[ "$punctuation_minus_final_rc" -eq 0 \
+  && "$(tail -n 1 "$ws_punctuation_minus_final/loop/promotions/runs.log")" == *' blocks=2 '* \
+  && "$(tail -n 1 "$ws_punctuation_minus_final/loop/promotions/runs.log")" == *' fabricated=1 '* \
+  && "$(tail -n 1 "$ws_punctuation_minus_final/loop/promotions/runs.log")" == *' candidates=1 '* ]]; then
+  pass '[R5-1] punctuation-minus-final authenticates while an actual tail change still rejects'
+else
+  fail_case '[R5-1] punctuation-minus-final authenticates while an actual tail change still rejects' "rc=$punctuation_minus_final_rc receipt=$(tail -n 1 "$ws_punctuation_minus_final/loop/promotions/runs.log") stderr=$(cat "$TMP_ROOT/punctuation-minus-final.err")"
+fi
+
+ELLIPSIS_TRIAGE=$TMP_ROOT/ellipsis-triage-reviewer
+write_reviewer "$ELLIPSIS_TRIAGE" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: literal shell ellipsis stays literal
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:bash trap: command `$( ... )` retains stdout
+WEEKS: 2026-W30
+EVIDENCE: Exact source ellipses must validate before any truncation heuristic runs.
+PROMOTE: not-yet
+THEME: ascii source-ending ellipsis stays literal
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:source-ending ellipsis remains literal ...
+WEEKS: 2026-W30
+EVIDENCE: A source-authenticated trailing ... must pass.
+PROMOTE: not-yet
+THEME: unicode source-ending ellipsis stays literal
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:unicode source-ending ellipsis remains literal …
+WEEKS: 2026-W30
+EVIDENCE: A source-authenticated trailing … must pass.
+PROMOTE: not-yet
+THEME: model-added truncation is still rejected
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:model-added truncation needs full text...
+WEEKS: 2026-W30
+EVIDENCE: Only a stripped-form match may classify trailing ellipsis as model truncation.
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+ws_ellipsis_triage=$(new_ws ellipsis-triage)
+cat <<'EOF_RAW' >"$ws_ellipsis_triage/loop/archive/flush-2026-07-20.md"
+- 2026-07-20 bash trap: command `$( ... )` retains stdout until descendants close it.
+- source-ending ellipsis remains literal ...
+- unicode source-ending ellipsis remains literal …
+- model-added truncation needs full text after this point.
+EOF_RAW
+write_conf "$ws_ellipsis_triage" producer-model "ellipsis-triage $ELLIPSIS_TRIAGE"
+"$RAW_REVIEW" --workspace "$ws_ellipsis_triage" --week 2026-W30 >/dev/null 2>"$TMP_ROOT/ellipsis-triage.err"
+ellipsis_triage_rc=$?
+if [[ "$ellipsis_triage_rc" -eq 0 \
+  && "$(tail -n 1 "$ws_ellipsis_triage/loop/promotions/runs.log")" == *' blocks=4 '* \
+  && "$(tail -n 1 "$ws_ellipsis_triage/loop/promotions/runs.log")" == *' fabricated=1 '* \
+  && "$(tail -n 1 "$ws_ellipsis_triage/loop/promotions/runs.log")" == *' candidates=3 '* ]]; then
+  pass '[R5-2] exact ellipses validate first and only stripped trailing ellipses classify as truncation'
+else
+  fail_case '[R5-2] exact ellipses validate first and only stripped trailing ellipses classify as truncation' "rc=$ellipsis_triage_rc receipt=$(tail -n 1 "$ws_ellipsis_triage/loop/promotions/runs.log") stderr=$(cat "$TMP_ROOT/ellipsis-triage.err")"
+fi
+
+CONSERVATIVE_CANONICALIZATION=$TMP_ROOT/conservative-canonicalization-reviewer
+write_reviewer "$CONSERVATIVE_CANONICALIZATION" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: machine tag strips conservatively
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:content with a shared leading tag still validates
+WEEKS: 2026-W30
+EVIDENCE: Conservative machine tags may strip on both sides.
+PROMOTE: not-yet
+THEME: date-like machine tag also strips
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:date-stamped machine tag still strips
+WEEKS: 2026-W30
+EVIDENCE: Numeric machine tags remain comparison-only decoration.
+PROMOTE: not-yet
+THEME: paired emphasis still authenticates
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:paired emphasis survives for citations
+WEEKS: 2026-W30
+EVIDENCE: Paired emphasis markers may strip while the enclosed text remains.
+PROMOTE: not-yet
+THEME: machine tag with hash still strips
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:hash-tagged machine label still strips
+WEEKS: 2026-W30
+EVIDENCE: A machine tag may include punctuation as long as it has no spaces and contains an ASCII digit.
+PROMOTE: not-yet
+THEME: word-adjacent single-star emphasis still authenticates
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:single-star emphasis survives for citations
+WEEKS: 2026-W30
+EVIDENCE: Single-star stripping stays allowed for word-adjacent emphasis.
+PROMOTE: not-yet
+THEME: preserved warning tag still matters
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:delete files
+WEEKS: 2026-W30
+EVIDENCE: Human warning tags like NEVER must not be stripped away.
+PROMOTE: not-yet
+THEME: lone glob star still matters
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:rm -rf
+WEEKS: 2026-W30
+EVIDENCE: A prefix may not silently omit a remaining lone/glob * token.
+PROMOTE: not-yet
+THEME: machine tag without delimiter stays literal
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:content fused to machine tag stays literal
+WEEKS: 2026-W30
+EVIDENCE: A machine tag strips only when a delimiter space or tab follows the closing bracket.
+PROMOTE: not-yet
+THEME: single-star glob stays literal
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:rm .
+WEEKS: 2026-W30
+EVIDENCE: Single-star stripping must not erase semantic glob content such as *.*.
+PROMOTE: not-yet
+THEME: direct-star suffix stays literal
+CLASS: rule
+MEMBERS:
+- flush-2026-07-20.md:dangerous
+WEEKS: 2026-W30
+EVIDENCE: Prefix matching must not ignore a directly adjacent trailing * token.
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+ws_conservative_canonicalization=$(new_ws conservative-canonicalization)
+cat <<'EOF_RAW' >"$ws_conservative_canonicalization/loop/archive/flush-2026-07-20.md"
+- [session-806] content with a shared leading tag still validates
+- [2026-07-20] date-stamped machine tag still strips
+- **paired emphasis survives** for citations
+- [caty-cloud#7] hash-tagged machine label still strips
+- *single-star emphasis survives* for citations
+- [NEVER] **delete * files**
+- rm -rf *
+- [session-806]content fused to machine tag stays literal
+- rm *.*
+- dangerous*glob
+EOF_RAW
+write_conf "$ws_conservative_canonicalization" producer-model "conservative-canonicalization $CONSERVATIVE_CANONICALIZATION"
+printf '%s\n' 'fabricated_pct=100' >>"$ws_conservative_canonicalization/loop/review.conf"
+"$RAW_REVIEW" --workspace "$ws_conservative_canonicalization" --week 2026-W30 >/dev/null 2>"$TMP_ROOT/conservative-canonicalization.err"
+conservative_canonicalization_rc=$?
+if [[ "$conservative_canonicalization_rc" -eq 0 \
+  && "$(tail -n 1 "$ws_conservative_canonicalization/loop/promotions/runs.log")" == *' blocks=10 '* \
+  && "$(tail -n 1 "$ws_conservative_canonicalization/loop/promotions/runs.log")" == *' fabricated=5 '* \
+  && "$(tail -n 1 "$ws_conservative_canonicalization/loop/promotions/runs.log")" == *' candidates=5 '* ]]; then
+  pass '[R5-3] machine tags need a delimiter, paired emphasis stays narrow, and warning/glob content remains meaningful'
+else
+  fail_case '[R5-3] machine tags need a delimiter, paired emphasis stays narrow, and warning/glob content remains meaningful' "rc=$conservative_canonicalization_rc receipt=$(tail -n 1 "$ws_conservative_canonicalization/loop/promotions/runs.log") stderr=$(cat "$TMP_ROOT/conservative-canonicalization.err")"
+fi
+
+BAD_SINGLETON=$TMP_ROOT/bad-singleton-reviewer
+write_reviewer "$BAD_SINGLETON" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: lone fabricated singleton
+CLASS: rule
+MEMBERS:
+- flush-2026-08-10.md:retries need
+WEEKS: 2026-W33
+EVIDENCE: A single bad block must not count as a successful review.
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+ws_bad_singleton=$(new_ws bad-singleton)
+seed_two_weeks "$ws_bad_singleton"
+write_conf "$ws_bad_singleton" producer-model "bad-singleton $BAD_SINGLETON" "good $GOOD"
+"$RAW_REVIEW" --workspace "$ws_bad_singleton" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/bad-singleton.err"
+bad_singleton_rc=$?
+if [[ "$bad_singleton_rc" -eq 0 \
+  && "$(tail -n 1 "$ws_bad_singleton/loop/promotions/runs.log")" == *' model_used=good '* \
+  && "$(tail -n 1 "$ws_bad_singleton/loop/promotions/runs.log")" == *' chain_pos=2 '* ]] \
+  && grep -Fqx 'reviewer_failed=bad-singleton reason=fabrication-threshold' "$TMP_ROOT/bad-singleton.err"; then
+  pass '[R5-4] a parsed review with zero accepted candidates fails closed and advances to the next reviewer'
+else
+  fail_case '[R5-4] a parsed review with zero accepted candidates fails closed and advances to the next reviewer' "rc=$bad_singleton_rc receipt=$(tail -n 1 "$ws_bad_singleton/loop/promotions/runs.log") stderr=$(cat "$TMP_ROOT/bad-singleton.err")"
+fi
+
+ws_decimal_config=$(new_ws decimal-config)
+seed_two_weeks "$ws_decimal_config"
+write_conf "$ws_decimal_config" producer-model "decimal-config $FABRICATION_BOUNDARY 17"
+printf '%s\n' 'review_window_weeks=02' 'reviewer_timeout_s=08' 'fabricated_pct=0100' 'zero_streak_threshold=0100' >>"$ws_decimal_config/loop/review.conf"
+"$RAW_REVIEW" --workspace "$ws_decimal_config" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/decimal-config.err"
+decimal_config_rc=$?
+if [[ "$decimal_config_rc" -eq 0 \
+  && "$(tail -n 1 "$ws_decimal_config/loop/promotions/runs.log")" == *' blocks=25 '* \
+  && "$(tail -n 1 "$ws_decimal_config/loop/promotions/runs.log")" == *' fabricated=17 '* \
+  && "$(tail -n 1 "$ws_decimal_config/loop/promotions/runs.log")" == *' candidates=8 '* \
+  && "$(tail -n 1 "$ws_decimal_config/loop/promotions/runs.log")" == *' error=none' ]]; then
+  pass '[R5-5] decimal config parsing treats 08 and 0100 as 8 and 100 instead of octal semantics'
+else
+  fail_case '[R5-5] decimal config parsing treats 08 and 0100 as 8 and 100 instead of octal semantics' "rc=$decimal_config_rc receipt=$(tail -n 1 "$ws_decimal_config/loop/promotions/runs.log") stderr=$(cat "$TMP_ROOT/decimal-config.err")"
+fi
+
+ws_boundary_twelve=$(new_ws boundary-twelve)
+seed_two_weeks "$ws_boundary_twelve"
+write_conf "$ws_boundary_twelve" producer-model "boundary-twelve $FABRICATION_BOUNDARY 12"
+"$RAW_REVIEW" --workspace "$ws_boundary_twelve" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/boundary-twelve.err"
+boundary_twelve_rc=$?
+boundary_twelve_candidate=$(latest_candidate "$ws_boundary_twelve")
+if [[ "$boundary_twelve_rc" -eq 0 && -f "$boundary_twelve_candidate" \
+  && "$(grep -c '^## theme-' "$boundary_twelve_candidate")" -eq 13 \
+  && "$(tail -n 1 "$ws_boundary_twelve/loop/promotions/runs.log")" == *' blocks=25 '* \
+  && "$(tail -n 1 "$ws_boundary_twelve/loop/promotions/runs.log")" == *' fabricated=12 '* \
+  && "$(tail -n 1 "$ws_boundary_twelve/loop/promotions/runs.log")" == *' candidates=13 '* \
+  && "$(tail -n 1 "$ws_boundary_twelve/loop/promotions/runs.log")" == *' error=none' ]]; then
+  pass '[R5-6] the default whole-call guard keeps the 25/12 pass seam intact'
+else
+  fail_case '[R5-6] the default whole-call guard keeps the 25/12 pass seam intact' "rc=$boundary_twelve_rc receipt=$(tail -n 1 "$ws_boundary_twelve/loop/promotions/runs.log") stderr=$(cat "$TMP_ROOT/boundary-twelve.err")"
 fi
 
 OUTPUT_CAP_ERROR=$TMP_ROOT/output-cap-error-reviewer
@@ -894,9 +1138,9 @@ seed_two_weeks "$ws_floor_two"
 write_conf "$ws_floor_two" producer-model "floor-two $FLOOR_TWO"
 "$RAW_REVIEW" --workspace "$ws_floor_two" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/floor-two.err"
 floor_two_rc=$?
-if [[ "$midline_rc" -eq 0 && "$floor_one_rc" -eq 0 && "$floor_two_rc" -eq 1 \
+if [[ "$midline_rc" -eq 1 && "$floor_one_rc" -eq 0 && "$floor_two_rc" -eq 1 \
   && "$(tail -n 1 "$ws_midline/loop/promotions/runs.log")" == *' fabricated=1 '* \
-  && "$(tail -n 1 "$ws_midline/loop/promotions/runs.log")" == *' candidates=0 '* \
+  && "$(tail -n 1 "$ws_midline/loop/promotions/runs.log")" == *' error=chain-exhausted' \
   && "$(tail -n 1 "$ws_floor_one/loop/promotions/runs.log")" == *' blocks=4 '* \
   && "$(tail -n 1 "$ws_floor_one/loop/promotions/runs.log")" == *' fabricated=1 '* \
   && "$(tail -n 1 "$ws_floor_two/loop/promotions/runs.log")" == *' error=chain-exhausted' ]]; then

@@ -81,10 +81,15 @@ its `error=` field uses `none`, `skipped-paused`, `lock-busy`, `chain-exhausted`
 normalized for citation validation — fails closed like the chain classes).
 THEME blocks may be separated by blank lines, but blank lines inside a block are invalid.
 Each member citation must normalize to 8–200 characters and match the start of a normalized
-source line after leading indentation/bullet/date/`[tag]` markers are stripped for comparison;
-shorter, mid-line-only, or fabricated citations reject the complete block. The whole reviewer
-call fails when fabricated blocks reach `max(fabricated_floor, ceil(fabricated_pct% of blocks))`;
-`fabricated_pct` defaults to 50 and accepts values from 1 through 100.
+source line after leading indentation, one bullet marker, an ISO date prefix, conservative
+machine tags with no internal whitespace that contain at least one ASCII digit or `-` and are
+followed by space or tab, and paired emphasis markers such as `**bold**` / word-adjacent
+`*bold*` are stripped for comparison. Human warning tags such as `[IMPORTANT]` or `[NEVER]`,
+and meaningful lone/glob `*` tokens, remain significant. Shorter, mid-line-only,
+or fabricated citations reject the complete block. The whole reviewer call fails when fabricated
+blocks reach `max(fabricated_floor, ceil(fabricated_pct% of blocks))`; `fabricated_pct`
+defaults to 50 and accepts values from 1 through 100. Numeric `loop/review.conf` values are
+parsed as decimal, so values such as `08` and `0100` mean 8 and 100.
 
 Configure the reviewer route with enough output tokens for about 30 THEME blocks; for
 claude-CLI-wrapped chains, size `CLAUDE_CODE_MAX_OUTPUT_TOKENS` accordingly. An output-capped

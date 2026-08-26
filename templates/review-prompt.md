@@ -22,8 +22,12 @@ PROMOTE: yes | not-yet
 Repeat blocks directly or separate them with blank lines. Do not put blank lines inside
 a block. Include at most five MEMBERS citations per theme, choosing the clearest.
 Keep EVIDENCE to one to three lines. Quote each member verbatim from the start of the
-lesson content after any leading indentation, bullet, date, `[tag]`, and emphasis markers,
-and keep the quote at 200 characters or fewer. When there are no groups, write
+lesson content after any leading indentation, bullet, ISO date, conservative machine tags
+with no internal whitespace that contain at least one ASCII digit or `-` and are followed by
+space or tab, and paired emphasis markers such as `**bold**` or word-adjacent `*bold*`.
+Do not skip human warning tags such as `[IMPORTANT]` / `[NEVER]`, and do not
+omit a meaningful lone `*` token. Keep the quote at 200 characters or fewer.
+When there are no groups, write
 `NO_GROUPS:` inside the markers and no THEME block. Put no extra prose beyond this
 grammar inside the markers, and put none outside them. Citation authenticity is checked
 by the host. `WEEKS` and `PROMOTE` are advisory: the host recomputes recurrence from the
