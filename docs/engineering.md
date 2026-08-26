@@ -112,6 +112,18 @@ lowercase `warning:` rows on stderr and do not change required-layout exit seman
 For an older, unwired workspace, a missing `loop/promotions/` is informational rather
 than a `missing path:` contract failure.
 
+### Promotion apply consumer
+
+`scripts/apply-promotions.sh` deterministically consumes validated
+`loop/promotions/candidates-<runid>.md` files. A bare run reports pending decisions and
+materializes draft skill stubs; capability facts require
+`--auto-capability-facts` or an explicit `--approve`, and rules require explicit
+approval. The consumer holds an apply-exclusive lock, performs every `STATE.md`
+mutation under the shared state lock through one atomic publish, and publishes the
+anti-resurrection `apply-index.tsv` in the same lock hold. `apply.log` records the
+run start, per-theme transitions, and run summary; caps refuse new entries rather
+than evicting existing durable content.
+
 **Quickstart is not the whole installation.** It creates the workspace scaffold and the managed bootstrap. End-of-session checkpoint reminders and deeper automation require the per-runtime wiring in the next section (user-level hook/cron registration); until that is done, only the start-of-task discipline from the bootstrap block is active.
 
 ---

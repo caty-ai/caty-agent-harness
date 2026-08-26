@@ -252,6 +252,18 @@ grep -Fq ' error=skipped-paused' "$ws/loop/promotions/runs.log" \
   || fail_case "paused raw review does not start the configured model" "model sentinel exists"
 cover scripts/raw-review.sh exit-0-receipt
 
+apply_receipts_before=$(awk 'END {print NR + 0}' "$ws/loop/promotions/apply.log" 2>/dev/null || printf '0\n')
+capture_run apply-promotions-paused "$ROOT/scripts/apply-promotions.sh" --workspace "$ws"
+assert_eq "paused apply promotions exits zero" "0" "$CAPTURE_RC"
+assert_eq "paused apply promotions stdout is empty" "" "$CAPTURE_OUT"
+assert_eq "paused apply promotions stderr is empty" "" "$CAPTURE_ERR"
+apply_receipts_after=$(awk 'END {print NR + 0}' "$ws/loop/promotions/apply.log")
+assert_eq "paused apply promotions appends exactly one receipt" "$((apply_receipts_before + 1))" "$apply_receipts_after"
+grep -Fq ' reason=skipped-paused' "$ws/loop/promotions/apply.log" \
+  && pass "paused apply promotions records skipped-paused" \
+  || fail_case "paused apply promotions records skipped-paused" "$(cat "$ws/loop/promotions/apply.log")"
+cover scripts/apply-promotions.sh exit-0-receipt
+
 for hook in \
   adapters/claude-code/checkpoint-stop-hook.sh \
   adapters/claude-code/precompact-flush-hook.sh \
