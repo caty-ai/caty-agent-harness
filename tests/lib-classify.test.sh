@@ -166,6 +166,106 @@ middle_suffix=$(( large_size - banner_size - middle_prefix ))
 check_files bounded-tail-window-sees-login 1 "$empty_stderr" "$large_tail_stdout" deterministic-auth
 check_files bounded-middle-window-omits-login 1 "$empty_stderr" "$large_middle_stdout" transient
 
+wc_failure_bin="$test_tmp/wc-failure-bin"
+mkdir -p "$wc_failure_bin"
+printf '%s\n' '#!/usr/bin/env bash' 'exit 1' >"$wc_failure_bin/wc"
+chmod +x "$wc_failure_bin/wc"
+wc_failure_diag="$test_tmp/wc-failure.diag"
+set +e
+wc_failure_actual=$(PATH="$wc_failure_bin:$PATH" classify_failure 1 "$empty_stderr" "$large_tail_stdout" 2>"$wc_failure_diag")
+wc_failure_rc=$?
+set -e
+if [[ "$wc_failure_rc" -eq 0 && "$wc_failure_actual" = deterministic-auth ]] \
+  && grep -F -x -q "classify_failure: unreadable evidence: $large_tail_stdout" "$wc_failure_diag"; then
+  pass_count=$(( pass_count + 1 ))
+  printf 'PASS wc-failure-uses-conservative-bounded-read\n'
+else
+  fail_count=$(( fail_count + 1 ))
+  printf 'FAIL wc-failure-uses-conservative-bounded-read: expected deterministic-auth plus unreadable diagnostic, got rc=%s result=%s\n' "$wc_failure_rc" "$wc_failure_actual"
+fi
+
+wc_failure_large_evidence="$test_tmp/wc-failure-large-evidence.stdout"
+wc_failure_large_marker='Not logged in'
+wc_failure_large_expected_bytes=$(( 2 * CLASSIFY_WINDOW_BYTES + 1 ))
+wc_failure_large_size=$(( wc_failure_large_expected_bytes + 1 ))
+fill_bytes $(( wc_failure_large_size - ${#wc_failure_large_marker} )) >"$wc_failure_large_evidence"
+printf '%s' "$wc_failure_large_marker" >>"$wc_failure_large_evidence"
+wc_failure_large_diag="$test_tmp/wc-failure-large.diag"
+set +e
+wc_failure_large_actual=$(PATH="$wc_failure_bin:$PATH" classify_failure 1 "$empty_stderr" "$wc_failure_large_evidence" 2>"$wc_failure_large_diag")
+wc_failure_large_rc=$?
+wc_failure_large_reader_output=$(PATH="$wc_failure_bin:$PATH" _classify_read_bounded "$wc_failure_large_evidence" 2>>"$wc_failure_large_diag")
+wc_failure_large_reader_rc=$?
+set -e
+wc_failure_large_reader_bytes=$(printf '%s' "$wc_failure_large_reader_output" | wc -c)
+wc_failure_large_file_bytes=$(wc -c <"$wc_failure_large_evidence")
+if [[ "$wc_failure_large_rc" -eq 0 && "$wc_failure_large_reader_rc" -eq 0 ]] \
+  && [[ "$wc_failure_large_actual" = deterministic-auth ]] \
+  && [[ "$wc_failure_large_file_bytes" -gt "$CLASSIFY_INLINE_MAX_BYTES" ]] \
+  && [[ "$wc_failure_large_file_bytes" -eq "$wc_failure_large_size" ]] \
+  && [[ "$wc_failure_large_reader_bytes" -eq "$wc_failure_large_expected_bytes" ]] \
+  && [[ "$wc_failure_large_reader_bytes" -lt "$wc_failure_large_file_bytes" ]]; then
+  pass_count=$(( pass_count + 1 ))
+  printf 'PASS wc-failure-with-large-evidence-still-windows\n'
+else
+  fail_count=$(( fail_count + 1 ))
+  printf 'FAIL wc-failure-with-large-evidence-still-windows: expected deterministic-auth and %s-byte window output, got rc=%s reader_rc=%s result=%s reader_bytes=%s file_bytes=%s\n' "$wc_failure_large_expected_bytes" "$wc_failure_large_rc" "$wc_failure_large_reader_rc" "$wc_failure_large_actual" "$wc_failure_large_reader_bytes" "$wc_failure_large_file_bytes"
+fi
+
+wc_invalid_bin="$test_tmp/wc-invalid-bin"
+mkdir -p "$wc_invalid_bin"
+printf '%s\n' '#!/usr/bin/env bash' "printf '%s\\n' not-a-number" >"$wc_invalid_bin/wc"
+chmod +x "$wc_invalid_bin/wc"
+wc_invalid_diag="$test_tmp/wc-invalid.diag"
+set +e
+wc_invalid_actual=$(PATH="$wc_invalid_bin:$PATH" classify_failure 1 "$empty_stderr" "$large_tail_stdout" 2>"$wc_invalid_diag")
+wc_invalid_rc=$?
+set -e
+if [[ "$wc_invalid_rc" -eq 0 && "$wc_invalid_actual" = deterministic-auth ]] \
+  && grep -F -x -q "classify_failure: invalid evidence size: value='not-a-number' file='$large_tail_stdout'" "$wc_invalid_diag"; then
+  pass_count=$(( pass_count + 1 ))
+  printf 'PASS nonnumeric-size-uses-conservative-bounded-read\n'
+else
+  fail_count=$(( fail_count + 1 ))
+  printf 'FAIL nonnumeric-size-uses-conservative-bounded-read: expected deterministic-auth plus invalid-size diagnostic, got rc=%s result=%s\n' "$wc_invalid_rc" "$wc_invalid_actual"
+fi
+
+wc_leading_zero_bin="$test_tmp/wc-leading-zero-bin"
+mkdir -p "$wc_leading_zero_bin"
+printf '%s\n' '#!/usr/bin/env bash' "printf '%s\\n' 0200000" >"$wc_leading_zero_bin/wc"
+chmod +x "$wc_leading_zero_bin/wc"
+wc_leading_zero_diag="$test_tmp/wc-leading-zero.diag"
+set +e
+wc_leading_zero_actual=$(PATH="$wc_leading_zero_bin:$PATH" classify_failure 1 "$empty_stderr" "$large_tail_stdout" 2>"$wc_leading_zero_diag")
+wc_leading_zero_rc=$?
+set -e
+if [[ "$wc_leading_zero_rc" -eq 0 && "$wc_leading_zero_actual" = deterministic-auth ]] \
+  && grep -F -x -q "classify_failure: invalid evidence size: value='0200000' file='$large_tail_stdout'" "$wc_leading_zero_diag"; then
+  pass_count=$(( pass_count + 1 ))
+  printf 'PASS leading-zero-size-is-rejected-conservatively\n'
+else
+  fail_count=$(( fail_count + 1 ))
+  printf 'FAIL leading-zero-size-is-rejected-conservatively: expected deterministic-auth plus invalid-size diagnostic, got rc=%s result=%s\n' "$wc_leading_zero_rc" "$wc_leading_zero_actual"
+fi
+
+wc_spaced_bin="$test_tmp/wc-spaced-bin"
+mkdir -p "$wc_spaced_bin"
+printf '%s\n' '#!/usr/bin/env bash' "printf '  12 34  \\n'" >"$wc_spaced_bin/wc"
+chmod +x "$wc_spaced_bin/wc"
+wc_spaced_diag="$test_tmp/wc-spaced.diag"
+set +e
+wc_spaced_actual=$(PATH="$wc_spaced_bin:$PATH" classify_failure 1 "$empty_stderr" "$large_tail_stdout" 2>"$wc_spaced_diag")
+wc_spaced_rc=$?
+set -e
+if [[ "$wc_spaced_rc" -eq 0 && "$wc_spaced_actual" = deterministic-auth ]] \
+  && grep -F -x -q "classify_failure: invalid evidence size: value='12 34' file='$large_tail_stdout'" "$wc_spaced_diag"; then
+  pass_count=$(( pass_count + 1 ))
+  printf 'PASS internal-whitespace-size-is-rejected-conservatively\n'
+else
+  fail_count=$(( fail_count + 1 ))
+  printf 'FAIL internal-whitespace-size-is-rejected-conservatively: expected deterministic-auth plus invalid-size diagnostic, got rc=%s result=%s\n' "$wc_spaced_rc" "$wc_spaced_actual"
+fi
+
 if [[ $(id -u) -eq 0 ]]; then
   printf 'SKIP unreadable-stdout-is-degenerate (running as root)\n'
 else
