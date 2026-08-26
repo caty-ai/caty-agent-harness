@@ -1,6 +1,6 @@
 # Apply step — reviewed candidates → durable-tier writeback (#201)
 
-Status: DRAFT v3 (v1 reviewed 2026-08-27 by Kimi K3 / Grok 4.6 / GLM 5.3, all NO-GO;
+Status: FROZEN 2026-08-27 (L1-9 upstream review: 3-seat GO — see #201 adjudication records) (v1 reviewed 2026-08-27 by Kimi K3 / Grok 4.6 / GLM 5.3, all NO-GO;
 v2 landed all round-1 flip conditions — delta verdicts Kimi GO / Grok GO / GLM NO-GO on
 one remaining supersedes cell; v3 lands that cell plus all round-2 non-blocking
 observations — adjudication records on #201)
@@ -305,7 +305,7 @@ resolution authority). Lines:
   with no `run-summary` marks a crashed run).
 
 Reason-token set is closed: `hygiene parse input-untrusted already-applied
-duplicate-content superseded supersedes-not-owned supersedes-unresolved
+duplicate-content superseded supersedes-not-owned
 supersedes-ambiguous awaiting-approval unknown-approval k-below-2 section-full
 volume-guard stub-exists stub-replay stub-dirty caps-read-failed lock-busy
 skipped-paused already-rolled-back` — §9 requires a fixture per token.
