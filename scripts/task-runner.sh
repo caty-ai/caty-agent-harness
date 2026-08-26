@@ -404,13 +404,15 @@ spawn_step_pause_record_matches() {
   local workspace_path=$2
   [[ -f "$stderr_file" && ! -L "$stderr_file" ]] || return 1
   python3 - "$stderr_file" "$workspace_path" <<'PY'
+import re
 import sys
 
 stderr_file, workspace = sys.argv[1:3]
-expected = f"status=paused workspace={workspace} entrypoint=hermes-spawn-step".encode("utf-8")
+prefix = f"status=paused workspace={workspace} entrypoint=".encode("utf-8")
+pattern = re.escape(prefix) + rb"[a-z0-9][a-z0-9-]*-spawn-step(?:\n)?"
 with open(stderr_file, "rb") as f:
     actual = f.read()
-raise SystemExit(0 if actual in (expected, expected + b"\n") else 1)
+raise SystemExit(0 if re.fullmatch(pattern, actual) else 1)
 PY
 }
 

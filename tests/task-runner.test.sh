@@ -145,6 +145,26 @@ SH
   chmod +x "$path"
 }
 
+write_overflow_paused_step() {
+  local path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+printf 'status=paused workspace=%s entrypoint=%s\n' "$2" overflow-spawn-step >&2
+exit 0
+SH
+  chmod +x "$path"
+}
+
+write_invalid_pause_label_step() {
+  local path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+printf 'status=paused workspace=%s entrypoint=%s\n' "$2" evil-step >&2
+exit 0
+SH
+  chmod +x "$path"
+}
+
 write_nonpause_status_step() {
   local path=$1
   cat >"$path" <<'SH'
@@ -2442,6 +2462,30 @@ case_paused_step_requeues_without_charge() {
   fi
 }
 
+case_overflow_paused_step_requeues_without_charge() {
+  local name=overflow-paused-step-requeues-without-charge
+  local ws canonical_ws paused_step
+  ws=$(make_ws)
+  canonical_ws=$(cd "$ws" && pwd -P)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  paused_step="$ws/overflow-paused-step.sh"
+  write_overflow_paused_step "$paused_step"
+  run_tick_with_step "$ws" "$paused_step" >/dev/null 2>&1
+  if [[ "$(state_value "$ws" tr-basic status)" = queued ]] \
+    && [[ "$(state_value "$ws" tr-basic attempts_used)" = 0 ]] \
+    && [[ "$(state_value "$ws" tr-basic active_seconds_used)" = 0 ]] \
+    && [[ "$(state_value "$ws" tr-basic infra_retries)" = 0 ]] \
+    && [[ "$(driver_value "$ws" tr-basic outcome)" = paused ]] \
+    && [[ "$(driver_value "$ws" tr-basic classified)" = paused ]] \
+    && [[ "$(driver_value "$ws" tr-basic exit_code)" = 0 ]] \
+    && [[ -f "$ws/loop/tasks/queue/tr-basic.task.md" ]] \
+    && grep -Fqx "status=paused workspace=$canonical_ws entrypoint=overflow-spawn-step" "$ws/loop/artifacts/tr-basic/attempts/001/model.stderr"; then
+    pass "$name"
+  else
+    fail "$name" "overflow pause did not requeue cleanly: status=$(state_value "$ws" tr-basic status) attempts=$(state_value "$ws" tr-basic attempts_used) active=$(state_value "$ws" tr-basic active_seconds_used) outcome=$(driver_value "$ws" tr-basic outcome)"
+  fi
+}
+
 case_paused_step_crash_recovery() {
   local name=paused-step-crash-recovery
   local ws paused_step first_rc
@@ -2515,6 +2559,25 @@ case_nonpause_status_record_is_not_paused() {
     pass "$name"
   else
     fail "$name" "malformed paused record was misclassified as paused: status=$(state_value "$ws" tr-basic status) attempts=$(state_value "$ws" tr-basic attempts_used) infra=$(state_value "$ws" tr-basic infra_retries) classified=$(driver_value "$ws" tr-basic classified)"
+  fi
+}
+
+case_invalid_pause_label_is_not_paused() {
+  local name=invalid-pause-label-is-not-paused
+  local ws invalid_pause_step
+  ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  invalid_pause_step="$ws/invalid-pause-label-step.sh"
+  write_invalid_pause_label_step "$invalid_pause_step"
+  run_tick_with_step "$ws" "$invalid_pause_step" >/dev/null 2>&1 || true
+  if [[ "$(state_value "$ws" tr-basic status)" = queued ]] \
+    && [[ "$(state_value "$ws" tr-basic attempts_used)" = 1 ]] \
+    && [[ "$(state_value "$ws" tr-basic infra_retries)" = 0 ]] \
+    && [[ "$(driver_value "$ws" tr-basic outcome)" = ok ]] \
+    && [[ "$(driver_value "$ws" tr-basic classified)" = '' ]]; then
+    pass "$name"
+  else
+    fail "$name" "invalid pause label was misclassified as paused: status=$(state_value "$ws" tr-basic status) attempts=$(state_value "$ws" tr-basic attempts_used) infra=$(state_value "$ws" tr-basic infra_retries) outcome=$(driver_value "$ws" tr-basic outcome) classified=$(driver_value "$ws" tr-basic classified)"
   fi
 }
 
@@ -2906,9 +2969,11 @@ case_prompt_budget_time_boundary_wind_down
 case_prompt_budget_time_above_boundary_no_wind_down
 case_paused_step_old_behavior_red
 case_paused_step_requeues_without_charge
+case_overflow_paused_step_requeues_without_charge
 case_paused_step_crash_recovery
 case_paused_step_crash_before_stamp_recovery
 case_nonpause_status_record_is_not_paused
+case_invalid_pause_label_is_not_paused
 case_prior_verifier_finding
 case_prior_verifier_pass_is_none
 case_prior_verifier_step_scoped
