@@ -279,12 +279,6 @@ and sends `prompt.md` on stdin. `OVF_STEP_CMD` defaults to
 whitespace-split argv, never shell-expanded. The model session—not this
 adapter—owns `step-result.json`.
 
-Known pause limitation: startup pause is handled before the model starts, but a
-workspace paused while this adapter is already running is currently classified
-by the task-runner driver against the Hermes pause label. That mid-run pause can
-therefore be misclassified. Driver-side pause-label parameterization is a
-follow-up; this adapter does not change `task-runner.sh` in v1.
-
 The passive monitor writes `stream.jsonl`, `overflow-stream.eof`,
 `sentinel-events.jsonl`, `attempt.json`, and, after an active fire,
 `overflow-nudge.pending` in the attempt directory. Task-scoped hysteresis state
