@@ -347,6 +347,10 @@ def valid_ledger_records():
     records = []
     if not os.path.isfile(ledger_path):
         return records
+    parse_marker = os.environ.get("TR_LEDGER_TEST_FULL_PARSE_MARKER")
+    if parse_marker:
+        with open(parse_marker, "a", encoding="utf-8") as marker:
+            marker.write("parse\n")
     with open(ledger_path, "rb") as handle:
         for raw in handle:
             if not raw.endswith(b"\n"):
@@ -527,6 +531,8 @@ def fold_one(path, attempt_value, force_marker=False):
                 scan_start = max(0, scan_end - chunk_bytes)
                 handle.seek(scan_start)
                 block = handle.read(scan_end - scan_start)
+                if not block:
+                    break
                 newline = block.rfind(b"\n")
                 if newline >= 0:
                     complete_end = scan_start + newline + 1
@@ -564,6 +570,8 @@ def fold_one(path, attempt_value, force_marker=False):
                 aligned_start = desired_start
                 while aligned_start < complete_end:
                     block = handle.read(min(chunk_bytes, complete_end - aligned_start))
+                    if not block:
+                        break
                     newline = block.find(b"\n")
                     if newline >= 0:
                         aligned_start += newline + 1
@@ -601,6 +609,8 @@ def fold_one(path, attempt_value, force_marker=False):
                             parts.append(part)
                     if part.endswith(b"\n"):
                         break
+                if line_size == 0:
+                    break
                 seq += 1
                 if oversize:
                     dropped_lines_pass += 1
@@ -698,6 +708,48 @@ def all_attempt_dirs():
             if os.path.isdir(path) and number.isdigit():
                 paths.append((int(number), path, number.zfill(3)))
     return [item[1:] for item in sorted(paths, key=lambda item: (item[0], item[1]))]
+
+
+def file_signature(path):
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    return {
+        "size": stat.st_size,
+        "mtime_ns": getattr(stat, "st_mtime_ns", int(stat.st_mtime * 1000000000)),
+    }
+
+
+def reconcile_signature():
+    receipt_path = os.path.join(artifact_dir, "task-end.json")
+    receipt = read_json(receipt_path) or {}
+    attempts = []
+    for path, number in all_attempt_dirs():
+        source_path = os.path.join(path, "sentinel-events.jsonl")
+        source_exists = os.path.isfile(source_path)
+        source_stat = file_signature(source_path)
+        attempts.append({
+            "attempt": number,
+            "path": os.path.relpath(path, artifact_dir),
+            "source_size": source_stat["size"] if source_stat else None,
+            "source_mtime_ns": source_stat["mtime_ns"] if source_stat else None,
+            "fold_state": file_signature(os.path.join(path, ".ledger-fold.json")),
+            "attempt_receipt": file_signature(os.path.join(path, "attempt.json")),
+            "driver": file_signature(os.path.join(path, "driver.json")),
+            "eof": file_signature(os.path.join(path, "overflow-stream.eof")),
+            "quiescent": source_quiescent(path, source_exists),
+        })
+    receipt_stat = file_signature(receipt_path)
+    return {
+        "schema": 1,
+        "ledger": file_signature(ledger_path),
+        "state": file_signature(os.path.join(artifact_dir, "state.json")),
+        "receipt_version": receipt.get("receipt_version"),
+        "receipt_mtime_ns": receipt_stat["mtime_ns"] if receipt_stat else None,
+        "receipt_size": receipt_stat["size"] if receipt_stat else None,
+        "attempts": attempts,
+    }
 
 
 def catchup():
@@ -940,6 +992,22 @@ def project_receipt():
         raise RuntimeError("task-end-projection-validation")
 
 
+def reconcile_terminal():
+    ensure_init()
+    reconcile_path = os.path.join(artifact_dir, ".ledger-reconcile.json")
+    signature = reconcile_signature()
+    previous = read_json(reconcile_path)
+    if previous and previous.get("signature") == signature:
+        return
+    catchup()
+    emit_receipt()
+    project_receipt()
+    atomic_json(reconcile_path, {
+        "schema": 1,
+        "signature": reconcile_signature(),
+    })
+
+
 try:
     if operation == "init":
         ensure_init()
@@ -951,6 +1019,8 @@ try:
         emit_receipt()
     elif operation == "project":
         project_receipt()
+    elif operation == "reconcile":
+        reconcile_terminal()
     else:
         raise ValueError("unknown-operation")
 except Exception as exc:
@@ -988,6 +1058,10 @@ emit_task_end_if_missing() {
 
 project_task_end_if_stale() {
   ledger_append_best_effort project "$1"
+}
+
+reconcile_terminal_ledger() {
+  ledger_append_best_effort reconcile "$1"
 }
 
 lease_age_s() {
@@ -1074,7 +1148,7 @@ except Exception:
 classified = d.get("classified")
 exit_code = d.get("exit_code")
 outcome = d.get("outcome")
-print("true" if classified in ("infra", "transient", "context-overflow", "degenerate") or (exit_code == 111 and outcome != "timeout") else "false")
+print("true" if classified in ("infra", "transient", "window-error", "degenerate") or (exit_code == 111 and outcome != "timeout") else "false")
 PY
 }
 
@@ -2277,7 +2351,6 @@ reconcile_terminals() {
     feature_era=0
     if [[ -f "$artifact_dir/ledger.jsonl" ]]; then
       feature_era=1
-      ensure_ledger_init "$artifact_dir"
     fi
     if [[ "$status" = "delivered" ]]; then
       dest="$delivered_dir/$task_id"
@@ -2310,10 +2383,10 @@ reconcile_terminals() {
       fi
     fi
     if (( feature_era == 1 )); then
-      fold_terminal_tail "$artifact_dir"
-      emit_task_end_if_missing "$artifact_dir"
-      # Projection is intentionally independent of receipt creation/repair.
-      project_task_end_if_stale "$artifact_dir"
+      # Catch-up, receipt repair, and independent projection share one
+      # fail-open process. Its persisted signature makes steady-state visits
+      # stat-only: no ledger parse and no receipt/projection rewrite.
+      reconcile_terminal_ledger "$artifact_dir"
     fi
   done
 }
@@ -2609,7 +2682,7 @@ except Exception:
     print("")
 PY
 )
-      if [[ "$recovered_class" = deterministic-auth || "$recovered_class" = deterministic-input || "$recovered_class" = window-error ]]; then
+      if [[ "$recovered_class" = deterministic-auth || "$recovered_class" = deterministic-input ]]; then
         fold_attempt_sentinel "$artifact_dir" "$attempt_dir" "$nnn" 1
         dlq_task "$task_file" "$artifact_dir" "$recovered_class"
         continue
@@ -2874,7 +2947,7 @@ run_one_attempt() {
     exit 137
   fi
 
-  if [[ "$classified" = deterministic-auth || "$classified" = deterministic-input || "$classified" = window-error ]]; then
+  if [[ "$classified" = deterministic-auth || "$classified" = deterministic-input ]]; then
     fold_attempt_sentinel "$artifact_dir" "$attempt_dir" "$nnn" 1
     dlq_task "$task_file" "$artifact_dir" "$classified"
     return 0

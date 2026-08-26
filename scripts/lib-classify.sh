@@ -66,12 +66,20 @@ _classify_read_bounded() {
 
 _classify_is_window_error() {
   local evidence=${1-}
+  local allow_legacy_stderr=${2:-0}
   local line
   while IFS= read -r line; do
     case "$line" in
       *context_length_exceeded*|*'prompt is too long'*|*'input length and max_tokens exceed context limit'*)
         return 0
         ;;
+    esac
+    if [[ "$allow_legacy_stderr" = 1 ]]; then
+      case "$line" in
+        *'context length exceeded'*|*context-length-exceeded*|*'context overflow'*|*'too many tokens'*) return 0 ;;
+      esac
+    fi
+    case "$line" in
       *'maximum context length'*|*'context window'*)
         # These phrases are common in ordinary prose; require the same line to
         # look like a persisted error diagnostic.
@@ -127,7 +135,7 @@ classify_failure() {
       return 0
       ;;
   esac
-  if _classify_is_window_error "$stderr_lower"; then
+  if _classify_is_window_error "$stderr_lower" 1; then
     printf '%s\n' window-error
     return 0
   fi

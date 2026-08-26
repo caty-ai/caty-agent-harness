@@ -298,4 +298,5 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
 - v0.5.4（2026-08-27・#187 application note）: `sentinel-events.jsonl` を task-runner sole-writer の
   per-task `ledger.jsonl` へ bounded・fail-open に fold し、driver の実 terminal state から distinct な
   task-level `task_end` と atomic `task-end.json` receipt を生成する ledger-confluence を適用。
+  `window-error` は infra として fresh-session retry し、retry を焼き切った最終 driver も `window-error` の場合だけ exhausted DLQ を `overflowed` に写像する。
   per-run `attempt_end` と monitor の schema/state は変更しない。

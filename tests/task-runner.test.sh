@@ -3133,22 +3133,51 @@ case_ledger_driver_outcome_mapping() {
   else fail "$name" "driver/monitor outcome ownership was violated"; fi
 }
 
-case_ledger_window_error_class_is_terminal() {
-  local name=ledger-window-error-class-is-terminal ws step artifact
-  ws=$(make_ws); write_runner_task "$ws" window-terminal out/delivery-receipt.json true
+case_ledger_window_error_retries_then_overflows() {
+  local name=ledger-window-error-retries-then-overflows ws step artifact i
+  ws=$(make_ws); write_runner_task "$ws" window-overflow out/delivery-receipt.json true
+  step="$ws/window-error-step.sh"
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'printf "%s\n" "API Error 400: maximum context length exceeded for this request" >&2' \
+    'exit 1' >"$step"
+  chmod +x "$step"
+  for i in 1 2 3 4; do
+    run_tick_with_step "$ws" "$step" >/dev/null 2>&1
+  done
+  artifact="$ws/loop/artifacts/window-overflow"
+  if [[ "$(state_value "$ws" window-overflow status)" = dlq ]] \
+    && [[ "$(state_value "$ws" window-overflow terminal_reason)" = infra ]] \
+    && [[ "$(state_value "$ws" window-overflow infra_retries)" -eq 4 ]] \
+    && [[ "$(state_value "$ws" window-overflow attempts_used)" -eq 0 ]] \
+    && [[ "$(driver_value "$ws" window-overflow classified)" = window-error ]] \
+    && [[ "$(infra_driver_value "$ws" window-overflow 1 classified)" = window-error ]] \
+    && [[ "$(receipt_value "$artifact/task-end.json" outcome)" = overflowed ]]; then
+    pass "$name"
+  else fail "$name" "window-error did not exhaust infra retries with an overflowed receipt"; fi
+}
+
+case_ledger_window_error_recovers_completed() {
+  local name=ledger-window-error-recovers-completed ws step artifact rc
+  ws=$(make_ws); write_runner_task "$ws" window-recovery out/delivery-receipt.json true
   step="$ws/window-error-step.sh"
   printf '%s\n' '#!/usr/bin/env bash' \
     'printf "%s\n" "API Error: Prompt is too long for this model" >&2' \
     'exit 1' >"$step"
   chmod +x "$step"
-  run_tick_with_step "$ws" "$step" >/dev/null 2>&1
-  artifact="$ws/loop/artifacts/window-terminal"
-  if [[ "$(state_value "$ws" window-terminal status)" = dlq ]] \
-    && [[ "$(state_value "$ws" window-terminal terminal_reason)" = window-error ]] \
-    && [[ "$(driver_value "$ws" window-terminal classified)" = window-error ]] \
-    && [[ "$(receipt_value "$artifact/task-end.json" outcome)" = overflowed ]]; then
+  set +e
+  run_tick_with_step "$ws" "$step" TR_CRASH_AFTER=stamp >/dev/null 2>&1
+  rc=$?
+  set -e
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success >/dev/null
+  artifact="$ws/loop/artifacts/window-recovery"
+  if [[ "$rc" -eq 137 ]] \
+    && [[ "$(state_value "$ws" window-recovery status)" = delivered ]] \
+    && [[ "$(state_value "$ws" window-recovery infra_retries)" -eq 1 ]] \
+    && [[ "$(state_value "$ws" window-recovery attempts_used)" -eq 1 ]] \
+    && [[ "$(infra_driver_value "$ws" window-recovery 1 classified)" = window-error ]] \
+    && [[ "$(receipt_value "$artifact/task-end.json" outcome)" = completed ]]; then
     pass "$name"
-  else fail "$name" "classified window-error was not routed terminally"; fi
+  else fail "$name" "window-error stamp crash/reap recovery did not complete: first_rc=$rc"; fi
 }
 
 case_ledger_io_failure_is_fail_open() {
@@ -3395,29 +3424,50 @@ case_ledger_pre_feature_terminal_gate() {
   else fail "$name" "reconcile fabricated telemetry for pre-feature artifact"; fi
 }
 
-if [[ "${TR_LEDGER_FOCUSED:-0}" = 1 ]]; then
-  case_ledger_terminal_pre_projection_reconcile
-  case_ledger_fired_delivered_is_completed
-  case_ledger_direct_dlq_reap_folds_once
-  case_ledger_torn_tail_repair
-  case_ledger_zero_attempt_dlq
-  case_ledger_driver_outcome_mapping
-  case_ledger_window_error_class_is_terminal
-  case_ledger_io_failure_is_fail_open
-  case_ledger_orphan_tail_converges
-  case_ledger_receipt_tmp_crash_recovery
-  case_ledger_fingerprint_repair_after_emit_failure
-  case_ledger_quiescence_only_repairs_receipt
-  case_ledger_receipt_projection_independent
-  case_ledger_fold_worked_cases
-  case_ledger_post_exhaustion_is_quiescent
-  case_ledger_oversize_lines_are_accounted
-  case_ledger_partial_line_completed_once
-  case_ledger_pre_feature_terminal_gate
-  log "TOTAL pass=$pass_count fail=$fail_count"
-  (( fail_count == 0 ))
-  exit
-fi
+case_ledger_reconcile_steady_state_is_stat_only() {
+  local name=ledger-reconcile-steady-state-is-stat-only ws root trace ops bin real_python before after i
+  ws=$(make_ws); root="$ws/loop/artifacts"
+  i=1
+  while (( i <= 20 )); do
+    write_terminal_ledger_fixture "$ws" "steady-$(printf '%02d' "$i")" delivered
+    i=$(( i + 1 ))
+  done
+  trace="$ws/full-parse.trace"
+  run_tick "$ws" TR_LEDGER_TEST_FULL_PARSE_MARKER="$trace" >/dev/null
+  rm -f "$trace"
+  before=$(python3 - "$root" <<'PY'
+import glob, os, sys
+root=sys.argv[1]
+for artifact in sorted(glob.glob(os.path.join(root, "steady-*"))):
+    for name in ("ledger.jsonl", "task-end.json", ".ledger-reconcile.json"):
+        stat=os.stat(os.path.join(artifact,name))
+        print("%s/%s:%s:%s" % (os.path.basename(artifact), name, stat.st_size, stat.st_mtime_ns))
+PY
+)
+  ops="$ws/ledger-ops.trace"; bin="$ws/python-bin"; real_python=$(command -v python3)
+  mkdir -p "$bin"
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'case "${3:-}" in init|fold|catchup|receipt|project|reconcile) printf "%s\n" "$3" >>"$TR_LEDGER_OP_TRACE" ;; esac' \
+    'exec "$TR_REAL_PYTHON" "$@"' >"$bin/python3"
+  chmod +x "$bin/python3"
+  PATH="$bin:$PATH" TR_REAL_PYTHON="$real_python" TR_LEDGER_OP_TRACE="$ops" \
+    run_tick "$ws" TR_LEDGER_TEST_FULL_PARSE_MARKER="$trace" >/dev/null
+  after=$(python3 - "$root" <<'PY'
+import glob, os, sys
+root=sys.argv[1]
+for artifact in sorted(glob.glob(os.path.join(root, "steady-*"))):
+    for name in ("ledger.jsonl", "task-end.json", ".ledger-reconcile.json"):
+        stat=os.stat(os.path.join(artifact,name))
+        print("%s/%s:%s:%s" % (os.path.basename(artifact), name, stat.st_size, stat.st_mtime_ns))
+PY
+)
+  if [[ "$before" = "$after" ]] \
+    && [[ ! -e "$trace" ]] \
+    && [[ "$(grep -c '^reconcile$' "$ops")" -eq 20 ]] \
+    && ! grep -Eq '^(init|fold|catchup|receipt|project)$' "$ops"; then
+    pass "$name"
+  else fail "$name" "steady reconcile parsed/wrote telemetry or used split Python operations"; fi
+}
 
 case_env_integer_validation
 case_corrupt_state_quarantine_continues
@@ -3522,7 +3572,8 @@ case_ledger_direct_dlq_reap_folds_once
 case_ledger_torn_tail_repair
 case_ledger_zero_attempt_dlq
 case_ledger_driver_outcome_mapping
-case_ledger_window_error_class_is_terminal
+case_ledger_window_error_retries_then_overflows
+case_ledger_window_error_recovers_completed
 case_ledger_io_failure_is_fail_open
 case_ledger_orphan_tail_converges
 case_ledger_receipt_tmp_crash_recovery
@@ -3534,6 +3585,7 @@ case_ledger_post_exhaustion_is_quiescent
 case_ledger_oversize_lines_are_accounted
 case_ledger_partial_line_completed_once
 case_ledger_pre_feature_terminal_gate
+case_ledger_reconcile_steady_state_is_stat_only
 
 log "TOTAL pass=$pass_count fail=$fail_count"
 if (( fail_count > 0 )); then
