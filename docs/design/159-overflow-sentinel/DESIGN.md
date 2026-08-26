@@ -175,9 +175,14 @@ alert       = ts_first_byte 不在のまま TTFB 床超過（fire とは別イ�
 | M（射影ホライズン） | 10 turns | 保守的（v1 の誤発火コスト= ログ1行+ナッジ1回） |
 | TTFB 床 | 90/150/240s + reasoning floor 表 + unknown=240s | Hermes 実装値 + hermes#89241 の逆張り |
 
-**ctx_window の4段梯子**: config 明示上書き > HF config.json（公開モデル・**訓練上限≠提供窓に注意**、
-過大方向は T_abs 併置で無害化） > モデルカタログ > 保守既定 200k。採用段を `ctx_window_source` として
-ログに記録。128k 実窓モデルに 200k 既定が当たる過大方向の見逃しも T_abs が受ける。
+**ctx_window の5段梯子**: config 明示上書き > HF config.json（公開モデル・**訓練上限≠提供窓に注意**、
+過大方向は T_abs 併置で無害化） > opt-in の HF network cache rung（`CLAUDE_MODEL` を plain な HF repo id
+として検証し、`https://huggingface.co/<model>/resolve/main/config.json` を stdlib `urllib` の 1 fetch /
+hard 5s timeout で取得、`OVF_HF_CACHE_DIR` 配下へ flat な `sha256(model).json` を atomic write して
+再読込に成功した場合のみ採用） > モデルカタログ > 保守既定 200k。採用段を `ctx_window_source` として
+ログに記録し、network rung の source 名は fresh/cached とも `hf-network-cached` に固定する。
+HF id / cache validation / cache I/O / fetch の失敗は warning を 1 行出して catalog/default へ fall through
+する。128k 実窓モデルに 200k 既定が当たる過大方向の見逃しも T_abs が受ける。
 
 ## 6. 発火時の動作（D3: v1 は提案のみ + 発火実測ログ）
 

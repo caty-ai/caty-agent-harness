@@ -266,6 +266,24 @@ so the context-window catalog and TTFB floor can select a known entry. If it is
 unset, the adapter records `claude-unknown`, which deliberately uses the default
 context window and conservative 240-second TTFB floor.
 
+`OVF_HF_NETWORK=1` adds one best-effort HF config rung after `OVF_HF_CONFIG` and
+before the catalog fallback. When enabled, `OVF_HF_CACHE_DIR` is required and is
+validated as a writable non-symlink directory, created if missing, and forced to
+mode `0700` before the step starts. The monitor then validates `CLAUDE_MODEL` as
+a plain HF repo id, fetches exactly one
+`https://huggingface.co/<model>/resolve/main/config.json` with stdlib `urllib`
+and a hard 5-second timeout, writes a flat `sha256(model).json` cache entry, and
+uses it only after re-reading that cache entry successfully. Any HF id, cache,
+or fetch failure warns and falls through to the catalog/default ladder without
+changing the model-step exit status.
+
+Optional snippet:
+
+```sh
+export OVF_HF_NETWORK=1
+export OVF_HF_CACHE_DIR="$WS/loop/.cache/overflow-sentinel-hf"
+```
+
 After inspecting `sentinel-events.jsonl`, select `OVF_SENTINEL=active` to allow
 the adapter to prepare a five-point delta nudge. The nudge is shown at the next
 task-runner step boundary, not injected into the running `claude -p` process.
