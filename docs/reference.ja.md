@@ -132,6 +132,24 @@ review notification、48時間を超える沈黙、設定 threshold 以上の ze
   または PATH lookup 前提の設定は runner 実行前に移行してください。`HERMES_STEP_CMD`、
   `HERMES_PROBE_CMD`、`TR_PUSH_CMD` は whitespace で分割して argv 配列にし、PATH 解決される
   通常の実行可能ファイル名も使えます。
+- `TR_LEDGER_FOLD_TOTAL_MAX_BYTES` は attempt ごとの sentinel fold budget（既定 16 MiB）です。
+  `TR_LEDGER_FOLD_MAX_BYTES` は bounded fold loop の chunk size（既定 4 MiB）であり、pass 全体の
+  上限ではありません。total budget を使い切った attempt は以後 permanent に fold-quiescent となり、
+  receipt は `fold_complete:false` のままです。
+
+feature-era の各 task artifact には append-only の `ledger.jsonl` があります。writer は task runner
+だけです。runner は `init` を追加し、各 attempt の `sentinel-events.jsonl` の complete line を
+driver 所有の task/attempt/run/seq identity で fold し、version 付き task-level `task_end` を projection
+します。不正な source line も `schema:"raw"` と `parse_error:true` を付けて保持し、budget または
+oversize による loss は `fold_done`、`fold_oversize_line`、terminal な `fold_exhausted` に明示します。
+ledger failure は fail-open の telemetry failure であり、delivered/DLQ transition を rollback しません。
+
+`task-end.json` は atomic な task-level receipt です。最初の `ts`、`started_at`、`outcome`、
+`terminal_reason` は immutable です。reconcile は folded-state fingerprint が変わった場合だけ
+`receipt_version` を増やして evidence aggregate を修復し、`fold_complete` を再計算します。また、
+現 receipt version の valid な ledger projection が 1 件あることを独立に保証します。`delivered` は
+常に `completed`、DLQ は final driver classification が `window-error` の場合だけ `overflowed`、
+それ以外は `aborted` です。sentinel の `window_error` は evidence であり outcome を決めません。
 
 ### Claude Code overflow sentinel の環境変数
 
@@ -183,7 +201,8 @@ append-only の `turn` series から再構成できます。slope-only fire で�
 `threshold_hit` を省略します。
 
 `sentinel-events.jsonl` は append-only で、`turn`、`fire`、`alert`、run ごとの
-`attempt_end` を収録します。task-level の `task_end` は ledger-confluence integration へ延期します。
+`attempt_end` を収録します。task runner はこれらを per-task ledger へ fold し、上記の distinct な
+task-level `task_end` を emit します。
 `attempt.json` は厳密に `schema_version`、`task_id`、`attempt`、`mode`、`model`、
 `ctx_window`、`ctx_window_source`、`started_at`、nullable な `first_byte_at`、
 `cli_exit_code`、`tap_status_final`、`fired`、`events_path` の field で atomic に確定します。attempt identity は

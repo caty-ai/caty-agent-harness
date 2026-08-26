@@ -18,10 +18,12 @@ TR_SPAWN_STEP=${TR_SPAWN_STEP:-}
 TR_PUSH_CMD=${TR_PUSH_CMD:-}
 TR_CRASH_AFTER=${TR_CRASH_AFTER:-}
 TR_TEMPLATE_OVERRIDE=${TR_TEMPLATE_OVERRIDE:-}
+TR_LEDGER_FOLD_TOTAL_MAX_BYTES=${TR_LEDGER_FOLD_TOTAL_MAX_BYTES-16777216}
+TR_LEDGER_FOLD_MAX_BYTES=${TR_LEDGER_FOLD_MAX_BYTES-4194304}
 # Replay payload cap: values are clamped to a 64-byte floor and 1048576-byte ceiling.
 TR_GATE_REPLAY_MAX_BYTES=${TR_GATE_REPLAY_MAX_BYTES-4096}
 
-for integer_var in TR_STEP_TIMEOUT_S TR_GRACE_S TR_DONECHECK_TIMEOUT_S TR_GATE_REPLAY_MAX_BYTES; do
+for integer_var in TR_STEP_TIMEOUT_S TR_GRACE_S TR_DONECHECK_TIMEOUT_S TR_GATE_REPLAY_MAX_BYTES TR_LEDGER_FOLD_TOTAL_MAX_BYTES TR_LEDGER_FOLD_MAX_BYTES; do
   integer_value=${!integer_var}
   case "$integer_value" in
     ''|*[!0-9]*|0[0-9]*)
@@ -30,11 +32,15 @@ for integer_var in TR_STEP_TIMEOUT_S TR_GRACE_S TR_DONECHECK_TIMEOUT_S TR_GATE_R
       ;;
   esac
 done
+if (( TR_LEDGER_FOLD_MAX_BYTES == 0 )); then
+  printf 'TR_LEDGER_FOLD_MAX_BYTES must be greater than zero\n' >&2
+  exit 2
+fi
 
 case "$TR_CRASH_AFTER" in
-  ''|spawn|stamp|infra-requeue|infra-terminal|verifying|donecheck-pass|deliver-terminal|dlq-terminal) ;;
+  ''|spawn|stamp|infra-requeue|infra-terminal|verifying|donecheck-pass|deliver-terminal|dlq-terminal|terminal-pre-ledger) ;;
   *)
-    printf 'TR_CRASH_AFTER must be one of: spawn, stamp, infra-requeue, infra-terminal, verifying, donecheck-pass, deliver-terminal, dlq-terminal\n' >&2
+    printf 'TR_CRASH_AFTER must be one of: spawn, stamp, infra-requeue, infra-terminal, verifying, donecheck-pass, deliver-terminal, dlq-terminal, terminal-pre-ledger\n' >&2
     exit 2
     ;;
 esac
@@ -274,6 +280,7 @@ init_state_if_missing() {
     lease_owner_sentinel=''
     terminal_reason=''
     write_state "$state_file"
+    ensure_ledger_init "$(dirname "$state_file")"
   fi
 }
 
@@ -282,6 +289,705 @@ utc_now() {
 from datetime import datetime, timezone
 print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
 PY
+}
+
+# The driver is the sole ledger writer. Every ledger read/append and every
+# derived receipt update is routed through this fail-open boundary so telemetry
+# can never abort queue progress under `set -e`.
+ledger_append_best_effort() {
+  local operation=$1
+  local artifact_dir=$2
+  local attempt_dir=${3:-}
+  local attempt=${4:-}
+  local force_marker=${5:-0}
+  local failure_reason=''
+  if ! failure_reason=$(python3 -B - "$operation" "$artifact_dir" "$attempt_dir" "$attempt" \
+    "$force_marker" "$TR_LEDGER_FOLD_TOTAL_MAX_BYTES" "$TR_LEDGER_FOLD_MAX_BYTES" <<'PY'
+import datetime
+import glob
+import hashlib
+import json
+import math
+import os
+import sys
+
+operation, artifact_dir, attempt_dir, attempt, force_text, total_text, chunk_text = sys.argv[1:8]
+ledger_path = os.path.join(artifact_dir, "ledger.jsonl")
+task_id = os.path.basename(os.path.normpath(artifact_dir))
+total_budget = int(total_text)
+chunk_bytes = int(chunk_text)
+
+
+def utc_now():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def atomic_json(path, value):
+    tmp = "%s.tmp.%d" % (path, os.getpid())
+    with open(tmp, "w", encoding="utf-8") as handle:
+        json.dump(value, handle, sort_keys=True, indent=2, ensure_ascii=False)
+        handle.write("\n")
+    os.replace(tmp, path)
+
+
+def append_records(records):
+    if not records:
+        return
+    os.makedirs(artifact_dir, exist_ok=True)
+    repair_tail()
+    with open(ledger_path, "ab") as handle:
+        for record in records:
+            encoded = json.dumps(
+                record, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ).encode("utf-8", "surrogateescape")
+            handle.write(encoded + b"\n")
+
+
+def valid_ledger_records():
+    records = []
+    if not os.path.isfile(ledger_path):
+        return records
+    with open(ledger_path, "rb") as handle:
+        for raw in handle:
+            if not raw.endswith(b"\n"):
+                continue
+            try:
+                value = json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            if isinstance(value, dict):
+                records.append(value)
+    return records
+
+
+def ensure_init():
+    if os.path.exists(ledger_path):
+        return
+    append_records([{
+        "event": "init",
+        "ledger_schema": 1,
+        "task_id": task_id,
+    }])
+
+
+def read_json(path):
+    try:
+        with open(path, encoding="utf-8") as handle:
+            value = json.load(handle)
+        return value if isinstance(value, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def attempt_run(path):
+    receipt = read_json(os.path.join(path, "attempt.json")) or {}
+    if receipt.get("started_at"):
+        return str(receipt["started_at"])
+    driver = read_json(os.path.join(path, "driver.json")) or {}
+    return "unknown-" + str(driver.get("started") or "unknown")
+
+
+def initial_fold_state(path, attempt_value, run):
+    state_path = os.path.join(path, ".ledger-fold.json")
+    state = read_json(state_path)
+    # Once assigned, the run key is immutable. In particular, a late
+    # attempt.json must not replace unknown-<driver.started> and reset cursor 0.
+    if state and state.get("attempt") == attempt_value and state.get("run"):
+        return state
+    state = {
+        "attempt": attempt_value,
+        "run": run,
+        "source_bytes_at_fold": 0,
+        "source_lines": 0,
+        "folded_lines": 0,
+        "folded_bytes": 0,
+        "dropped_lines": 0,
+        "dropped_bytes": 0,
+        "budget_remaining": total_budget,
+        "truncated": False,
+        "exhausted": False,
+        "quiescent": False,
+        "marker_written": False,
+    }
+    # Recover the last durable marker if the side receipt was lost after an
+    # append. The run key prevents a quarantined retry from borrowing state.
+    driver = read_json(os.path.join(path, "driver.json")) or {}
+    unknown_driver_run = "unknown-" + str(driver.get("started") or "unknown")
+    durable = valid_ledger_records()
+    recover_run = run
+    if not any(
+        record.get("event") == "fold_done"
+        and record.get("attempt") == attempt_value
+        and record.get("run") == run
+        for record in durable
+    ) and any(
+        record.get("event") == "fold_done"
+        and record.get("attempt") == attempt_value
+        and record.get("run") == unknown_driver_run
+        for record in durable
+    ):
+        recover_run = unknown_driver_run
+        state["run"] = recover_run
+    for record in durable:
+        if record.get("event") != "fold_done":
+            continue
+        if record.get("attempt") != attempt_value or record.get("run") != recover_run:
+            continue
+        for key in (
+            "source_bytes_at_fold", "source_lines", "folded_lines", "folded_bytes",
+            "dropped_lines", "dropped_bytes", "budget_remaining",
+            "truncated", "exhausted", "quiescent",
+        ):
+            if key in record:
+                state[key] = record[key]
+        state["marker_written"] = True
+    if any(
+        record.get("event") == "fold_exhausted"
+        and record.get("attempt") == attempt_value
+        and record.get("run") == run
+        for record in durable
+    ):
+        state["exhausted"] = True
+        state["truncated"] = True
+        state["budget_remaining"] = 0
+    return state
+
+
+def source_quiescent(path, source_exists):
+    if os.path.isfile(os.path.join(path, "overflow-stream.eof")):
+        return True
+    # attempt.json is written only after the monitor emits attempt_end and
+    # exits its processing loop, so it is also positive monitor-gone evidence.
+    if os.path.isfile(os.path.join(path, "attempt.json")):
+        return True
+    # With no sentinel artifacts at all, the monitor never ran.
+    if not source_exists:
+        return True
+    state = read_json(os.path.join(artifact_dir, "state.json")) or {}
+    if state.get("status") in ("delivered", "dlq") and state.get("lease") is None:
+        return True
+    lease = state.get("lease") if isinstance(state.get("lease"), dict) else {}
+    monitor_pid = lease.get("pid") if lease else None
+    if isinstance(monitor_pid, int) and monitor_pid > 0:
+        try:
+            os.kill(monitor_pid, 0)
+        except ProcessLookupError:
+            return True
+        except PermissionError:
+            return False
+        else:
+            return False
+    return False
+
+
+def envelope_source(raw, attempt_value, run, seq):
+    try:
+        source = json.loads(raw[:-1].decode("utf-8"))
+        if not isinstance(source, dict):
+            raise ValueError("source record is not an object")
+    except (UnicodeDecodeError, ValueError):
+        source = {
+            "schema": "raw",
+            "parse_error": True,
+            "raw": raw[:-1].decode("utf-8", "replace"),
+        }
+    record = dict(source)
+    if "task_id" in source and source.get("task_id") != task_id:
+        record["source_task_id"] = source.get("task_id")
+    if "attempt" in source and str(source.get("attempt")) != attempt_value:
+        record["source_attempt"] = source.get("attempt")
+    record.update({
+        "task_id": task_id,
+        "attempt": attempt_value,
+        "run": run,
+        "seq": seq,
+        "ledger_schema": 1,
+    })
+    return record
+
+
+def fold_one(path, attempt_value, force_marker=False):
+    ensure_init()
+    source_path = os.path.join(path, "sentinel-events.jsonl")
+    source_exists = os.path.isfile(source_path)
+    run = attempt_run(path)
+    state_path = os.path.join(path, ".ledger-fold.json")
+    state = initial_fold_state(path, attempt_value, run)
+    run = str(state.get("run") or run)
+    if bool(state.get("exhausted")):
+        return
+
+    cursor_before = int(state.get("source_bytes_at_fold", 0))
+    complete_end = 0
+    if source_exists:
+        source_size = os.path.getsize(source_path)
+        with open(source_path, "rb") as handle:
+            scan_end = source_size
+            while scan_end > 0:
+                scan_start = max(0, scan_end - chunk_bytes)
+                handle.seek(scan_start)
+                block = handle.read(scan_end - scan_start)
+                newline = block.rfind(b"\n")
+                if newline >= 0:
+                    complete_end = scan_start + newline + 1
+                    break
+                scan_end = scan_start
+    if complete_end < cursor_before:
+        # Append-only violation: preserve the old cursor and expose truncation.
+        complete_end = cursor_before
+    unseen_at_entry = complete_end - cursor_before
+    budget_at_entry = max(0, int(state.get("budget_remaining", total_budget)))
+    allowance = min(unseen_at_entry, budget_at_entry)
+    desired_start = complete_end - allowance
+
+    def count_newlines(start, end):
+        count = 0
+        with open(source_path, "rb") as handle:
+            handle.seek(start)
+            remaining = end - start
+            while remaining > 0:
+                block = handle.read(min(chunk_bytes, remaining))
+                if not block:
+                    break
+                count += block.count(b"\n")
+                remaining -= len(block)
+        return count
+
+    aligned_start = cursor_before
+    if source_exists and desired_start > cursor_before:
+        with open(source_path, "rb") as handle:
+            handle.seek(desired_start - 1)
+            if handle.read(1) == b"\n":
+                aligned_start = desired_start
+            else:
+                handle.seek(desired_start)
+                aligned_start = desired_start
+                while aligned_start < complete_end:
+                    block = handle.read(min(chunk_bytes, complete_end - aligned_start))
+                    newline = block.find(b"\n")
+                    if newline >= 0:
+                        aligned_start += newline + 1
+                        break
+                    aligned_start += len(block)
+
+    dropped_bytes_pass = aligned_start - cursor_before
+    dropped_lines_pass = count_newlines(cursor_before, aligned_start) if dropped_bytes_pass else 0
+    folded_lines_pass = 0
+    folded_bytes_pass = 0
+    folded_records = []
+    seq = int(state.get("source_lines", 0)) + dropped_lines_pass
+
+    # TR_LEDGER_FOLD_MAX_BYTES is a loop chunk size, never a pass ceiling.
+    chunk_used = 0
+    if source_exists:
+        with open(source_path, "rb") as handle:
+            handle.seek(aligned_start)
+            position = aligned_start
+            while position < complete_end:
+                parts = []
+                line_size = 0
+                oversize = False
+                while position < complete_end:
+                    part = handle.readline(min(chunk_bytes + 1, complete_end - position))
+                    if not part:
+                        break
+                    position += len(part)
+                    line_size += len(part)
+                    if not oversize:
+                        if line_size > chunk_bytes:
+                            parts = []
+                            oversize = True
+                        else:
+                            parts.append(part)
+                    if part.endswith(b"\n"):
+                        break
+                seq += 1
+                if oversize:
+                    dropped_lines_pass += 1
+                    dropped_bytes_pass += line_size
+                    state["truncated"] = True
+                    folded_records.append({
+                        "event": "fold_oversize_line",
+                        "task_id": task_id,
+                        "attempt": attempt_value,
+                        "run": run,
+                        "seq": seq,
+                        "line_bytes": line_size,
+                        "ledger_schema": 1,
+                    })
+                    chunk_used = 0
+                    continue
+                line = b"".join(parts)
+                if chunk_used and chunk_used + line_size > chunk_bytes:
+                    chunk_used = 0
+                folded_records.append(envelope_source(line, attempt_value, run, seq))
+                folded_lines_pass += 1
+                folded_bytes_pass += line_size
+                chunk_used += line_size
+
+    if dropped_bytes_pass:
+        state["truncated"] = True
+    if folded_bytes_pass + dropped_bytes_pass != unseen_at_entry:
+        raise RuntimeError("fold-accounting")
+
+    state["source_bytes_at_fold"] = cursor_before + unseen_at_entry
+    state["source_lines"] = int(state.get("source_lines", 0)) + dropped_lines_pass + folded_lines_pass
+    state["folded_lines"] = int(state.get("folded_lines", 0)) + folded_lines_pass
+    state["folded_bytes"] = int(state.get("folded_bytes", 0)) + folded_bytes_pass
+    state["dropped_lines"] = int(state.get("dropped_lines", 0)) + dropped_lines_pass
+    state["dropped_bytes"] = int(state.get("dropped_bytes", 0)) + dropped_bytes_pass
+    state["budget_remaining"] = max(0, budget_at_entry - unseen_at_entry)
+    new_quiescent = source_quiescent(path, source_exists)
+    quiescence_changed = bool(state.get("quiescent")) != new_quiescent
+    state["quiescent"] = new_quiescent
+
+    should_mark = bool(force_marker) or unseen_at_entry > 0 or quiescence_changed or not state.get("marker_written")
+    records = folded_records
+    exhausted_now = state["budget_remaining"] == 0 and unseen_at_entry > 0
+    if exhausted_now:
+        state["exhausted"] = True
+        state["truncated"] = True
+    if should_mark:
+        marker = {
+            "event": "fold_done",
+            "task_id": task_id,
+            "attempt": attempt_value,
+            "run": run,
+            "folded_lines": state["folded_lines"],
+            "folded_bytes": state["folded_bytes"],
+            "dropped_lines": state["dropped_lines"],
+            "dropped_bytes": state["dropped_bytes"],
+            "source_lines": state["source_lines"],
+            "source_bytes_at_fold": state["source_bytes_at_fold"],
+            "budget_remaining": state["budget_remaining"],
+            "truncated": bool(state["truncated"]),
+            "exhausted": bool(exhausted_now),
+            "quiescent": bool(state["quiescent"]),
+            "ledger_schema": 1,
+        }
+        records.append(marker)
+        state["marker_written"] = True
+    if exhausted_now:
+        records.append({
+            "event": "fold_exhausted",
+            "task_id": task_id,
+            "attempt": attempt_value,
+            "run": run,
+            "source_bytes_at_fold": state["source_bytes_at_fold"],
+            "folded_bytes": state["folded_bytes"],
+            "dropped_bytes": state["dropped_bytes"],
+            "ledger_schema": 1,
+        })
+    append_records(records)
+    atomic_json(state_path, state)
+
+
+def attempt_number(path):
+    base = os.path.basename(path)
+    return base.split(".", 1)[0]
+
+
+def all_attempt_dirs():
+    paths = []
+    for pattern in (
+        os.path.join(artifact_dir, "attempts", "*"),
+        os.path.join(artifact_dir, "attempts-infra", "*"),
+    ):
+        for path in glob.glob(pattern):
+            number = attempt_number(path)
+            if os.path.isdir(path) and number.isdigit():
+                paths.append((int(number), path, number.zfill(3)))
+    return [item[1:] for item in sorted(paths, key=lambda item: (item[0], item[1]))]
+
+
+def catchup():
+    ensure_init()
+    for path, number in all_attempt_dirs():
+        fold_one(path, number, False)
+
+
+def fold_vector():
+    vector = []
+    for path, number in all_attempt_dirs():
+        state = read_json(os.path.join(path, ".ledger-fold.json"))
+        if not state:
+            continue
+        vector.append({
+            "attempt": number,
+            "run": state.get("run"),
+            "folded_lines": int(state.get("folded_lines", 0)),
+            "source_bytes_at_fold": int(state.get("source_bytes_at_fold", 0)),
+            "truncated": bool(state.get("truncated")),
+            "exhausted": bool(state.get("exhausted")),
+            "quiescent": bool(state.get("quiescent")),
+        })
+    return vector
+
+
+def parse_time(value):
+    if not value:
+        return None
+    value = str(value)
+    if value.startswith("unknown-"):
+        value = value[len("unknown-"):]
+    try:
+        return datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=datetime.timezone.utc
+        )
+    except ValueError:
+        return None
+
+
+def ordered_drivers():
+    drivers = []
+    for path, number in all_attempt_dirs():
+        driver = read_json(os.path.join(path, "driver.json"))
+        if driver:
+            drivers.append((int(number), str(driver.get("started") or ""), driver))
+    return [item[2] for item in sorted(drivers, key=lambda item: (item[0], item[1]))]
+
+
+def tagged_turns(attempt_value, values):
+    if not isinstance(values, list):
+        return []
+    return [{"attempt": attempt_value, "turn_idx": value} for value in values]
+
+
+def reducer(status, terminal_reason, emitted_at, vector):
+    records = valid_ledger_records()
+    folded = [
+        record for record in records
+        if record.get("run") is not None and record.get("attempt") is not None
+        and record.get("event") not in ("fold_done", "fold_exhausted", "fold_oversize_line")
+    ]
+    runs = {}
+    run_order = []
+    turn_values = []
+    for record in folded:
+        key = (str(record.get("attempt")), str(record.get("run")))
+        if key not in runs:
+            runs[key] = {"last_end": None, "started_at": record.get("started_at") or record.get("run")}
+            run_order.append(key)
+        if record.get("event") == "attempt_end":
+            runs[key]["last_end"] = record
+            runs[key]["started_at"] = record.get("started_at") or runs[key]["started_at"]
+        if record.get("event") == "turn":
+            value = record.get("injected_last")
+            if not isinstance(value, (int, float)):
+                parts = [record.get(name) for name in (
+                    "input_tokens", "cache_read_tokens", "cache_creation_tokens"
+                )]
+                if all(isinstance(part, (int, float)) for part in parts):
+                    value = sum(parts)
+            if isinstance(value, (int, float)) and math.isfinite(float(value)):
+                turn_values.append(float(value))
+
+    ends = [(key, runs[key]["last_end"]) for key in run_order if runs[key]["last_end"]]
+    latest = ends[-1][1] if ends else None
+    started_candidates = []
+    for key in run_order:
+        parsed = parse_time(runs[key].get("started_at"))
+        if parsed:
+            started_candidates.append(parsed)
+    drivers = ordered_drivers()
+    first_driver = drivers[0] if drivers else None
+    driver = drivers[-1] if drivers else None
+    if started_candidates:
+        started_dt = min(started_candidates)
+        started_at = started_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    elif first_driver and parse_time(first_driver.get("started")):
+        started_dt = parse_time(first_driver.get("started"))
+        started_at = first_driver.get("started")
+    else:
+        started_dt = None
+        started_at = None
+    emitted_dt = parse_time(emitted_at)
+    elapsed_s = max(0, int((emitted_dt - started_dt).total_seconds())) if emitted_dt and started_dt else None
+
+    def reduced_or(field):
+        sourced = [end.get(field) for _, end in ends if field in end]
+        return any(bool(value) for value in sourced) if sourced else None
+
+    window_error = reduced_or("window_error")
+    runtime_compaction = reduced_or("runtime_compaction")
+    compaction_suspected = reduced_or("compaction_suspected")
+    token_values = [
+        end.get("total_tokens") for _, end in ends
+        if isinstance(end.get("total_tokens"), (int, float))
+    ]
+    total_tokens = sum(token_values) if token_values else None
+    maxima = []
+    for _, end in ends:
+        summary = end.get("injected_summary")
+        if isinstance(summary, dict) and isinstance(summary.get("max"), (int, float)):
+            maxima.append(summary["max"])
+    injected_max = max(maxima) if maxima else None
+    injected_source = None
+    if turn_values:
+        last = turn_values[-3:]
+        last3_mean = sum(last) / float(len(last))
+    elif latest and isinstance(latest.get("injected_summary"), dict):
+        last3_mean = latest["injected_summary"].get("last3_mean")
+        injected_source = "attempt_summary"
+    else:
+        last3_mean = None
+    fired_turns = [] if any("fired_turns" in end for _, end in ends) else None
+    alert_turns = [] if any("alert_turns" in end for _, end in ends) else None
+    for key, end in ends:
+        if fired_turns is not None:
+            fired_turns.extend(tagged_turns(key[0], end.get("fired_turns")))
+        if alert_turns is not None:
+            alert_turns.extend(tagged_turns(key[0], end.get("alert_turns")))
+
+    if status == "delivered":
+        outcome = "completed"
+    else:
+        outcome = "overflowed" if driver and driver.get("classified") == "window-error" else "aborted"
+    any_sentinel = bool(folded)
+    result = {
+        "ledger_schema": 1,
+        "task_id": task_id,
+        "ts": emitted_at,
+        "started_at": started_at,
+        "elapsed_s": elapsed_s,
+        "outcome": outcome,
+        "terminal_reason": terminal_reason if status == "dlq" else None,
+        "window_error": window_error,
+        "runtime_compaction": runtime_compaction,
+        "compaction_suspected": compaction_suspected,
+        "total_tokens": total_tokens,
+        "injected_summary": {"max": injected_max, "last3_mean": last3_mean},
+        "fired_turns": fired_turns,
+        "alert_turns": alert_turns,
+        "nudge_disposition_final": latest.get("nudge_disposition_final") if latest else None,
+        "tap_status": latest.get("tap_status") if latest else (None if any_sentinel else "never-ran"),
+        "run_meta": latest.get("run_meta") if latest else None,
+    }
+    if injected_source:
+        result["injected_summary_source"] = injected_source
+    return result
+
+
+def emit_receipt():
+    ensure_init()
+    state = read_json(os.path.join(artifact_dir, "state.json"))
+    if not state or state.get("status") not in ("delivered", "dlq"):
+        return
+    vector = fold_vector()
+    canonical = json.dumps(vector, sort_keys=True, separators=(",", ":"))
+    fingerprint = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    quiescent = all(item["quiescent"] for item in vector)
+    truncated = any(item["truncated"] or item["exhausted"] for item in vector)
+    fold_complete = quiescent and not truncated
+    receipt_path = os.path.join(artifact_dir, "task-end.json")
+    old = read_json(receipt_path)
+    if old and old.get("fold_fingerprint") == fingerprint:
+        return
+    version = int(old.get("receipt_version", 0)) + 1 if old else 1
+    emitted_at = old.get("ts") if old else utc_now()
+    reduced = reducer(
+        str(state.get("status")),
+        state.get("terminal_reason"),
+        emitted_at,
+        vector,
+    )
+    if old:
+        for immutable in ("ts", "started_at", "elapsed_s", "outcome", "terminal_reason"):
+            reduced[immutable] = old.get(immutable)
+    reduced.update({
+        "receipt_version": version,
+        "fold_fingerprint": fingerprint,
+        "fold_state": vector,
+        "fold_complete": fold_complete,
+        "fold_incomplete": not fold_complete,
+    })
+    atomic_json(receipt_path, reduced)
+
+
+def repair_tail():
+    if not os.path.isfile(ledger_path) or os.path.getsize(ledger_path) == 0:
+        return
+    with open(ledger_path, "rb+") as handle:
+        handle.seek(-1, os.SEEK_END)
+        if handle.read(1) != b"\n":
+            handle.seek(0, os.SEEK_END)
+            handle.write(b"\n")
+
+
+def project_receipt():
+    receipt = read_json(os.path.join(artifact_dir, "task-end.json"))
+    if not receipt:
+        return
+    repair_tail()
+    version = receipt.get("receipt_version")
+    if any(
+        record.get("event") == "task_end"
+        and record.get("task_id") == task_id
+        and record.get("receipt_version") == version
+        for record in valid_ledger_records()
+    ):
+        return
+    projection = dict(receipt)
+    projection["event"] = "task_end"
+    projection["ledger_schema"] = 1
+    append_records([projection])
+    if not any(
+        record.get("event") == "task_end"
+        and record.get("task_id") == task_id
+        and record.get("receipt_version") == version
+        for record in valid_ledger_records()
+    ):
+        raise RuntimeError("task-end-projection-validation")
+
+
+try:
+    if operation == "init":
+        ensure_init()
+    elif operation == "fold":
+        fold_one(attempt_dir, attempt, force_text == "1")
+    elif operation == "catchup":
+        catchup()
+    elif operation == "receipt":
+        emit_receipt()
+    elif operation == "project":
+        project_receipt()
+    else:
+        raise ValueError("unknown-operation")
+except Exception as exc:
+    reason = getattr(exc, "errno", None)
+    if reason is not None:
+        reason = "errno-%s" % reason
+    else:
+        reason = str(exc).strip().replace("\n", " ") or exc.__class__.__name__
+    print(reason)
+    raise SystemExit(1)
+PY
+  ); then
+    failure_reason=${failure_reason%%$'\n'*}
+    [[ -n "$failure_reason" ]] || failure_reason=unknown
+    printf 'task-runner.sh: ledger write failed (%s) — telemetry degraded\n' "$failure_reason" >&2
+  fi
+  return 0
+}
+
+ensure_ledger_init() {
+  ledger_append_best_effort init "$1"
+}
+
+fold_attempt_sentinel() {
+  ledger_append_best_effort fold "$1" "$2" "$3" "${4:-0}"
+}
+
+fold_terminal_tail() {
+  ledger_append_best_effort catchup "$1"
+}
+
+emit_task_end_if_missing() {
+  ledger_append_best_effort receipt "$1"
+}
+
+project_task_end_if_stale() {
+  ledger_append_best_effort project "$1"
 }
 
 lease_age_s() {
@@ -386,6 +1092,8 @@ quarantine_infra_attempt() {
     printf 'quarantine_infra_attempt: destination exists, preserving source: %s\n' "$destination" >&2
     return 0
   fi
+  # Preserve the last sentinel snapshot before its source path changes.
+  fold_attempt_sentinel "$artifact_dir" "$attempt_dir" "$nnn" 1
   if ! python3 - "$attempt_dir" "$destination" <<'PY'
 import os, sys
 try:
@@ -1511,6 +2219,13 @@ dlq_task() {
   if [[ -n "$TR_PUSH_CMD" ]]; then
     push_dlq_report "$dest"
   fi
+  if [[ "$TR_CRASH_AFTER" = "terminal-pre-ledger" ]]; then
+    exit 137
+  fi
+  ensure_ledger_init "$artifact_dir"
+  fold_terminal_tail "$artifact_dir"
+  emit_task_end_if_missing "$artifact_dir"
+  project_task_end_if_stale "$artifact_dir"
 }
 
 deliver_task() {
@@ -1537,6 +2252,13 @@ deliver_task() {
     mv "$task_file" "$dest/$(basename "$task_file")"
   fi
   cp "$state_file" "$dest/state.json"
+  if [[ "$TR_CRASH_AFTER" = "terminal-pre-ledger" ]]; then
+    exit 137
+  fi
+  ensure_ledger_init "$artifact_dir"
+  fold_terminal_tail "$artifact_dir"
+  emit_task_end_if_missing "$artifact_dir"
+  project_task_end_if_stale "$artifact_dir"
 }
 
 reconcile_terminals() {
@@ -1548,9 +2270,15 @@ reconcile_terminals() {
       continue
     fi
     [[ "$status" = "delivered" || "$status" = "dlq" ]] || continue
-    local artifact_dir task_id dest task_file terminal_task report_missing
+    local artifact_dir task_id dest task_file terminal_task report_missing feature_era
     artifact_dir=$(dirname "$state_file")
     task_id=$(basename "$artifact_dir")
+    # Pre-#187 terminal artifacts have no ledger and must not be backfilled.
+    feature_era=0
+    if [[ -f "$artifact_dir/ledger.jsonl" ]]; then
+      feature_era=1
+      ensure_ledger_init "$artifact_dir"
+    fi
     if [[ "$status" = "delivered" ]]; then
       dest="$delivered_dir/$task_id"
     else
@@ -1581,6 +2309,12 @@ reconcile_terminals() {
         push_dlq_report "$dest"
       fi
     fi
+    if (( feature_era == 1 )); then
+      fold_terminal_tail "$artifact_dir"
+      emit_task_end_if_missing "$artifact_dir"
+      # Projection is intentionally independent of receipt creation/repair.
+      project_task_end_if_stale "$artifact_dir"
+    fi
   done
 }
 
@@ -1590,6 +2324,9 @@ finalize_attempt() {
   local attempt_dir=$3
   local charge_s=$4
   local state_file="$artifact_dir/state.json"
+  local finalized_attempt
+  finalized_attempt=$(basename "$attempt_dir")
+  fold_attempt_sentinel "$artifact_dir" "$attempt_dir" "$finalized_attempt" 1
   load_task_meta "$task_file"
   if ! caty_valid_receipt "$receipt"; then
     dlq_task "$task_file" "$artifact_dir" missing-receipt
@@ -1719,6 +2456,7 @@ recover_verifying() {
     [[ "$status" = "verifying" ]] || continue
     local artifact_dir
     artifact_dir=$(dirname "$state_file")
+    ensure_ledger_init "$artifact_dir"
     local task_id
     task_id=$(basename "$artifact_dir")
     local task_file="$queue_dir/$task_id.task.md"
@@ -1815,6 +2553,7 @@ reap_running() {
     [[ "$status" = "running" ]] || continue
     local artifact_dir
     artifact_dir=$(dirname "$state_file")
+    ensure_ledger_init "$artifact_dir"
     local task_id
     task_id=$(basename "$artifact_dir")
     local task_file="$queue_dir/$task_id.task.md"
@@ -1853,6 +2592,7 @@ reap_running() {
         kill_pgroup "$lease_pgid"
       else
         driver_write "$attempt_dir/driver.json" "${lease_started:-$(utc_now)}" "$(utc_now)" 0 manual-recovery "" unproven-pgid
+        fold_attempt_sentinel "$artifact_dir" "$attempt_dir" "$nnn" 1
         if [[ -f "$task_file" ]]; then
           dlq_task "$task_file" "$artifact_dir" unproven-pgid
         fi
@@ -1869,7 +2609,8 @@ except Exception:
     print("")
 PY
 )
-      if [[ "$recovered_class" = deterministic-auth || "$recovered_class" = deterministic-input ]]; then
+      if [[ "$recovered_class" = deterministic-auth || "$recovered_class" = deterministic-input || "$recovered_class" = window-error ]]; then
+        fold_attempt_sentinel "$artifact_dir" "$attempt_dir" "$nnn" 1
         dlq_task "$task_file" "$artifact_dir" "$recovered_class"
         continue
       fi
@@ -1897,6 +2638,7 @@ PY
           if [[ "$TR_CRASH_AFTER" = "infra-terminal" ]]; then
             exit 137
           fi
+          fold_attempt_sentinel "$artifact_dir" "$attempt_dir" "$nnn" 1
           dlq_task "$task_file" "$artifact_dir" infra
         else
           status=queued
@@ -2044,6 +2786,7 @@ run_one_attempt() {
   fi
   mkdir -p "$attempts_dir" "$artifact_dir/out"
   init_state_if_missing "$state_file"
+  ensure_ledger_init "$artifact_dir"
   if ! load_state "$state_file"; then
     quarantine_corrupt_state run_one_attempt "$state_file"
     return 0
@@ -2131,7 +2874,8 @@ run_one_attempt() {
     exit 137
   fi
 
-  if [[ "$classified" = deterministic-auth || "$classified" = deterministic-input ]]; then
+  if [[ "$classified" = deterministic-auth || "$classified" = deterministic-input || "$classified" = window-error ]]; then
+    fold_attempt_sentinel "$artifact_dir" "$attempt_dir" "$nnn" 1
     dlq_task "$task_file" "$artifact_dir" "$classified"
     return 0
   fi
@@ -2161,6 +2905,7 @@ run_one_attempt() {
       if [[ "$TR_CRASH_AFTER" = "infra-terminal" ]]; then
         exit 137
       fi
+      fold_attempt_sentinel "$artifact_dir" "$attempt_dir" "$nnn" 1
       dlq_task "$task_file" "$artifact_dir" infra
     else
       status=queued

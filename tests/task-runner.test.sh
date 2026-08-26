@@ -135,6 +135,81 @@ run_tick_with_step() {
   env TR_SPAWN_STEP="$step_cmd" "$@" bash "$RUNNER" "$ws"
 }
 
+ledger_event_count() {
+  local ledger=$1
+  local event=$2
+  python3 - "$ledger" "$event" <<'PY'
+import json, sys
+count = 0
+try:
+    source = open(sys.argv[1], encoding="utf-8")
+except OSError:
+    print(0)
+    raise SystemExit
+with source:
+    for line in source:
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        count += record.get("event") == sys.argv[2]
+print(count)
+PY
+}
+
+receipt_value() {
+  local receipt_file=$1
+  local key=$2
+  python3 - "$receipt_file" "$key" <<'PY'
+import json, sys
+value = json.load(open(sys.argv[1], encoding="utf-8"))
+for part in sys.argv[2].split("."):
+    value = value.get(part)
+print("" if value is None else str(value).lower() if isinstance(value, bool) else value)
+PY
+}
+
+write_terminal_ledger_fixture() {
+  local ws=$1
+  local id=$2
+  local terminal_status=${3:-delivered}
+  local reason=${4:-}
+  local classified=${5:-}
+  local artifact="$ws/loop/artifacts/$id"
+  mkdir -p "$artifact/attempts/001"
+  python3 - "$artifact/state.json" "$terminal_status" "$reason" <<'PY'
+import json, sys
+json.dump({
+    "status": sys.argv[2], "current_step": 1, "attempts_used": 1,
+    "active_seconds_used": 1, "infra_retries": 0, "consec_noncomplete": 0,
+    "last_error_class": None, "last_gap_fingerprint": None,
+    "last_gap_step": None, "lease": None,
+    "terminal_reason": sys.argv[3] or None,
+}, open(sys.argv[1], "w", encoding="utf-8"))
+PY
+  python3 - "$artifact/attempts/001/driver.json" "$classified" <<'PY'
+import json, sys
+value = {"started":"2026-08-27T00:00:00Z", "ended":"2026-08-27T00:00:01Z", "dur_s":1, "outcome":"ok", "exit_code":0}
+if sys.argv[2]: value["classified"] = sys.argv[2]
+json.dump(value, open(sys.argv[1], "w", encoding="utf-8"))
+PY
+  printf '{"event":"init","ledger_schema":1,"task_id":"%s"}\n' "$id" >"$artifact/ledger.jsonl"
+}
+
+set_terminal_lease() {
+  local state_file=$1
+  local pid=${2:-}
+  python3 - "$state_file" "$pid" <<'PY'
+import json, sys
+path, pid = sys.argv[1:3]
+value = json.load(open(path, encoding="utf-8"))
+value["lease"] = ({"pid": int(pid), "pgid": int(pid), "started": "2026-08-27T00:00:00Z"} if pid else None)
+with open(path, "w", encoding="utf-8") as target:
+    json.dump(value, target)
+    target.write("\n")
+PY
+}
+
 write_paused_step() {
   local path=$1
   cat >"$path" <<'SH'
@@ -2938,6 +3013,412 @@ case_crash_verifying_terminal_rederive() {
   fi
 }
 
+case_ledger_terminal_pre_projection_reconcile() {
+  local name=ledger-terminal-pre-projection-reconcile ws artifact rc
+  ws=$(make_ws)
+  write_runner_task "$ws" ledger-crash out/delivery-receipt.json true
+  set +e
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success TR_CRASH_AFTER=terminal-pre-ledger >/dev/null 2>&1
+  rc=$?
+  set -e
+  artifact="$ws/loop/artifacts/ledger-crash"
+  run_tick "$ws" >/dev/null
+  run_tick "$ws" >/dev/null
+  if [[ "$rc" -eq 137 && -f "$artifact/task-end.json" ]] \
+    && [[ "$(ledger_event_count "$artifact/ledger.jsonl" task_end)" -eq 1 ]]; then
+    pass "$name"
+  else
+    fail "$name" "terminal-pre-ledger recovery did not emit one task_end"
+  fi
+}
+
+case_ledger_fired_delivered_is_completed() {
+  local name=ledger-fired-delivered-is-completed ws artifact
+  ws=$(make_ws)
+  write_terminal_ledger_fixture "$ws" fired-delivered delivered
+  artifact="$ws/loop/artifacts/fired-delivered"
+  printf '%s\n' \
+    '{"event":"fire","task_id":"fired-delivered","attempt":"001","turn_idx":2}' \
+    '{"event":"attempt_end","task_id":"fired-delivered","attempt":"001","started_at":"2026-08-27T00:00:00Z","window_error":true,"runtime_compaction":false,"compaction_suspected":false,"total_tokens":9,"injected_summary":{"max":9,"last3_mean":9},"fired_turns":[2],"alert_turns":[],"nudge_disposition_final":"shown","tap_status":"ok","run_meta":{}}' \
+    >"$artifact/attempts/001/sentinel-events.jsonl"
+  run_tick "$ws" >/dev/null
+  if [[ "$(receipt_value "$artifact/task-end.json" outcome)" = completed ]] \
+    && [[ "$(receipt_value "$artifact/task-end.json" window_error)" = true ]]; then
+    pass "$name"
+  else
+    fail "$name" "monitor evidence changed delivered outcome"
+  fi
+}
+
+case_ledger_direct_dlq_reap_folds_once() {
+  local name=ledger-direct-dlq-reap-folds-once ws artifact
+  ws=$(make_ws)
+  write_runner_task "$ws" reap-window out/delivery-receipt.json true
+  run_tick "$ws" TR_MOCK_BEHAVIOR=auth-error TR_CRASH_AFTER=stamp >/dev/null 2>&1 || true
+  artifact="$ws/loop/artifacts/reap-window"
+  printf '%s\n' '{"event":"turn","task_id":"wrong","attempt":"999","turn_idx":1,"input_tokens":1,"cache_read_tokens":0,"cache_creation_tokens":0}' 'not-json' \
+    >"$artifact/attempts/001/sentinel-events.jsonl"
+  run_tick "$ws" >/dev/null
+  if [[ "$(state_value "$ws" reap-window status)" = dlq ]] \
+    && [[ "$(ledger_event_count "$artifact/ledger.jsonl" turn)" -eq 1 ]] \
+    && [[ "$(ledger_event_count "$artifact/ledger.jsonl" task_end)" -eq 1 ]] \
+    && python3 - "$artifact/ledger.jsonl" <<'PY'
+import json, sys
+rows=[json.loads(line) for line in open(sys.argv[1],encoding="utf-8")]
+turn=next(row for row in rows if row.get("event")=="turn")
+raw=next(row for row in rows if row.get("parse_error"))
+assert turn["task_id"]=="reap-window" and turn["attempt"]=="001"
+assert turn["source_task_id"]=="wrong" and turn["source_attempt"]=="999"
+assert raw["schema"]=="raw" and raw["task_id"]=="reap-window"
+PY
+  then
+    pass "$name"
+  else
+    fail "$name" "direct reap DLQ did not fold and emit once"
+  fi
+}
+
+case_ledger_torn_tail_repair() {
+  local name=ledger-torn-tail-repair ws artifact
+  ws=$(make_ws)
+  write_terminal_ledger_fixture "$ws" torn delivered
+  artifact="$ws/loop/artifacts/torn"
+  printf '%s' '{"partial":' >>"$artifact/ledger.jsonl"
+  run_tick "$ws" >/dev/null
+  if [[ "$(ledger_event_count "$artifact/ledger.jsonl" task_end)" -eq 1 ]] \
+    && [[ "$(tail -c 1 "$artifact/ledger.jsonl")" = '' ]]; then
+    pass "$name"
+  else
+    fail "$name" "torn tail was not isolated before task_end append"
+  fi
+}
+
+case_ledger_zero_attempt_dlq() {
+  local name=ledger-zero-attempt-dlq ws artifact
+  ws=$(make_ws)
+  write_runner_task "$ws" zero-attempt __missing__ true
+  run_tick "$ws" >/dev/null
+  artifact="$ws/loop/artifacts/zero-attempt"
+  if [[ "$(state_value "$ws" zero-attempt status)" = dlq ]] \
+    && [[ "$(ledger_event_count "$artifact/ledger.jsonl" init)" -eq 1 ]] \
+    && [[ "$(ledger_event_count "$artifact/ledger.jsonl" task_end)" -eq 1 ]] \
+    && python3 - "$artifact/task-end.json" <<'PY'
+import json, sys
+r=json.load(open(sys.argv[1],encoding="utf-8"))
+assert r["total_tokens"] is None and r["window_error"] is None
+assert r["runtime_compaction"] is None and r["compaction_suspected"] is None
+assert r["fired_turns"] is None and r["alert_turns"] is None
+assert r["tap_status"] == "never-ran"
+PY
+  then
+    pass "$name"
+  else
+    fail "$name" "zero-attempt terminal lacked init/task_end"
+  fi
+}
+
+case_ledger_driver_outcome_mapping() {
+  local name=ledger-driver-outcome-mapping ws root
+  ws=$(make_ws); root="$ws/loop/artifacts"
+  write_terminal_ledger_fixture "$ws" driver-window dlq attempts-budget window-error
+  write_terminal_ledger_fixture "$ws" monitor-only dlq time-budget transient
+  printf '%s\n' '{"event":"attempt_end","started_at":"2026-08-27T00:00:00Z","window_error":true,"runtime_compaction":false,"compaction_suspected":false,"total_tokens":1,"injected_summary":{"max":1,"last3_mean":1},"fired_turns":[],"alert_turns":[],"nudge_disposition_final":"none","tap_status":"ok","run_meta":null}' \
+    >"$root/monitor-only/attempts/001/sentinel-events.jsonl"
+  run_tick "$ws" >/dev/null
+  if [[ "$(receipt_value "$root/driver-window/task-end.json" outcome)" = overflowed ]] \
+    && [[ "$(receipt_value "$root/driver-window/task-end.json" terminal_reason)" = attempts-budget ]] \
+    && [[ "$(receipt_value "$root/monitor-only/task-end.json" outcome)" = aborted ]] \
+    && [[ "$(receipt_value "$root/monitor-only/task-end.json" window_error)" = true ]]; then
+    pass "$name"
+  else fail "$name" "driver/monitor outcome ownership was violated"; fi
+}
+
+case_ledger_window_error_class_is_terminal() {
+  local name=ledger-window-error-class-is-terminal ws step artifact
+  ws=$(make_ws); write_runner_task "$ws" window-terminal out/delivery-receipt.json true
+  step="$ws/window-error-step.sh"
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'printf "%s\n" "API Error: Prompt is too long for this model" >&2' \
+    'exit 1' >"$step"
+  chmod +x "$step"
+  run_tick_with_step "$ws" "$step" >/dev/null 2>&1
+  artifact="$ws/loop/artifacts/window-terminal"
+  if [[ "$(state_value "$ws" window-terminal status)" = dlq ]] \
+    && [[ "$(state_value "$ws" window-terminal terminal_reason)" = window-error ]] \
+    && [[ "$(driver_value "$ws" window-terminal classified)" = window-error ]] \
+    && [[ "$(receipt_value "$artifact/task-end.json" outcome)" = overflowed ]]; then
+    pass "$name"
+  else fail "$name" "classified window-error was not routed terminally"; fi
+}
+
+case_ledger_io_failure_is_fail_open() {
+  local name=ledger-io-failure-is-fail-open ws artifact bin real_python marker output warning
+  ws=$(make_ws); write_runner_task "$ws" io-fail out/delivery-receipt.json true
+  artifact="$ws/loop/artifacts/io-fail"; bin="$ws/python-bin"; marker="$ws/python-failed-once"
+  mkdir -p "$bin"; real_python=$(command -v python3)
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'if [[ "${3:-}" = fold && ! -e "$TR_FAIL_ONCE_MARKER" ]]; then' \
+    '  : >"$TR_FAIL_ONCE_MARKER"' \
+    '  printf "%s\n" simulated-EROFS' \
+    '  exit 1' \
+    'fi' \
+    'exec "$TR_REAL_PYTHON" "$@"' >"$bin/python3"
+  chmod +x "$bin/python3"
+  output=$(PATH="$bin:$PATH" TR_REAL_PYTHON="$real_python" TR_FAIL_ONCE_MARKER="$marker" \
+    run_tick "$ws" TR_MOCK_BEHAVIOR=success 2>&1)
+  warning='task-runner.sh: ledger write failed (simulated-EROFS) — telemetry degraded'
+  if [[ "$(state_value "$ws" io-fail status)" = delivered ]] \
+    && [[ -f "$ws/loop/tasks/delivered/io-fail/io-fail.task.md" ]] \
+    && [[ "$(grep -F -x -c "$warning" <<<"$output")" -eq 1 ]] \
+    && [[ "$(ledger_event_count "$artifact/ledger.jsonl" task_end)" -eq 1 ]]; then
+    pass "$name"
+  else fail "$name" "one ledger error stalled delivery or warning contract drifted: $output"; fi
+}
+
+case_ledger_orphan_tail_converges() {
+  local name=ledger-orphan-tail-converges ws artifact version1 source_bytes marker_bytes
+  ws=$(make_ws)
+  write_terminal_ledger_fixture "$ws" orphan delivered
+  artifact="$ws/loop/artifacts/orphan"
+  printf '%s\n' '{"event":"turn","turn_idx":1,"input_tokens":1,"cache_read_tokens":0,"cache_creation_tokens":0}' \
+    >"$artifact/attempts/001/sentinel-events.jsonl"
+  run_tick "$ws" >/dev/null
+  version1=$(receipt_value "$artifact/task-end.json" receipt_version)
+  printf '%s\n' '{"event":"turn","turn_idx":2,"input_tokens":2,"cache_read_tokens":0,"cache_creation_tokens":0}' \
+    >>"$artifact/attempts/001/sentinel-events.jsonl"
+  run_tick "$ws" >/dev/null
+  source_bytes=$(wc -c <"$artifact/attempts/001/sentinel-events.jsonl" | tr -d ' ')
+  marker_bytes=$(python3 - "$artifact/ledger.jsonl" <<'PY'
+import json, sys
+values=[]
+for line in open(sys.argv[1], encoding="utf-8"):
+    try: row=json.loads(line)
+    except ValueError: continue
+    if row.get("event")=="fold_done": values.append(row["source_bytes_at_fold"])
+print(values[-1])
+PY
+)
+  if [[ "$(ledger_event_count "$artifact/ledger.jsonl" turn)" -eq 2 ]] \
+    && [[ "$(receipt_value "$artifact/task-end.json" receipt_version)" -gt "$version1" ]] \
+    && [[ "$marker_bytes" -eq "$source_bytes" ]]; then
+    pass "$name"
+  else
+    fail "$name" "supplementary tail did not converge"
+  fi
+}
+
+case_ledger_receipt_tmp_crash_recovery() {
+  local name=ledger-receipt-tmp-crash-recovery ws artifact
+  ws=$(make_ws)
+  write_terminal_ledger_fixture "$ws" receipt-tmp delivered
+  artifact="$ws/loop/artifacts/receipt-tmp"
+  printf '%s\n' '{"receipt_version":1' >"$artifact/task-end.json.tmp.99999"
+  run_tick "$ws" >/dev/null
+  if [[ -f "$artifact/task-end.json" ]] \
+    && [[ "$(ledger_event_count "$artifact/ledger.jsonl" task_end)" -eq 1 ]]; then
+    pass "$name"
+  else
+    fail "$name" "orphan tmp prevented receipt recovery"
+  fi
+}
+
+case_ledger_fingerprint_repair_after_emit_failure() {
+  local name=ledger-fingerprint-repair-after-emit-failure ws artifact old_version
+  ws=$(make_ws)
+  write_terminal_ledger_fixture "$ws" fingerprint delivered
+  artifact="$ws/loop/artifacts/fingerprint"
+  run_tick "$ws" >/dev/null
+  old_version=$(receipt_value "$artifact/task-end.json" receipt_version)
+  mv "$artifact/task-end.json" "$artifact/task-end.saved"
+  mkdir "$artifact/task-end.json"
+  printf '%s\n' '{"event":"turn","turn_idx":1,"input_tokens":3,"cache_read_tokens":0,"cache_creation_tokens":0}' \
+    >"$artifact/attempts/001/sentinel-events.jsonl"
+  run_tick "$ws" >/dev/null 2>&1 || true
+  rmdir "$artifact/task-end.json"
+  mv "$artifact/task-end.saved" "$artifact/task-end.json"
+  run_tick "$ws" >/dev/null
+  if [[ "$(receipt_value "$artifact/task-end.json" receipt_version)" -gt "$old_version" ]] \
+    && [[ "$(ledger_event_count "$artifact/ledger.jsonl" turn)" -eq 1 ]]; then
+    pass "$name"
+  else
+    fail "$name" "fingerprint mismatch did not repair receipt"
+  fi
+}
+
+case_ledger_quiescence_only_repairs_receipt() {
+  local name=ledger-quiescence-only-repairs-receipt ws artifact old_version
+  ws=$(make_ws)
+  write_terminal_ledger_fixture "$ws" quiescence delivered
+  artifact="$ws/loop/artifacts/quiescence"
+  printf '%s\n' '{"event":"turn","turn_idx":1,"input_tokens":1,"cache_read_tokens":0,"cache_creation_tokens":0}' \
+    >"$artifact/attempts/001/sentinel-events.jsonl"
+  set_terminal_lease "$artifact/state.json" "$$"
+  run_tick "$ws" >/dev/null
+  old_version=$(receipt_value "$artifact/task-end.json" receipt_version)
+  if [[ "$(receipt_value "$artifact/task-end.json" fold_complete)" != false ]]; then
+    fail "$name" "live lease was treated as quiescent"
+    return
+  fi
+  set_terminal_lease "$artifact/state.json"
+  run_tick "$ws" >/dev/null
+  if [[ "$(receipt_value "$artifact/task-end.json" fold_complete)" = true ]] \
+    && [[ "$(receipt_value "$artifact/task-end.json" receipt_version)" -gt "$old_version" ]]; then
+    pass "$name"
+  else
+    fail "$name" "quiescence-only fingerprint change was not repaired"
+  fi
+}
+
+case_ledger_receipt_projection_independent() {
+  local name=ledger-receipt-projection-independent ws artifact version
+  ws=$(make_ws)
+  write_terminal_ledger_fixture "$ws" projection delivered
+  artifact="$ws/loop/artifacts/projection"
+  run_tick "$ws" >/dev/null
+  python3 - "$artifact/task-end.json" <<'PY'
+import json, os, sys
+path=sys.argv[1]
+value=json.load(open(path, encoding="utf-8")); value["receipt_version"] += 1
+tmp=path+".tmp-test"
+with open(tmp,"w",encoding="utf-8") as f: json.dump(value,f); f.write("\n")
+os.replace(tmp,path)
+PY
+  version=$(receipt_value "$artifact/task-end.json" receipt_version)
+  run_tick "$ws" >/dev/null
+  if python3 - "$artifact/ledger.jsonl" "$version" <<'PY'
+import json, sys
+rows=[]
+for line in open(sys.argv[1],encoding="utf-8"):
+    try: row=json.loads(line)
+    except ValueError: continue
+    if row.get("event")=="task_end" and row.get("receipt_version")==int(sys.argv[2]): rows.append(row)
+raise SystemExit(0 if len(rows)==1 else 1)
+PY
+  then pass "$name"; else fail "$name" "stale receipt version was not independently projected"; fi
+}
+
+write_exact_json_lines() {
+  local path=$1 line_bytes=$2 count=$3 partial=${4:-0}
+  python3 - "$path" "$line_bytes" "$count" "$partial" <<'PY'
+import sys
+path, width, count, partial = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+line = b"{}" + b" " * (width - 3) + b"\n"
+data = line * count
+if partial: data = b'{"event":"turn"'
+open(path,"wb").write(data)
+PY
+}
+
+case_ledger_fold_worked_cases() {
+  local name=ledger-fold-worked-cases ws id artifact
+  ws=$(make_ws)
+  for id in fold64 fold20 fold8; do write_terminal_ledger_fixture "$ws" "$id" delivered; done
+  write_exact_json_lines "$ws/loop/artifacts/fold64/attempts/001/sentinel-events.jsonl" 8 8
+  write_exact_json_lines "$ws/loop/artifacts/fold20/attempts/001/sentinel-events.jsonl" 5 4
+  write_exact_json_lines "$ws/loop/artifacts/fold8/attempts/001/sentinel-events.jsonl" 8 1
+  run_tick "$ws" TR_LEDGER_FOLD_TOTAL_MAX_BYTES=16 TR_LEDGER_FOLD_MAX_BYTES=8 >/dev/null
+  if python3 - "$ws/loop/artifacts" <<'PY'
+import json, os, sys
+root=sys.argv[1]
+states={name:json.load(open(os.path.join(root,name,"attempts/001/.ledger-fold.json"),encoding="utf-8")) for name in ("fold64","fold20","fold8")}
+assert (states["fold64"]["folded_bytes"],states["fold64"]["dropped_bytes"],states["fold64"]["source_bytes_at_fold"],states["fold64"]["budget_remaining"],states["fold64"]["exhausted"]) == (16,48,64,0,True)
+assert (states["fold20"]["folded_bytes"],states["fold20"]["dropped_bytes"],states["fold20"]["source_bytes_at_fold"],states["fold20"]["budget_remaining"],states["fold20"]["exhausted"]) == (15,5,20,0,True)
+assert (states["fold8"]["folded_bytes"],states["fold8"]["dropped_bytes"],states["fold8"]["source_bytes_at_fold"],states["fold8"]["budget_remaining"],states["fold8"]["exhausted"]) == (8,0,8,8,False)
+for name in ("fold64","fold20"): assert sum(1 for row in map(json.loads,open(os.path.join(root,name,"ledger.jsonl"),encoding="utf-8")) if row.get("event")=="fold_exhausted") == 1
+PY
+  then pass "$name"; else fail "$name" "64/16, 20/16, or 8/16 accounting mismatch"; fi
+}
+
+case_ledger_post_exhaustion_is_quiescent() {
+  local name=ledger-post-exhaustion-is-quiescent ws artifact bytes version i
+  ws=$(make_ws); write_terminal_ledger_fixture "$ws" exhausted delivered
+  artifact="$ws/loop/artifacts/exhausted"
+  write_exact_json_lines "$artifact/attempts/001/sentinel-events.jsonl" 8 8
+  run_tick "$ws" TR_LEDGER_FOLD_TOTAL_MAX_BYTES=16 TR_LEDGER_FOLD_MAX_BYTES=8 >/dev/null
+  bytes=$(wc -c <"$artifact/ledger.jsonl" | tr -d ' '); version=$(receipt_value "$artifact/task-end.json" receipt_version)
+  for i in 1 2 3; do
+    printf '{}\n' >>"$artifact/attempts/001/sentinel-events.jsonl"
+    run_tick "$ws" TR_LEDGER_FOLD_TOTAL_MAX_BYTES=16 TR_LEDGER_FOLD_MAX_BYTES=8 >/dev/null
+  done
+  if [[ "$(wc -c <"$artifact/ledger.jsonl" | tr -d ' ')" -eq "$bytes" ]] \
+    && [[ "$(receipt_value "$artifact/task-end.json" receipt_version)" -eq "$version" ]] \
+    && [[ "$(receipt_value "$artifact/task-end.json" fold_complete)" = false ]]; then
+    pass "$name"
+  else fail "$name" "exhausted attempt emitted after adversarial appends"; fi
+}
+
+case_ledger_oversize_lines_are_accounted() {
+  local name=ledger-oversize-lines-are-accounted ws root
+  ws=$(make_ws); root="$ws/loop/artifacts"
+  write_terminal_ledger_fixture "$ws" storm delivered; write_terminal_ledger_fixture "$ws" single delivered
+  write_exact_json_lines "$root/storm/attempts/001/sentinel-events.jsonl" 8 3
+  write_exact_json_lines "$root/single/attempts/001/sentinel-events.jsonl" 8 1
+  run_tick "$ws" TR_LEDGER_FOLD_TOTAL_MAX_BYTES=16 TR_LEDGER_FOLD_MAX_BYTES=4 >/dev/null
+  if python3 - "$root" <<'PY'
+import json, os, sys
+root=sys.argv[1]
+storm=json.load(open(os.path.join(root,"storm/attempts/001/.ledger-fold.json"),encoding="utf-8"))
+single=json.load(open(os.path.join(root,"single/attempts/001/.ledger-fold.json"),encoding="utf-8"))
+assert storm["exhausted"] and storm["truncated"] and storm["dropped_bytes"] == 24
+assert not single["exhausted"] and single["truncated"] and single["dropped_bytes"] == 8
+assert not json.load(open(os.path.join(root,"single/task-end.json"),encoding="utf-8"))["fold_complete"]
+assert sum(1 for row in map(json.loads,open(os.path.join(root,"single/ledger.jsonl"),encoding="utf-8")) if row.get("event")=="fold_oversize_line") == 1
+PY
+  then pass "$name"; else fail "$name" "oversize line truncation totals mismatch"; fi
+}
+
+case_ledger_partial_line_completed_once() {
+  local name=ledger-partial-line-completed-once ws artifact
+  ws=$(make_ws); write_terminal_ledger_fixture "$ws" partial-line delivered
+  artifact="$ws/loop/artifacts/partial-line"
+  printf '%s' '{"event":"turn","turn_idx":1' >"$artifact/attempts/001/sentinel-events.jsonl"
+  run_tick "$ws" >/dev/null
+  printf '%s\n' '}' >>"$artifact/attempts/001/sentinel-events.jsonl"
+  run_tick "$ws" >/dev/null
+  if [[ "$(ledger_event_count "$artifact/ledger.jsonl" turn)" -eq 1 ]] \
+    && [[ "$(python3 - "$artifact/ledger.jsonl" <<'PY'
+import json,sys
+print([r["seq"] for r in map(json.loads,open(sys.argv[1],encoding="utf-8")) if r.get("event")=="turn"][-1])
+PY
+)" -eq 1 ]]; then
+    pass "$name"
+  else fail "$name" "newline-anchored cursor duplicated or lost completed record"; fi
+}
+
+case_ledger_pre_feature_terminal_gate() {
+  local name=ledger-pre-feature-terminal-gate ws artifact
+  ws=$(make_ws); write_terminal_ledger_fixture "$ws" legacy delivered
+  artifact="$ws/loop/artifacts/legacy"; rm "$artifact/ledger.jsonl"
+  run_tick "$ws" >/dev/null
+  if [[ ! -e "$artifact/task-end.json" && ! -e "$artifact/ledger.jsonl" ]]; then
+    pass "$name"
+  else fail "$name" "reconcile fabricated telemetry for pre-feature artifact"; fi
+}
+
+if [[ "${TR_LEDGER_FOCUSED:-0}" = 1 ]]; then
+  case_ledger_terminal_pre_projection_reconcile
+  case_ledger_fired_delivered_is_completed
+  case_ledger_direct_dlq_reap_folds_once
+  case_ledger_torn_tail_repair
+  case_ledger_zero_attempt_dlq
+  case_ledger_driver_outcome_mapping
+  case_ledger_window_error_class_is_terminal
+  case_ledger_io_failure_is_fail_open
+  case_ledger_orphan_tail_converges
+  case_ledger_receipt_tmp_crash_recovery
+  case_ledger_fingerprint_repair_after_emit_failure
+  case_ledger_quiescence_only_repairs_receipt
+  case_ledger_receipt_projection_independent
+  case_ledger_fold_worked_cases
+  case_ledger_post_exhaustion_is_quiescent
+  case_ledger_oversize_lines_are_accounted
+  case_ledger_partial_line_completed_once
+  case_ledger_pre_feature_terminal_gate
+  log "TOTAL pass=$pass_count fail=$fail_count"
+  (( fail_count == 0 ))
+  exit
+fi
+
 case_env_integer_validation
 case_corrupt_state_quarantine_continues
 case_quoted_id_intake_runner_agree
@@ -3035,6 +3516,24 @@ case_stdout_cli_login_deterministic_auth_dlq
 case_non111_unknown_error_uses_infra_retries
 case_empty_stderr_is_degenerate_and_retries
 case_metrics_idempotent
+case_ledger_terminal_pre_projection_reconcile
+case_ledger_fired_delivered_is_completed
+case_ledger_direct_dlq_reap_folds_once
+case_ledger_torn_tail_repair
+case_ledger_zero_attempt_dlq
+case_ledger_driver_outcome_mapping
+case_ledger_window_error_class_is_terminal
+case_ledger_io_failure_is_fail_open
+case_ledger_orphan_tail_converges
+case_ledger_receipt_tmp_crash_recovery
+case_ledger_fingerprint_repair_after_emit_failure
+case_ledger_quiescence_only_repairs_receipt
+case_ledger_receipt_projection_independent
+case_ledger_fold_worked_cases
+case_ledger_post_exhaustion_is_quiescent
+case_ledger_oversize_lines_are_accounted
+case_ledger_partial_line_completed_once
+case_ledger_pre_feature_terminal_gate
 
 log "TOTAL pass=$pass_count fail=$fail_count"
 if (( fail_count > 0 )); then

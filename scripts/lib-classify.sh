@@ -64,6 +64,26 @@ _classify_read_bounded() {
   fi
 }
 
+_classify_is_window_error() {
+  local evidence=${1-}
+  local line
+  while IFS= read -r line; do
+    case "$line" in
+      *context_length_exceeded*|*'prompt is too long'*|*'input length and max_tokens exceed context limit'*)
+        return 0
+        ;;
+      *'maximum context length'*|*'context window'*)
+        # These phrases are common in ordinary prose; require the same line to
+        # look like a persisted error diagnostic.
+        case "$line" in
+          *error*|*exception*|*fail*|*invalid*|*exceed*|*'too long'*|*limit*|*'status code 4'*|*'status code 5'*) return 0 ;;
+        esac
+        ;;
+    esac
+  done <<<"$evidence"
+  return 1
+}
+
 classify_failure() {
   local exit_code=$1
   local stderr_file=$2
@@ -72,6 +92,8 @@ classify_failure() {
   local stdout_message=''
   local stderr_cleaned=''
   local stdout_cleaned=''
+  local stderr_lower=''
+  local stdout_lower=''
   local LC_ALL=C
   export LC_ALL
 
@@ -86,16 +108,14 @@ classify_failure() {
   stdout_message=$(_classify_read_bounded "$stdout_file")
   stderr_cleaned=$(printf '%s' "$stderr_message" | tr -d '[:space:]')
   stdout_cleaned=$(printf '%s' "$stdout_message" | tr -d '[:space:]')
+  stderr_lower=$(printf '%s' "$stderr_message" | tr '[:upper:]' '[:lower:]')
+  stdout_lower=$(printf '%s' "$stdout_message" | tr '[:upper:]' '[:lower:]')
 
   # Stderr is the authoritative diagnostics stream. If it matches any bucket,
   # its verdict wins; stdout is consulted only when stderr matches no bucket.
   case "$stderr_message" in
     *' 408 '*|*'"status":408'*|*'"status": 408'*|*'408 Request Timeout'*|*'status code 408'*|*' 429 '*|*'"status":429'*|*'"status": 429'*|*'429 Too Many Requests'*|*'status code 429'*|*'returned error: 429'*|*'"code":429'*|*'"code": 429'*|*'rate_limit_error'*)
       printf '%s\n' transient
-      return 0
-      ;;
-    *'context_length_exceeded'*|*'context length exceeded'*|*'context-length-exceeded'*|*'context overflow'*|*'maximum context length'*|*'too many tokens'*)
-      printf '%s\n' context-overflow
       return 0
       ;;
     *' 401 '*|*'"status":401'*|*'"status": 401'*|*'401 Unauthorized'*|*'status code 401'*|*' 403 '*|*'"status":403'*|*'"status": 403'*|*'403 Forbidden'*|*'status code 403'*|*'authentication_error'*|*'invalid_api_key'*|*'invalid api key'*|*'unauthorized'*|*'forbidden'*|*'Not logged in'*|*'not logged in'*|*'Please run /login'*|*'login required'*|*'Login required'*|*'permission_error'*|*'billing_error'*|*'invalid_grant'*)
@@ -107,17 +127,17 @@ classify_failure() {
       return 0
       ;;
   esac
+  if _classify_is_window_error "$stderr_lower"; then
+    printf '%s\n' window-error
+    return 0
+  fi
 
   # Stdout intentionally excludes prose-prone markers: bare space-delimited 4xx
   # numbers; unauthorized/forbidden; invalid api key/request/input/parameter/model;
-  # context length/overflow/token prose variants; and lowercase login banners.
+  # unrestricted context-window prose; and lowercase login banners.
   case "$stdout_message" in
     *'"status":408'*|*'"status": 408'*|*'408 Request Timeout'*|*'status code 408'*|*'"status":429'*|*'"status": 429'*|*'429 Too Many Requests'*|*'status code 429'*|*'returned error: 429'*|*'"code":429'*|*'"code": 429'*|*'rate_limit_error'*)
       printf '%s\n' transient
-      return 0
-      ;;
-    *'context_length_exceeded'*)
-      printf '%s\n' context-overflow
       return 0
       ;;
     *'"status":401'*|*'"status": 401'*|*'401 Unauthorized'*|*'status code 401'*|*'"status":403'*|*'"status": 403'*|*'403 Forbidden'*|*'status code 403'*|*'authentication_error'*|*'invalid_api_key'*|*'Not logged in'*|*'Please run /login'*|*'Login required'*|*'permission_error'*|*'billing_error'*|*'invalid_grant'*)
@@ -129,6 +149,10 @@ classify_failure() {
       return 0
       ;;
   esac
+  if _classify_is_window_error "$stdout_lower"; then
+    printf '%s\n' window-error
+    return 0
+  fi
 
   if [[ -z "$stderr_cleaned" && -z "$stdout_cleaned" ]]; then
     printf '%s\n' degenerate
