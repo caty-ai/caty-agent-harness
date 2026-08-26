@@ -1,6 +1,13 @@
 # Apply step — reviewed candidates → durable-tier writeback (#201)
 
-Status: FROZEN 2026-08-27 (L1-9 upstream review: 3-seat GO — see #201 adjudication records) (v1 reviewed 2026-08-27 by Kimi K3 / Grok 4.6 / GLM 5.3, all NO-GO;
+Status: FROZEN 2026-08-27, superseding record v3.1 (L1-8): errata + classifications
+forced by the 3-seat implementation review of f9dc955 (Opus 5 / GLM 5.3 / Kimi K3 —
+§3.4 full token classification incl. supersedes-not-owned=terminal; §2.1 phase-3
+receipt truthfulness; §2.2a temp-dir wording; §4 stub-replay canonical clarification;
+§7 transitions-only stated exceptions; §9 second-run invariant + test seams). No
+architectural change; upstream panel notified (Grok delta). Original freeze:
+(L1-9 upstream review: 3-seat GO — see #201 adjudication records) (v1 reviewed
+2026-08-27 by Kimi K3 / Grok 4.6 / GLM 5.3, all NO-GO;
 v2 landed all round-1 flip conditions — delta verdicts Kimi GO / Grok GO / GLM NO-GO on
 one remaining supersedes cell; v3 lands that cell plus all round-2 non-blocking
 observations — adjudication records on #201)
@@ -67,10 +74,17 @@ Lock-acquisition failure in phase 1 or 2 = **abort before any STATE.md byte is
 written**, exit non-zero. Phase-3 promotions-lock failure is the one case where STATE
 and the index are already durably published: receipts are then the only loss, the
 dangling `run-start` is the operator signal, and the index prevents replay — exit
-non-zero so the caller knows receipts are incomplete. If the promotions lock can still be taken, append
-`decision=run-summary reason=lock-busy`; if not, O_APPEND the summary line directly
-(raw-review.sh's existing lock-busy receipt precedent). Intake's lock-busy `exit 0` is
-explicitly **not** copied.
+non-zero so the caller knows receipts are incomplete. In that phase-3 case the
+per-theme receipt lines and a summary with the **real** promoted/skipped counts are
+O_APPENDed directly (raw-review.sh's existing lock-busy receipt precedent) — the
+ledger must never assert fewer promotions than actually landed (v3.1, from the
+implementation review: a hardcoded `promoted=0` summary both falsified the ledger and
+suppressed the dangling-`run-start` crash signal). For phase-1 lock-busy, append
+`decision=run-summary reason=lock-busy` if the promotions lock permits, else O_APPEND
+it. Intake's lock-busy `exit 0` is explicitly **not** copied. Mid-run operational
+aborts after `run-start` (rollback target invalid, torn index, caps-read-failed)
+likewise leave a reasoned `run-summary` — a diagnosed refusal must not masquerade as
+a crash (v3.1).
 
 ### 2.2 Run phases
 
@@ -80,8 +94,11 @@ explicitly **not** copied.
    (A crashed run is thereafter mechanically detectable: `run-start` without a matching
    `run-summary`.)
 2. **Writeback** — under the state lock:
-   a. copy live `STATE.md` to a private temp file (0600, in the workspace temp area,
-      not adjacent to STATE.md);
+   a. copy live `STATE.md` to a private temp file (0600, inside a private 0700
+      mktemp directory on the same filesystem as STATE.md — same-filesystem is an
+      `atomic_write_file` rename requirement, so "the workspace temp area" means a
+      private temp dir under the workspace, created after the pause check and lock
+      acquisition; v3.1 wording erratum);
    b. perform all mutations (appends, `invalidated-by:` annotations) **on the temp**;
    c. enforce caps by **refusal, not eviction** (§6): a section whose post-append line
       count would exceed its cap takes no further appends this run
@@ -152,15 +169,29 @@ are host constants, not candidate fields.
 
 ### 3.4 Per-theme resolution states
 
-Terminal (never revisited): `promoted`, `rolled-back`, `duplicate-content`, `hygiene`,
-`parse`, `superseded` (assigned the moment its superseder promotes — same batch or
-cross-run, §5), `k-below-2` (terminal because recurrence emits a **new** theme-id in a
-later run; a frozen id's k never changes — §9 has a fixture asserting the re-emitted
-id, not the frozen one, is what gets reconsidered), `stub-exists`, `unknown-approval`.
+**Every §7 reason token has exactly one classification here** (v3.1 erratum — the
+3-seat implementation review demonstrated that an unclassified token, guessed as
+persistable, bricked the index validator; the vocabulary the index accepts and the
+vocabulary `record_result` can write MUST be one single table in the script, and the
+index writer refuses out-of-vocabulary decisions at write time):
+
+Terminal (never revisited): `promoted` (incl. `reason=stub-replay`), `rolled-back`,
+`duplicate-content`, `hygiene`, `parse`, `superseded` (assigned the moment its
+superseder promotes — same batch or cross-run, §5), `k-below-2` (terminal because
+recurrence emits a **new** theme-id in a later run; a frozen id's k never changes —
+§9 has a fixture asserting the re-emitted id, not the frozen one, is what gets
+reconsidered), `stub-exists` (foreign/non-canonical stub dirs only — see §4),
+`unknown-approval`, **`supersedes-not-owned`** (the non-owned target line belongs to
+#149's jurisdiction; a re-review of the theme mints a new id, so the frozen id never
+becomes promotable), `already-applied`, `already-rolled-back`.
 
 Revisit (pending): `awaiting-approval`, `section-full`, `volume-guard`,
 `supersedes-ambiguous` (re-resolves only if a later batch changes the facts; never
 promotes silently).
+
+Run-level, never a per-theme index decision: `input-untrusted` (per-file),
+`caps-read-failed`, `lock-busy`, `skipped-paused`, `stub-dirty` (rollback-operation
+outcome). These never produce index rows.
 
 `supersedes-unresolved` is a **receipt annotation only** (`note=supersedes-unresolved`
 on the promoted superseder's receipt line) — no theme ever holds it as a decision
@@ -212,8 +243,13 @@ routes the approval gate through a value the reviewed model chose):
 
 Skill stubs: frontmatter carries a host-written `source: theme-<id>` line; the
 existence guard is the directory **and** that frontmatter stamp. Crash-replay after
-`mkdir` (with or without `SKILL.md` yet written) → complete the stub and receipt
-`decision=promoted reason=stub-replay` (not `stub-exists`), so replay converges.
+`mkdir` (with or without `SKILL.md` yet written, **including a fully-written
+byte-canonical stub whose index/receipt write was lost** — the canonical check is the
+existing byte-identity helper) → complete the stub if needed and receipt
+`decision=promoted reason=stub-replay` (not `stub-exists`), so replay converges and
+the stub stays rollbackable. `stub-exists` is reserved for foreign or non-canonical
+directories at the slug path (v3.1 clarification — the implementation review found a
+post-write crash window that mislabeled apply's own stub).
 Stub creation does not count against `APPLY_MAX_PER_SECTION` (stubs are never
 CONSULT-loaded).
 
@@ -299,7 +335,12 @@ resolution authority). Lines:
 - `decision=run-start applyid=<id> inputs=<n>` (phase 1)
 - per-theme **transitions only** (a theme that stays `awaiting-approval` across 300
   nightly runs produces one line, not 300; the run-summary carries still-pending
-  counts): `ts=<UTC> applyid=<id> theme=<theme-id> class=<class> decision=promoted|skipped|rolled-back reason=<token> note=<supersedes-unresolved|-> approver=<alpha|auto|-> target=<section|staging-path> line_sha=<sha256 of written line|->`
+  counts). Stated exceptions (v3.1, each is deliberate operator feedback): a
+  persistent `input-untrusted` file re-receipts every run (nagging is intended); the
+  guard-3 index self-heal emits one forced receipt when it re-adds a lost row (an
+  index mutation must never be silent); a stale `--approve` of a non-pending id
+  re-receipts `unknown-approval` per invocation (the operator passed the flag, the
+  operator gets the answer): `ts=<UTC> applyid=<id> theme=<theme-id> class=<class> decision=promoted|skipped|rolled-back reason=<token> note=<supersedes-unresolved|-> approver=<alpha|auto|-> target=<section|staging-path> line_sha=<sha256 of written line|->`
 - `decision=run-summary` with counts promoted/skipped-by-reason/pending, always
   appended on every completed run (0-consumed stays operator-visible; a `run-start`
   with no `run-summary` marks a crashed run).
@@ -379,6 +420,21 @@ Rollback (`apply-promotions.sh --rollback <theme-id> --reason <ref>`):
   paths).
 - Assert all STATE.md mutations go through `take_state_lock` + `atomic_write_file`
   (no unguarded cp/append anywhere in apply).
+- **Second-run invariant (v3.1, from the implementation review's CRITICAL)**: after
+  EVERY reason-token fixture, re-run apply and assert the run exits with its expected
+  code and `apply-index.tsv` still parses — no token may ever write a row the
+  validator rejects. Plus a static assertion that the decision vocabulary
+  `record_result` can persist is a subset of the validator's accepted set (single
+  table, §3.4).
+- Crash-window test seams: the script may ship env-gated self-kill hooks
+  (`APPLY_TEST_CRASH_AFTER_STUB_MKDIR`, `APPLY_TEST_CRASH_AFTER_PHASE2`, and a
+  between-STATE-and-index variant) — declared here as the documented test seam
+  (v3.1; they only SIGKILL the process, never write) and listed in
+  `docs/reference.md` alongside the other `APPLY_*` variables.
+- Phase-3 lock-busy truthfulness: a run that published STATE must never record a
+  summary asserting fewer promotions than landed — fixture races the promotions lock
+  after phase 2 and asserts ledger/STATE agreement (v3.1, from the implementation
+  review).
 
 ## 10. Files to touch (implementation phase, to re-declare at WIP update)
 
