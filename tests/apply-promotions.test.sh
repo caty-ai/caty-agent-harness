@@ -8,8 +8,8 @@ PASS_COUNT=0
 FAIL_COUNT=0
 SKIP_COUNT=0
 FILTER=${APPLY_TEST_FILTER:-}
-SECOND_RUN_WORKSPACE=
-SECOND_RUN_EXPECTED_RC=
+SECOND_RUN_WORKSPACES_FILE=$APPLY_FIXTURE_TMP/second-run-workspaces
+SECOND_RUN_METADATA_FILE=$APPLY_FIXTURE_TMP/second-run-metadata
 
 cleanup() { rm -rf "$APPLY_FIXTURE_TMP"; }
 trap cleanup EXIT HUP INT TERM
@@ -57,16 +57,30 @@ assert_second_run() {
   assert_index_valid "$ws"
 }
 note_second_run() {
-  SECOND_RUN_WORKSPACE=$1
-  SECOND_RUN_EXPECTED_RC=$2
+  printf '%s\t%s\n' "$1" "$2" >>"$SECOND_RUN_METADATA_FILE"
 }
 clear_second_run() {
-  SECOND_RUN_WORKSPACE=
-  SECOND_RUN_EXPECTED_RC=
+  : >"$SECOND_RUN_WORKSPACES_FILE"
+  : >"$SECOND_RUN_METADATA_FILE"
 }
-assert_generic_reason_second_run() {
-  [[ -n "$SECOND_RUN_WORKSPACE" && -n "$SECOND_RUN_EXPECTED_RC" ]] || return 1
-  assert_second_run "$SECOND_RUN_WORKSPACE" "$SECOND_RUN_EXPECTED_RC" "$APPLY_FIXTURE_TMP/generic-reason-rerun.out"
+assert_generic_index_second_runs() {
+  local ws expected_rc sequence=0
+  while IFS= read -r ws || [[ -n "$ws" ]]; do
+    [[ -n "$ws" && -e "$ws/loop/promotions/apply-index.tsv" ]] || continue
+    expected_rc=$(awk -F '\t' -v ws="$ws" '$1 == ws {value=$2; count++} END {if (count != 1) exit 1; print value}' "$SECOND_RUN_METADATA_FILE") || {
+      printf 'missing or duplicate second-run metadata for index workspace: %s\n' "$ws" >&2
+      return 1
+    }
+    sequence=$((sequence + 1))
+    assert_second_run "$ws" "$expected_rc" "$APPLY_FIXTURE_TMP/generic-index-rerun.$sequence.out" || {
+      printf 'generic second run failed for index workspace: %s\n' "$ws" >&2
+      return 1
+    }
+    [[ -e "$ws/loop/promotions/apply-index.tsv" ]] || {
+      printf 'generic second run removed index workspace state: %s\n' "$ws" >&2
+      return 1
+    }
+  done <"$SECOND_RUN_WORKSPACES_FILE"
 }
 state_sha() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1/STATE.md" | awk '{print $1}'
@@ -79,8 +93,8 @@ run_case() {
   clear_second_run
   if [[ -n "$FILTER" ]] && ! printf '%s\n' "$name" | grep -Eq "$FILTER"; then return; fi
   if "$@"; then
-    if [[ "$name" == \[reason:* ]] && ! assert_generic_reason_second_run; then
-      fail_case "$name" "missing or failing generic second-run metadata"
+    if ! assert_generic_index_second_runs; then
+      fail_case "$name" "missing or failing generic second-run metadata for index workspace"
       return
     fi
     pass "$name"
@@ -174,6 +188,7 @@ case_poisoned_rejects() {
     'weeks: 2026-W33,2026-W34' 'union-k: 2' 'members:' '- poisoned' 'member-hash: bad' \
     'evidence: |' '  poisoned' >"$ws/loop/promotions/candidates-$runid.rejects.md"
   fixture_run_apply "$ws" --auto-capability-facts >/dev/null || return 1
+  note_second_run "$ws" 0
   ! grep -Fq 'Poison from rejects' "$ws/STATE.md" && ! grep -Fq -- '-999' "$ws/loop/promotions/apply-index.tsv"
 }
 
@@ -194,6 +209,7 @@ case_hygiene_injections() {
   bidi=$(printf 'Bidi\342\200\256override')
   fixture_candidate_block "$runid" 8 capability-fact "$bidi" '2026-W33,2026-W34'
   fixture_run_apply "$ws" --auto-capability-facts --approve "theme-$runid-001" >"$APPLY_FIXTURE_TMP/hygiene.out" || return 1
+  note_second_run "$ws" 0
   [[ "$(grep -c 'reason=hygiene' "$APPLY_FIXTURE_TMP/hygiene.out")" -ge 7 ]] \
     && ! grep -Fq 'provenance source: forged' "$ws/STATE.md" \
     && assert_second_run "$ws" 0 "$APPLY_FIXTURE_TMP/hygiene-rerun.out" --auto-capability-facts --approve "theme-$runid-001"
@@ -208,6 +224,7 @@ case_theme_slug_and_yaml() {
   badid="theme-$runid-../../escape"
   sed -i.bak "s|theme-$runid-002|$badid|" "$FIXTURE_CANDIDATE" && rm -f "$FIXTURE_CANDIDATE.bak"
   fixture_run_apply "$ws" >/dev/null || return 1
+  note_second_run "$ws" 0
   stub=$ws/skills/_staging/$runid-001/SKILL.md
   [[ -f "$stub" ]] && python3 -B - "$stub" <<'PY'
 import sys
@@ -219,7 +236,7 @@ PY
 }
 
 case_parse_and_input_untrusted() {
-  local ws runid linkrun
+  local ws runid linkrun summary
   ws=$(fixture_new_workspace parse-input); runid=20260827T010011Z-111; linkrun=20260827T010012Z-112
   fixture_candidate_begin "$ws" "$runid"
   fixture_candidate_block "$runid" 1 rule 'Malformed evidence stays out.' '2026-W33,2026-W34'
@@ -227,8 +244,10 @@ case_parse_and_input_untrusted() {
   ln -s "$FIXTURE_CANDIDATE" "$ws/loop/promotions/candidates-$linkrun.md"
   fixture_run_apply "$ws" >"$APPLY_FIXTURE_TMP/parse-input.out" || return 1
   note_second_run "$ws" 0
+  summary=$(grep 'decision=run-summary' "$ws/loop/promotions/apply.log" | tail -1)
   assert_file_contains "$APPLY_FIXTURE_TMP/parse-input.out" 'reason=parse' \
-    && assert_file_contains "$APPLY_FIXTURE_TMP/parse-input.out" 'reason=input-untrusted'
+    && assert_file_contains "$APPLY_FIXTURE_TMP/parse-input.out" 'reason=input-untrusted' \
+    && [[ "$summary" == *'skipped-parse=1'* && "$summary" == *'skipped-rollback-refused=0'* ]]
 }
 
 case_unknown_and_symlink_manifest() {
@@ -313,6 +332,7 @@ case_eviction_resurrection() {
   tmp=$ws/STATE.evicted
   grep -Fv "source: $id" "$ws/STATE.md" >"$tmp" && mv "$tmp" "$ws/STATE.md"
   fixture_run_apply "$ws" --auto-capability-facts >"$APPLY_FIXTURE_TMP/eviction.out" || return 1
+  note_second_run "$ws" 0
   ! grep -Fq "source: $id" "$ws/STATE.md" && assert_file_contains "$APPLY_FIXTURE_TMP/eviction.out" 'reason=already-applied' \
     && assert_second_run "$ws" 0 "$APPLY_FIXTURE_TMP/eviction-rerun.out" --auto-capability-facts
 }
@@ -338,6 +358,7 @@ case_resurrection_sequence() {
   tmp=$ws/STATE.evicted
   grep -Fv "source: $victim" "$ws/STATE.md" >"$tmp" && mv "$tmp" "$ws/STATE.md" || return 1
   fixture_run_apply "$ws" --auto-capability-facts >"$APPLY_FIXTURE_TMP/resurrection-evict.out" || return 1
+  note_second_run "$ws" 0
   ! grep -Fq "source: $victim" "$ws/STATE.md" || return 1
   assert_file_contains "$APPLY_FIXTURE_TMP/resurrection-evict.out" "theme=$victim decision=skipped reason=already-applied" || return 1
   assert_file_contains "$ws/loop/promotions/apply-index.tsv" $'theme-'"$victim_run"$'-001\tcapability-fact\tpromoted\t' || return 1
@@ -353,6 +374,7 @@ case_supersedes_applied_and_annotation() {
   fixture_run_apply "$ws" --approve "$oldid" >/dev/null || return 1
   fixture_candidate_begin "$ws" "$newrun"; fixture_candidate_block "$newrun" 1 rule 'New rule wording.' '2026-W34,2026-W35' fixture-reviewer "$oldid"
   fixture_run_apply "$ws" --approve "$newid" >/dev/null || return 1
+  note_second_run "$ws" 0
   [[ "$(grep -c "invalidated-by: $newid" "$ws/STATE.md")" -eq 1 ]] || return 1
   fixture_run_apply "$ws" --approve "$newid" >/dev/null || return 1
   [[ "$(grep -c "invalidated-by: $newid" "$ws/STATE.md")" -eq 1 ]] \
@@ -423,6 +445,7 @@ case_same_batch_successor_skipped() {
   fixture_candidate_block "$runid" 1 rule 'Victim remains eligible when successor waits.' '2026-W33,2026-W34'
   fixture_candidate_block "$runid" 2 rule 'Unapproved successor waits.' '2026-W34,2026-W35' fixture-reviewer "$victim"
   fixture_run_apply "$ws" --approve "$victim" >/dev/null || return 1
+  note_second_run "$ws" 0
   assert_file_contains "$ws/STATE.md" "source: $victim" \
     && assert_file_contains "$ws/loop/promotions/apply-index.tsv" $'theme-'"$runid"$'-002\trule\tawaiting-approval\t' \
     && ! grep -Fq "source: $successor" "$ws/STATE.md" \
@@ -444,6 +467,7 @@ case_supersedes_index_absent_rows() {
   fixture_candidate_begin "$ws" "$newrun"; fixture_candidate_block "$newrun" 1 rule 'Successor of evicted promoted target.' '2026-W34,2026-W35' fixture-reviewer "$oldid"
   fixture_candidate_begin "$ws" "$newrun2"; fixture_candidate_block "$newrun2" 1 rule 'Successor of absent rolled target.' '2026-W34,2026-W35' fixture-reviewer "$rollid"
   fixture_run_apply "$ws" --approve "theme-$newrun-001" --approve "theme-$newrun2-001" >/dev/null || return 1
+  note_second_run "$ws" 0
   [[ "$(grep -c 'note=supersedes-unresolved' "$ws/loop/promotions/apply.log")" -ge 2 ]] \
     && assert_index_valid "$ws"
 }
@@ -459,6 +483,7 @@ case_supersedes_cycles_and_chains() {
   fixture_candidate_block "$runid" 4 rule 'Cycle left.' '2026-W33,2026-W34' fixture-reviewer "$id5"
   fixture_candidate_block "$runid" 5 rule 'Cycle right.' '2026-W34,2026-W35' fixture-reviewer "$id4"
   fixture_run_apply "$ws" --approve "$id1" --approve "$id2" --approve "$id3" --approve "$id4" --approve "$id5" >/dev/null || return 1
+  note_second_run "$ws" 0
   [[ "$(grep -c 'reason=supersedes-ambiguous' "$ws/loop/promotions/apply.log")" -eq 5 ]] \
     && assert_index_valid "$ws"
 }
@@ -496,6 +521,7 @@ case_clean_stub_rollback_without_candidate() {
   [[ -f "$stub" ]] || return 1
   mv "$candidate" "$APPLY_FIXTURE_TMP/removed-candidate.md"
   fixture_run_apply "$ws" --rollback "$skill" --reason review-clean >/dev/null || return 1
+  note_second_run "$ws" 0
   [[ ! -e "$stub" ]] && assert_file_contains "$ws/loop/promotions/apply-index.tsv" $'\trolled-back\t'
 }
 
@@ -520,7 +546,8 @@ case_torn_index_rejects() {
   fixture_candidate_begin "$ws" "$runid"; fixture_candidate_block "$runid" 1 capability-fact 'Torn index refuses all.' '2026-W33,2026-W34'
   printf 'torn\trow\n' >"$ws/loop/promotions/apply-index.tsv"; before=$(state_sha "$ws")
   fixture_run_apply "$ws" --auto-capability-facts >/dev/null 2>&1; rc=$?
-  [[ "$rc" -eq 1 && "$before" == "$(state_sha "$ws")" ]]
+  [[ "$rc" -eq 1 && "$before" == "$(state_sha "$ws")" ]] || return 1
+  rm -f "$ws/loop/promotions/apply-index.tsv"
 }
 
 case_heading_caps_read_failed() {
@@ -552,6 +579,7 @@ case_phase2_crash_replay() {
   rm -f "$ws/loop/.distill-state.lock/pid"; rmdir "$ws/loop/.distill-state.lock"
   before_lines=$(grep -c "source: $id" "$ws/STATE.md")
   fixture_run_apply "$ws" --auto-capability-facts >"$APPLY_FIXTURE_TMP/crash-replay.out" || return 1
+  note_second_run "$ws" 0
   [[ "$before_lines" -eq "$(grep -c "source: $id" "$ws/STATE.md")" ]] \
     && assert_file_contains "$APPLY_FIXTURE_TMP/crash-replay.out" 'dangling-run-start=' \
     && assert_index_valid "$ws"
@@ -568,6 +596,7 @@ case_state_index_crash_self_heal() {
   rm -f "$ws/loop/promotions/.apply.lock/pid"; rmdir "$ws/loop/promotions/.apply.lock"
   rm -f "$ws/loop/.distill-state.lock/pid"; rmdir "$ws/loop/.distill-state.lock"
   fixture_run_apply "$ws" --auto-capability-facts >"$APPLY_FIXTURE_TMP/state-index-replay.out" || return 1
+  note_second_run "$ws" 0
   assert_file_contains "$APPLY_FIXTURE_TMP/state-index-replay.out" 'dangling-run-start=' \
     && assert_file_contains "$APPLY_FIXTURE_TMP/state-index-replay.out" 'reason=already-applied' \
     && [[ "$(grep -c 'reason=already-applied' "$ws/loop/promotions/apply.log")" -eq 1 ]] \
@@ -589,12 +618,14 @@ case_phase3_lock_busy_truthful() {
 }
 
 case_rollback_abort_summaries() {
-  local ws runid id rc tmp
+  local ws runid id rc tmp summary
   ws=$(fixture_new_workspace rollback-target-invalid); runid=20260827T010032Z-132
   fixture_run_apply "$ws" --rollback "theme-$runid-001" --reason review-miss >"$APPLY_FIXTURE_TMP/rollback-target-invalid.out" 2>&1; rc=$?
   [[ "$rc" -eq 1 ]] \
     && assert_file_contains "$APPLY_FIXTURE_TMP/rollback-target-invalid.out" 'rollback target is not an applied theme' \
-    && assert_file_contains "$ws/loop/promotions/apply.log" 'reason=parse' || return 1
+    && assert_file_contains "$ws/loop/promotions/apply.log" 'reason=rollback-refused' || return 1
+  summary=$(grep 'decision=run-summary' "$ws/loop/promotions/apply.log" | tail -1)
+  [[ "$summary" == *'skipped-rollback-refused=1'* ]] || return 1
 
   ws=$(fixture_new_workspace rollback-stamp-invalid); runid=20260827T010035Z-135; id=theme-$runid-001
   fixture_candidate_begin "$ws" "$runid"; fixture_candidate_block "$runid" 1 rule 'Rollback stamp loss is diagnosed.' '2026-W33,2026-W34'
@@ -602,9 +633,10 @@ case_rollback_abort_summaries() {
   tmp=$ws/STATE.rollback-miss
   grep -Fv "source: $id" "$ws/STATE.md" >"$tmp" && mv "$tmp" "$ws/STATE.md"
   fixture_run_apply "$ws" --rollback "$id" --reason review-miss >"$APPLY_FIXTURE_TMP/rollback-stamp-invalid.out" 2>&1; rc=$?
+  note_second_run "$ws" 0
   [[ "$rc" -eq 1 ]] \
     && assert_file_contains "$APPLY_FIXTURE_TMP/rollback-stamp-invalid.out" 'rollback stamp count is 0, expected 1' \
-    && assert_file_contains "$ws/loop/promotions/apply.log" 'reason=parse' || return 1
+    && assert_file_contains "$ws/loop/promotions/apply.log" 'reason=rollback-refused' || return 1
 
   ws=$(fixture_new_workspace rollback-open-failures-invalid); runid=20260827T010036Z-136; id=theme-$runid-001
   fixture_candidate_begin "$ws" "$runid"; fixture_candidate_block "$runid" 1 rule 'Rollback missing failures heading is diagnosed.' '2026-W33,2026-W34'
@@ -612,9 +644,10 @@ case_rollback_abort_summaries() {
   tmp=$ws/STATE.rollback-failures
   grep -v '^## Open failures' "$ws/STATE.md" >"$tmp" && mv "$tmp" "$ws/STATE.md"
   fixture_run_apply "$ws" --rollback "$id" --reason review-miss >"$APPLY_FIXTURE_TMP/rollback-open-failures-invalid.out" 2>&1; rc=$?
+  note_second_run "$ws" 0
   [[ "$rc" -eq 1 ]] \
     && assert_file_contains "$APPLY_FIXTURE_TMP/rollback-open-failures-invalid.out" 'rollback Open failures heading count is 0, expected 1' \
-    && assert_file_contains "$ws/loop/promotions/apply.log" 'reason=parse'
+    && assert_file_contains "$ws/loop/promotions/apply.log" 'reason=rollback-refused'
 }
 
 lock_case() {
@@ -640,7 +673,105 @@ case_paused() {
   mkdir -p "$ws/.caty-agent-harness"; : >"$ws/.caty-agent-harness/DISABLED"; before=$(state_sha "$ws")
   fixture_run_apply "$ws" --auto-capability-facts >/dev/null 2>&1; rc=$?
   note_second_run "$ws" 0
-  [[ "$rc" -eq 0 && "$before" == "$(state_sha "$ws")" ]] && assert_file_contains "$ws/loop/promotions/apply.log" 'reason=skipped-paused'
+  [[ "$rc" -eq 0 && "$before" == "$(state_sha "$ws")" ]] \
+    && assert_file_contains "$ws/loop/promotions/apply.log" 'reason=skipped-paused' \
+    && python3 -B - "$APPLY_SCRIPT" "$ws/loop/promotions/apply.log" <<'PY'
+from pathlib import Path
+import re, sys
+script = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r"reason_token_list=\$\(cat <<'EOF'\n(.*?)\nEOF\n\)", script, re.S)
+assert match
+tokens = [line for line in match.group(1).splitlines() if line]
+line = [line for line in Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
+        if "decision=run-summary" in line and "reason=skipped-paused" in line][-1]
+fields = line.split()
+keys = [field.split("=", 1)[0] for field in fields if field.startswith("skipped-")]
+assert len(keys) == len(set(keys)), line
+for token in tokens:
+    expected = "1" if token == "skipped-paused" else "0"
+    assert fields.count(f"skipped-{token}={expected}") == 1, line
+assert sum(field.startswith("skipped-skipped-paused=") for field in fields) == 1, line
+PY
+}
+
+case_index_downgrade_refusal() {
+  local harness=$APPLY_FIXTURE_TMP/index-downgrade-harness.sh
+  local index_work=$APPLY_FIXTURE_TMP/index-downgrade.tsv before=$APPLY_FIXTURE_TMP/index-downgrade.before rc
+  local id=theme-20260827T010037Z-137-001
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$id" rule promoted 20260827T010037Z-137 - 2026-08-27T01:03:07Z >"$index_work"
+  cp "$index_work" "$before"
+  {
+    # The generated harness must expand these values when it runs, not now.
+    # shellcheck disable=SC2016
+    printf '%s\n' '#!/usr/bin/env bash' 'set -u' \
+      'tmp_root=${TMPDIR:-/tmp}/index-downgrade-harness.$$' 'mkdir -p "$tmp_root"' \
+      'trap '\''rm -rf "$tmp_root"'\'' EXIT' \
+      'index_work=$1' 'id=$2' 'apply_id=20260827T010038Z-138' 'run_ts=2026-08-27T01:03:08Z' \
+      'index_decision_state() { return 0; }' \
+      'pending_decision() { [[ "$1" == awaiting-approval ]]; }' \
+      'index_decision() { printf '\''promoted\n'\''; }'
+    awk '/^index_upsert\(\)/ {copy=1} copy {print} copy && /^}/ {exit}' "$APPLY_SCRIPT"
+    # shellcheck disable=SC2016
+    printf '%s\n' 'index_upsert "$id" rule awaiting-approval -'
+  } >"$harness"
+  bash "$harness" "$index_work" "$id" >"$APPLY_FIXTURE_TMP/index-downgrade.out" 2>&1; rc=$?
+  [[ "$rc" -ne 0 ]] \
+    && cmp -s "$before" "$index_work" \
+    && assert_file_contains "$APPLY_FIXTURE_TMP/index-downgrade.out" "refusing promoted-to-pending downgrade for $id"
+}
+
+case_malformed_receipt_noise_bound() {
+  local ws runid id row_before row_after receipts_before receipts_after summary
+  local invalid_ws invalid_run invalid_receipts_before invalid_receipts_after
+  ws=$(fixture_new_workspace malformed-valid-id); runid=20260827T010039Z-139; id=theme-$runid-001
+  fixture_candidate_begin "$ws" "$runid"
+  fixture_candidate_block "$runid" 1 rule 'Persistent malformed valid ids transition once.' '2026-W33,2026-W34'
+  sed -i.bak '/  Synthetic fixture evidence\./d' "$FIXTURE_CANDIDATE" && rm -f "$FIXTURE_CANDIDATE.bak"
+  fixture_run_apply "$ws" >/dev/null || return 1
+  row_before=$(grep -F "$id" "$ws/loop/promotions/apply-index.tsv") || return 1
+  receipts_before=$(grep -c "theme=$id class=rule decision=skipped reason=parse" "$ws/loop/promotions/apply.log")
+  fixture_run_apply "$ws" >/dev/null || return 1
+  note_second_run "$ws" 0
+  row_after=$(grep -F "$id" "$ws/loop/promotions/apply-index.tsv") || return 1
+  receipts_after=$(grep -c "theme=$id class=rule decision=skipped reason=parse" "$ws/loop/promotions/apply.log")
+  summary=$(grep 'decision=run-summary' "$ws/loop/promotions/apply.log" | tail -1)
+  [[ "$row_before" == "$row_after" && "$receipts_before" -eq 1 && "$receipts_after" -eq 1 \
+    && "$summary" == *'skipped-parse=1'* ]] || return 1
+
+  invalid_ws=$(fixture_new_workspace malformed-invalid-id); invalid_run=20260827T010040Z-140
+  fixture_candidate_begin "$invalid_ws" "$invalid_run"
+  fixture_candidate_block "$invalid_run" 1 rule 'Invalid ids keep nagging until garbage is removed.' '2026-W33,2026-W34'
+  sed -i.bak "s/theme-$invalid_run-001/theme-$invalid_run-bad/" "$FIXTURE_CANDIDATE" && rm -f "$FIXTURE_CANDIDATE.bak"
+  fixture_run_apply "$invalid_ws" >/dev/null || return 1
+  invalid_receipts_before=$(grep -c 'theme=- class=rule decision=skipped reason=hygiene' "$invalid_ws/loop/promotions/apply.log")
+  fixture_run_apply "$invalid_ws" >/dev/null || return 1
+  invalid_receipts_after=$(grep -c 'theme=- class=rule decision=skipped reason=hygiene' "$invalid_ws/loop/promotions/apply.log")
+  note_second_run "$invalid_ws" 0
+  [[ "$invalid_receipts_before" -eq 1 && "$invalid_receipts_after" -eq 2 ]]
+}
+
+case_index_gate_probe_body() {
+  local ws runid
+  ws=$(fixture_new_workspace index-gate-probe); runid=20260827T010041Z-141
+  fixture_candidate_begin "$ws" "$runid"
+  fixture_candidate_block "$runid" 1 rule 'A non-reason case cannot dodge the rerun invariant.' '2026-W33,2026-W34'
+  fixture_run_apply "$ws" >/dev/null
+}
+
+case_universal_second_run_gate() {
+  (
+    FILTER=
+    SECOND_RUN_WORKSPACES_FILE=$APPLY_FIXTURE_TMP/index-gate-probe-workspaces
+    SECOND_RUN_METADATA_FILE=$APPLY_FIXTURE_TMP/index-gate-probe-metadata
+    probe_pass_count=0
+    probe_fail_count=0
+    pass() { probe_pass_count=$((probe_pass_count + 1)); }
+    fail_case() { probe_fail_count=$((probe_fail_count + 1)); printf 'FAIL %s: %s\n' "$1" "$2"; }
+    clear_second_run
+    run_case '[index-gate-probe]' case_index_gate_probe_body >"$APPLY_FIXTURE_TMP/index-gate-probe.out" 2>&1
+    [[ "$probe_pass_count" -eq 0 && "$probe_fail_count" -eq 1 ]] \
+      && assert_file_contains "$APPLY_FIXTURE_TMP/index-gate-probe.out" 'missing or failing generic second-run metadata'
+  )
 }
 
 case_no_intermediate_overcap() {
@@ -655,6 +786,7 @@ case_no_intermediate_overcap() {
     [[ "$count" -gt 120 ]] && observed=1
   done
   wait "$pid"; rc=$?
+  note_second_run "$ws" 0
   [[ "$rc" -eq 0 && "$observed" -eq 0 && "$(fixture_section_count "$ws" '## Verified facts')" -eq 120 ]]
 }
 
@@ -675,9 +807,15 @@ script = Path(sys.argv[1]).read_text(encoding="utf-8")
 table = re.search(r"index_decision_table=\$\(cat <<'EOF'\n(.*?)\nEOF\n\)", script, re.S)
 assert table, "missing single index decision table"
 tokens = [line.split()[0] for line in table.group(1).splitlines() if line.strip()]
+reasons = re.search(r"reason_token_list=\$\(cat <<'EOF'\n(.*?)\nEOF\n\)", script, re.S)
+assert reasons, "missing summary reason token table"
+reason_tokens = [line for line in reasons.group(1).splitlines() if line.strip()]
 assert "supersedes-not-owned" in tokens
 assert "awaiting-approval" in tokens
+assert "rollback-refused" in reason_tokens
+assert "rollback-refused" not in tokens
 assert len(tokens) == len(set(tokens))
+assert len(reason_tokens) == len(set(reason_tokens))
 assert 'INDEX_DECISION_TABLE="$index_decision_table" python3 -B - "$index_work"' in script
 assert "refusing invalid persisted decision" in script
 assert "refusing promoted-to-pending downgrade" in script
@@ -712,7 +850,8 @@ case_replay_corpus() {
   printf '%s\n' "$base" | grep -Eq '^candidates-[0-9]{8}T[0-9]{6}Z-[0-9]+\.md$' || return 1
   ws=$(fixture_new_workspace corpus-replay)
   cp "$corpus" "$ws/loop/promotions/$base"
-  fixture_run_apply "$ws" >/dev/null
+  fixture_run_apply "$ws" >/dev/null || return 1
+  note_second_run "$ws" 0
 }
 
 run_case '[reason:awaiting-approval] bare run leaves STATE byte-identical' case_default_awaiting
@@ -753,6 +892,9 @@ run_case '[reason:skipped-paused] paused workspace exits zero without mutation' 
 run_case '[no-intermediate-overcap] live STATE never exposes an over-cap section' case_no_intermediate_overcap
 run_case '[guarded-atomic-path] STATE publish has one locked atomic write and no fold call' case_static_state_guard
 run_case '[rollback-abort-summaries] rollback refusals leave explicit run-summary reasons' case_rollback_abort_summaries
+run_case '[index-downgrade-refusal] promoted rows refuse pending rewrites' case_index_downgrade_refusal
+run_case '[malformed-receipt-noise] valid ids transition once while invalid ids keep nagging' case_malformed_receipt_noise_bound
+run_case '[universal-second-run-gate] non-reason index writers cannot dodge rerun validation' case_universal_second_run_gate
 run_case '[decision-vocabulary] single declared table feeds validation and rejects unsafe writes' case_static_decision_vocabulary
 run_case '[rejects-two-layer] bash and python candidate gates both exclude .rejects.md' case_static_rejects_two_layer
 run_case '[replay-real-corpus] env-gated private corpus replay' case_replay_corpus

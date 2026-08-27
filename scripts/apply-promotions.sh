@@ -84,6 +84,7 @@ EOF
 reason_token_list=$(cat <<'EOF'
 hygiene
 parse
+rollback-refused
 input-untrusted
 already-applied
 duplicate-content
@@ -279,12 +280,14 @@ if [[ "$pause_state" != enabled ]]; then
   paused_summary="decision=run-summary applyid=$apply_id promoted=0 rolled-back=0 skipped=1 pending=0"
   while IFS= read -r token || [[ -n "$token" ]]; do
     [[ -n "$token" ]] || continue
-    paused_summary="$paused_summary skipped-$token=0"
+    if [[ "$token" == skipped-paused ]]; then
+      paused_summary="$paused_summary skipped-$token=1"
+    else
+      paused_summary="$paused_summary skipped-$token=0"
+    fi
   done <<EOF
 $reason_token_list
 EOF
-  paused_summary=${paused_summary% skipped-skipped-paused=0}
-  paused_summary="$paused_summary skipped-skipped-paused=1"
   paused_summary="$paused_summary reason=skipped-paused"
   if take_promotions_lock; then append_direct "$paused_summary"; release_promotions_lock
   else append_direct "$paused_summary"
@@ -848,6 +851,8 @@ state_changed=0
 
 abort_under_state_lock() {
   local reason=$1
+  skipped_count=$((skipped_count + 1))
+  printf '%s\t%s\t%s\t%s\n' - - skipped "$reason" >>"$results"
   release_state_lock
   append_summary_line "$(summary_with_reason "$reason")" 1
   exit 1
@@ -932,7 +937,7 @@ rollback_operation() {
 }
 
 if [[ -n "$rollback_id" ]]; then
-  if ! rollback_operation; then abort_under_state_lock parse; fi
+  if ! rollback_operation; then abort_under_state_lock rollback-refused; fi
 else
   build_graph_files || { release_state_lock; exit 1; }
   section_verified_promotions=0
@@ -945,12 +950,16 @@ else
     [[ "$status" == ok ]] && continue
     id=$(sed -n '1p' "$block/id")
     class=$(sed -n '1p' "$block/class")
-    if [[ "$id" =~ ^theme-[0-9]{8}T[0-9]{6}Z-[0-9]+-[0-9]{3}$ ]]; then printf '%s\n' "$id" >>"$tmp_root/seen-ids"; fi
-    if [[ "$status" == hygiene ]]; then
-      record_result "$id" "$class" skipped hygiene - - - - 1 || { release_state_lock; exit 1; }
-    else
-      record_result "$id" "$class" skipped parse - - - - 1 || { release_state_lock; exit 1; }
+    if [[ "$status" == hygiene ]]; then malformed_reason=hygiene; else malformed_reason=parse; fi
+    if [[ "$id" =~ ^theme-[0-9]{8}T[0-9]{6}Z-[0-9]+-[0-9]{3}$ ]]; then
+      printf '%s\n' "$id" >>"$tmp_root/seen-ids"
+      old_decision=$(index_decision "$id")
+      if [[ -n "$old_decision" ]] && terminal_decision "$old_decision"; then
+        record_result "$id" "$class" skipped "$malformed_reason" - - - - 0 || { release_state_lock; exit 1; }
+        continue
+      fi
     fi
+    record_result "$id" "$class" skipped "$malformed_reason" - - - - 1 || { release_state_lock; exit 1; }
   done
   while IFS= read -r untrusted || [[ -n "$untrusted" ]]; do
     [[ -n "$untrusted" ]] || continue

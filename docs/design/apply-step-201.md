@@ -190,13 +190,16 @@ Revisit (pending): `awaiting-approval`, `section-full`, `volume-guard`,
 promotes silently).
 
 Run-level or receipt-only, never a per-theme index decision: `input-untrusted`
-(per-file), `caps-read-failed`, `lock-busy`, `skipped-paused`, `stub-dirty`
-(rollback-operation outcome), `unknown-approval`, `already-applied`,
+(per-file), `caps-read-failed`, `lock-busy`, `skipped-paused`, `rollback-refused`
+(operational rollback refusal), `stub-dirty` (rollback-operation outcome),
+`unknown-approval`, `already-applied`,
 `already-rolled-back` (the latter three are guard outcomes about an id whose index
 row keeps its original decision — persisting them would rewrite history; v3.2 nit
 from the delta review: listing them as Terminal invited a future edit to persist
 them, which would reintroduce the vocabulary-mismatch CRITICAL). These never produce
-index rows.
+index rows. The index-decision table and the summary/receipt reason-token table are
+distinct; only the former is accepted by the index grammar, so `rollback-refused`
+MUST NOT enter the index-decision table or an index row.
 
 `supersedes-unresolved` is a **receipt annotation only** (`note=supersedes-unresolved`
 on the promoted superseder's receipt line) — no theme ever holds it as a decision
@@ -342,6 +345,9 @@ resolution authority). Lines:
   nightly runs produces one line, not 300; the run-summary carries still-pending
   counts). Stated exceptions (v3.1, each is deliberate operator feedback): a
   persistent `input-untrusted` file re-receipts every run (nagging is intended); the
+  malformed content of an invalid/unparseable theme-id re-receipts every run because
+  it has no stable index key and the operator must remove the garbage (adding another
+  durable seen-set is outside this step and, if needed, belongs to #149); the
   guard-3 index self-heal emits one forced receipt when it re-adds a lost row (an
   index mutation must never be silent); a stale `--approve` of a non-pending id
   re-receipts `unknown-approval` per invocation (the operator passed the flag, the
@@ -350,7 +356,11 @@ resolution authority). Lines:
   appended on every completed run (0-consumed stays operator-visible; a `run-start`
   with no `run-summary` marks a crashed run).
 
-Reason-token set is closed: `hygiene parse input-untrusted already-applied
+For a malformed block with a valid theme-id, an existing terminal index row suppresses
+another per-theme receipt and index upsert. The run-summary still counts the block under
+its original `hygiene` or `parse` token; the existing index is the only seen-set.
+
+Reason-token set is closed: `hygiene parse rollback-refused input-untrusted already-applied
 duplicate-content superseded supersedes-not-owned
 supersedes-ambiguous awaiting-approval unknown-approval k-below-2 section-full
 volume-guard stub-exists stub-replay stub-dirty caps-read-failed lock-busy

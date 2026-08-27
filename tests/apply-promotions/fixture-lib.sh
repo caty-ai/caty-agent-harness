@@ -4,6 +4,7 @@ fixture_new_workspace() {
   local name=$1
   local ws=$APPLY_FIXTURE_TMP/$name
   "$ROOT/scripts/loop-init" --workspace "$ws" >/dev/null
+  printf '%s\n' "$ws" >>"$SECOND_RUN_WORKSPACES_FILE"
   printf '%s\n' "$ws"
 }
 
