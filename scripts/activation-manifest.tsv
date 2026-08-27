@@ -38,5 +38,6 @@ scripts/lib-wrapper-conformance.sh	exempt	none	not-applicable	sourced-library	-	
 scripts/flush-intake.sh	exempt	explicit-function-argument	not-applicable	sourced-intake-core-guarded-by-adapter-entries	-	-
 scripts/loop-init	exempt	--workspace	not-applicable	explicit-initialization-command	-	-
 scripts/raw-week.sh	exempt	--workspace	not-applicable	read-only-inspection	-	-
+scripts/apply-promotions.sh	guarded	--workspace	exit-0-receipt	deterministic-promotion-writeback	caty_pause_workspace_state	mkdir -p "$promotions_dir"
 scripts/raw-review.sh	guarded	--workspace	exit-0-receipt	automated-model-call-and-review-receipt	caty_pause_workspace_state	mkdir -p "$promotions_dir"
 scripts/tr-metrics.sh	exempt	argv.workspace	not-applicable	read-only-inspection	-	-
