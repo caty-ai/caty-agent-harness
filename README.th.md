@@ -44,7 +44,7 @@ Caty Agent Harness แก้ทั้งหมดนี้ด้วยไฟล�
 
 </div>
 <!-- repo-state:begin (generated; do not edit) -->
-<p align="center"><sub>generation: <code>74b9fbc</code> (2026-08-27T10:01:16Z) · verify: <a href="https://api.github.com/repos/caty-ai/caty-agent-harness/commits/main">API HEAD</a> · <a href="./status.json">status.json</a></sub></p>
+<p align="center"><sub>generation: <code>5185597</code> (2026-08-27T18:49:55Z) · verify: <a href="https://api.github.com/repos/caty-ai/caty-agent-harness/commits/main">API HEAD</a> · <a href="./status.json">status.json</a></sub></p>
 <!-- repo-state:end -->
 
 - [เคยเจอแบบนี้ไหม?](#problems)
