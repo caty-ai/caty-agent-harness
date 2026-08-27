@@ -43,6 +43,9 @@ a small system, wrapped around the AI you already use.
 🔧 [Engineering guide](docs/engineering.md) ｜ 📘 [Reference](docs/reference.md)
 
 </div>
+<!-- repo-state:begin (generated; do not edit) -->
+<p align="center"><sub>generation: <code>6dd2fda</code> (2026-08-27T10:00:39Z) · verify: <a href="https://api.github.com/repos/caty-ai/caty-agent-harness/commits/feat/repo-state-caller-193">API HEAD</a> · <a href="./status.json">status.json</a></sub></p>
+<!-- repo-state:end -->
 
 - [Does this sound familiar?](#problems)
 - [What you get](#what-you-get)
