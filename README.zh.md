@@ -43,6 +43,9 @@ Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决�
 🔧 [工程指南（英文）](docs/engineering.md) ｜ 📘 [详细规范（英文）](docs/reference.md)
 
 </div>
+<!-- repo-state:begin (generated; do not edit) -->
+<p align="center"><sub>generation: <code>6dd2fda</code> (2026-08-27T10:00:39Z) · verify: <a href="https://api.github.com/repos/caty-ai/caty-agent-harness/commits/feat/repo-state-caller-193">API HEAD</a> · <a href="./status.json">status.json</a></sub></p>
+<!-- repo-state:end -->
 
 - [这些情况是否似曾相识？](#problems)
 - [它能做什么](#what-you-get)

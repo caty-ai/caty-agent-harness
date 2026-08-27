@@ -43,6 +43,9 @@ Caty Agent Harness แก้ทั้งหมดนี้ด้วยไฟล�
 🔧 [คู่มือวิศวกรรม (ภาษาอังกฤษ)](docs/engineering.md) ｜ 📘 [ข้อมูลอ้างอิง (ภาษาอังกฤษ)](docs/reference.md)
 
 </div>
+<!-- repo-state:begin (generated; do not edit) -->
+<p align="center"><sub>generation: <code>6dd2fda</code> (2026-08-27T10:00:39Z) · verify: <a href="https://api.github.com/repos/caty-ai/caty-agent-harness/commits/feat/repo-state-caller-193">API HEAD</a> · <a href="./status.json">status.json</a></sub></p>
+<!-- repo-state:end -->
 
 - [เคยเจอแบบนี้ไหม?](#problems)
 - [ทำอะไรได้บ้าง](#what-you-get)

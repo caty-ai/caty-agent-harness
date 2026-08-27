@@ -1,4 +1,7 @@
 # AGENTS.md — Caty Agent Harness
+<!-- repo-state:begin (generated; do not edit) -->
+<p align="center"><sub>generation: <code>6dd2fda</code> (2026-08-27T10:00:39Z) · verify: <a href="https://api.github.com/repos/caty-ai/caty-agent-harness/commits/feat/repo-state-caller-193">API HEAD</a> · <a href="./status.json">status.json</a></sub></p>
+<!-- repo-state:end -->
 
 Caty Agent Harness adds a file-based work discipline — a handover notebook, completion checks with evidence, and honest-stop rules — to the workspace an AI agent operates in. It is plain shell and plain files, installed into someone else's workspace.
 
