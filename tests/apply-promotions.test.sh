@@ -721,22 +721,30 @@ case_index_downgrade_refusal() {
 }
 
 case_malformed_receipt_noise_bound() {
-  local ws runid id row_before row_after receipts_before receipts_after summary
+  local ws runid id row_pending row_parse receipts_before receipts_after receipts_terminal summary index_after_second
   local invalid_ws invalid_run invalid_receipts_before invalid_receipts_after
   ws=$(fixture_new_workspace malformed-valid-id); runid=20260827T010039Z-139; id=theme-$runid-001
   fixture_candidate_begin "$ws" "$runid"
   fixture_candidate_block "$runid" 1 rule 'Persistent malformed valid ids transition once.' '2026-W33,2026-W34'
+  fixture_run_apply "$ws" >/dev/null || return 1
+  row_pending=$(grep -F "$id" "$ws/loop/promotions/apply-index.tsv") || return 1
+  receipts_before=$(grep -c "theme=$id class=rule decision=skipped reason=parse" "$ws/loop/promotions/apply.log")
+  [[ "$row_pending" == *$'\trule\tawaiting-approval\t'* ]] || return 1
+  fixture_candidate_begin "$ws" "$runid"
+  fixture_candidate_block "$runid" 1 rule 'Persistent malformed valid ids transition once.' '2026-W33,2026-W34'
   sed -i.bak '/  Synthetic fixture evidence\./d' "$FIXTURE_CANDIDATE" && rm -f "$FIXTURE_CANDIDATE.bak"
   fixture_run_apply "$ws" >/dev/null || return 1
-  row_before=$(grep -F "$id" "$ws/loop/promotions/apply-index.tsv") || return 1
-  receipts_before=$(grep -c "theme=$id class=rule decision=skipped reason=parse" "$ws/loop/promotions/apply.log")
-  fixture_run_apply "$ws" >/dev/null || return 1
-  note_second_run "$ws" 0
-  row_after=$(grep -F "$id" "$ws/loop/promotions/apply-index.tsv") || return 1
+  row_parse=$(grep -F "$id" "$ws/loop/promotions/apply-index.tsv") || return 1
   receipts_after=$(grep -c "theme=$id class=rule decision=skipped reason=parse" "$ws/loop/promotions/apply.log")
   summary=$(grep 'decision=run-summary' "$ws/loop/promotions/apply.log" | tail -1)
-  [[ "$row_before" == "$row_after" && "$receipts_before" -eq 1 && "$receipts_after" -eq 1 \
-    && "$summary" == *'skipped-parse=1'* ]] || return 1
+  cp "$ws/loop/promotions/apply-index.tsv" "$APPLY_FIXTURE_TMP/malformed-valid-id.index" || return 1
+  fixture_run_apply "$ws" >/dev/null || return 1
+  note_second_run "$ws" 0
+  receipts_terminal=$(grep -c "theme=$id class=rule decision=skipped reason=parse" "$ws/loop/promotions/apply.log")
+  index_after_second=$APPLY_FIXTURE_TMP/malformed-valid-id.index
+  [[ "$receipts_before" -eq 0 && "$receipts_after" -eq 1 && "$receipts_terminal" -eq 1 \
+    && "$row_parse" == *$'\trule\tparse\t'* && "$summary" == *'skipped-parse=1'* ]] || return 1
+  cmp -s "$index_after_second" "$ws/loop/promotions/apply-index.tsv" || return 1
 
   invalid_ws=$(fixture_new_workspace malformed-invalid-id); invalid_run=20260827T010040Z-140
   fixture_candidate_begin "$invalid_ws" "$invalid_run"
