@@ -158,6 +158,29 @@ configuration.
   before running the runner. `HERMES_STEP_CMD`, `HERMES_PROBE_CMD`, and
   `TR_PUSH_CMD` are whitespace-split into argv arrays and may use PATH-resolved
   regular executable names.
+- `TR_LEDGER_FOLD_TOTAL_MAX_BYTES` is the per-attempt sentinel fold budget
+  (default 16 MiB). `TR_LEDGER_FOLD_MAX_BYTES` is the bounded fold loop chunk
+  size (default 4 MiB), not a per-pass ceiling. When the total budget is
+  exhausted, that attempt becomes permanently fold-quiescent and its receipt
+  remains `fold_complete:false`.
+
+Each feature-era task artifact has an append-only `ledger.jsonl`. The task
+runner is its sole writer: it adds the `init` record, folds complete lines from
+each attempt's `sentinel-events.jsonl` under driver-owned task/attempt/run/seq
+identity, and projects versioned task-level `task_end` records. Malformed source
+lines are retained with `schema:"raw"` and `parse_error:true`; budget or
+oversize loss is explicit in `fold_done`, `fold_oversize_line`, and the terminal
+`fold_exhausted` record. Ledger failures are fail-open telemetry failures and do
+not roll back a delivered/DLQ transition.
+
+`task-end.json` is the atomic task-level receipt. Its first `ts`, `started_at`,
+`outcome`, and `terminal_reason` are immutable. Reconciliation increments
+`receipt_version` only when the folded-state fingerprint changes, repairs the
+evidence aggregates, recomputes `fold_complete`, and independently ensures one
+valid ledger projection for the current receipt version. `delivered` always
+maps to `completed`; a DLQ maps to `overflowed` only when the final driver
+classification is `window-error`, otherwise to `aborted`. Sentinel
+`window_error` is evidence and never controls that outcome.
 
 ### Claude Code overflow sentinel environment
 
@@ -219,8 +242,9 @@ series. On slope-only fires, `threshold_hit` is omitted because neither level
 threshold crossed.
 
 `sentinel-events.jsonl` is append-only and contains `turn`, `fire`, `alert`, and
-per-run `attempt_end` records. The task-level `task_end` event is deferred to the
-ledger-confluence integration. `attempt.json` is atomically finalized with exactly
+per-run `attempt_end` records. The task runner folds those records into the
+per-task ledger and emits the distinct task-level `task_end` described above.
+`attempt.json` is atomically finalized with exactly
 these fields: `schema_version`, `task_id`, `attempt`, `mode`, `model`,
 `ctx_window`, `ctx_window_source`, `started_at`, nullable `first_byte_at`,
 `cli_exit_code`, `tap_status_final`, `fired`, and `events_path`. Attempt identity

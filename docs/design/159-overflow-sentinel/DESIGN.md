@@ -295,3 +295,10 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
   task-level `task_end` は ledger-confluence follow-up へ延期する。nudge delivery は next-step boundary のため、
   発火 attempt で task が終了した場合は nudge 未配送となる。TTFB v1 は run-start→first assistant byte のみで、
   inter-turn stall detection は passive stream で request boundary を観測できる joint-design follow-up へ延期する
+- v0.5.4（2026-08-27・#187 application note）: `sentinel-events.jsonl` を task-runner sole-writer の
+  per-task `ledger.jsonl` へ bounded・fail-open に fold し、driver の実 terminal state から distinct な
+  task-level `task_end` と atomic `task-end.json` receipt を生成する ledger-confluence を適用。
+  `window-error` は infra として fresh-session retry し、retry を焼き切った最終 driver も `window-error` の場合だけ exhausted DLQ を `overflowed` に写像する。
+  outcome ownership は裁定済み設計として FINAL burned attempt の分類に属し（codex r2 の any-attempt derivation は棄却）、途中に overflow evidence があっても最終 attempt が non-window failure の mixed run は `aborted` とし、overflow evidence は folded `attempt_end` records に保持する。
+  また `maximum context length` / `context window` は error-shape guard 付きのままとする（main の unguarded arm に対する deliberate prose-hardening であり、retry fix 後のコストは outcome label だけで retry budget には影響しない）。
+  per-run `attempt_end` と monitor の schema/state は変更しない。

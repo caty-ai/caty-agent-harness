@@ -74,8 +74,8 @@ check oauth-invalid-grant 1 oauth-invalid-grant.json deterministic-auth
 check invalid-request 1 invalid-request.json deterministic-input
 check rate-limit 1 rate-limit.json transient
 check timeout-408 1 timeout-408.json transient
-check context-4xx 1 context-4xx.json context-overflow
-check context-500 1 context-500.json context-overflow
+check context-4xx-deterministic-input-precedence 1 context-4xx.json deterministic-input
+check context-500-window-error 1 context-500.json window-error
 check degenerate-empty 1 degenerate-empty.txt degenerate
 check unknown-is-transient 1 unknown.json transient
 check short-transient 1 short-transient.txt transient
@@ -125,6 +125,17 @@ unauthorized_prose="$test_tmp/unauthorized-prose.stdout"
 unknown_stdout="$test_tmp/unknown.stdout"
 whitespace_stdout="$test_tmp/whitespace.stdout"
 binary_stdout="$test_tmp/binary.stdout"
+window_stderr="$test_tmp/window.stderr"
+window_stdout="$test_tmp/window.stdout"
+window_prose="$test_tmp/window-prose.stdout"
+maximum_prose="$test_tmp/maximum-prose.stdout"
+window_auth="$test_tmp/window-auth.stderr"
+window_input="$test_tmp/window-input.stderr"
+window_legacy_length="$test_tmp/window-legacy-length.stderr"
+window_legacy_hyphen="$test_tmp/window-legacy-hyphen.stderr"
+window_legacy_overflow="$test_tmp/window-legacy-overflow.stderr"
+window_legacy_tokens="$test_tmp/window-legacy-tokens.stderr"
+window_legacy_prose="$test_tmp/window-legacy-prose.stdout"
 
 : >"$empty_stderr"
 printf '%s\n' 'unexpected upstream failure xyz123' >"$unknown_stderr"
@@ -136,6 +147,21 @@ printf '%s\n' 'the user was unauthorized to enter' >"$unauthorized_prose"
 printf '%s\n' 'unrecognized non-whitespace stdout evidence' >"$unknown_stdout"
 printf ' \t\n' >"$whitespace_stdout"
 printf '\xff' >"$binary_stdout"
+printf '%s\n' 'API Error: Prompt is too long for this model' >"$window_stderr"
+printf '%s\n' 'ERROR: input length and max_tokens exceed context limit' >"$window_stdout"
+printf '%s\n' 'The context window is described in the user guide.' >"$window_prose"
+printf '%s\n' 'The maximum context length is documented as 200k tokens.' >"$maximum_prose"
+printf '%s\n' '401 Unauthorized: prompt is too long' >"$window_auth"
+printf '%s\n' 'invalid input: context_length_exceeded' >"$window_input"
+printf '%s\n' 'context length exceeded' >"$window_legacy_length"
+printf '%s\n' 'context-length-exceeded' >"$window_legacy_hyphen"
+printf '%s\n' 'context overflow' >"$window_legacy_overflow"
+printf '%s\n' 'too many tokens' >"$window_legacy_tokens"
+printf '%s\n' \
+  'context length exceeded' \
+  'context-length-exceeded' \
+  'context overflow' \
+  'too many tokens' >"$window_legacy_prose"
 
 check_files stdout-structural-429 1 "$empty_stderr" "$structural_429" transient
 check_files unknown-stderr-stdout-login 1 "$unknown_stderr" "$FIXTURES/cli-not-logged-in.txt" deterministic-auth
@@ -147,6 +173,17 @@ check_files stdout-whitespace-only 1 "$empty_stderr" "$whitespace_stdout" degene
 check_files missing-stderr-stdout-login 1 "$test_tmp/missing.stderr" "$FIXTURES/cli-not-logged-in.txt" deterministic-auth
 check_files stderr-auth-wins-over-stdout-429 1 "$FIXTURES/auth-401.json" "$structural_429" deterministic-auth
 check_files invalid-utf8-stdout-is-nondegenerate 1 "$empty_stderr" "$binary_stdout" transient
+check_files window-error-stderr-case-insensitive 1 "$window_stderr" "$empty_stderr" window-error
+check_files window-error-stdout-signature 1 "$empty_stderr" "$window_stdout" window-error
+check_files context-window-prose-is-not-window-error 1 "$empty_stderr" "$window_prose" transient
+check_files maximum-context-prose-is-not-window-error 1 "$empty_stderr" "$maximum_prose" transient
+check_files deterministic-auth-precedes-window-error 1 "$window_auth" "$empty_stderr" deterministic-auth
+check_files deterministic-input-precedes-window-error 1 "$window_input" "$empty_stderr" deterministic-input
+check_files legacy-context-length-exceeded-stderr 1 "$window_legacy_length" "$empty_stderr" window-error
+check_files legacy-context-length-hyphen-stderr 1 "$window_legacy_hyphen" "$empty_stderr" window-error
+check_files legacy-context-overflow-stderr 1 "$window_legacy_overflow" "$empty_stderr" window-error
+check_files legacy-too-many-tokens-stderr 1 "$window_legacy_tokens" "$empty_stderr" window-error
+check_files legacy-window-signatures-stay-excluded-from-stdout 1 "$empty_stderr" "$window_legacy_prose" transient
 
 large_size=225280
 login_banner='Not logged in'
