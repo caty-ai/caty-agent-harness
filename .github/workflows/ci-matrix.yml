@@ -440,9 +440,21 @@ jobs:
             fail "executed suite count $n != expected $expected"
           fi
 
-          skip_count=$(awk 'tolower($0) ~ /(^[[:space:]]*skip([[:space:]:-]|$)|#[[:space:]]*skip([[:space:]:-]|$)|^(pass|ok)([[:space:]]|[[:punct:]]).*skip(ped)?[[:space:]]+because)/ {count++} END {print count+0}' "$test_log")
+          # #210: honest env-gated SKIPs must be declared in .github/ci/declared-skips.pin.
+          # Each exact pin line absorbs at most one occurrence; everything undeclared stays red.
+          skip_lines=/tmp/caty-skip-lines-"$CELL_ID".log
+          undeclared_skip_lines=/tmp/caty-undeclared-skips-"$CELL_ID".log
+          declared_skips_pin=.github/ci/declared-skips.pin
+          awk 'tolower($0) ~ /(^[[:space:]]*skip([[:space:]:-]|$)|#[[:space:]]*skip([[:space:]:-]|$)|^(pass|ok)([[:space:]]|[[:punct:]]).*skip(ped)?[[:space:]]+because)/ {print}' "$test_log" > "$skip_lines"
+          if [ -s "$declared_skips_pin" ]; then
+            awk 'NR==FNR {allow[$0]++; next} {if (allow[$0] > 0) {allow[$0]--; next} print}' "$declared_skips_pin" "$skip_lines" > "$undeclared_skip_lines"
+          else
+            cp "$skip_lines" "$undeclared_skip_lines"
+          fi
+          skip_count=$(awk 'END {print NR+0}' "$undeclared_skip_lines")
           if [ "$skip_count" -ne 0 ]; then
-            fail "test output contains $skip_count SKIP or PASS-as-SKIP lines"
+            cat "$undeclared_skip_lines"
+            fail "test output contains $skip_count undeclared SKIP or PASS-as-SKIP lines"
           fi
           pass_count=$(awk '/^(PASS|ok)([[:space:]]|[[:punct:]])/ {count++} END {print count+0}' "$test_log")
           if [ "$pass_count" -lt "$PASS_FLOOR" ]; then
