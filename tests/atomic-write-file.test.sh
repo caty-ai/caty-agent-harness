@@ -95,5 +95,33 @@ else
     "rc=$directory_rc entries=$(ls -A "$directory_destination" 2>/dev/null | tr '\n' ',') parent_temp_removed=$([ ! -e "$directory_tmp" ] && printf yes || printf no) nested_temp_removed=$([ ! -e "$directory_nested_tmp" ] && printf yes || printf no)"
 fi
 
+symlink_dir=$TMP_ROOT/symlink-dir-trap
+mkdir -p "$symlink_dir"
+symlink_source=$symlink_dir/source
+symlink_real=$symlink_dir/realdir
+symlink_destination=$symlink_dir/destination
+symlink_tmp=$symlink_dir/.destination.tmp.$$
+symlink_nested_tmp=$symlink_real/.destination.tmp.$$
+printf 'replacement content\n' >"$symlink_source"
+mkdir -p "$symlink_real"
+printf 'sentinel content\n' >"$symlink_real/sentinel"
+ln -s "$symlink_real" "$symlink_destination"
+if atomic_write_file "$symlink_source" "$symlink_destination"; then
+  symlink_rc=0
+else
+  symlink_rc=$?
+fi
+if [ "$symlink_rc" -ne 0 ] \
+  && [ -L "$symlink_destination" ] \
+  && [ "$(cat "$symlink_real/sentinel" 2>/dev/null)" = "sentinel content" ] \
+  && [ "$(ls -A "$symlink_real")" = "sentinel" ] \
+  && [ ! -e "$symlink_tmp" ] \
+  && [ ! -e "$symlink_nested_tmp" ]; then
+  pass "symlink-to-directory destination is refused with the symlink untouched"
+else
+  fail_case "symlink-to-directory destination is refused with the symlink untouched" \
+    "rc=$symlink_rc still_symlink=$([ -L "$symlink_destination" ] && printf yes || printf no) entries=$(ls -A "$symlink_real" 2>/dev/null | tr '\n' ',') parent_temp_removed=$([ ! -e "$symlink_tmp" ] && printf yes || printf no) nested_temp_removed=$([ ! -e "$symlink_nested_tmp" ] && printf yes || printf no)"
+fi
+
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
 [ "$FAIL_COUNT" -eq 0 ]
