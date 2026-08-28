@@ -409,8 +409,12 @@ atomic_write_file() {
   destination_dir=$(cd "$(dirname "$destination")" && pwd)
   destination_name=${destination##*/}
   tmp_file="$destination_dir/.$destination_name.tmp.$$"
-  cp "$source_file" "$tmp_file"
-  mv -f "$tmp_file" "$destination"
+  cp "$source_file" "$tmp_file" || { rm -f "$tmp_file"; return 1; }
+  # Verify before rename: catches ENOSPC mid-copy and short reads.
+  if ! cmp -s "$source_file" "$tmp_file"; then rm -f "$tmp_file"; return 1; fi
+  # The destination must be a regular file or absent, never a directory.
+  if [ -e "$destination" ] && [ ! -f "$destination" ]; then rm -f "$tmp_file"; return 1; fi
+  mv -f "$tmp_file" "$destination" || { rm -f "$tmp_file"; return 1; }
 }
 
 last_session_parse_snapshot() {
