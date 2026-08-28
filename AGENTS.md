@@ -126,7 +126,7 @@ The maintainers additionally run the lane discipline in the [Family Dev Handbook
 - [ ] Every "done when" condition on the issue passes, with evidence
 - [ ] `make test` and `make lint` are green locally
 - [ ] The required checks listed in section 2 are green
-- [ ] No skipped tests — `ci-matrix.yml` rejects `SKIP` lines outright
+- [ ] No undeclared skipped tests — `ci-matrix.yml` rejects `SKIP` lines unless the exact full line is declared in `.github/ci/declared-skips.pin` (one byte-exact occurrence per declared line)
 - [ ] Nothing left that only *looks* done — `CONTRIBUTING.md` calls this honest completion, and a TODO placeholder or a stub standing in for the stated behavior fails it
 - [ ] Reviewed by someone other than the author — a maintainer norm; GitHub does not enforce it here
 

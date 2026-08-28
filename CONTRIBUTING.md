@@ -32,7 +32,7 @@ make lint
 
 `make test` runs every shell suite under `tests/` and reports all failing suites after the run; `make lint` syntax-checks every tracked shell script and rejects Bash 4.2+ Unicode escapes in ANSI-C quoted strings. All suites must pass before a pull request is reviewed. If your change alters installer, pause, task-runner, or adapter behavior, add or extend a test that pins the new contract.
 
-`ci-matrix` also treats `SKIP` and "PASS-as-SKIP" output as failures unless the exact full line is declared in `.github/ci/declared-skips.pin`. Each declared line absorbs one byte-exact occurrence; extra copies still fail the job.
+`ci-matrix` also treats `SKIP` and "PASS-as-SKIP" output as failures unless the exact full line is declared in `.github/ci/declared-skips.pin`. Each declared line absorbs one byte-exact occurrence; extra copies still fail the job. To declare one, run the suite and copy the emitted SKIP line verbatim into the pin (the failing gate also prints the undeclared line) — declare the line rather than un-registering the case, which would hide the skip instead of recording it.
 
 `WRAPPER_CONFORMANCE_PASS_FLOOR` in `.github/workflows/ci-matrix.yml` is an exact pin: adding a case to `tests/wrapper-conformance.test.sh` requires bumping it and `PASS_FLOOR` in the same pull request.
 
