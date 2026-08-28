@@ -905,6 +905,7 @@ run_case '[malformed-receipt-noise] valid ids transition once while invalid ids 
 run_case '[universal-second-run-gate] non-reason index writers cannot dodge rerun validation' case_universal_second_run_gate
 run_case '[decision-vocabulary] single declared table feeds validation and rejects unsafe writes' case_static_decision_vocabulary
 run_case '[rejects-two-layer] bash and python candidate gates both exclude .rejects.md' case_static_rejects_two_layer
+# This exact SKIP line is declared in .github/ci/declared-skips.pin; renaming or removing this case must update that pin in the same change (#210).
 run_case '[replay-real-corpus] env-gated private corpus replay' case_replay_corpus
 
 printf '\nApply Promotions Summary: %s PASS, %s FAIL, %s SKIP\n' "$PASS_COUNT" "$FAIL_COUNT" "$SKIP_COUNT"
