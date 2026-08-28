@@ -440,9 +440,59 @@ jobs:
             fail "executed suite count $n != expected $expected"
           fi
 
-          skip_count=$(awk 'tolower($0) ~ /(^[[:space:]]*skip([[:space:]:-]|$)|#[[:space:]]*skip([[:space:]:-]|$)|^(pass|ok)([[:space:]]|[[:punct:]]).*skip(ped)?[[:space:]]+because)/ {count++} END {print count+0}' "$test_log")
+          # #210: honest env-gated SKIPs must be declared in .github/ci/declared-skips.pin.
+          # Each exact pin line absorbs at most one occurrence; undeclared or unused entries stay red.
+          skip_lines=/tmp/caty-skip-lines-"$CELL_ID".log
+          undeclared_skip_lines=/tmp/caty-undeclared-skips-"$CELL_ID".log
+          unused_declared_skips=/tmp/caty-unused-declared-skips-"$CELL_ID".log
+          declared_skips_pin=.github/ci/declared-skips.pin
+          if [ -e "$declared_skips_pin" ] && [ ! -f "$declared_skips_pin" ]; then
+            fail "declared-skips pin exists but is not a regular file - failing closed"
+          fi
+          awk 'tolower($0) ~ /(^[[:space:]]*skip([[:space:]:-]|$)|#[[:space:]]*skip([[:space:]:-]|$)|^(pass|ok)([[:space:]]|[[:punct:]]).*skip(ped)?[[:space:]]+because)/ {print}' "$test_log" > "$skip_lines"
+          if [ -f "$declared_skips_pin" ] && [ -s "$declared_skips_pin" ]; then
+            : > "$undeclared_skip_lines"
+            : > "$unused_declared_skips"
+            awk -v undeclared_file="$undeclared_skip_lines" -v unused_file="$unused_declared_skips" '
+              NR == FNR {
+                pin[++pin_count] = $0
+                remaining[pin_count] = 1
+                next
+              }
+              {
+                matched = 0
+                for (i = 1; i <= pin_count; i++) {
+                  if (remaining[i] && pin[i] == $0) {
+                    remaining[i] = 0
+                    matched = 1
+                    break
+                  }
+                }
+                if (!matched) {
+                  print > undeclared_file
+                }
+              }
+              END {
+                for (i = 1; i <= pin_count; i++) {
+                  if (remaining[i]) {
+                    print "unused declared skip: " pin[i] > unused_file
+                  }
+                }
+              }
+            ' "$declared_skips_pin" "$skip_lines"
+          else
+            cp "$skip_lines" "$undeclared_skip_lines"
+            : > "$unused_declared_skips"
+          fi
+          skip_count=$(awk 'END {print NR+0}' "$undeclared_skip_lines")
           if [ "$skip_count" -ne 0 ]; then
-            fail "test output contains $skip_count SKIP or PASS-as-SKIP lines"
+            cat "$undeclared_skip_lines"
+            fail "test output contains $skip_count undeclared SKIP or PASS-as-SKIP lines"
+          fi
+          unused_skip_count=$(awk 'END {print NR+0}' "$unused_declared_skips")
+          if [ "$unused_skip_count" -ne 0 ]; then
+            cat "$unused_declared_skips"
+            fail "declared-skips pin contains $unused_skip_count unused declaration(s) - pin no longer reflects reality"
           fi
           pass_count=$(awk '/^(PASS|ok)([[:space:]]|[[:punct:]])/ {count++} END {print count+0}' "$test_log")
           if [ "$pass_count" -lt "$PASS_FLOOR" ]; then
