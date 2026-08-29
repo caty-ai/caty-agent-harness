@@ -1,8 +1,8 @@
 # DESIGN: #159 overflow sentinel — 文脈圧力の実測で task-runner を発火する
 
-status: **v0.6.2**（2026-08-29・Alpha・外部レビュー採用2件〔@pm25coder〕の条文化 + D4 閾値注入点の
-設計凍結（数値は P2 窓プローブ待ちで保留）・L1-9 異種5席 r1→r2 delta 全反映・Codex マイクロ確認待ち・
-サイズ H。直前の凍結版= v0.5.4〔§10。v0.5.3 表記のまま header 未更新だった誤記を本版で訂正〕）
+status: **v0.6.3**（2026-08-29・Alpha・外部レビュー採用2件〔@pm25coder〕の条文化 + D4 閾値注入点の
+設計凍結（数値は P2 窓プローブ待ちで保留）・L1-9 異種5席 r1→r2→r3 マイクロ確認 反映・サイズ H。
+直前の凍結版= v0.5.4〔§10。v0.5.3 表記のまま header 未更新だった誤記を本版で訂正〕）
 inputs: PILOT.md（訂正節含む）/ REPORT-runtime-context-survey.md / REPORT-pattern4-rootcause.md /
 REPORT-hermes-provider-layer.md / REPORT-hermes-provider-deep-research.md / REPORT-qwen38-artifacts.md /
 #159 clarify 決裁5点 / L1-9 r1〜r3 裁定（reviews/ADJUDICATION-r1〜r3-FINAL.md）/
@@ -344,8 +344,10 @@ tap_drift: {ts, task_id, turn_idx, drift_kind: bias|schema-change,
 regime_change: {ts, task_id, turn_idx, from_model, to_model, from_runtime, to_runtime,
            resolved: {ctx_window, T_abs, w, ttfb_floor},
            sources: {ctx_window_source, threshold_sources},
-           drift_reference: independent|derived|none（新 regime の検査能力・r2 Codex#6/GLM N3 —
-           capability が regime 間で変わっても履歴が残る唯一の記録）, schema_version}
+           drift_reference: {from: independent|derived|none, to: independent|derived|none}
+           （旧/新 regime 双方の検査能力・r2 Codex#6/GLM N3・r3 Codex: to だけでは最初の regime の
+           記録が消える — from/to ペアで全 regime が復元可能になる: 初回 regime= 最初の
+           regime_change.from（変更なしタスクは task_end 値）・以降= 各 .to）, schema_version}
            （§4 手順2。発火の無い regime でも閾値解決の履歴が復元できる唯一の記録 —
            マルチ regime タスクの較正材料）
 task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|aborted,
@@ -505,3 +507,7 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
   glob `*` のみ（Codex#8）⑥検査主体= core・ledger 値上で評価（GLM N2）⑦C-1 境界と run-level
   ctx_window 上書きの明文化（Grok F10/F11 NB）⑧§9-1 に fixture 4種追加（間欠参照/capability 変化/
   ターン1/identity 欠落）。裁定= reviews/ADJUDICATION-r1-v06.md 追記
+- v0.6.3（2026-08-29・Alpha・**r3 Codex マイクロ確認の残1点**）: regime_change.drift_reference を
+  **{from, to} ペア**へ（to 単独では最初の regime の capability 記録が消え「全 regime 復元可能」が
+  複数 regime タスクで偽になる — r3 Codex 指摘の逐語対応）。r3= 3点中 2 RESOLVED + 本修正で
+  全点処置 → 再マイクロ確認（r4）で cumulative GO を確認して凍結
