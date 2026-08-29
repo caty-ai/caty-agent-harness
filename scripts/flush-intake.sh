@@ -233,19 +233,6 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 source "$repo_root/scripts/lib-state-fold.sh"
 adapter_identity=${adapter_identity:-"${CATY_INTAKE_ADAPTER:?}-flush-intake"}
 
-state_file="$workspace/STATE.md"
-pending_dir="$workspace/loop/pending"
-archive_dir="$workspace/loop/archive"
-artifacts_dir="$workspace/loop/artifacts"
-deadman_dir="$workspace/loop/.deadman"
-receipt_file="$pending_dir/intake-runs.log"
-for required_path in "$state_file" "$pending_dir" "$archive_dir" "$artifacts_dir"; do
-  [[ -e "$required_path" ]] || {
-    usage
-    exit 2
-  }
-done
-
 max_fold=${INTAKE_MAX_FOLD:-$((STATE_FOLD_LESSONS_CAP_DEFAULT / 2))}
 max_bullet_bytes=${INTAKE_MAX_BULLET_BYTES:-512}
 lock_attempts=${INTAKE_LOCK_ATTEMPTS:-30}
@@ -262,6 +249,25 @@ if ((max_bullet_bytes > 1048576)); then
   usage
   exit 2
 fi
+# An intake soft limit above the Lessons hard cap never constrains a run before FIFO eviction.
+if (( max_fold > STATE_FOLD_LESSONS_CAP_DEFAULT )); then
+  printf 'flush-intake.sh: ordering invariant failed: INTAKE_MAX_FOLD(value=%s) <= STATE_FOLD_LESSONS_CAP_DEFAULT(value=%s)\n' \
+    "$max_fold" "$STATE_FOLD_LESSONS_CAP_DEFAULT" >&2
+  exit 2
+fi
+
+state_file="$workspace/STATE.md"
+pending_dir="$workspace/loop/pending"
+archive_dir="$workspace/loop/archive"
+artifacts_dir="$workspace/loop/artifacts"
+deadman_dir="$workspace/loop/.deadman"
+receipt_file="$pending_dir/intake-runs.log"
+for required_path in "$state_file" "$pending_dir" "$archive_dir" "$artifacts_dir"; do
+  [[ -e "$required_path" ]] || {
+    usage
+    exit 2
+  }
+done
 
 files_scanned=0
 blocks=0

@@ -347,7 +347,7 @@ case_startup_ordering_validation() {
   code=$?
   set -e
   if [[ "$code" -ne 2 ]] \
-    || ! grep -Fq 'ordering invariant failed: TR_GRACE_S(value=30) < TR_STEP_TIMEOUT_S(value=30)' <<<"$output" \
+    || ! grep -Fq 'task-runner.sh: ordering invariant failed: TR_GRACE_S(value=30) < TR_STEP_TIMEOUT_S(value=30)' <<<"$output" \
     || [[ -e "$ws/loop/tasks/.tick.lock" ]] \
     || [[ -d "$ws/loop/artifacts" ]]; then
     fail "$name-TR_GRACE_S-TR_STEP_TIMEOUT_S" "rc=$code output=$output"
@@ -358,7 +358,7 @@ case_startup_ordering_validation() {
   mutated_root=$(mktemp -d "${TMPDIR:-/tmp}/tr-mutated-root.XXXXXX")
   mkdir -p "$mutated_root/scripts"
   mutated_runner="$mutated_root/scripts/task-runner.sh"
-  sed 's/^TR_D21_NO_PROGRESS_THRESHOLD=2$/TR_D21_NO_PROGRESS_THRESHOLD=0/' \
+  sed 's/^TR_PERSISTENT_FAILURE_THRESHOLD=2$/TR_PERSISTENT_FAILURE_THRESHOLD=0/' \
     "$RUNNER" >"$mutated_runner"
   chmod +x "$mutated_runner"
   set +e
@@ -367,10 +367,10 @@ case_startup_ordering_validation() {
   set -e
   rm -rf "$mutated_root"
   if [[ "$code" -ne 2 ]] \
-    || ! grep -Fq 'TR_D21_NO_PROGRESS_THRESHOLD must be greater than zero: value=0' <<<"$output" \
+    || ! grep -Fq 'task-runner.sh: TR_PERSISTENT_FAILURE_THRESHOLD must be greater than zero: value=0' <<<"$output" \
     || [[ -e "$ws/loop/tasks/.tick.lock" ]] \
     || [[ -d "$ws/loop/artifacts" ]]; then
-    fail "$name-TR_D21_NO_PROGRESS_THRESHOLD" "rc=$code output=$output"
+    fail "$name-TR_PERSISTENT_FAILURE_THRESHOLD" "rc=$code output=$output"
     return
   fi
 

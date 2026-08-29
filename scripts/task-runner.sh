@@ -22,9 +22,9 @@ TR_LEDGER_FOLD_TOTAL_MAX_BYTES=${TR_LEDGER_FOLD_TOTAL_MAX_BYTES-16777216}
 TR_LEDGER_FOLD_MAX_BYTES=${TR_LEDGER_FOLD_MAX_BYTES-4194304}
 # Replay payload cap: values are clamped to a 64-byte floor and 1048576-byte ceiling.
 TR_GATE_REPLAY_MAX_BYTES=${TR_GATE_REPLAY_MAX_BYTES-4096}
-TR_D21_NO_PROGRESS_THRESHOLD=2
+TR_PERSISTENT_FAILURE_THRESHOLD=2
 
-for integer_var in TR_STEP_TIMEOUT_S TR_GRACE_S TR_DONECHECK_TIMEOUT_S TR_GATE_REPLAY_MAX_BYTES TR_LEDGER_FOLD_TOTAL_MAX_BYTES TR_LEDGER_FOLD_MAX_BYTES TR_D21_NO_PROGRESS_THRESHOLD; do
+for integer_var in TR_STEP_TIMEOUT_S TR_GRACE_S TR_DONECHECK_TIMEOUT_S TR_GATE_REPLAY_MAX_BYTES TR_LEDGER_FOLD_TOTAL_MAX_BYTES TR_LEDGER_FOLD_MAX_BYTES TR_PERSISTENT_FAILURE_THRESHOLD; do
   integer_value=${!integer_var}
   case "$integer_value" in
     ''|*[!0-9]*|0[0-9]*)
@@ -33,10 +33,10 @@ for integer_var in TR_STEP_TIMEOUT_S TR_GRACE_S TR_DONECHECK_TIMEOUT_S TR_GATE_R
       ;;
   esac
 done
-# A zero D21 threshold makes the first noncomplete attempt silently terminal.
-if (( TR_D21_NO_PROGRESS_THRESHOLD == 0 )); then
-  printf 'TR_D21_NO_PROGRESS_THRESHOLD must be greater than zero: value=%s\n' \
-    "$TR_D21_NO_PROGRESS_THRESHOLD" >&2
+# A zero persistent-failure threshold makes the first noncomplete attempt silently terminal.
+if (( TR_PERSISTENT_FAILURE_THRESHOLD == 0 )); then
+  printf 'task-runner.sh: TR_PERSISTENT_FAILURE_THRESHOLD must be greater than zero: value=%s\n' \
+    "$TR_PERSISTENT_FAILURE_THRESHOLD" >&2
   exit 2
 fi
 if (( TR_LEDGER_FOLD_MAX_BYTES == 0 )); then
@@ -45,7 +45,7 @@ if (( TR_LEDGER_FOLD_MAX_BYTES == 0 )); then
 fi
 # A grace window at or above the step timeout silently lets recovery outlive the operation it cleans up.
 if (( TR_GRACE_S >= TR_STEP_TIMEOUT_S )); then
-  printf 'ordering invariant failed: TR_GRACE_S(value=%s) < TR_STEP_TIMEOUT_S(value=%s)\n' \
+  printf 'task-runner.sh: ordering invariant failed: TR_GRACE_S(value=%s) < TR_STEP_TIMEOUT_S(value=%s)\n' \
     "$TR_GRACE_S" "$TR_STEP_TIMEOUT_S" >&2
   exit 2
 fi
@@ -2489,7 +2489,7 @@ finalize_attempt() {
       consec_noncomplete=1
     fi
     last_error_class=$error_class
-    if (( consec_noncomplete >= TR_D21_NO_PROGRESS_THRESHOLD )) && [[ -z "$pending_terminal" ]]; then
+    if (( consec_noncomplete >= TR_PERSISTENT_FAILURE_THRESHOLD )) && [[ -z "$pending_terminal" ]]; then
       pending_terminal=persistent-failure
     fi
   fi
@@ -2647,7 +2647,7 @@ recover_verifying() {
       fi
       if [[ -z "$recovery_reason" ]] && (( $(deviation_count "$artifact_dir/attempts") >= 3 )); then
         recovery_reason=plan-mismatch
-      elif [[ -z "$recovery_reason" ]] && (( consec_noncomplete >= TR_D21_NO_PROGRESS_THRESHOLD )); then
+      elif [[ -z "$recovery_reason" ]] && (( consec_noncomplete >= TR_PERSISTENT_FAILURE_THRESHOLD )); then
         recovery_reason=persistent-failure
       elif [[ -z "$recovery_reason" ]] && (( attempts_used >= ${attempts_budget:-0} )); then
         recovery_reason=attempts-budget
