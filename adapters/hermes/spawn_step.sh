@@ -60,6 +60,31 @@ source "$repo_root/scripts/lib-command-argv.sh"
 source "$repo_root/scripts/lib-pause.sh"
 prompt_file="$attempt_dir/prompt.md"
 
+HERMES_HTTP_TIMEOUT_S=$(resolve_timeout_env HERMES_HTTP_TIMEOUT_S 540)
+export HERMES_HTTP_TIMEOUT_S
+HERMES_STEP_TIMEOUT_S=$(resolve_timeout_env HERMES_STEP_TIMEOUT_S 540)
+HERMES_STEP_GRACE_S=$(resolve_timeout_env HERMES_STEP_GRACE_S 10 1)
+TR_STEP_TIMEOUT_S=$(resolve_timeout_env TR_STEP_TIMEOUT_S 600 1)
+
+# An HTTP timeout above the step timeout silently lets the wrapper kill hide the client timeout.
+if (( HERMES_HTTP_TIMEOUT_S > HERMES_STEP_TIMEOUT_S )); then
+  printf 'spawn_step.sh: ordering invariant failed: HERMES_HTTP_TIMEOUT_S(value=%s) <= HERMES_STEP_TIMEOUT_S(value=%s)\n' \
+    "$HERMES_HTTP_TIMEOUT_S" "$HERMES_STEP_TIMEOUT_S" >&2
+  exit 2
+fi
+# A cleanup grace at or above its step timeout silently makes cleanup outlive the operation it cleans up.
+if (( HERMES_STEP_GRACE_S >= HERMES_STEP_TIMEOUT_S )); then
+  printf 'spawn_step.sh: ordering invariant failed: HERMES_STEP_GRACE_S(value=%s) < HERMES_STEP_TIMEOUT_S(value=%s)\n' \
+    "$HERMES_STEP_GRACE_S" "$HERMES_STEP_TIMEOUT_S" >&2
+  exit 2
+fi
+# An adapter timeout plus grace at or above the driver timeout silently lets the driver preempt result quarantine.
+if (( HERMES_STEP_TIMEOUT_S + HERMES_STEP_GRACE_S >= TR_STEP_TIMEOUT_S )); then
+  printf 'spawn_step.sh: ordering invariant failed: HERMES_STEP_TIMEOUT_S(value=%s) + HERMES_STEP_GRACE_S(value=%s) < TR_STEP_TIMEOUT_S(value=%s)\n' \
+    "$HERMES_STEP_TIMEOUT_S" "$HERMES_STEP_GRACE_S" "$TR_STEP_TIMEOUT_S" >&2
+  exit 2
+fi
+
 # Keep the driver-facing arguments visible to strict mode and future audits.
 : "$task_file" "$workspace" "$step_k"
 
@@ -107,16 +132,6 @@ if [[ -n "${HERMES_PROBE_CMD:-}" ]]; then
   if ! "${probe_argv[@]+"${probe_argv[@]}"}"; then
     infra_fail 'HERMES_PROBE_CMD failed'
   fi
-fi
-
-export HERMES_HTTP_TIMEOUT_S="${HERMES_HTTP_TIMEOUT_S:-540}"
-HERMES_STEP_TIMEOUT_S=$(resolve_timeout_env HERMES_STEP_TIMEOUT_S 540)
-HERMES_STEP_GRACE_S=$(resolve_timeout_env HERMES_STEP_GRACE_S 10 1)
-
-if [[ -n "${TR_STEP_TIMEOUT_S:-}" ]] && [[ "$TR_STEP_TIMEOUT_S" =~ ^(0|[1-9][0-9]*)$ ]] \
-  && (( HERMES_STEP_TIMEOUT_S + HERMES_STEP_GRACE_S >= TR_STEP_TIMEOUT_S )); then
-  printf 'WARNING: HERMES_STEP_TIMEOUT_S(%ss)+grace(%ss) >= TR_STEP_TIMEOUT_S(%ss); driver hard-kill may preempt quarantine\n' \
-    "$HERMES_STEP_TIMEOUT_S" "$HERMES_STEP_GRACE_S" "$TR_STEP_TIMEOUT_S" >&2
 fi
 
 # Weak-model sessions lean on env vars they can echo — export the location

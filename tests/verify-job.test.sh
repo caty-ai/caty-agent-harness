@@ -333,6 +333,30 @@ else
   fail_case "valid verifier command runs and logs verdict" "rc=$rc output=$output"
 fi
 
+bundle=$(make_bundle ordering-guard)
+output=$(VERIFY_TIMEOUT_S=10 VERIFY_GRACE_S=10 bash "$SCRIPT" "$bundle" 2>&1)
+rc=$?
+if [ "$rc" -eq 2 ] \
+  && printf '%s\n' "$output" | grep -Fq 'ordering invariant failed: VERIFY_GRACE_S(value=10) < VERIFY_TIMEOUT_S(value=10)' \
+  && [ ! -e "$TMP_ROOT/ws-ordering-guard/loop/artifacts/task-one/verify.json" ]; then
+  pass "verify timeout ordering rejects equal grace at entry"
+else
+  fail_case "verify timeout ordering rejects equal grace at entry" "rc=$rc output=$output"
+fi
+
+bundle=$(make_bundle ordering-happy)
+verifier=$TMP_ROOT/ordering-happy-verifier.sh
+write_verifier "$verifier"
+attest_verifier_wrapper "$verifier" ordering-happy
+output=$(VERIFY_TIMEOUT_S=10 VERIFY_GRACE_S=1 VERIFIER_CMD="$verifier" \
+  VERIFIER_ID=ordering-happy bash "$SCRIPT" "$bundle" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] && printf '%s\n' "$output" | grep -Fq 'VERDICT: pass'; then
+  pass "verify timeout ordering accepts a smaller grace"
+else
+  fail_case "verify timeout ordering accepts a smaller grace" "rc=$rc output=$output"
+fi
+
 bundle=$(make_bundle success-stderr)
 verifier=$TMP_ROOT/warning-verifier.sh
 write_warning_verifier "$verifier"

@@ -626,6 +626,15 @@ source "$repo_root/scripts/lib-classify.sh"
 source "$repo_root/scripts/lib-bounded.sh"
 source "$repo_root/scripts/lib-wrapper-conformance.sh"
 source "$repo_root/scripts/lib-pause.sh"
+VERIFY_TIMEOUT_S=$(resolve_timeout_env VERIFY_TIMEOUT_S 300)
+VERIFY_GRACE_S=$(resolve_timeout_env VERIFY_GRACE_S 10 1)
+
+# A verifier grace at or above its timeout silently makes cleanup outlive the verification window.
+if (( VERIFY_GRACE_S >= VERIFY_TIMEOUT_S )); then
+  printf 'verify-job.sh: ordering invariant failed: VERIFY_GRACE_S(value=%s) < VERIFY_TIMEOUT_S(value=%s)\n' \
+    "$VERIFY_GRACE_S" "$VERIFY_TIMEOUT_S" >&2
+  exit 2
+fi
 bundle_dir=$(caty_pause_canonical_workspace "$1" 2>/dev/null) || {
   usage
   exit 2
@@ -830,8 +839,6 @@ fi
 
 verifier_stderr=$(mktemp "${TMPDIR:-/tmp}/verify-job.stderr.XXXXXX")
 verifier_stdout_file=$(mktemp "${TMPDIR:-/tmp}/verify-job.stdout.XXXXXX")
-VERIFY_TIMEOUT_S=$(resolve_timeout_env VERIFY_TIMEOUT_S 300)
-VERIFY_GRACE_S=$(resolve_timeout_env VERIFY_GRACE_S 10 1)
 
 set +e
 FABLE_CONFORMING_PROVIDER_PATH="$WRAPPER_CONFORMANCE_STAGED_PROVIDER_PATH" \
