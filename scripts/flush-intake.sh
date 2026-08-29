@@ -469,9 +469,38 @@ if [[ -s "$accepted_lessons" || -s "$accepted_failures" ]]; then
   if [[ -s "$evicted_lessons_file" ]]; then
     eviction_archive="loop/archive/intake-evictions-$today.md"
     eviction_archive_path="$workspace/$eviction_archive"
-    printf '<!-- intake eviction adapter=%s ts=%s -->\n' \
-      "$adapter_identity" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >>"$eviction_archive_path"
-    cat "$evicted_lessons_file" >>"$eviction_archive_path"
+    eviction_block="$work_dir/eviction-block.md"
+    if ! {
+      printf '<!-- intake eviction adapter=%s ts=%s -->\n' \
+        "$adapter_identity" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+      cat "$evicted_lessons_file"
+    } >"$eviction_block"; then
+      folded=0
+      receipt_error=eviction-archive
+      write_receipt acquired untouched
+      exit 1
+    fi
+    append_eviction=1
+    last_header=
+    if [[ -f "$eviction_archive_path" ]]; then
+      last_header=$(grep -n '^<!-- intake eviction adapter=' "$eviction_archive_path" \
+        | tail -n 1 | cut -d: -f1) || last_header=
+      if [[ "$last_header" =~ ^[0-9]+$ ]]; then
+        dedup_rc=0
+        tail -n "+$((last_header + 1))" "$eviction_archive_path" \
+          | cmp -s - "$evicted_lessons_file" || dedup_rc=$?
+        if [[ "$dedup_rc" -eq 0 ]]; then
+          append_eviction=0
+        fi
+      fi
+    fi
+    if [[ "$append_eviction" -eq 1 ]] \
+      && ! state_fold_atomic_archive_append "$eviction_block" "$eviction_archive_path"; then
+      folded=0
+      receipt_error=eviction-archive
+      write_receipt acquired untouched
+      exit 1
+    fi
   fi
   if ! atomic_write_file "$state_tmp" "$state_file"; then
     folded=0
