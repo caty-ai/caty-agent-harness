@@ -82,12 +82,38 @@ file_mtime() {
 
 ws=$(new_ws case-01-fold)
 cp "$ROOT/tests/fixtures/flush/basic.md" "$ws/loop/pending/flush-2026-07-01.md"
+case_01_lessons=$TMP_ROOT/case-01-lessons
+case_01_failures=$TMP_ROOT/case-01-failures
+case_01_expected_state=$TMP_ROOT/case-01-STATE.md
+case_01_evictions=$TMP_ROOT/case-01-evictions
+printf '%s\n' \
+  '- 2026-07-01 Keep the fold receipt beside the pending ledgers. (source: flush-intake)' \
+  '- 2026-07-01 Preserve the original flush record in the archive. (source: flush-intake)' \
+  >"$case_01_lessons"
+: >"$case_01_failures"
+bash -c '
+  source "$1"
+  append_state_sections "$2" "$3" "$4" "$5" \
+    "$STATE_FOLD_LESSONS_CAP_DEFAULT" "$STATE_FOLD_FAILURES_CAP_DEFAULT" "$6"
+' _ "$ROOT/scripts/lib-state-fold.sh" "$ws/STATE.md" "$case_01_lessons" \
+  "$case_01_failures" "$case_01_expected_state" "$case_01_evictions"
 run_intake "$ws"
 if grep -Fqx -- '- 2026-07-01 Keep the fold receipt beside the pending ledgers. (source: flush-intake)' "$ws/STATE.md" \
-  && [ "$(receipt_value "$ws" folded)" -eq 2 ]; then
-  pass '[1] ok blocks fold deterministically into Lessons learned'
+  && cmp -s "$case_01_expected_state" "$ws/STATE.md" \
+  && [ "$(receipt_value "$ws" files_scanned)" -eq 1 ] \
+  && [ "$(receipt_value "$ws" blocks)" -eq 1 ] \
+  && [ "$(receipt_value "$ws" candidates)" -eq 2 ] \
+  && [ "$(receipt_value "$ws" folded)" -eq 2 ] \
+  && [ "$(receipt_value "$ws" deduped)" -eq 0 ] \
+  && [ "$(receipt_value "$ws" rejected)" -eq 0 ] \
+  && [ "$(receipt_value "$ws" evicted_by_cap)" -eq 0 ] \
+  && [ "$(receipt_value "$ws" lock)" = acquired ] \
+  && [ "$(receipt_value "$ws" marker)" = touched ] \
+  && [ "$(receipt_value "$ws" error)" = none ]; then
+  pass '[1] ok blocks publish rebuilt STATE bytes and exact receipt fields deterministically'
 else
-  fail_case '[1] ok blocks fold deterministically into Lessons learned' "receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+  fail_case '[1] ok blocks publish rebuilt STATE bytes and exact receipt fields deterministically' \
+    "state_matches=$(cmp -s "$case_01_expected_state" "$ws/STATE.md" && printf yes || printf no) receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
 fi
 
 ws=$(new_ws case-02-skip)
@@ -481,9 +507,44 @@ run_intake "$ws"
 if [ "$crash_rc" -eq 75 ] && [ -z "$ledger_after_crash" ] && [ "$marker_after_crash" -eq 0 ] \
   && [ "$(state_count "$ws" '- 2026-07-13 STATE moves before the ledger. (source: flush-intake)')" -eq 1 ] \
   && [ "$(receipt_value "$ws" folded)" -eq 0 ] && [ "$(receipt_value "$ws" deduped)" -eq 1 ]; then
-  pass '[25] crash after STATE move is stopped by normalized STATE backstop on retry'
+  crash_order_ok=1
 else
-  fail_case '[25] crash after STATE move is stopped by normalized STATE backstop on retry' "rc=$crash_rc ledger=$ledger_after_crash"
+  crash_order_ok=0
+fi
+crash_order_receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log" 2>/dev/null) || true
+
+ws=$(new_ws case-25-ledger-write-failure)
+write_block "$ws/loop/pending/flush-2026-07-23.md" 2026-07-23 \
+  'A refused ledger write stays visible.'
+ledger_directory=$ws/loop/pending/intake-$TODAY.md
+mkdir -p "$ledger_directory"
+printf 'sentinel\n' >"$ledger_directory/sentinel"
+set +e
+run_intake "$ws"
+ledger_write_rc=$?
+set -e
+if [ "$ledger_write_rc" -eq 1 ] \
+  && grep -Fq 'A refused ledger write stays visible.' "$ws/STATE.md" \
+  && [ "$(receipt_value "$ws" folded)" -eq 1 ] \
+  && [ "$(receipt_value "$ws" error)" = ledger-write ] \
+  && [ "$(receipt_value "$ws" marker)" = untouched ] \
+  && [ -f "$ws/loop/pending/flush-2026-07-23.md" ] \
+  && [ "$(cat "$ledger_directory/sentinel" 2>/dev/null)" = sentinel ] \
+  && ! find "$ledger_directory" -mindepth 1 -maxdepth 1 ! -name sentinel -print | grep -q . \
+  && [ ! -e "$ws/loop/.deadman/distill.marker" ] \
+  && [ ! -d "$ws/loop/.distill-state.lock" ] \
+  && ! find "$ws" -name '.STATE.md.tmp.*' -print | grep -q . \
+  && ! find "$ws/loop/pending" -maxdepth 1 -name '.intake-*.tmp.*' -print | grep -q .; then
+  ledger_write_failed_closed=1
+else
+  ledger_write_failed_closed=0
+fi
+ledger_write_receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log" 2>/dev/null) || true
+if [ "$crash_order_ok" -eq 1 ] && [ "$ledger_write_failed_closed" -eq 1 ]; then
+  pass '[25] STATE-before-ledger ordering preserves dedup safety and exposes refused ledger writes'
+else
+  fail_case '[25] STATE-before-ledger ordering preserves dedup safety and exposes refused ledger writes' \
+    "crash_ok=$crash_order_ok crash_rc=$crash_rc crash_ledger=$ledger_after_crash crash_receipt=$crash_order_receipt ledger_ok=$ledger_write_failed_closed ledger_rc=$ledger_write_rc ledger_receipt=$ledger_write_receipt"
 fi
 
 ws=$(new_ws case-26-anchor)
@@ -627,15 +688,59 @@ set +e
 run_intake "$ws"
 annotated_section_rc=$?
 set -e
-if [ "$missing_section_failed_closed" -eq 1 ] \
-  && [ "$annotated_section_rc" -eq 0 ] \
+if [ "$annotated_section_rc" -eq 0 ] \
   && grep -Fqx '## Lessons learned - house annotation' "$ws/STATE.md" \
   && grep -Fq 'Missing sections fail closed.' "$ws/STATE.md" \
   && [ -f "$ws/loop/archive/flush-2026-07-16.md" ] \
   && [ -e "$ws/loop/.deadman/distill.marker" ]; then
-  pass '[31] missing requested STATE section fails atomically and a prefix-matched annotated header folds after repair'
+  annotated_section_repaired=1
 else
-  fail_case '[31] missing requested STATE section fails atomically and a prefix-matched annotated header folds after repair' "failed_closed=$missing_section_failed_closed repair_rc=$annotated_section_rc receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+  annotated_section_repaired=0
+fi
+
+ws=$(new_ws case-31-state-publish-failure)
+cp "$ws/STATE.md" "$TMP_ROOT/state-before-publish-failure"
+write_block "$ws/loop/pending/flush-2026-07-22.md" 2026-07-22 \
+  'A refused STATE publish stays visible.'
+state_publish_shim=$TMP_ROOT/state-publish-shim
+mkdir -p "$state_publish_shim"
+cat >"$state_publish_shim/cp" <<'SH'
+#!/usr/bin/env bash
+case ${1##*/} in
+  .STATE.md.rebuild.*)
+    printf 'partial STATE copy\n' >"$2"
+    exit 1
+    ;;
+esac
+exec "$REAL_CP" "$@"
+SH
+chmod +x "$state_publish_shim/cp"
+real_cp=$(command -v cp)
+set +e
+run_intake "$ws" PATH="$state_publish_shim:$PATH" REAL_CP="$real_cp"
+state_publish_rc=$?
+set -e
+if [ "$state_publish_rc" -eq 1 ] \
+  && cmp -s "$TMP_ROOT/state-before-publish-failure" "$ws/STATE.md" \
+  && [ "$(receipt_value "$ws" folded)" -eq 0 ] \
+  && [ "$(receipt_value "$ws" error)" = state-publish ] \
+  && [ "$(receipt_value "$ws" marker)" = untouched ] \
+  && [ -f "$ws/loop/pending/flush-2026-07-22.md" ] \
+  && [ ! -e "$ws/loop/.deadman/distill.marker" ] \
+  && [ ! -d "$ws/loop/.distill-state.lock" ] \
+  && ! find "$ws" -maxdepth 1 \( -name '.STATE.md.tmp.*' -o -name '.STATE.md.rebuild.*' \) -print | grep -q .; then
+  state_publish_failed_closed=1
+else
+  state_publish_failed_closed=0
+fi
+state_publish_receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log" 2>/dev/null) || true
+if [ "$missing_section_failed_closed" -eq 1 ] \
+  && [ "$annotated_section_repaired" -eq 1 ] \
+  && [ "$state_publish_failed_closed" -eq 1 ]; then
+  pass '[31] missing sections and refused STATE publish fail atomically before repaired headers fold'
+else
+  fail_case '[31] missing sections and refused STATE publish fail atomically before repaired headers fold' \
+    "missing_section_ok=$missing_section_failed_closed repair_ok=$annotated_section_repaired repair_rc=$annotated_section_rc state_publish_ok=$state_publish_failed_closed state_publish_rc=$state_publish_rc state_publish_receipt=$state_publish_receipt"
 fi
 
 set +e

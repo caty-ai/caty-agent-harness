@@ -445,7 +445,7 @@ distiller_cmd=${DISTILLER_CMD:-}
 distiller_id=${DISTILLER_ID:-$distiller_cmd}
 state_file="$workspace/STATE.md"
 state_dir=$(cd "$(dirname "$state_file")" && pwd)
-state_tmp_file="$state_dir/.STATE.md.tmp.$$"
+state_tmp_file="$state_dir/.STATE.md.rebuild.$$"
 marker_file="$workspace/loop/.distill-last-run"
 pending_dir="$workspace/loop/pending"
 staging_dir=${STAGING_DIR:-$workspace/skills/_staging}
@@ -702,7 +702,7 @@ if [[ "$lessons_added" -gt 0 || "$failures_added" -gt 0 ]]; then
   elif [[ "$append_rc" -ne 0 ]]; then
     infra_fail "STATE.md fold failed (append rc=$append_rc)"
   fi
-  mv -f "$state_tmp_file" "$state_file"
+  atomic_write_file "$state_tmp_file" "$state_file" || infra_fail 'STATE.md publish failed'
   evicted_by_cap=$(cat "$work_dir/evicted-count.txt")
 fi
 

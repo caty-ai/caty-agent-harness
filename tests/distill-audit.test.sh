@@ -380,7 +380,7 @@ if [ "$rc" -eq 0 ] \
   && ! grep -Fq -- '- 2026-07-05 old lesson 001 (source: distill-audit)' "$ws/STATE.md" \
   && ! grep -Fq -- '- 2026-07-05 old failure 001 (source: distill-audit)' "$ws/STATE.md" \
   && grep -Fq 'evicted_by_cap=2' "$ws/loop/pending/distill-runs.log" \
-  && [ ! -e "$ws/.STATE.md.tmp.$$" ] \
+  && ! find "$ws" -maxdepth 1 \( -name '.STATE.md.tmp.*' -o -name '.STATE.md.rebuild.*' \) -print | grep -q . \
   && [ ! -d "$ws/loop/.distill-state.lock" ]; then
   pass "state rewrite is capped, eviction reported, atomic temp cleaned, and lock released"
 else
@@ -406,6 +406,73 @@ if [ "$rc" -eq 3 ] \
 else
   fail_case "missing requested STATE section is a loud atomic infrastructure failure" \
     "rc=$rc output=$output pending=$(find "$ws/loop/pending" -maxdepth 1 -type f -print)"
+fi
+
+ws=$(make_ws state-publish-refusal)
+cp "$ws/STATE.md" "$TMP_ROOT/state-before-publish-refusal"
+state_publish_shim=$TMP_ROOT/state-publish-shim
+mkdir -p "$state_publish_shim"
+cat >"$state_publish_shim/cp" <<'SH'
+#!/usr/bin/env bash
+case ${1##*/} in
+  .STATE.md.rebuild.*)
+    printf 'partial STATE copy\n' >"$2"
+    exit 1
+    ;;
+esac
+exec "$REAL_CP" "$@"
+SH
+chmod +x "$state_publish_shim/cp"
+real_cp=$(command -v cp)
+set +e
+output=$(PATH="$state_publish_shim:$PATH" REAL_CP="$real_cp" \
+  DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+set -e
+if [ "$rc" -eq 3 ] \
+  && printf '%s\n' "$output" | grep -Fq 'distill-audit infra error: STATE.md publish failed' \
+  && cmp -s "$TMP_ROOT/state-before-publish-refusal" "$ws/STATE.md" \
+  && [ ! -e "$ws/loop/.distill-last-run" ] \
+  && [ ! -d "$ws/loop/.distill-state.lock" ] \
+  && ! find "$ws" \( -name '.STATE.md.tmp.*' -o -name '.STATE.md.rebuild.*' \
+    -o -name '.distill-*.md.tmp.*' -o -path '*/loop/archive/.*.tmp.*' \) -print | grep -q .; then
+  pass "refused STATE publish exits infra error and cleans lock and temporary files"
+else
+  fail_case "refused STATE publish exits infra error and cleans lock and temporary files" \
+    "rc=$rc output=$output temps=$(find "$ws" -name '.*.tmp.*' -print) lock=$([ -d "$ws/loop/.distill-state.lock" ] && printf held || printf released)"
+fi
+
+ws=$(make_ws reply-publish-refusal)
+reply_publish_shim=$TMP_ROOT/reply-publish-shim
+mkdir -p "$reply_publish_shim"
+cat >"$reply_publish_shim/cmp" <<'SH'
+#!/usr/bin/env bash
+case ${2##*/} in
+  reply.annotated.md)
+    mkdir "$REPLY_DESTINATION"
+    ;;
+esac
+exec "$REAL_CMP" "$@"
+SH
+chmod +x "$reply_publish_shim/cmp"
+real_cmp=$(command -v cmp)
+reply_destination=$ws/loop/pending/distill-$(date -u '+%Y-%m-%d').md
+set +e
+output=$(PATH="$reply_publish_shim:$PATH" REAL_CMP="$real_cmp" \
+  REPLY_DESTINATION="$reply_destination" DISTILLER_CMD="$distiller" \
+  bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+set -e
+if [ "$rc" -ne 0 ] \
+  && [ -d "$reply_destination" ] \
+  && [ ! -e "$ws/loop/.distill-last-run" ] \
+  && [ ! -d "$ws/loop/.distill-state.lock" ] \
+  && ! find "$ws" \( -name '.STATE.md.tmp.*' -o -name '.STATE.md.rebuild.*' \
+    -o -name '.distill-*.md.tmp.*' -o -path '*/loop/archive/.*.tmp.*' \) -print | grep -q .; then
+  pass "reply publish guard refusal releases the lock and cleans all temporary files"
+else
+  fail_case "reply publish guard refusal releases the lock and cleans all temporary files" \
+    "rc=$rc output=$output temps=$(find "$ws" -name '.*.tmp.*' -print) lock=$([ -d "$ws/loop/.distill-state.lock" ] && printf held || printf released)"
 fi
 
 ws=$(make_ws bad-cmd)
