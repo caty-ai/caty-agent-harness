@@ -56,3 +56,18 @@ writer= Alpha（fable-5）のため Opus 席は同系統回避（loom-seats の 
 
 **r1= NO-GO 3 / GO-w/c 2 → blocking 全反映の v0.6.1 を作成し、5席 delta（RESOLVED 表+累積 verdict）
 で確認する。** 骨格（採用2件の方向・log-only・config 表・3 Issue 分割・P2 保留）への異論は 0。
+
+## r2 delta（対象 v0.6.1・同5席・自席 r1 findings の RESOLVED 表+累積 verdict 様式）
+
+| 席 | verdict | 残指摘 |
+|---|---|---|
+| Gemini | **GO** | 全 RESOLVED・新規 0 |
+| Muse | **GO** | F1-F9 全 RESOLVED・新規 0 |
+| GLM | **GO** | 全 RESOLVED・非blocking nit 3（N1 ヒステリシス条文同期 / N2 検査主体 / N3 capability 履歴） |
+| Grok | **GO-with-concerns** | F1-F6 RESOLVED・stay-NO-GO 解消・N1 ヒステリシス / N2 raw_usage 必須化・NB F10/F11 |
+| Codex | **NO-GO**（狭い3点） | ①参照間欠欠落のペア和未定義 ②§6 ヒステリシス条文矛盾 ③capability の regime 間履歴。他7項 RESOLVED・「方向は健全」明言 |
+
+**v0.6.2 で全採用**（blocking/nit を問わず — Codex③=GLM N3、Codex②=GLM N1=Grok N1 の独立収束）:
+R_e ペア和 / §6 regime 単位同期 / regime_change.drift_reference + task_end 最弱値 / raw_usage 必須化 /
+パターン文法 glob `*` のみ / 検査主体= core / C-1 境界・ctx_window 上書きの明文化 / §9-1 fixture 4種追加。
+→ **Codex 席への単一論点マイクロ確認で cumulative GO を確認して凍結**（r3-FINAL の grok B1 と同型手続き）。

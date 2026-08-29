@@ -1,7 +1,7 @@
 # DESIGN: #159 overflow sentinel — 文脈圧力の実測で task-runner を発火する
 
-status: **v0.6.1 DRAFT**（2026-08-29・Alpha・外部レビュー採用2件〔@pm25coder〕の条文化 + D4 閾値注入点の
-設計凍結（数値は P2 窓プローブ待ちで保留）・L1-9 異種5席 r1 の blocking 全反映済み・delta 確認待ち・
+status: **v0.6.2**（2026-08-29・Alpha・外部レビュー採用2件〔@pm25coder〕の条文化 + D4 閾値注入点の
+設計凍結（数値は P2 窓プローブ待ちで保留）・L1-9 異種5席 r1→r2 delta 全反映・Codex マイクロ確認待ち・
 サイズ H。直前の凍結版= v0.5.4〔§10。v0.5.3 表記のまま header 未更新だった誤記を本版で訂正〕）
 inputs: PILOT.md（訂正節含む）/ REPORT-runtime-context-survey.md / REPORT-pattern4-rootcause.md /
 REPORT-hermes-provider-layer.md / REPORT-hermes-provider-deep-research.md / REPORT-qwen38-artifacts.md /
@@ -116,8 +116,10 @@ EV-006 確定の3パターン（第4パターンは配線バグで撤回・訂�
     `model_identity = canonical(model)`（小文字化+trim・config の任意 alias map 適用後）と
     `runtime`（ファミリーそのまま）で行う。**どちらかのフィールドが欠けたターンでは比較しない**
     （リセットも発生させない）。
-  - **`raw_usage?`（v0.6.1 追加・optional）**: 正規化前の生 usage オブジェクト（§3-1 derived 検査と
+  - **`raw_usage?`（v0.6.1 追加）**: 正規化前の生 usage オブジェクト（§3-1 derived 検査と
     スキーマ署名の材料。turn ledger に保存される — §6 turn 系列の常時保存に含める）。
+    **`drift_reference ∈ {independent, derived}` のランタイムでは必須**（無ければ検査が成立しない）・
+    省略可は `none` 申告時のみ（r2 Grok N2）。
   - **意味論を固定**: `input_tokens` は cache_* を含まない正味（排他加算）。OpenAI 系のように
     `prompt_tokens` が cached を内包するランタイムは、アダプタが正規化してから送る（二重計上禁止）。
   - `cache_creation_tokens` を報告できないランタイムは 0 を送り、`tap_status: no-cache-accounting`
@@ -166,8 +168,11 @@ EV-006 確定の3パターン（第4パターンは配線バグで撤回・訂�
 ```
 cadence     : epoch 内で e = N_drift, 2·N_drift, … の各ターンで検査
               （参照欠落ターンも cadence を進める・イベントは出さない）
-reported_cum_e  = Σ injected_t（epoch 内・tap が発行した正規化済み値の累積）
-reference_cum_e = Σ ref_t（同じターン集合。ref_t = independent なら独立参照から取得、
+R_e         = epoch 内ターン ≤ e のうち**参照観測が取得できたターンの集合**
+              （参照欠落ターンは cadence を進めるが、**両辺の和から対で除外**する —
+              片側だけに計上すると欠落自体が偽の累積バイアスになるため・r2 Codex#1）
+reported_cum_e  = Σ injected_t over R_e（tap が発行した正規化済み値の累積）
+reference_cum_e = Σ ref_t over R_e（ref_t = independent なら独立参照から取得、
                   derived なら保存済み生 usage への正規化規則の再適用値 — 両辺は同一の
                   正規化・同一のキャッシュ基準を共有する construction で、基準不一致の
                   系統誤差を構造的に排除する）
@@ -179,6 +184,8 @@ tap_drift   は drift_state への「突入時」に1発（edge/episode-triggere
 schema-change 署名変化は独立のエピソードとして同スキーマで記録
 ```
 
+- **検査の実行主体は core**: 両辺とも ledger 保存値（発行済み turn 系列と `raw_usage`）に対して
+  core が評価する — アダプタ自身に自己採点させない（r2 GLM N2）。
 - v1 の動作は**記録のみ**（発火・sentinel 無効化・ナッジはしない — D3「提案のみ」と整合。
   drift 実測が蓄積してから v2 で degrade 動作を検討する）。C-2（blind-path）とは非干渉 —
   drift は enablement を変えない。
@@ -289,7 +296,12 @@ D4 の未決分= 「データ由来の per-model 閾値の数値」。数値の�
   部分上書き・欠けたキーは次段へ） > 製品既定（T_abs=80k / w=50%・§5 表）。
 - **表のマッチングは決定論（凍結・r1 Codex#8）**: canonical 完全一致 > パターン（最長リテラル
   接頭辞が最specific）・同 specificity の重複は **config ロード時エラー**（実行時に黙って先勝ちしない）。
-  未知キー・範囲外値もロード時に拒否する。
+  未知キー・範囲外値もロード時に拒否する。**パターン文法も凍結**: glob の `*` のみ
+  （`?`・文字クラス・ブレースは不使用 — 実装間で解釈が割れない最小文法・r2 Codex#8）。
+- **C-1 との境界（r2 Grok F10）**: per-model 閾値表は発火の**較正**であり、C-1（配備適格性
+  enablement）を変えない — 表にエントリがあることは default-on の根拠にならず、逆も然り。
+- **config 明示上書きの ctx_window は regime 変更後も最上段として勝つ**（r2 Grok F11 の明文化 —
+  run-level 上書きは操作者の明示指定であり、モデル切替はそれを取り消さない。意図的）。
 - 採用段は**キー別**に fire / task_end の `run_meta` へ
   **`threshold_sources: {T_abs: config|per-model|default, w: config|per-model|default}`** として
   記録する（ctx_window_source と同じ思想 — どの段が勝ったかを後から復元できない値は較正に使えない。
@@ -331,7 +343,9 @@ tap_drift: {ts, task_id, turn_idx, drift_kind: bias|schema-change,
            derived 由来の counts を provider-drift の証拠として扱わないこと。v1 は記録のみ）
 regime_change: {ts, task_id, turn_idx, from_model, to_model, from_runtime, to_runtime,
            resolved: {ctx_window, T_abs, w, ttfb_floor},
-           sources: {ctx_window_source, threshold_sources}, schema_version}
+           sources: {ctx_window_source, threshold_sources},
+           drift_reference: independent|derived|none（新 regime の検査能力・r2 Codex#6/GLM N3 —
+           capability が regime 間で変わっても履歴が残る唯一の記録）, schema_version}
            （§4 手順2。発火の無い regime でも閾値解決の履歴が復元できる唯一の記録 —
            マルチ regime タスクの較正材料）
 task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|aborted,
@@ -341,11 +355,15 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
            regime_change_resets: int（model/runtime どちら由来かは regime_change イベントの from/to で
            復元・r1 Codex#7）, tap_drift_count: int（エピソード数・§3-1）,
            drift_reference_status: independent|derived|none（§3-1 の検査能力申告 — tap_status とは
-           別語彙）, nudge_disposition_final, tap_status, run_meta, elapsed_s, schema_version}
+           別語彙。**複数 regime のタスクでは最弱値**（none < derived < independent）を報告し、
+           regime ごとの実値は regime_change イベントで復元する・r2 Codex#6）,
+           nudge_disposition_final, tap_status, run_meta, elapsed_s, schema_version}
 ```
 
-**ナッジのヒステリシス（Fable r2）**: nudge はタスクごと・軸ごとに1回。再提示は MA が前回発火時から
-さらに `+10% × ctx_window` 上がった時のみ（連打による無視学習とログ肥大の防止）。
+**ナッジのヒステリシス（Fable r2・v0.6.2 で regime 単位に改定）**: nudge は **regime ごと（§4 の
+リセットで再武装）**・軸ごとに1回。再提示は MA が前回発火時からさらに `+10% × ctx_window` 上がった
+時のみ（連打による無視学習とログ肥大の防止）。v0.5.4 の「タスクごと」は §4 の regime リセット導入に
+伴い regime 単位へ意図的に変更（r2 で Codex/GLM/Grok が独立に §4 との矛盾を指摘・§4 が正）。
 
 - **誤発火の定義はコストで行う**: 発火+completed は誤発火ではない（EV-006 の本命ケースは
   「完走するが4〜6x高い」）。判定は task_end の total_tokens と EV-008 の対照腕（別紙）で行う。
@@ -391,13 +409,16 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
   **エピソード意味論**（持続 drift で毎周期カウントしない・re-arm 後の再カウント）・ゼロ参照分母・
   **derived/independent の別が正しくイベントに刻まれる**こと・`drift_reference_status: none` の申告・
   **同一 provenance で等値でも「independent 突合 PASS」を主張しない**こと・キャッシュ包含/排他の
-  基準不一致 fixture（両辺同一正規化の construction が守られているか）・schema-change 署名検出）
+  基準不一致 fixture（両辺同一正規化の construction が守られているか）・schema-change 署名検出・
+  **参照が間欠欠落する fixture**（欠落ターンが両辺から対で除外され偽バイアスを作らない= R_e 検証）・
+  **capability が regime 間で変わる fixture**（task_end= 最弱値・regime_change に per-regime 値））
 - regime リセットの unit テスト（§4。タスク途中の model 切替 fixture で: MA/slope/drift 累積器の
   クリア・保留ナッジ取り下げ・ヒステリシス再武装・ctx_window+T_abs/w+TTFB floor の**全再解決**・
   `regime_change` イベント発行・`regime_change_resets` 集計。**alias/バージョン揺れ fixture で
   リセットが起きない**こと・**model 変更と compaction 同ターン fixture でリセットが1回**であること・
   reset-before-fire= 切替ターンの述語評価が新 epoch 状態で行われること・**per-model 表の2エントリ間を
-  タスク途中で切り替える fixture**）
+  タスク途中で切り替える fixture**・**ターン1がリセットとして数えられない fixture**（比較対象なし=
+  no-op）・**identity フィールド欠落 fixture**（欠落側では比較もリセットも発生しない））
 - 閾値解決順序のテスト（§5-1。config > per-model 表 > 既定の3段・部分上書きの**キー別**
   `threshold_sources` 記録・同 specificity 重複と未知キーのロード時拒否）
 - イベント族の分離アサーション: **tap_drift のみ有る（fire 無し）タスクの task_end が fires=0 を
@@ -476,3 +497,11 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
   literal へ threshold_sources 明記・task_end を regime_change_resets/drift_reference_status に整理
   ⑥§9-1 敵対 fixture 群+fires=0 非汚染アサーション+ledger fold 明示追加。
   裁定= reviews/ADJUDICATION-r1-v06.md・席 out 原本= 私設 experiments/ev006/reviews-159-v06/（保全済み）
+- v0.6.2（2026-08-29・Alpha・**r2 delta の残指摘 全反映**）: r2= Gemini GO / Muse GO / GLM GO /
+  Grok GO-w/c / Codex NO-GO（狭い3点）。採用: ①§3-1 突合和を **R_e（参照取得ターン集合）上のペア和**に
+  固定（間欠欠落が偽バイアスを作る経路を封鎖・Codex#1）②§6 ヒステリシスを regime 単位に条文同期
+  （Codex/GLM/Grok 独立指摘・§4 が正）③regime_change に drift_reference・task_end は複数 regime で
+  最弱値（Codex#6/GLM N3）④raw_usage を derived/independent で必須化（Grok N2）⑤パターン文法凍結=
+  glob `*` のみ（Codex#8）⑥検査主体= core・ledger 値上で評価（GLM N2）⑦C-1 境界と run-level
+  ctx_window 上書きの明文化（Grok F10/F11 NB）⑧§9-1 に fixture 4種追加（間欠参照/capability 変化/
+  ターン1/identity 欠落）。裁定= reviews/ADJUDICATION-r1-v06.md 追記
