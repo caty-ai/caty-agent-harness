@@ -490,7 +490,7 @@ if [[ -s "$accepted_lessons" || -s "$accepted_failures" ]]; then
     fi
     last_header=
     if [[ -f "$eviction_archive_path" ]]; then
-      last_header=$(grep -n '^<!-- intake eviction adapter=' "$eviction_archive_path" \
+      last_header=$(grep -a -n '^<!-- intake eviction adapter=' "$eviction_archive_path" \
         | tail -n 1 | cut -d: -f1) || last_header=
       if [[ "$last_header" =~ ^[0-9]+$ ]]; then
         dedup_rc=0

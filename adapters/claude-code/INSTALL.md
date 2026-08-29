@@ -182,7 +182,12 @@ Each parsed bullet is limited to `INTAKE_MAX_BULLET_BYTES` bytes (default `512` 
 control-character stripping); an oversized bullet is dropped whole and counted as
 `dropped_oversize` in the run receipt. Lessons displaced by the STATE cap are appended
 to `loop/archive/intake-evictions-<UTC-date>.md`, while `evicted_by_cap` and the archive
-path remain visible in the receipt.
+path remain visible in the receipt. When the previous receipt records a refused STATE
+publish (`error=state-publish`), a retry whose displaced-lesson payload byte-matches the
+archive's last record adopts that record instead of appending a duplicate; the
+comparison is payload-only, so the adopted record keeps its original adapter header. A
+failed archive append aborts the run before the STATE publish with
+`error=eviction-archive` in the receipt.
 
 On every intake under the shared STATE lock, including scans with zero flush files,
 the host folds `## Last session` into a newest-first index capped at 20 entries. Entry
