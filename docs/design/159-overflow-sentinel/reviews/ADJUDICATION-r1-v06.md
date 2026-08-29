@@ -71,3 +71,26 @@ writer= Alpha（fable-5）のため Opus 席は同系統回避（loom-seats の 
 R_e ペア和 / §6 regime 単位同期 / regime_change.drift_reference + task_end 最弱値 / raw_usage 必須化 /
 パターン文法 glob `*` のみ / 検査主体= core / C-1 境界・ctx_window 上書きの明文化 / §9-1 fixture 4種追加。
 → **Codex 席への単一論点マイクロ確認で cumulative GO を確認して凍結**（r3-FINAL の grok B1 と同型手続き）。
+
+## r3/r4 マイクロ確認（Codex 席のみ・単一論点）
+
+- r3（対象 v0.6.2）: 3点中 **2 RESOLVED**・残1= regime_change.drift_reference が新 regime の値のみで
+  初回 regime の記録が消える（「全 regime 復元可能」が複数 regime タスクで偽）→ NO-GO
+- v0.6.3: drift_reference を **{from, to} ペア**に（初回= 最初のイベントの from・以降= 各 to・
+  変更なしタスク= task_end 値）
+- r4（対象 v0.6.3・one-hunk diff）: blocker 3 **RESOLVED** —
+  **CUMULATIVE VERDICT: GO for freezing v0.6.3 as the three-issue baseline**（本文ログ= 私設保全
+  out-codex-micro.md / out-codex-micro2.md）
+
+## 最終評定
+
+**L1-9 設計 delta レビュー PASS（5席 GO 系で収束・blocking 残 0）**:
+Gemini GO（r2）/ Muse GO（r2）/ GLM GO（r2）/ Grok GO-with-concerns（r2・懸念 N1/N2 は v0.6.2 で
+反映済み）/ Codex GO（r4 cumulative）。**v0.6.3 を凍結版とし、実装 Issue 3本（①regime リセット S
+②tap_drift M ③閾値注入点 M）の設計基線とする。** D4 の数値は P2 窓プローブ完了後に owner 決裁+
+writeback のみで確定（clarify 決裁 2026-08-29・再レビュー不要）。
+
+- requested/actual: codex-sol（自己申告 OpenAI Codex GPT-5 系）/ glm-5.3 / grok-4.6 /
+  gemini-3.7-flash-high / muse-spark-1.2（Contributor 枠・公開文書のみ）。writer= Alpha（fable-5）—
+  全席と異系統・self-approve なし。coverage-matrix= Grok 席（DW 全項 covered/unclear 2→v0.6.1 で
+  解消・unrequested= scope creep 0）。

@@ -1,7 +1,9 @@
 # DESIGN: #159 overflow sentinel — 文脈圧力の実測で task-runner を発火する
 
-status: **v0.6.3**（2026-08-29・Alpha・外部レビュー採用2件〔@pm25coder〕の条文化 + D4 閾値注入点の
-設計凍結（数値は P2 窓プローブ待ちで保留）・L1-9 異種5席 r1→r2→r3 マイクロ確認 反映・サイズ H。
+status: **v0.6.3 FROZEN**（2026-08-29・Alpha・外部レビュー採用2件〔@pm25coder〕の条文化 + D4 閾値
+注入点の設計凍結（数値は P2 窓プローブ完了後に owner 決裁+writeback で確定・再レビュー不要）・
+**L1-9 異種5席 PASS**〔r1: NO-GO3/GWC2 → r2 delta → r3/r4 マイクロ確認・最終= 5席 GO 系収束・
+blocking 残0・裁定= reviews/ADJUDICATION-r1-v06.md〕・サイズ H。
 直前の凍結版= v0.5.4〔§10。v0.5.3 表記のまま header 未更新だった誤記を本版で訂正〕）
 inputs: PILOT.md（訂正節含む）/ REPORT-runtime-context-survey.md / REPORT-pattern4-rootcause.md /
 REPORT-hermes-provider-layer.md / REPORT-hermes-provider-deep-research.md / REPORT-qwen38-artifacts.md /
@@ -510,4 +512,4 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
 - v0.6.3（2026-08-29・Alpha・**r3 Codex マイクロ確認の残1点**）: regime_change.drift_reference を
   **{from, to} ペア**へ（to 単独では最初の regime の capability 記録が消え「全 regime 復元可能」が
   複数 regime タスクで偽になる — r3 Codex 指摘の逐語対応）。r3= 3点中 2 RESOLVED + 本修正で
-  全点処置 → 再マイクロ確認（r4）で cumulative GO を確認して凍結
+  全点処置 → r4 マイクロ確認= **RESOLVED・CUMULATIVE GO** → 5席収束で v0.6.3 を凍結（PASS）
