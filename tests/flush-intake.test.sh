@@ -511,7 +511,7 @@ if [ "$crash_rc" -eq 75 ] && [ -z "$ledger_after_crash" ] && [ "$marker_after_cr
 else
   crash_order_ok=0
 fi
-crash_order_receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log" 2>/dev/null)
+crash_order_receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log" 2>/dev/null) || true
 
 ws=$(new_ws case-25-ledger-write-failure)
 write_block "$ws/loop/pending/flush-2026-07-23.md" 2026-07-23 \
@@ -539,7 +539,7 @@ if [ "$ledger_write_rc" -eq 1 ] \
 else
   ledger_write_failed_closed=0
 fi
-ledger_write_receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log" 2>/dev/null)
+ledger_write_receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log" 2>/dev/null) || true
 if [ "$crash_order_ok" -eq 1 ] && [ "$ledger_write_failed_closed" -eq 1 ]; then
   pass '[25] STATE-before-ledger ordering preserves dedup safety and exposes refused ledger writes'
 else
@@ -733,7 +733,7 @@ if [ "$state_publish_rc" -eq 1 ] \
 else
   state_publish_failed_closed=0
 fi
-state_publish_receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log" 2>/dev/null)
+state_publish_receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log" 2>/dev/null) || true
 if [ "$missing_section_failed_closed" -eq 1 ] \
   && [ "$annotated_section_repaired" -eq 1 ] \
   && [ "$state_publish_failed_closed" -eq 1 ]; then

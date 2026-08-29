@@ -380,7 +380,7 @@ if [ "$rc" -eq 0 ] \
   && ! grep -Fq -- '- 2026-07-05 old lesson 001 (source: distill-audit)' "$ws/STATE.md" \
   && ! grep -Fq -- '- 2026-07-05 old failure 001 (source: distill-audit)' "$ws/STATE.md" \
   && grep -Fq 'evicted_by_cap=2' "$ws/loop/pending/distill-runs.log" \
-  && [ ! -e "$ws/.STATE.md.tmp.$$" ] \
+  && ! find "$ws" -maxdepth 1 \( -name '.STATE.md.tmp.*' -o -name '.STATE.md.rebuild.*' \) -print | grep -q . \
   && [ ! -d "$ws/loop/.distill-state.lock" ]; then
   pass "state rewrite is capped, eviction reported, atomic temp cleaned, and lock released"
 else

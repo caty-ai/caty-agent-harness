@@ -600,26 +600,29 @@ state_fold_atomic_archive_append() {
   tmp_file="$archive_dir/.$archive_name.tmp.$$"
   if [[ -f "$archive_file" ]]; then
     cp "$archive_file" "$tmp_file" || { rm -f "$tmp_file"; return 1; }
-    if ! before_bytes=$(wc -c <"$archive_file" | tr -d '[:space:]'); then
+    if ! before_bytes=$(wc -c <"$archive_file"); then
       rm -f "$tmp_file"
       return 1
     fi
+    before_bytes=${before_bytes//[[:space:]]/}
   else
     : >"$tmp_file" || { rm -f "$tmp_file"; return 1; }
   fi
-  if ! source_bytes=$(wc -c <"$source_file" | tr -d '[:space:]'); then
+  if ! source_bytes=$(wc -c <"$source_file"); then
     rm -f "$tmp_file"
     return 1
   fi
+  source_bytes=${source_bytes//[[:space:]]/}
   cat "$source_file" >>"$tmp_file" || {
     rm -f "$tmp_file"
     return 1
   }
   expected_bytes=$((before_bytes + source_bytes))
-  if ! actual_bytes=$(wc -c <"$tmp_file" | tr -d '[:space:]'); then
+  if ! actual_bytes=$(wc -c <"$tmp_file"); then
     rm -f "$tmp_file"
     return 1
   fi
+  actual_bytes=${actual_bytes//[[:space:]]/}
   if [[ "$actual_bytes" -ne "$expected_bytes" ]]; then
     rm -f "$tmp_file"
     return 1

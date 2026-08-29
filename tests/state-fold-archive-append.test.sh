@@ -238,5 +238,41 @@ else
     "rc=$empty_rc unchanged=$(cmp -s "$empty_before" "$empty_archive" && printf yes || printf no) tail_zero_empty=$(cmp -s "$empty_source" "$empty_probe" && printf yes || printf no) temp_removed=$([ ! -e "$empty_tmp" ] && printf yes || printf no)"
 fi
 
+unreadable_dir=$TMP_ROOT/unreadable-source
+mkdir -p "$unreadable_dir"
+unreadable_archive=$unreadable_dir/archive.md
+unreadable_source=$unreadable_dir/source.md
+unreadable_before=$unreadable_dir/archive.before
+printf 'archive preserved when source size is unreadable\n' >"$unreadable_archive"
+printf 'payload that must not be appended\n' >"$unreadable_source"
+cp "$unreadable_archive" "$unreadable_before"
+chmod 000 "$unreadable_source"
+if (
+  set +o pipefail
+  # If a broken wc pipeline reaches cat, make that bypass observable instead of
+  # letting cat independently refuse the same unreadable source.
+  # shellcheck disable=SC2329
+  cat() {
+    if [ "$1" = "$unreadable_source" ]; then
+      return 0
+    fi
+    command cat "$@"
+  }
+  state_fold_atomic_archive_append "$unreadable_source" "$unreadable_archive"
+); then
+  unreadable_rc=0
+else
+  unreadable_rc=$?
+fi
+chmod 600 "$unreadable_source"
+if [ "$unreadable_rc" -ne 0 ] \
+  && cmp -s "$unreadable_before" "$unreadable_archive" \
+  && ! find "$unreadable_dir" -maxdepth 1 -name '.archive.md.tmp.*' -print | grep -q .; then
+  pass "unreadable source size is refused without changing the archive"
+else
+  fail_case "unreadable source size is refused without changing the archive" \
+    "rc=$unreadable_rc preserved=$(cmp -s "$unreadable_before" "$unreadable_archive" && printf yes || printf no) temps=$(find "$unreadable_dir" -maxdepth 1 -name '.archive.md.tmp.*' -print | tr '\n' ',')"
+fi
+
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
 [ "$FAIL_COUNT" -eq 0 ]
