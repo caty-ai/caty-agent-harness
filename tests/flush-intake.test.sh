@@ -914,5 +914,45 @@ else
     "headers=$(grep -c '^<!-- intake eviction adapter=' "$eviction_archive_path") archive=$(tr '\n' ' ' <"$eviction_archive_path")"
 fi
 
+ws=$(new_ws case-38-external-rewind)
+{
+  printf '%s\n' '## Verified facts' '## General rules' '## Open failures' '## Lessons learned'
+  i=1
+  while [ "$i" -le 60 ]; do
+    printf -- '- 2026-06-01 capped lesson %02d (source: distill-audit)\n' "$i"
+    i=$((i + 1))
+  done
+  printf '%s\n' '## Last session'
+} >"$ws/STATE.md"
+cp "$ws/STATE.md" "$TMP_ROOT/state-before-external-rewind"
+write_block "$ws/loop/pending/flush-2026-07-26.md" 2026-07-26 \
+  'The first rewind-sensitive eviction succeeds.'
+run_intake "$ws"
+first_rewind_rc=$?
+eviction_archive_path="$ws/loop/archive/intake-evictions-$TODAY.md"
+if [ "$first_rewind_rc" -eq 0 ] \
+  && [ "$(grep -c '^<!-- intake eviction adapter=' "$eviction_archive_path")" -eq 1 ]; then
+  first_rewind_archive_ok=1
+else
+  first_rewind_archive_ok=0
+fi
+cp "$TMP_ROOT/state-before-external-rewind" "$ws/STATE.md"
+write_block "$ws/loop/pending/flush-2026-07-27.md" 2026-07-27 \
+  'The second rewind-sensitive eviction is distinct.'
+run_intake "$ws"
+second_rewind_rc=$?
+if [ "$first_rewind_archive_ok" -eq 1 ] \
+  && [ "$second_rewind_rc" -eq 0 ] \
+  && [ "$(receipt_value "$ws" evicted_by_cap)" -eq 1 ] \
+  && [ "$(receipt_value "$ws" eviction_archive)" = "loop/archive/intake-evictions-$TODAY.md" ] \
+  && [ "$(receipt_value "$ws" error)" = none ] \
+  && [ "$(grep -c '^<!-- intake eviction adapter=' "$eviction_archive_path")" -eq 2 ] \
+  && [ "$(grep -Fc 'capped lesson 01' "$eviction_archive_path")" -eq 2 ]; then
+  pass '[38] external STATE rewind appends an identical eviction payload as a distinct record'
+else
+  fail_case '[38] external STATE rewind appends an identical eviction payload as a distinct record' \
+    "first_ok=$first_rewind_archive_ok first_rc=$first_rewind_rc second_rc=$second_rewind_rc receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log") archive=$(tr '\n' ' ' <"$eviction_archive_path")"
+fi
+
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
 [ "$FAIL_COUNT" -eq 0 ]

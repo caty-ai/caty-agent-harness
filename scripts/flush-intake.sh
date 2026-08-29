@@ -481,6 +481,13 @@ if [[ -s "$accepted_lessons" || -s "$accepted_failures" ]]; then
       exit 1
     fi
     append_eviction=1
+    dedup_allowed=0
+    if [[ -f "$pending_dir/intake-runs.log" ]]; then
+      last_receipt=$(tail -n 1 "$pending_dir/intake-runs.log") || last_receipt=
+      case "$last_receipt" in
+        *' error=state-publish'*) dedup_allowed=1 ;;
+      esac
+    fi
     last_header=
     if [[ -f "$eviction_archive_path" ]]; then
       last_header=$(grep -n '^<!-- intake eviction adapter=' "$eviction_archive_path" \
@@ -489,7 +496,7 @@ if [[ -s "$accepted_lessons" || -s "$accepted_failures" ]]; then
         dedup_rc=0
         tail -n "+$((last_header + 1))" "$eviction_archive_path" \
           | cmp -s - "$evicted_lessons_file" || dedup_rc=$?
-        if [[ "$dedup_rc" -eq 0 ]]; then
+        if [[ "$dedup_allowed" -eq 1 && "$dedup_rc" -eq 0 ]]; then
           append_eviction=0
         fi
       fi
