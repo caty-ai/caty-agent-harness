@@ -831,5 +831,231 @@ else
     'raw archive did not preserve the accepted and rejected bullet bodies exactly'
 fi
 
+ws=$(new_ws case-36-eviction-retry-dedup)
+{
+  printf '%s\n' '## Verified facts' '## General rules' '## Open failures' '## Lessons learned'
+  i=1
+  while [ "$i" -le 60 ]; do
+    printf -- '- 2026-06-01 capped lesson %02d (source: distill-audit)\n' "$i"
+    i=$((i + 1))
+  done
+  printf '%s\n' '## Last session'
+} >"$ws/STATE.md"
+cp "$ws/STATE.md" "$TMP_ROOT/state-before-eviction-retry"
+write_block "$ws/loop/pending/flush-2026-07-23.md" 2026-07-23 \
+  'A refused cap eviction is adopted by its retry.'
+eviction_publish_shim=$TMP_ROOT/eviction-publish-shim
+mkdir -p "$eviction_publish_shim"
+cat >"$eviction_publish_shim/cp" <<'SH'
+#!/usr/bin/env bash
+case ${1##*/} in
+  .STATE.md.rebuild.*)
+    printf 'partial STATE copy\n' >"$2"
+    exit 1
+    ;;
+esac
+exec "$REAL_CP" "$@"
+SH
+chmod +x "$eviction_publish_shim/cp"
+real_cp=$(command -v cp)
+set +e
+run_intake "$ws" PATH="$eviction_publish_shim:$PATH" REAL_CP="$real_cp"
+eviction_publish_rc=$?
+set -e
+eviction_archive_path="$ws/loop/archive/intake-evictions-$TODAY.md"
+if [ "$eviction_publish_rc" -eq 1 ] \
+  && cmp -s "$TMP_ROOT/state-before-eviction-retry" "$ws/STATE.md" \
+  && [ "$(receipt_value "$ws" error)" = state-publish ] \
+  && [ "$(grep -c '^<!-- intake eviction adapter=' "$eviction_archive_path")" -eq 1 ] \
+  && [ "$(grep -Fc 'capped lesson 01' "$eviction_archive_path")" -eq 1 ]; then
+  eviction_refusal_ok=1
+else
+  eviction_refusal_ok=0
+fi
+set +e
+run_intake "$ws"
+eviction_retry_rc=$?
+set -e
+if [ "$eviction_refusal_ok" -eq 1 ] \
+  && [ "$eviction_retry_rc" -eq 0 ] \
+  && grep -Fq 'A refused cap eviction is adopted by its retry.' "$ws/STATE.md" \
+  && ! grep -Fq 'capped lesson 01' "$ws/STATE.md" \
+  && [ "$(grep -c '^<!-- intake eviction adapter=' "$eviction_archive_path")" -eq 1 ] \
+  && [ "$(grep -Fc 'capped lesson 01' "$eviction_archive_path")" -eq 1 ]; then
+  pass '[36] refused STATE publish retry adopts the existing eviction record without duplication'
+else
+  fail_case '[36] refused STATE publish retry adopts the existing eviction record without duplication' \
+    "refusal_ok=$eviction_refusal_ok refusal_rc=$eviction_publish_rc retry_rc=$eviction_retry_rc receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+fi
+
+ws=$(new_ws case-37-distinct-evictions)
+{
+  printf '%s\n' '## Verified facts' '## General rules' '## Open failures' '## Lessons learned'
+  i=1
+  while [ "$i" -le 60 ]; do
+    printf -- '- 2026-06-01 capped lesson %02d (source: distill-audit)\n' "$i"
+    i=$((i + 1))
+  done
+  printf '%s\n' '## Last session'
+} >"$ws/STATE.md"
+write_block "$ws/loop/pending/flush-2026-07-24.md" 2026-07-24 \
+  'The first distinct eviction succeeds.'
+run_intake "$ws"
+write_block "$ws/loop/pending/flush-2026-07-25.md" 2026-07-25 \
+  'The second distinct eviction succeeds.'
+run_intake "$ws"
+eviction_archive_path="$ws/loop/archive/intake-evictions-$TODAY.md"
+if [ "$(grep -c '^<!-- intake eviction adapter=' "$eviction_archive_path")" -eq 2 ] \
+  && [ "$(grep -Fc 'capped lesson 01' "$eviction_archive_path")" -eq 1 ] \
+  && [ "$(grep -Fc 'capped lesson 02' "$eviction_archive_path")" -eq 1 ]; then
+  pass '[37] distinct same-day eviction payloads append separate archive records'
+else
+  fail_case '[37] distinct same-day eviction payloads append separate archive records' \
+    "headers=$(grep -c '^<!-- intake eviction adapter=' "$eviction_archive_path") archive=$(tr '\n' ' ' <"$eviction_archive_path")"
+fi
+
+ws=$(new_ws case-38-external-rewind)
+{
+  printf '%s\n' '## Verified facts' '## General rules' '## Open failures' '## Lessons learned'
+  i=1
+  while [ "$i" -le 60 ]; do
+    printf -- '- 2026-06-01 capped lesson %02d (source: distill-audit)\n' "$i"
+    i=$((i + 1))
+  done
+  printf '%s\n' '## Last session'
+} >"$ws/STATE.md"
+cp "$ws/STATE.md" "$TMP_ROOT/state-before-external-rewind"
+write_block "$ws/loop/pending/flush-2026-07-26.md" 2026-07-26 \
+  'The first rewind-sensitive eviction succeeds.'
+run_intake "$ws"
+first_rewind_rc=$?
+eviction_archive_path="$ws/loop/archive/intake-evictions-$TODAY.md"
+if [ "$first_rewind_rc" -eq 0 ] \
+  && [ "$(grep -c '^<!-- intake eviction adapter=' "$eviction_archive_path")" -eq 1 ]; then
+  first_rewind_archive_ok=1
+else
+  first_rewind_archive_ok=0
+fi
+cp "$TMP_ROOT/state-before-external-rewind" "$ws/STATE.md"
+write_block "$ws/loop/pending/flush-2026-07-27.md" 2026-07-27 \
+  'The second rewind-sensitive eviction is distinct.'
+run_intake "$ws"
+second_rewind_rc=$?
+if [ "$first_rewind_archive_ok" -eq 1 ] \
+  && [ "$second_rewind_rc" -eq 0 ] \
+  && [ "$(receipt_value "$ws" evicted_by_cap)" -eq 1 ] \
+  && [ "$(receipt_value "$ws" eviction_archive)" = "loop/archive/intake-evictions-$TODAY.md" ] \
+  && [ "$(receipt_value "$ws" error)" = none ] \
+  && [ "$(grep -c '^<!-- intake eviction adapter=' "$eviction_archive_path")" -eq 2 ] \
+  && [ "$(grep -Fc 'capped lesson 01' "$eviction_archive_path")" -eq 2 ]; then
+  pass '[38] external STATE rewind appends an identical eviction payload as a distinct record'
+else
+  fail_case '[38] external STATE rewind appends an identical eviction payload as a distinct record' \
+    "first_ok=$first_rewind_archive_ok first_rc=$first_rewind_rc second_rc=$second_rewind_rc receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log") archive=$(tr '\n' ' ' <"$eviction_archive_path")"
+fi
+
+ws=$(new_ws case-39-last-header-dedup)
+{
+  printf '%s\n' '## Verified facts' '## General rules' '## Open failures' '## Lessons learned'
+  i=1
+  while [ "$i" -le 60 ]; do
+    printf -- '- 2026-06-01 capped lesson %02d (source: distill-audit)\n' "$i"
+    i=$((i + 1))
+  done
+  printf '%s\n' '## Last session'
+} >"$ws/STATE.md"
+write_block "$ws/loop/pending/flush-2026-07-28.md" 2026-07-28 \
+  'The first same-day eviction succeeds.'
+run_intake "$ws"
+first_same_day_rc=$?
+eviction_archive_path="$ws/loop/archive/intake-evictions-$TODAY.md"
+if [ "$first_same_day_rc" -eq 0 ] \
+  && [ "$(grep -c '^<!-- intake eviction adapter=' "$eviction_archive_path")" -eq 1 ] \
+  && [ "$(grep -Fc 'capped lesson 01' "$eviction_archive_path")" -eq 1 ] \
+  && [ "$(grep -Fc 'capped lesson 02' "$eviction_archive_path")" -eq 0 ]; then
+  first_same_day_ok=1
+else
+  first_same_day_ok=0
+fi
+eviction_retry_shim=$TMP_ROOT/eviction-retry-shim
+mkdir -p "$eviction_retry_shim"
+cat >"$eviction_retry_shim/cp" <<'SH'
+#!/usr/bin/env bash
+case ${1##*/} in
+  .STATE.md.rebuild.*)
+    printf 'partial STATE copy\n' >"$2"
+    exit 1
+    ;;
+esac
+exec "$REAL_CP" "$@"
+SH
+chmod +x "$eviction_retry_shim/cp"
+real_cp=$(command -v cp)
+write_block "$ws/loop/pending/flush-2026-07-29.md" 2026-07-29 \
+  'A refused retry must adopt the latest same-day eviction.'
+set +e
+run_intake "$ws" PATH="$eviction_retry_shim:$PATH" REAL_CP="$real_cp"
+same_day_refusal_rc=$?
+set -e
+if [ "$first_same_day_ok" -eq 1 ] \
+  && [ "$same_day_refusal_rc" -eq 1 ] \
+  && [ "$(receipt_value "$ws" error)" = state-publish ] \
+  && [ "$(grep -c '^<!-- intake eviction adapter=' "$eviction_archive_path")" -eq 2 ] \
+  && [ "$(grep -Fc 'capped lesson 01' "$eviction_archive_path")" -eq 1 ] \
+  && [ "$(grep -Fc 'capped lesson 02' "$eviction_archive_path")" -eq 1 ]; then
+  same_day_refusal_ok=1
+else
+  same_day_refusal_ok=0
+fi
+run_intake "$ws"
+same_day_retry_rc=$?
+if [ "$same_day_refusal_ok" -eq 1 ] \
+  && [ "$same_day_retry_rc" -eq 0 ] \
+  && [ "$(receipt_value "$ws" error)" = none ] \
+  && [ "$(grep -c '^<!-- intake eviction adapter=' "$eviction_archive_path")" -eq 2 ] \
+  && [ "$(grep -Fc 'capped lesson 01' "$eviction_archive_path")" -eq 1 ] \
+  && [ "$(grep -Fc 'capped lesson 02' "$eviction_archive_path")" -eq 1 ]; then
+  pass '[39] refused same-day retry adopts the latest archived eviction record without duplication'
+else
+  fail_case '[39] refused same-day retry adopts the latest archived eviction record without duplication' \
+    "first_ok=$first_same_day_ok refusal_ok=$same_day_refusal_ok refusal_rc=$same_day_refusal_rc retry_rc=$same_day_retry_rc receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log") archive=$(tr '\n' ' ' <"$eviction_archive_path")"
+fi
+
+ws=$(new_ws case-40-headerless-equal-archive)
+{
+  printf '%s\n' '## Verified facts' '## General rules' '## Open failures' '## Lessons learned'
+  i=1
+  while [ "$i" -le 60 ]; do
+    printf -- '- 2026-06-01 capped lesson %02d (source: distill-audit)\n' "$i"
+    i=$((i + 1))
+  done
+  printf '%s\n' '## Last session'
+} >"$ws/STATE.md"
+write_block "$ws/loop/pending/flush-2026-07-30.md" 2026-07-30 \
+  'A headerless equal archive must still append.'
+case_40_payload=$TMP_ROOT/case-40-payload
+printf '%s\n' '- 2026-06-01 capped lesson 01 (source: distill-audit)' >"$case_40_payload"
+eviction_archive_path="$ws/loop/archive/intake-evictions-$TODAY.md"
+cp "$case_40_payload" "$eviction_archive_path"
+printf '%s\n' 'scan=prior error=state-publish' >"$ws/loop/pending/intake-runs.log"
+if cmp -s "$case_40_payload" "$eviction_archive_path" \
+  && [ "$(grep -c '^<!-- intake eviction adapter=' "$eviction_archive_path")" -eq 0 ]; then
+  headerless_seed_ok=1
+else
+  headerless_seed_ok=0
+fi
+run_intake "$ws"
+headerless_retry_rc=$?
+if [ "$headerless_seed_ok" -eq 1 ] \
+  && [ "$headerless_retry_rc" -eq 0 ] \
+  && [ "$(receipt_value "$ws" error)" = none ] \
+  && [ "$(grep -c '^<!-- intake eviction adapter=' "$eviction_archive_path")" -eq 1 ] \
+  && [ "$(grep -Fc 'capped lesson 01' "$eviction_archive_path")" -eq 2 ]; then
+  pass '[40] a headerless archive equal to the eviction payload still appends a recorded eviction'
+else
+  fail_case '[40] a headerless archive equal to the eviction payload still appends a recorded eviction' \
+    "seed_ok=$headerless_seed_ok rc=$headerless_retry_rc receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log") archive=$(tr '\n' ' ' <"$eviction_archive_path")"
+fi
+
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
 [ "$FAIL_COUNT" -eq 0 ]
