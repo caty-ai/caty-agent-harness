@@ -108,6 +108,67 @@ case_success() {
   fi
 }
 
+case_ordering_guards() {
+  local name=ordering-guards
+  local dir code output sentinel
+  dir=$(make_case_dir)
+  sentinel="$dir/invoked"
+  cat >"$dir/fake-hermes" <<SH
+#!/usr/bin/env bash
+touch "$sentinel"
+exit 0
+SH
+  chmod +x "$dir/fake-hermes"
+
+  set +e
+  output=$(HERMES_STEP_CMD="$dir/fake-hermes" HERMES_HTTP_TIMEOUT_S=541 \
+    HERMES_STEP_TIMEOUT_S=540 HERMES_STEP_GRACE_S=10 TR_STEP_TIMEOUT_S=600 \
+    run_adapter "$dir" 2>&1)
+  code=$?
+  set -e
+  if [[ "$code" -ne 2 ]] \
+    || ! grep -Fq 'ordering invariant failed: HERMES_HTTP_TIMEOUT_S(value=541) <= HERMES_STEP_TIMEOUT_S(value=540)' <<<"$output" \
+    || [[ -e "$sentinel" ]]; then
+    fail "$name-HERMES_HTTP_TIMEOUT_S-HERMES_STEP_TIMEOUT_S" "rc=$code output=$output"
+    return
+  fi
+
+  set +e
+  output=$(HERMES_STEP_CMD="$dir/fake-hermes" HERMES_HTTP_TIMEOUT_S=10 \
+    HERMES_STEP_TIMEOUT_S=10 HERMES_STEP_GRACE_S=10 TR_STEP_TIMEOUT_S=30 \
+    run_adapter "$dir" 2>&1)
+  code=$?
+  set -e
+  if [[ "$code" -ne 2 ]] \
+    || ! grep -Fq 'ordering invariant failed: HERMES_STEP_GRACE_S(value=10) < HERMES_STEP_TIMEOUT_S(value=10)' <<<"$output" \
+    || [[ -e "$sentinel" ]]; then
+    fail "$name-HERMES_STEP_GRACE_S-HERMES_STEP_TIMEOUT_S" "rc=$code output=$output"
+    return
+  fi
+
+  set +e
+  output=$(HERMES_STEP_CMD="$dir/fake-hermes" HERMES_HTTP_TIMEOUT_S=20 \
+    HERMES_STEP_TIMEOUT_S=20 HERMES_STEP_GRACE_S=1 TR_STEP_TIMEOUT_S=21 \
+    run_adapter "$dir" 2>&1)
+  code=$?
+  set -e
+  if [[ "$code" -ne 2 ]] \
+    || ! grep -Fq 'ordering invariant failed: HERMES_STEP_TIMEOUT_S(value=20) + HERMES_STEP_GRACE_S(value=1) < TR_STEP_TIMEOUT_S(value=21)' <<<"$output" \
+    || [[ -e "$sentinel" ]]; then
+    fail "$name-HERMES_STEP_TIMEOUT_S-HERMES_STEP_GRACE_S-TR_STEP_TIMEOUT_S" "rc=$code output=$output"
+    return
+  fi
+
+  if HERMES_STEP_CMD="$dir/fake-hermes" HERMES_HTTP_TIMEOUT_S=20 \
+    HERMES_STEP_TIMEOUT_S=20 HERMES_STEP_GRACE_S=1 TR_STEP_TIMEOUT_S=22 \
+    run_adapter "$dir" >/dev/null 2>&1 \
+    && [[ -e "$sentinel" ]]; then
+    pass "$name"
+  else
+    fail "$name-happy" 'valid explicit ordering did not invoke the step command'
+  fi
+}
+
 case_step_cmd_unset() {
   local name=step-cmd-unset
   local dir code
@@ -387,7 +448,7 @@ case_timeout_quarantines_partial_output_and_kills_group() {
   dir=$(make_case_dir)
   write_hanging_cli "$dir/fake-hermes"
   set +e
-  HERMES_STEP_CMD="$dir/fake-hermes" HERMES_STEP_TIMEOUT_S=2 HERMES_STEP_GRACE_S=1 run_adapter "$dir" >/dev/null 2>&1
+  HERMES_STEP_CMD="$dir/fake-hermes" HERMES_HTTP_TIMEOUT_S=2 HERMES_STEP_TIMEOUT_S=2 HERMES_STEP_GRACE_S=1 run_adapter "$dir" >/dev/null 2>&1
   code=$?
   set -e
   grandchild_pid=$(cat "$dir/attempt/grandchild.pid" 2>/dev/null || true)
@@ -411,7 +472,7 @@ case_fast_exit_preserves_complete_output_and_reaps_group() {
   dir=$(make_case_dir)
   write_fast_lingering_cli "$dir/fake-hermes"
   set +e
-  HERMES_STEP_CMD="$dir/fake-hermes" HERMES_STEP_TIMEOUT_S=10 HERMES_STEP_GRACE_S=1 run_adapter "$dir" >/dev/null 2>&1
+  HERMES_STEP_CMD="$dir/fake-hermes" HERMES_HTTP_TIMEOUT_S=10 HERMES_STEP_TIMEOUT_S=10 HERMES_STEP_GRACE_S=1 run_adapter "$dir" >/dev/null 2>&1
   code=$?
   set -e
   grandchild_pid=$(cat "$dir/attempt/grandchild.pid" 2>/dev/null || true)
@@ -451,7 +512,7 @@ case_forwarded_term_quarantines_partial_output_and_kills_group() {
   local dir adapter_pid code grandchild_pid tries
   dir=$(make_case_dir)
   write_signal_hanging_cli "$dir/fake-hermes"
-  HERMES_STEP_CMD="$dir/fake-hermes" HERMES_STEP_TIMEOUT_S=30 HERMES_STEP_GRACE_S=1 \
+  HERMES_STEP_CMD="$dir/fake-hermes" HERMES_HTTP_TIMEOUT_S=30 HERMES_STEP_TIMEOUT_S=30 HERMES_STEP_GRACE_S=1 \
     "$ADAPTER" "$dir/task.md" "$dir/ws" "$dir/attempt" 1 >/dev/null 2>&1 &
   adapter_pid=$!
   tries=0
@@ -553,6 +614,7 @@ case_runner_rejects_nonexecutable_spawn_step() {
 }
 
 case_success
+case_ordering_guards
 case_step_cmd_unset
 case_step_cmd_nonexistent
 case_step_runs_in_workspace

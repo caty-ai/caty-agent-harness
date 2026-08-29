@@ -11,8 +11,9 @@ TMP_ROOT=${TMPDIR:-/tmp}/flush-intake-test.$$
 PASS_COUNT=0
 FAIL_COUNT=0
 TODAY=$(date -u +%F)
-DEFAULT_INTAKE_MAX_FOLD=$(bash -c 'source "$1"; printf "%s\n" "$((STATE_FOLD_LESSONS_CAP_DEFAULT / 2))"' \
+STATE_FOLD_LESSONS_CAP_DEFAULT=$(bash -c 'source "$1"; printf "%s\n" "$STATE_FOLD_LESSONS_CAP_DEFAULT"' \
   _ "$ROOT/scripts/lib-state-fold.sh")
+DEFAULT_INTAKE_MAX_FOLD=$((STATE_FOLD_LESSONS_CAP_DEFAULT / 2))
 DEFAULT_INTAKE_MAX_BULLET_BYTES=512
 
 cleanup() {
@@ -43,6 +44,15 @@ run_intake() {
   local ws=$1
   shift
   env INTAKE_LOCK_SLEEP_S=0 "$@" "$INTAKE" "$ws" >"$TMP_ROOT/intake.out" 2>"$TMP_ROOT/intake.err"
+}
+
+run_intake_unset_max_fold() {
+  local ws=$1
+
+  (
+    unset INTAKE_MAX_FOLD
+    INTAKE_LOCK_SLEEP_S=0 "$INTAKE" "$ws" >"$TMP_ROOT/intake.out" 2>"$TMP_ROOT/intake.err"
+  )
 }
 
 state_count() {
@@ -79,6 +89,31 @@ age_file_seconds() {
 file_mtime() {
   stat -c '%Y' "$1" 2>/dev/null || stat -f '%m' "$1"
 }
+
+ws=$(new_ws case-00-ordering-assert)
+set +e
+run_intake "$ws" INTAKE_MAX_FOLD=$((STATE_FOLD_LESSONS_CAP_DEFAULT + 1))
+ordering_rc=$?
+set -e
+ordering_stderr=$(tr '\n' ' ' <"$TMP_ROOT/intake.err")
+if [ "$ordering_rc" -eq 2 ] \
+  && grep -Fqx "flush-intake.sh: ordering invariant failed: INTAKE_MAX_FOLD(value=$((STATE_FOLD_LESSONS_CAP_DEFAULT + 1))) <= STATE_FOLD_LESSONS_CAP_DEFAULT(value=$STATE_FOLD_LESSONS_CAP_DEFAULT)" "$TMP_ROOT/intake.err" \
+  && [ ! -e "$ws/loop/pending/intake-runs.log" ] \
+  && [ ! -e "$ws/loop/.distill-state.lock" ]; then
+  ordering_red_ok=1
+else
+  ordering_red_ok=0
+fi
+unset_ws=$(new_ws case-00-ordering-unset)
+at_cap_ws=$(new_ws case-00-ordering-at-cap)
+if [ "$ordering_red_ok" -eq 1 ] \
+  && run_intake_unset_max_fold "$unset_ws" \
+  && run_intake "$at_cap_ws" INTAKE_MAX_FOLD="$STATE_FOLD_LESSONS_CAP_DEFAULT"; then
+  pass '[0] intake fold ordering fails closed above the Lessons cap and accepts unset or at-cap values'
+else
+  fail_case '[0] intake fold ordering fails closed above the Lessons cap and accepts unset or at-cap values' \
+    "red_ok=$ordering_red_ok red_rc=$ordering_rc stderr=$ordering_stderr"
+fi
 
 ws=$(new_ws case-01-fold)
 cp "$ROOT/tests/fixtures/flush/basic.md" "$ws/loop/pending/flush-2026-07-01.md"

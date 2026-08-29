@@ -327,7 +327,7 @@ case_env_integer_validation() {
 
   ws=$(make_ws)
   set +e
-  output=$(run_tick "$ws" TR_STEP_TIMEOUT_S=0 TR_GRACE_S=0 TR_DONECHECK_TIMEOUT_S=0 TR_GATE_REPLAY_MAX_BYTES=0 2>&1)
+  output=$(run_tick "$ws" TR_STEP_TIMEOUT_S=1 TR_GRACE_S=0 TR_DONECHECK_TIMEOUT_S=0 TR_GATE_REPLAY_MAX_BYTES=0 2>&1)
   code=$?
   set -e
   if [[ "$code" -ne 0 ]] || grep -F -q 'must be a non-negative integer' <<<"$output"; then
@@ -335,6 +335,53 @@ case_env_integer_validation() {
     return
   fi
   pass "$name"
+}
+
+case_startup_ordering_validation() {
+  local name=startup-ordering-validation
+  local ws output code mutated_root mutated_runner
+
+  ws=$(make_ws)
+  set +e
+  output=$(run_tick "$ws" TR_STEP_TIMEOUT_S=30 TR_GRACE_S=30 2>&1)
+  code=$?
+  set -e
+  if [[ "$code" -ne 2 ]] \
+    || ! grep -Fq 'task-runner.sh: ordering invariant failed: TR_GRACE_S(value=30) < TR_STEP_TIMEOUT_S(value=30)' <<<"$output" \
+    || [[ -e "$ws/loop/tasks/.tick.lock" ]] \
+    || [[ -d "$ws/loop/artifacts" ]]; then
+    fail "$name-TR_GRACE_S-TR_STEP_TIMEOUT_S" "rc=$code output=$output"
+    return
+  fi
+
+  ws=$(make_ws)
+  mutated_root=$(mktemp -d "${TMPDIR:-/tmp}/tr-mutated-root.XXXXXX")
+  mkdir -p "$mutated_root/scripts"
+  mutated_runner="$mutated_root/scripts/task-runner.sh"
+  sed 's/^TR_PERSISTENT_FAILURE_THRESHOLD=2$/TR_PERSISTENT_FAILURE_THRESHOLD=0/' \
+    "$RUNNER" >"$mutated_runner"
+  chmod +x "$mutated_runner"
+  set +e
+  output=$(TR_SPAWN_STEP="$MOCK" bash "$mutated_runner" "$ws" 2>&1)
+  code=$?
+  set -e
+  rm -rf "$mutated_root"
+  if [[ "$code" -ne 2 ]] \
+    || ! grep -Fq 'task-runner.sh: TR_PERSISTENT_FAILURE_THRESHOLD must be greater than zero: value=0' <<<"$output" \
+    || [[ -e "$ws/loop/tasks/.tick.lock" ]] \
+    || [[ -d "$ws/loop/artifacts" ]]; then
+    fail "$name-TR_PERSISTENT_FAILURE_THRESHOLD" "rc=$code output=$output"
+    return
+  fi
+
+  ws=$(make_ws)
+  copy_task "$FIX_BASIC" "$ws" tr-basic
+  if run_tick "$ws" TR_MOCK_BEHAVIOR=success >/dev/null \
+    && [[ -f "$ws/loop/tasks/delivered/tr-basic/tr-basic.task.md" ]]; then
+    pass "$name"
+  else
+    fail "$name" 'valid defaults did not complete the entry path'
+  fi
 }
 
 case_corrupt_state_quarantine_continues() {
@@ -1814,11 +1861,11 @@ case_stale_lease_reap() {
   ws=$(make_ws)
   copy_task "$FIX_BASIC" "$ws" tr-basic
   set +e
-  run_tick "$ws" TR_MOCK_BEHAVIOR=hang TR_CRASH_AFTER=spawn TR_STEP_TIMEOUT_S=1 TR_GRACE_S=1 >/dev/null 2>&1
+  run_tick "$ws" TR_MOCK_BEHAVIOR=hang TR_CRASH_AFTER=spawn TR_STEP_TIMEOUT_S=1 TR_GRACE_S=0 >/dev/null 2>&1
   set -e
   pgid=$(state_value "$ws" tr-basic lease.pgid)
   sleep 3
-  run_tick "$ws" TR_MOCK_BEHAVIOR=success TR_STEP_TIMEOUT_S=1 TR_GRACE_S=1
+  run_tick "$ws" TR_MOCK_BEHAVIOR=success TR_STEP_TIMEOUT_S=1 TR_GRACE_S=0
   if kill -0 "-$pgid" 2>/dev/null; then
     fail "$name" "orphaned process group still alive"
   elif [[ "$(state_value "$ws" tr-basic status)" = delivered ]]; then
@@ -1898,7 +1945,7 @@ case_time_exhaustion() {
   local ws
   ws=$(make_ws)
   copy_task "$FIX_TINY" "$ws" tr-tiny-budget
-  run_tick "$ws" TR_MOCK_BEHAVIOR=noncomplete TR_MOCK_ERROR_CLASS=time-one TR_STEP_TIMEOUT_S=1
+  run_tick "$ws" TR_MOCK_BEHAVIOR=noncomplete TR_MOCK_ERROR_CLASS=time-one TR_STEP_TIMEOUT_S=1 TR_GRACE_S=0
   if [[ "$(state_value "$ws" tr-tiny-budget status)" = dlq ]] && [[ "$(state_value "$ws" tr-tiny-budget terminal_reason)" = time-budget ]]; then
     pass "$name"
   else
@@ -1959,7 +2006,7 @@ case_timeout_is_chargeable_not_quarantined() {
   ws=$(make_ws)
   root="$ws/loop/artifacts/tr-basic"
   copy_task "$FIX_BASIC" "$ws" tr-basic
-  run_tick "$ws" TR_MOCK_BEHAVIOR=hang TR_STEP_TIMEOUT_S=1 TR_GRACE_S=1
+  run_tick "$ws" TR_MOCK_BEHAVIOR=hang TR_STEP_TIMEOUT_S=1 TR_GRACE_S=0
   if [[ ! -e "$root/attempts-infra" ]] \
     && [[ "$(state_value "$ws" tr-basic attempts_used)" = 1 ]] \
     && [[ "$(state_value "$ws" tr-basic infra_retries)" = 0 ]] \
@@ -3528,6 +3575,7 @@ PY
 }
 
 case_env_integer_validation
+case_startup_ordering_validation
 case_corrupt_state_quarantine_continues
 case_quoted_id_intake_runner_agree
 case_invalid_created_sorts_last
