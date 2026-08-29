@@ -325,3 +325,146 @@ values (mock passes do not exercise the live path — measured the hard way).
 The full final report, pre-registration with its correction ledger, and the
 per-model module reports live with the rig and are surfaced through
 [#159](https://github.com/caty-ai/caty-agent-harness/issues/159).
+
+---
+
+<a id="p2-win"></a>
+
+## P2-WIN — where run completion stopped: three size bands on bare models (2026-08)
+
+A third sealed, pre-registered experiment, run on the same rig and corpus
+family as EV-006. **Bare models only — no harness, no sentinel.** Instead of
+measuring an intervention, it characterizes the jobs: at what job size do runs
+stop completing, and what does the failure look like when they do? All 18
+scheduled runs executed (2 models × 3 bands × 3 seeds), zero infra failures,
+one recorded operational deviation (a slot change in the opus phase, in the
+deviations ledger).
+
+"Completion" on this page is the run's sealed protocol gate
+(`protocol_accept`) — a different metric from EV-006's *verified completion*
+(`task_resolved`); the two are not comparable across pages. The claim level
+was frozen in the pre-registration before any run: descriptive tables only —
+no tests, no effect sizes, no generalization beyond the n=2 hold-out seeds per
+cell. Every number below is machine-computed by the sealed formulas (frozen
+checkpoint tool).
+
+Setup: synthetic research corpora from a sealed generator at three sizes —
+**XL ≈ 600K**, **XXL ≈ 1.2M**, **XXXL ≈ 2.4M** tokens (for scale, 1.2M is
+roughly 1.2× the product-default context window of the measured models).
+Within a seed the bands are nested supersets sharing the same 20 hidden-key
+questions; **seeds differ — each seed is a different corpus**. Two hold-out
+seeds (9103/9104) decide every judgement; a third seed (9102), already used in
+the earlier probe phase, is therefore treated as a calibration seed in this
+study — its cell runs here are fresh P2-WIN runs, not reused probe data, and
+they are disclosed separately, never pooled into a judgement. Each cell ran up
+to 10 cold-start attempts under a per-band token budget (44M / 88M / 176M);
+the budget is a stop trigger evaluated after each attempt completes, not a
+hard cap — overruns are possible. Attempts are independent re-samples with no
+feedback between them, not learning retries.
+
+### Completion (k/2 hold-out seeds, terminal reason in parentheses)
+
+| Band | claude-sonnet-5 | claude-opus-5 |
+|---|---|---|
+| XL (≈600K) | **2/2** | **2/2** |
+| XXL (≈1.2M) | 0/2 (token budget ×2) | **1/2** (one completed; one hit token budget) |
+| XXXL (≈2.4M) | 0/2 (token budget / attempts budget) | 0/2 (attempts budget ×2) |
+
+### Transfer band — the frozen rule, then the result
+
+The rule, sealed before the runs: a "transfer band" (the smallest band with
+0/2 completion) may be reported **only** when both hold-out seeds agree and
+the pattern is monotonic in band size. Otherwise the report is **no unique
+transfer**, and no band is named in prose either.
+
+- **sonnet**: both seeds agree (XL completes, XXL/XXXL do not), monotonic →
+  **transfer band = XXL** — as a description of this table, not a cliff
+  position for the model.
+- **opus**: the two hold-out seeds — same band and protocol, different
+  corpora — disagreed in one band (one completed, one did not; the table
+  shows which) → **no unique transfer**. Per the frozen rule, no band is
+  named as the transfer. At XXXL both seeds were 0/2.
+- Calibration seed 9102 (sonnet: completed XL only; opus: completed XL and
+  XXL) is shown for context and used in no judgement.
+
+### Attempt-1 read coverage (coverage_001 — share of corpus *files* read, per ticket)
+
+| Band | sonnet 9103 / 9104 | opus 9103 / 9104 |
+|---|---|---|
+| XL | 1.000 / 1.000 | 1.000 / 1.000 |
+| XXL | 0.905 / 0.161 | 0.181 / **1.000** |
+| XXXL | 0.294 / 0.139 | 0.041 / 0.024 |
+
+### Degradation bits (k/2 hold-out cells where the bit fired)
+
+| Band | sonnet repeat-gate / correct<20 | opus repeat-gate / correct<20 |
+|---|---|---|
+| XL | 0/2 · 0/2 | 0/2 · 0/2 |
+| XXL | 0/2 · 1/2 | 0/2 · 1/2 |
+| XXXL | 0/2 · 1/2 | 0/2 · 1/2 |
+
+### Two failure shapes (per-ticket descriptions — not model laws)
+
+- **Burn-through (sonnet tickets)**: past the band, these tickets keep trying
+  to read and burn the token budget — 3 of sonnet's 4 non-completing hold-out
+  cells ended on token budget. Answer quality dropped in some tickets (one XXL
+  ticket fell to 3/20 on attempt 1; one XXXL ticket slipped 19→18).
+- **Early cut (opus tickets)**: at XXXL, all three seeds show the same shape —
+  from attempt 1 the run reads only a few dozen files (attempt-1 file-count
+  coverage 0.02–0.04), submits early, and consumes all 10 attempts that way.
+  Across all 30 opus XXXL attempts (3 seeds × 10, including calibration seed
+  9102 — which is not part of the transfer judgement) opus still scored
+  **19–20/20 with zero repeat-gate firings**: these tickets abandon the
+  reading, not the answering.
+- Where correctness dipped below 20/20 elsewhere, the shape was mostly a
+  single dropped needle (19/20); genuine answer degradation appears only in
+  the sonnet tickets above and in isolated repeat-gate firings on the
+  calibration seed.
+
+### Cost
+
+Total charge ≈1.429 B tokens (sonnet 971.3 M + opus 457.8 M), under the 2.5 B
+stop trigger. Heaviest observed cell: 327.4 M (XXXL) — over that band's 176 M
+budget because the budget is evaluated after each attempt completes (see
+Setup).
+
+### What this feeds — design material for #159, not claims
+
+1. In these runs, answer correctness was a weak overload signal — opus kept
+   scoring 19–20/20 at 2.4× its window while barely reading. The observable
+   candidate signals were **read-coverage progress** and **early submission**;
+   whether they work as detectors is to be tested in #159, not established
+   here.
+2. One band split the two hold-out seeds (same band and protocol, different
+   corpora — the table shows which) — in these runs a per-band binary did not
+   describe the boundary, which points the threshold design toward a
+   continuous headroom quantity.
+3. The two failure shapes have opposite cost structures (token budget binds
+   first vs attempt budget binds first) — budget guards likely need per-model
+   consideration.
+
+All three feed the data-derived-threshold design tracked in
+[#159](https://github.com/caty-ai/caty-agent-harness/issues/159); none is a
+claim beyond these 18 runs.
+
+### Limitations — read these before quoting
+
+- **n=2 hold-out seeds per cell, and each seed is a different corpus.**
+  opus's 1/2 split says "the seeds disagreed" and nothing more — corpus
+  difficulty differences are an unexcluded alternative explanation.
+- Bands, metrics and the calibration seed were chosen using earlier probe
+  runs — selection information is in the design. The probe data is quarantined
+  from every table here.
+- **Bare arm only.** No harness or sentinel comparison is made or implied.
+- Non-completions include budget censoring — that is why terminal reasons are
+  printed in the main table.
+
+### Reproduce / audit
+
+Pre-registration (`PREREGISTRATION-P2WIN.md` v2) with seal ledger
+(`SEAL-P2WIN.txt`, SHA-256
+`eb9b9582daa5113f86688183f6f44de12f20f8006eeaaab34b9f8b85769c709e`), the
+deviations ledger, the review records (3 first-round seats + delta reviews,
+one delta recovered by transcript, and the panel record), per-run telemetry
+and transcripts live with the rig and are retained offline, available on
+request — the same retention policy as EV-006. Anchor: https://github.com/caty-ai/caty-agent-harness/issues/129#issuecomment-5463745355.
