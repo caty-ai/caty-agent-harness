@@ -343,8 +343,9 @@ check_draft_integrity() {
         printf '%s\n' "$draft_name" >>"$rejected_drafts"
       fi
       failure_line="- $date_stamp distill integrity mismatch: skill $draft_name declares $field=$value not found (source: distill-audit)"
-      failure_hash=$(candidate_lesson_hash "$failure_line")
-      printf '%s [dedup_key: %s:%s]\n' "$failure_line" "$task_id" "$failure_hash" >>"$integrity_failures"
+      if failure_hash=$(candidate_lesson_hash "$failure_line"); then
+        printf '%s [dedup_key: %s:%s]\n' "$failure_line" "$task_id" "$failure_hash" >>"$integrity_failures"
+      fi
     fi
   done <"$declarations"
 

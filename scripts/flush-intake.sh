@@ -103,9 +103,9 @@ write_receipt() {
   local timestamp
 
   timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-  printf 'ts=%s files_scanned=%s blocks=%s candidates=%s folded=%s deduped=%s evicted_by_cap=%s eviction_archive=%s dropped_oversize=%s deferred=%s headerless_bullets=%s torn_lines=%s quarantined=%s lock=%s marker=%s error=%s%s%s%s\n' \
+  printf 'ts=%s files_scanned=%s blocks=%s candidates=%s folded=%s deduped=%s rejected=%s evicted_by_cap=%s eviction_archive=%s dropped_oversize=%s deferred=%s headerless_bullets=%s torn_lines=%s quarantined=%s lock=%s marker=%s error=%s%s%s%s\n' \
     "$timestamp" "$files_scanned" "$blocks" "$candidates" "$folded" "$deduped" \
-    "$evicted_by_cap" "$eviction_archive" "$dropped_oversize" "$deferred" \
+    "$rejected" "$evicted_by_cap" "$eviction_archive" "$dropped_oversize" "$deferred" \
     "$headerless_bullets" "$torn_lines" \
     "$quarantined" "$lock_status" "$marker_status" "$receipt_error" "$quarantined_paths" \
     "$last_session_receipt" \
@@ -156,6 +156,10 @@ consider_candidate() {
   local split_failures="$work_dir/candidate.failures"
 
   candidates=$((candidates + 1))
+  if ! printf '%s' "$text" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1; then
+    rejected=$((rejected + 1))
+    return 0
+  fi
   if (( budget_used >= max_fold )); then
     deferred=$((deferred + 1))
     return 1
@@ -177,11 +181,25 @@ consider_candidate() {
   split_annotated_reply_sections "$annotated_reply" "$split_lessons" "$split_failures" \
     '(source: flush-intake)' 'LESSONS|OPEN_FAILURES'
   if [[ "$target" == lessons ]]; then
-    IFS=$'\t' read -r composite_key line <"$split_lessons"
+    if ! IFS=$'\t' read -r composite_key line <"$split_lessons"; then
+      rejected=$((rejected + 1))
+      return 0
+    fi
   else
-    IFS=$'\t' read -r composite_key line <"$split_failures"
+    if ! IFS=$'\t' read -r composite_key line <"$split_failures"; then
+      rejected=$((rejected + 1))
+      return 0
+    fi
+  fi
+  if [[ -z "$composite_key" || -z "$line" || "$composite_key" != *:* ]]; then
+    rejected=$((rejected + 1))
+    return 0
   fi
   lesson_hash=${composite_key##*:}
+  if [[ -z "$lesson_hash" ]]; then
+    rejected=$((rejected + 1))
+    return 0
+  fi
   if [[ "$target" == lessons ]]; then
     normalized_target=$normalized_lessons_state
   else
@@ -250,6 +268,7 @@ blocks=0
 candidates=0
 folded=0
 deduped=0
+rejected=0
 evicted_by_cap=0
 eviction_archive=none
 dropped_oversize=0

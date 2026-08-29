@@ -116,6 +116,10 @@ fold. The same deterministic consumer may be used by Codex and Kimi workspaces b
 their checkpoint hooks emit the shared flush format. It does not assume that a
 model-authored `session=` attribute has been sanitized.
 
+`iconv` is a runtime dependency of flush intake (POSIX-standard and present on
+macOS and Linux); if it is absent, validation fails closed and receipts report
+`rejected=candidates`.
+
 Run the consumer two to four times per day. For a LaunchAgent, use a `StartInterval`
 between `21600` and `43200` seconds. A daily schedule has no jitter margin at the
 default deadman threshold. The consumer calls no model, so its scheduler does not need
