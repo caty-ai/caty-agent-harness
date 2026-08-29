@@ -114,7 +114,10 @@ aggregate_digest = matches[0]
 # The seal manifest is deliberately not vendored. This test is the only in-repo
 # pin for its digest, so changing it must be a deliberate two-place act.
 seal_manifest_digest = "f31e9af832d7ac54922f5176228172aecadd080ff46f8d6a73e331d598389cb0"
-expected_digests = {aggregate_digest, seal_manifest_digest}
+# The P2-WIN seal ledger (SEAL-P2WIN.txt) is likewise retained with the rig,
+# not vendored; its digest is quoted in the P2-WIN sections of both files.
+p2win_seal_digest = "eb9b9582daa5113f86688183f6f44de12f20f8006eeaaab34b9f8b85769c709e"
+expected_digests = {aggregate_digest, seal_manifest_digest, p2win_seal_digest}
 errors = []
 
 for document in sys.argv[2:]:
