@@ -1,0 +1,3 @@
+{"type":"assistant","message":{"id":"alias-1","model":" MODEL-A-v1 ","usage":{"input_tokens":1000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}
+{"type":"assistant","message":{"id":"alias-2","model":"model-A-V2","usage":{"input_tokens":2000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}
+{"type":"assistant","message":{"id":"alias-3","model":" MODEL-a-v1 ","usage":{"input_tokens":3000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}

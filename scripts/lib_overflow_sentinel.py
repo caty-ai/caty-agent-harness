@@ -50,6 +50,89 @@ REASONING_TTFB_FLOORS = (
 )
 
 
+class _JsonObjectPairs(list):
+    """Distinguish a decoded JSON object from an ordinary JSON array."""
+
+
+def parse_model_aliases(raw: Optional[str]) -> Dict[str, str]:
+    """Parse and normalize the optional single-step model alias map."""
+    if raw is None or not str(raw).strip():
+        return {}
+    try:
+        payload = json.loads(raw, object_pairs_hook=_JsonObjectPairs)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("model aliases must be valid JSON") from exc
+    if not isinstance(payload, _JsonObjectPairs):
+        raise ValueError("model aliases must be a JSON object")
+    aliases: Dict[str, str] = {}
+    for alias, canonical in payload:
+        if not isinstance(alias, str) or not isinstance(canonical, str):
+            raise ValueError("model alias keys and values must be strings")
+        normalized_alias = alias.strip().lower()
+        normalized_canonical = canonical.strip().lower()
+        if not normalized_alias or not normalized_canonical:
+            raise ValueError("model alias keys and values must be non-empty")
+        if normalized_alias in aliases:
+            raise ValueError(f"duplicate model alias after normalization: {normalized_alias}")
+        aliases[normalized_alias] = normalized_canonical
+    return aliases
+
+
+def canonical_model(model: Any, aliases: Optional[Mapping[str, str]] = None) -> Optional[str]:
+    """Return the lowercase/trimmed model identity with one alias lookup."""
+    if not isinstance(model, str):
+        return None
+    normalized = model.strip().lower()
+    if not normalized:
+        return None
+    return (aliases or {}).get(normalized, normalized)
+
+
+def compare_regime_identity(
+    previous: Optional[Mapping[str, str]],
+    model: Any,
+    runtime: Any,
+    aliases: Optional[Mapping[str, str]] = None,
+) -> Tuple[bool, Optional[Dict[str, str]]]:
+    """Compare complete turn identities, preserving the last complete identity."""
+    model_identity = canonical_model(model, aliases)
+    if model_identity is None or not isinstance(runtime, str) or not runtime:
+        return False, dict(previous) if previous is not None else None
+    current = {"model": model_identity, "runtime": runtime}
+    changed = previous is not None and (
+        current["model"] != previous.get("model") or current["runtime"] != previous.get("runtime")
+    )
+    return changed, current
+
+
+def reset_regime_state() -> Dict[str, Any]:
+    """Return cleared per-regime predicate state, including the #218 seams."""
+    return {
+        "series": [],
+        "last_injected": None,
+        "last_fire_ma": {},
+        "drift_accumulator": None,
+        "cadence_counter": 0,
+    }
+
+
+def resolve_thresholds(
+    explicit_t_abs: Optional[int], explicit_w: Optional[float]
+) -> Tuple[int, float, Dict[str, str]]:
+    """Resolve product thresholds with per-key provenance."""
+    t_abs = DEFAULT_T_ABS if explicit_t_abs is None else explicit_t_abs
+    w = DEFAULT_W if explicit_w is None else explicit_w
+    if not isinstance(t_abs, int) or isinstance(t_abs, bool) or t_abs < 1:
+        raise ValueError("T_abs must be an integer >= 1")
+    if not isinstance(w, (int, float)) or isinstance(w, bool) or not 0 < w < 1:
+        raise ValueError("w must be greater than 0 and less than 1")
+    sources = {
+        "T_abs": "default" if explicit_t_abs is None else "config",
+        "w": "default" if explicit_w is None else "config",
+    }
+    return t_abs, w, sources
+
+
 def atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
     """Write one JSON object with fsync + replace in the destination directory."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -97,6 +180,7 @@ def load_state(path: Path) -> Dict[str, Any]:
         "schema_version": SCHEMA_VERSION,
         "last_fire_ma": {},
         "last_run_injected_ma": None,
+        "regime_identity": None,
     }
     try:
         with path.open(encoding="utf-8") as handle:
@@ -116,20 +200,42 @@ def load_state(path: Path) -> Dict[str, Any]:
     last_run = payload.get("last_run_injected_ma")
     if not isinstance(last_run, (int, float)) or isinstance(last_run, bool) or last_run < 0:
         last_run = None
+    regime_identity = payload.get("regime_identity")
+    if not isinstance(regime_identity, dict):
+        regime_identity = None
+    else:
+        identity_model = regime_identity.get("model")
+        identity_runtime = regime_identity.get("runtime")
+        if (
+            not isinstance(identity_model, str)
+            or not identity_model
+            or not isinstance(identity_runtime, str)
+            or not identity_runtime
+        ):
+            regime_identity = None
+        else:
+            regime_identity = {"model": identity_model, "runtime": identity_runtime}
     return {
         "schema_version": SCHEMA_VERSION,
         "last_fire_ma": clean_fire,
         "last_run_injected_ma": last_run,
+        "regime_identity": regime_identity,
     }
 
 
-def save_state(path: Path, last_fire_ma: Mapping[str, float], last_run_injected_ma: Optional[float]) -> None:
+def save_state(
+    path: Path,
+    last_fire_ma: Mapping[str, float],
+    last_run_injected_ma: Optional[float],
+    regime_identity: Optional[Mapping[str, str]] = None,
+) -> None:
     atomic_write_json(
         path,
         {
             "schema_version": SCHEMA_VERSION,
             "last_fire_ma": dict(last_fire_ma),
             "last_run_injected_ma": last_run_injected_ma,
+            "regime_identity": dict(regime_identity) if regime_identity is not None else None,
         },
     )
 
@@ -479,6 +585,8 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
     evaluate.add_argument("--ctx", type=int, default=DEFAULT_CTX_WINDOW)
     validate_hf = sub.add_parser("validate-hf")
     validate_hf.add_argument("path")
+    validate_aliases = sub.add_parser("validate-aliases")
+    validate_aliases.add_argument("aliases")
     prepare_hf_cache = sub.add_parser("prepare-hf-cache")
     prepare_hf_cache.add_argument("path")
     args = parser.parse_args(argv)
@@ -489,6 +597,13 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
     if args.command == "prepare-hf-cache":
         try:
             print(prepare_hf_cache_dir(args.path))
+        except ValueError as exc:
+            print(str(exc), file=os.sys.stderr)
+            return 2
+        return 0
+    if args.command == "validate-aliases":
+        try:
+            print(json.dumps(parse_model_aliases(args.aliases), sort_keys=True))
         except ValueError as exc:
             print(str(exc), file=os.sys.stderr)
             return 2

@@ -1,0 +1,2 @@
+{"type":"assistant","message":{"id":"hysteresis-a","model":"model-a","usage":{"input_tokens":90000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}
+{"type":"assistant","message":{"id":"hysteresis-b","model":"model-b","usage":{"input_tokens":85000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}

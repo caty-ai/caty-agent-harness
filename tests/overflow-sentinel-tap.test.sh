@@ -57,6 +57,22 @@ run_monitor_fixture() {
     --mode "$mode" --model claude-sonnet-4-5 --t-abs 80000 --w 0.50
 }
 
+run_monitor_fixture_with_args() {
+  local fixture=$1
+  local attempt_dir=$2
+  local mode=${3:-shadow}
+  shift 3
+  cp "$FIXTURES/$fixture" "$attempt_dir/stream.jsonl"
+  printf '0\n' >"$attempt_dir/overflow-stream.eof"
+  python3 -B "$MONITOR" \
+    --stream "$attempt_dir/stream.jsonl" \
+    --eof "$attempt_dir/overflow-stream.eof" \
+    --attempt-dir "$attempt_dir" \
+    --artifact-dir "$(cd "$attempt_dir/../.." && pwd)" \
+    --task-id fixture-task --attempt "$(basename "$attempt_dir")" \
+    --mode "$mode" --model claude-sonnet-4-5 "$@"
+}
+
 run_unterminated_monitor_fixture() {
   local fixture=$1
   local attempt_dir=$2
@@ -88,6 +104,8 @@ events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines(
 assert len([x for x in events if x["event"]=="turn"])==2
 assert {x["event"] for x in events}=={"turn","attempt_end"}
 assert all("task_end" not in x.values() for x in events)
+assert all(x["runtime"]=="claude-code" for x in events if x["event"]=="turn")
+assert next(x for x in events if x["event"]=="attempt_end")["regime_change_resets"]==0
 ' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
 assert_python "attempt.json has the complete pinned field set and non-null first_byte_at" '
 p=json.loads(pathlib.Path(sys.argv[1]).read_text())
@@ -132,6 +150,151 @@ assert end["runtime_compaction"] is True and end["compaction_suspected"] is Fals
 assert end["injected_summary"]=={"max":50000,"last3_mean":50000.0}
 assert not pathlib.Path(sys.argv[2]).exists()
 ' "$case_root/artifact/attempts/001/sentinel-events.jsonl" "$case_root/artifact/attempts/001/overflow-nudge.pending"
+
+case_root="$TMP_ROOT/regime-switch"
+make_attempt "$case_root"
+run_monitor_fixture_with_args regime-switch.jsonl "$case_root/artifact/attempts/001" shadow \
+  --t-abs 100000 --w 0.90
+assert_python "model switch resets before fire and starts a fresh slope epoch" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+changes=[x for x in events if x["event"]=="regime_change"]
+fires=[x for x in events if x["event"]=="fire"]
+end=next(x for x in events if x["event"]=="attempt_end")
+assert len(changes)==1
+change=changes[0]
+assert change["turn_idx"]==4
+assert (change["from_model"],change["to_model"])==("model-a","model-b")
+assert (change["from_runtime"],change["to_runtime"])==("claude-code","claude-code")
+assert change["resolved"]=={"ctx_window":200000,"T_abs":100000,"w":0.9,"ttfb_floor":240}
+assert change["sources"]=={"ctx_window_source":"default","threshold_sources":{"T_abs":"config","w":"config"}}
+assert change["drift_reference"]=={"from":"none","to":"none"}
+assert change["attempt"]=="001" and change["schema_version"]==1
+assert not [x for x in fires if x["turn_idx"]==4]
+assert [(x["turn_idx"],x["slope"] is None) for x in fires]==[(6,True),(7,False)]
+assert end["regime_change_resets"]==1
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
+
+case_root="$TMP_ROOT/alias-version-sway"
+make_attempt "$case_root"
+run_monitor_fixture_with_args alias-version-sway.jsonl "$case_root/artifact/attempts/001" shadow \
+  --model-aliases '{" model-a-v1 ":"family-a","MODEL-A-V2":"family-a"}'
+assert_python "alias case whitespace and version sway stay in one regime" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+assert not [x for x in events if x["event"]=="regime_change"]
+assert next(x for x in events if x["event"]=="attempt_end")["regime_change_resets"]==0
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
+
+case_root="$TMP_ROOT/regime-compact-boundary"
+make_attempt "$case_root"
+run_monitor_fixture regime-compact-boundary.jsonl "$case_root/artifact/attempts/001" active
+assert_python "same-turn runtime compaction and model switch reset exactly once" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+changes=[x for x in events if x["event"]=="regime_change"]
+fires=[x for x in events if x["event"]=="fire"]
+end=next(x for x in events if x["event"]=="attempt_end")
+assert len(changes)==1 and end["regime_change_resets"]==1
+assert end["runtime_compaction"] is True and end["compaction_suspected"] is False
+assert end["injected_summary"]=={"max":30000,"last3_mean":30000.0}
+assert [(x["turn_idx"],x["slope"]) for x in fires]==[(1,None)]
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
+
+case_root="$TMP_ROOT/identity-missing-noop"
+make_attempt "$case_root"
+run_monitor_fixture identity-missing-noop.jsonl "$case_root/artifact/attempts/001"
+assert_python "missing model identity does not compare or reset" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+assert not [x for x in events if x["event"]=="regime_change"]
+assert next(x for x in events if x["event"]=="attempt_end")["regime_change_resets"]==0
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
+
+case_root="$TMP_ROOT/identity-missing-before-switch"
+make_attempt "$case_root"
+run_monitor_fixture identity-missing-before-switch.jsonl "$case_root/artifact/attempts/001"
+assert_python "complete identity after a missing-model turn compares with the last complete turn" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+changes=[x for x in events if x["event"]=="regime_change"]
+assert len(changes)==1 and changes[0]["turn_idx"]==3
+assert (changes[0]["from_model"],changes[0]["to_model"])==("model-a","model-b")
+assert next(x for x in events if x["event"]=="attempt_end")["regime_change_resets"]==1
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
+
+case_root="$TMP_ROOT/hysteresis-regime-rearm"
+make_attempt "$case_root"
+run_monitor_fixture hysteresis-regime-rearm.jsonl "$case_root/artifact/attempts/001" shadow
+assert_python "per-axis hysteresis is re-armed by a regime switch" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+fires=[x for x in events if x["event"]=="fire"]
+assert [(x["turn_idx"],x["axis"],x["injected_ma"]) for x in fires]==[(1,"level",90000.0),(2,"level",85000.0)]
+assert next(x for x in events if x["event"]=="attempt_end")["regime_change_resets"]==1
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
+
+case_root="$TMP_ROOT/regime-ctx-override"
+make_attempt "$case_root"
+_CATY_TESTING=1 _CATY_OVF_TEST_TTFB_FLOOR_S=7 \
+run_monitor_fixture_with_args hysteresis-regime-rearm.jsonl "$case_root/artifact/attempts/001" shadow \
+  --ctx-window 123456 --t-abs 80000 --w 0.50
+assert_python "run-level context override survives a regime switch" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+change=next(x for x in events if x["event"]=="regime_change")
+assert change["resolved"]["ctx_window"]==123456
+assert change["sources"]["ctx_window_source"]=="config"
+assert change["resolved"]["ttfb_floor"]==7
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
+
+case_root="$TMP_ROOT/regime-threshold-defaults"
+make_attempt "$case_root"
+run_monitor_fixture_with_args hysteresis-regime-rearm.jsonl "$case_root/artifact/attempts/001" shadow
+assert_python "omitted thresholds report product-default provenance" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+change=next(x for x in events if x["event"]=="regime_change")
+end=next(x for x in events if x["event"]=="attempt_end")
+assert change["resolved"]["T_abs"]==80000 and change["resolved"]["w"]==0.5
+assert change["sources"]["threshold_sources"]=={"T_abs":"default","w":"default"}
+assert end["run_meta"]["threshold_sources"]=={"T_abs":"default","w":"default"}
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
+
+case_root="$TMP_ROOT/regime-threshold-config"
+make_attempt "$case_root"
+run_monitor_fixture hysteresis-regime-rearm.jsonl "$case_root/artifact/attempts/001"
+assert_python "explicit thresholds report config provenance" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+change=next(x for x in events if x["event"]=="regime_change")
+assert change["sources"]["threshold_sources"]=={"T_abs":"config","w":"config"}
+assert next(x for x in events if x["event"]=="attempt_end")["run_meta"]["threshold_sources"]=={"T_abs":"config","w":"config"}
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
+
+case_root="$TMP_ROOT/regime-retry-switch"
+make_attempt "$case_root" 001
+run_monitor_fixture fire.jsonl "$case_root/artifact/attempts/001" shadow
+make_attempt "$case_root" 002
+run_monitor_fixture model-b-fire.jsonl "$case_root/artifact/attempts/002" shadow
+make_attempt "$case_root" 003
+run_monitor_fixture model-b-fire.jsonl "$case_root/artifact/attempts/003" shadow
+make_attempt "$case_root" 004
+_CATY_TESTING=1 _CATY_OVF_TEST_ELAPSED_S=241 \
+run_monitor_fixture absent.jsonl "$case_root/artifact/attempts/004" shadow
+assert_python "model-changing retry compares persisted identity and re-arms hysteresis" '
+first=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+second=[json.loads(x) for x in pathlib.Path(sys.argv[2]).read_text().splitlines()]
+third=[json.loads(x) for x in pathlib.Path(sys.argv[3]).read_text().splitlines()]
+fourth=[json.loads(x) for x in pathlib.Path(sys.argv[4]).read_text().splitlines()]
+state=json.loads(pathlib.Path(sys.argv[5]).read_text())
+assert next(x for x in first if x["event"]=="attempt_end")["regime_change_resets"]==0
+changes=[x for x in second if x["event"]=="regime_change"]
+fires=[x for x in second if x["event"]=="fire"]
+assert len(changes)==1 and changes[0]["turn_idx"]==1
+assert (changes[0]["from_model"],changes[0]["to_model"])==("claude-sonnet-4-5","model-b")
+assert len(fires)==1 and fires[0]["injected_ma"]==85000.0
+assert next(x for x in second if x["event"]=="attempt_end")["regime_change_resets"]==1
+assert not [x for x in third if x["event"] in {"regime_change","fire"}]
+assert next(x for x in third if x["event"]=="attempt_end")["regime_change_resets"]==0
+assert next(x for x in fourth if x["event"]=="alert")["floor_applied"]==240
+assert state["regime_identity"]=={"model":"model-b","runtime":"claude-code"}
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl" \
+  "$case_root/artifact/attempts/002/sentinel-events.jsonl" \
+  "$case_root/artifact/attempts/003/sentinel-events.jsonl" \
+  "$case_root/artifact/attempts/004/sentinel-events.jsonl" \
+  "$case_root/artifact/overflow-sentinel-state.json"
 
 case_root="$TMP_ROOT/no-trailing-newline"
 make_attempt "$case_root"
@@ -253,8 +416,26 @@ grep -Fqx 'mock stderr exact' "$adapter_root/stderr" && pass "CLI stderr passes 
 cmp -s "$adapter_root/stdout" "$attempt/stream.jsonl" && pass "model.stdout tee is byte-identical to stream.jsonl" || fail_case "model.stdout tee is byte-identical to stream.jsonl" "bytes differ"
 [[ -f "$attempt/overflow-stream.eof" ]] && pass "EOF marker is written" || fail_case "EOF marker is written" "missing"
 grep -Fq '"event": "attempt_end"' "$attempt/sentinel-events.jsonl" && pass "attempt_end is finalized before adapter exit" || fail_case "attempt_end is finalized before adapter exit" "missing"
+assert_python "spawn-step omits unset threshold flags so defaults retain provenance" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+end=next(x for x in events if x["event"]=="attempt_end")
+assert end["run_meta"]["threshold_sources"]=={"T_abs":"default","w":"default"}
+' "$attempt/sentinel-events.jsonl"
 step_result_after=$(shasum -a 256 "$attempt/step-result.json" | awk '{print $1}')
 [[ "$step_result_before" == "$step_result_after" ]] && pass "adapter never touches step-result.json" || fail_case "adapter never touches step-result.json" "digest changed"
+
+alias_adapter_root="$TMP_ROOT/alias-adapter"
+make_attempt "$alias_adapter_root"
+OVF_SENTINEL=shadow OVF_COMPACTION_OWNER=sentinel \
+OVF_MODEL_ALIASES='{"model-a-v1":"family-a","model-a-v2":"family-a"}' \
+OVF_STEP_CMD="$MOCK_CLI" MOCK_STREAM_FILE="$FIXTURES/alias-version-sway.jsonl" \
+  "$ADAPTER" "$alias_adapter_root/workspace/task.md" "$alias_adapter_root/workspace" \
+  "$alias_adapter_root/artifact/attempts/001" 1 >"$alias_adapter_root/out" 2>"$alias_adapter_root/err"
+assert_python "spawn-step validates and forwards OVF_MODEL_ALIASES" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+assert not [x for x in events if x["event"]=="regime_change"]
+assert next(x for x in events if x["event"]=="attempt_end")["regime_change_resets"]==0
+' "$alias_adapter_root/artifact/attempts/001/sentinel-events.jsonl"
 
 off_root="$TMP_ROOT/off"
 make_attempt "$off_root"
@@ -306,6 +487,7 @@ OVF_W_PCT=100
 OVF_W_PCT=x
 OVF_CTX_WINDOW=0
 OVF_CTX_WINDOW=x
+OVF_MODEL_ALIASES=[]
 OVF_COMPACTION_OWNER=bad
 OVF_FINALIZE_TIMEOUT_S=0
 OVF_FINALIZE_TIMEOUT_S=x
@@ -406,6 +588,7 @@ assert_python "run N+1 attempt_end records shown disposition" '
 events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
 end=[x for x in events if x["event"]=="attempt_end"][0]
 assert end["nudge_disposition_final"]=="shown" and not end["fired_turns"]
+assert end["regime_change_resets"]==0
 ' "$second_attempt/sentinel-events.jsonl"
 
 numeric_root="$TMP_ROOT/numeric-pending"
@@ -437,6 +620,7 @@ assert_python "OVF_W_PCT converts through division by one hundred" '
 events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
 fire=[x for x in events if x["event"]=="fire"][0]
 assert fire["run_meta"]["w"]==0.05
+assert fire["run_meta"]["threshold_sources"]=={"T_abs":"default","w":"config"}
 ' "$w_root/artifact/attempts/001/sentinel-events.jsonl"
 exit_root="$TMP_ROOT/exit"
 make_attempt "$exit_root"
@@ -543,10 +727,10 @@ turn=next(x for x in fire_events if x["event"]=="turn")
 fire=next(x for x in fire_events if x["event"]=="fire")
 end=next(x for x in fire_events if x["event"]=="attempt_end")
 alert=next(x for x in alert_events if x["event"]=="alert")
-assert {"event","schema_version","ts","task_id","attempt","turn_idx","input_tokens","cache_read_tokens","cache_creation_tokens","output_tokens","model","tap_status"} <= set(turn)
+assert {"event","schema_version","ts","task_id","attempt","turn_idx","input_tokens","cache_read_tokens","cache_creation_tokens","output_tokens","model","runtime","tap_status"} <= set(turn)
 assert {"event","schema_version","ts","started_at","task_id","attempt","turn_idx","axis","injected_ma","injected_last","value_kind","threshold_hit","ctx_window","ctx_window_source","slope","projection_turns","decision","nudge_disposition","model","runtime","tap_status","run_meta"} <= set(fire)
 assert {"event","schema_version","ts","task_id","attempt","turn_idx","ttfb_ms","floor_applied","model","runtime"} <= set(alert)
-assert {"event","schema_version","ts","started_at","task_id","attempt","outcome","window_error","runtime_compaction","compaction_suspected","total_tokens","injected_summary","fired_turns","alert_turns","nudge_disposition_final","tap_status","run_meta","elapsed_s"} <= set(end)
+assert {"event","schema_version","ts","started_at","task_id","attempt","outcome","window_error","runtime_compaction","compaction_suspected","regime_change_resets","total_tokens","injected_summary","fired_turns","alert_turns","nudge_disposition_final","tap_status","run_meta","elapsed_s"} <= set(end)
 assert end["outcome"] in {"step_completed","aborted","overflowed"}
 ' "$w_root/artifact/attempts/001/sentinel-events.jsonl" "$tier_root/artifact/attempts/001/sentinel-events.jsonl"
 
