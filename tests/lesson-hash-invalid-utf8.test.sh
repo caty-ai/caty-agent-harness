@@ -51,6 +51,9 @@ hash_candidate_with_normalizer() {
       awk-failure)
         normalize_state_candidate() { return 1; }
         ;;
+      partial-failure)
+        normalize_state_candidate() { printf "partial\n"; return 1; }
+        ;;
       python-failure)
         normalize_state_candidate() { printf "%s\n" "$1"; }
         ;;
@@ -77,6 +80,24 @@ else
     "rcs=$invalid_one_rc/$invalid_two_rc outputs=$(tr '\n' ';' <"$invalid_one_out")/$(tr '\n' ';' <"$invalid_two_out")"
 fi
 
+quiet_out=$TMP_ROOT/quiet-invalid.out
+quiet_err=$TMP_ROOT/quiet-invalid.err
+set +e
+bash -c '
+  source "$1"
+  set +e
+  normalize_state_candidate() { printf "%s\n" "$1"; }
+  candidate_lesson_hash "$2"
+' _ "$STATE_FOLD_LIB" "$invalid_one" >"$quiet_out" 2>"$quiet_err"
+quiet_rc=$?
+set -e
+if [ "$quiet_rc" -ne 0 ] && [ ! -s "$quiet_out" ] && [ ! -s "$quiet_err" ]; then
+  pass 'invalid-UTF-8 encode refusal is quiet'
+else
+  fail_case 'invalid-UTF-8 encode refusal is quiet' \
+    "rc=$quiet_rc stdout=$(LC_ALL=C sed -n l "$quiet_out") stderr=$(LC_ALL=C sed -n l "$quiet_err")"
+fi
+
 awk_failure_out=$TMP_ROOT/awk-failure.out
 python_failure_out=$TMP_ROOT/python-failure.out
 set +e
@@ -91,6 +112,35 @@ if [ "$awk_failure_rc" -ne 0 ] && [ "$python_failure_rc" -ne 0 ] \
 else
   fail_case 'awk-stage and Python-stage failures independently refuse hashing' \
     "rcs=$awk_failure_rc/$python_failure_rc outputs=$(tr '\n' ';' <"$awk_failure_out")/$(tr '\n' ';' <"$python_failure_out")"
+fi
+
+partial_failure_out=$TMP_ROOT/partial-failure.out
+set +e
+hash_candidate_with_normalizer 'ordinary text' partial-failure "$partial_failure_out"
+partial_failure_rc=$?
+set -e
+if [ "$partial_failure_rc" -ne 0 ] && [ ! -s "$partial_failure_out" ]; then
+  pass 'partial normalizer output with failure status is refused'
+else
+  fail_case 'partial normalizer output with failure status is refused' \
+    "rc=$partial_failure_rc output=$(tr '\n' ';' <"$partial_failure_out")"
+fi
+
+key_text_empty_out=$TMP_ROOT/key-text-empty.out
+set +e
+bash -c '
+  source "$1"
+  set +e
+  normalize_state_candidate() { return 0; }
+  normalize_state_candidate_key_text "ordinary text"
+' _ "$STATE_FOLD_LIB" >"$key_text_empty_out" 2>/dev/null
+key_text_empty_rc=$?
+set -e
+if [ "$key_text_empty_rc" -ne 0 ] && [ ! -s "$key_text_empty_out" ]; then
+  pass 'key-text normalization refuses empty output for non-empty input'
+else
+  fail_case 'key-text normalization refuses empty output for non-empty input' \
+    "rc=$key_text_empty_rc output=$(tr '\n' ';' <"$key_text_empty_out")"
 fi
 
 empty_out=$TMP_ROOT/empty.out
@@ -123,6 +173,7 @@ annotated=$TMP_ROOT/invalid.annotated
   printf '%s\n' "$invalid_one"
 } >"$reply"
 : >"$annotated"
+set +e
 bash -c '
   source "$1"
   set +e
@@ -131,6 +182,7 @@ bash -c '
     "$3" "(source: distill-audit)" "LESSONS|OPEN_FAILURES"
 ' _ "$STATE_FOLD_LIB" "$reply" "$annotated" 2>/dev/null
 annotate_rc=$?
+set -e
 if [ "$annotate_rc" -eq 0 ] \
   && [ "$(wc -l <"$annotated" | tr -d '[:space:]')" -eq 1 ] \
   && grep -Fqx -- '## LESSONS' "$annotated" \
@@ -149,12 +201,14 @@ normalized_state=$TMP_ROOT/state.normalized
   printf '%s\n' '- 2026-08-29 valid historical lesson (source: distill-audit)'
   printf '%s\n' '## Open failures'
 } >"$state"
+set +e
 bash -c '
   source "$1"
   set +e
   snapshot_state_normalized_candidates "$2" "$3" "## Lessons learned"
 ' _ "$STATE_FOLD_LIB" "$state" "$normalized_state" 2>/dev/null
 snapshot_rc=$?
+set -e
 if [ "$snapshot_rc" -eq 0 ] \
   && [ "$(wc -l <"$normalized_state" | tr -d '[:space:]')" -eq 1 ] \
   && grep -Fqx -- 'valid historical lesson' "$normalized_state"; then
@@ -196,9 +250,13 @@ invalid_flush=$workspace/loop/pending/flush-2026-07-22.md
   printf -- '- Invalid UTF-8 \377\376 candidate is refused.\n'
 } >"$invalid_flush"
 cp "$invalid_flush" "$TMP_ROOT/invalid-utf8-original.md"
-INTAKE_LOCK_SLEEP_S=0 "$INTAKE" "$workspace" \
+intake_trace=$TMP_ROOT/intake.trace
+: >"$intake_trace"
+set +e
+STATE_FOLD_TEST_TRACE_FILE="$intake_trace" INTAKE_LOCK_SLEEP_S=0 "$INTAKE" "$workspace" \
   >"$TMP_ROOT/intake.out" 2>"$TMP_ROOT/intake.err"
 intake_rc=$?
+set -e
 if [ "$intake_rc" -eq 0 ] \
   && [ "$(receipt_value "$workspace" candidates)" -eq 1 ] \
   && [ "$(receipt_value "$workspace" rejected)" -eq 1 ] \
@@ -211,6 +269,13 @@ if [ "$intake_rc" -eq 0 ] \
 else
   fail_case 'intake rejects invalid UTF-8 visibly and archives the raw file byte-identically' \
     "rc=$intake_rc receipt=$(tail -n 1 "$workspace/loop/pending/intake-runs.log" 2>/dev/null)"
+fi
+
+if ! grep -Eq '^(annotate|dedup)$' "$intake_trace"; then
+  pass 'intake invalid-UTF-8 validation stops before annotation and dedup'
+else
+  fail_case 'intake invalid-UTF-8 validation stops before annotation and dedup' \
+    "trace=$(tr '\n' ',' <"$intake_trace")"
 fi
 
 ascii_out=$TMP_ROOT/ascii.out

@@ -78,6 +78,8 @@ annotate_reply_dedup_keys() {
   local stripped_line
   local source_anchored_line
   local lesson_hash
+  # Keep this shell-local for byte-wise bash regex matching only. Child
+  # processes intentionally retain the ambient locale so valid keys do not drift.
   local LC_ALL=C
 
   state_fold_trace annotate
@@ -162,7 +164,10 @@ SMART_QUOTES = str.maketrans({
 value = unicodedata.normalize("NFKC", sys.argv[1]).translate(SMART_QUOTES)
 # Compatibility spaces introduced by NFKC join the existing whitespace fold.
 value = re.sub(r" +", " ", value).strip(" ")
-sys.stdout.buffer.write((value + "\n").encode("utf-8"))
+try:
+    sys.stdout.buffer.write((value + "\n").encode("utf-8"))
+except UnicodeEncodeError:
+    sys.exit(1)
 PY
 }
 

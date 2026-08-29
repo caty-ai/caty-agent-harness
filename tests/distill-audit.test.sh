@@ -733,6 +733,22 @@ else
   fail_case "integrity gate accepts existing files_created references" "rc=$rc output=$output"
 fi
 
+ws=$(make_ws integrity-invalid-utf8-hash)
+invalid_integrity_value=$'wrong-\xff\xfe-value'
+reply=$(printf '## LESSONS\n## OPEN_FAILURES\n## SKILL_DRAFTS\n### invalid-integrity-hash\ntrigger: test\ntarget_skill: %s\nDo not create this skill.\n### valid-integrity-sibling\ntrigger: test\ntarget_skill: different-valid-name\nDo not create this skill.' "$invalid_integrity_value")
+set +e
+output=$(LC_ALL=C DISTILL_REPLY="$reply" DISTILLER_CMD="$distiller" bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+set -e
+if [ "$rc" -eq 0 ] \
+  && ! LC_ALL=C grep -R -a -E '\[dedup_key: [0-9a-f]{64}:\]' "$ws" >/dev/null 2>&1 \
+  && LC_ALL=C grep -R -a -E 'distill integrity mismatch: skill valid-integrity-sibling.*\[dedup_key: [0-9a-f]{64}:[0-9a-f]{64}\]' "$ws" >/dev/null 2>&1; then
+  pass "integrity hash refusal emits no empty key and preserves valid sibling keys"
+else
+  fail_case "integrity hash refusal emits no empty key and preserves valid sibling keys" \
+    "rc=$rc output=$(LC_ALL=C printf '%s' "$output" | sed -n l) artifacts=$(LC_ALL=C grep -R -a -n 'dedup_key:' "$ws" 2>/dev/null)"
+fi
+
 ws=$(make_ws integrity-mechanically-checkable)
 reply='## LESSONS
 ## OPEN_FAILURES

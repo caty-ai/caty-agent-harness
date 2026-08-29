@@ -60,7 +60,7 @@ Pre-existing workspaces create it on first enqueue/runner use; invalid entries f
 
 ## Flush intake consumer receipts
 
-The flush intake consumer's accounting ledger is `loop/pending/intake-runs.log`. The deadman `distill` marker proves only that intake ran; inspect the ledger for content-level silence, dedup, deferral, eviction, and quarantine counts. The `loop/archive/` raw layer is append-only and is never auto-pruned; see [DESIGN.md §3.1](design/DESIGN.md#31-files-per-agent-workspace) for its exact membership. See [adapters/claude-code/INSTALL.md](../adapters/claude-code/INSTALL.md) for the full ledger format and scheduling.
+The flush intake consumer's accounting ledger is `loop/pending/intake-runs.log`. The deadman `distill` marker proves only that intake ran; inspect the ledger for content-level silence, dedup, deferral, eviction, rejection, and quarantine counts. The `rejected` field records content-level rejection of invalid-UTF-8 candidates. The `loop/archive/` raw layer is append-only and is never auto-pruned; see [DESIGN.md §3.1](design/DESIGN.md#31-files-per-agent-workspace) for its exact membership. See [adapters/claude-code/INSTALL.md](../adapters/claude-code/INSTALL.md) for the full ledger format and scheduling.
 
 ## Raw-layer cross-model review
 
