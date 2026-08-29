@@ -599,23 +599,47 @@ state_fold_atomic_archive_append() {
   archive_name=${archive_file##*/}
   tmp_file="$archive_dir/.$archive_name.tmp.$$"
   if [[ -f "$archive_file" ]]; then
-    cp "$archive_file" "$tmp_file" || return 1
-    before_bytes=$(wc -c <"$archive_file" | tr -d '[:space:]')
+    cp "$archive_file" "$tmp_file" || { rm -f "$tmp_file"; return 1; }
+    if ! before_bytes=$(wc -c <"$archive_file" | tr -d '[:space:]'); then
+      rm -f "$tmp_file"
+      return 1
+    fi
   else
-    : >"$tmp_file" || return 1
+    : >"$tmp_file" || { rm -f "$tmp_file"; return 1; }
   fi
-  source_bytes=$(wc -c <"$source_file" | tr -d '[:space:]')
+  if ! source_bytes=$(wc -c <"$source_file" | tr -d '[:space:]'); then
+    rm -f "$tmp_file"
+    return 1
+  fi
   cat "$source_file" >>"$tmp_file" || {
     rm -f "$tmp_file"
     return 1
   }
   expected_bytes=$((before_bytes + source_bytes))
-  actual_bytes=$(wc -c <"$tmp_file" | tr -d '[:space:]')
+  if ! actual_bytes=$(wc -c <"$tmp_file" | tr -d '[:space:]'); then
+    rm -f "$tmp_file"
+    return 1
+  fi
   if [[ "$actual_bytes" -ne "$expected_bytes" ]]; then
     rm -f "$tmp_file"
     return 1
   fi
-  mv -f "$tmp_file" "$archive_file"
+  if [[ "$source_bytes" -gt 0 ]] \
+    && ! tail -c "$source_bytes" "$tmp_file" | cmp -s - "$source_file"; then
+    rm -f "$tmp_file"
+    return 1
+  fi
+  if [[ "$before_bytes" -gt 0 ]] \
+    && ! head -c "$before_bytes" "$tmp_file" | cmp -s - "$archive_file"; then
+    rm -f "$tmp_file"
+    return 1
+  fi
+  # The destination must be a regular file or absent, never a directory.
+  if [ -e "$archive_file" ] && [ ! -f "$archive_file" ]; then
+    rm -f "$tmp_file"
+    return 1
+  fi
+  mv -f "$tmp_file" "$archive_file" || { rm -f "$tmp_file"; return 1; }
 }
 
 fold_declared_state_caps() {

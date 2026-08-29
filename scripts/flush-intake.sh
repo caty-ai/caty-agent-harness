@@ -293,7 +293,7 @@ fi
 
 tmp_root=${TMPDIR:-/tmp}
 work_dir=$(mktemp -d "$tmp_root/flush-intake.XXXXXX")
-state_tmp="$workspace/.STATE.md.tmp.$$"
+state_tmp="$workspace/.STATE.md.rebuild.$$"
 marker_tmp="$deadman_dir/.distill.marker.tmp.$$"
 # shellcheck disable=SC2329
 cleanup() {
@@ -473,7 +473,12 @@ if [[ -s "$accepted_lessons" || -s "$accepted_failures" ]]; then
       "$adapter_identity" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >>"$eviction_archive_path"
     cat "$evicted_lessons_file" >>"$eviction_archive_path"
   fi
-  mv -f "$state_tmp" "$state_file"
+  if ! atomic_write_file "$state_tmp" "$state_file"; then
+    folded=0
+    receipt_error=state-publish
+    write_receipt acquired untouched
+    exit 1
+  fi
   if [[ ${INTAKE_TEST_CRASH_AFTER_STATE:-0} == 1 ]]; then
     exit 75
   fi
@@ -490,7 +495,11 @@ if [[ -s "$accepted_keys" ]]; then
   while IFS= read -r composite_key || [[ -n "$composite_key" ]]; do
     printf '<!-- carried dedup_key: %s -->\n' "$composite_key" >>"$ledger_source"
   done <"$accepted_keys"
-  atomic_write_file "$ledger_source" "$ledger_file"
+  if ! atomic_write_file "$ledger_source" "$ledger_file"; then
+    receipt_error=ledger-write
+    write_receipt acquired untouched
+    exit 1
+  fi
 fi
 
 while IFS=$'\034' read -r action source_path relative_path || [[ -n "$action" ]]; do
