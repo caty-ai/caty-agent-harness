@@ -25,7 +25,7 @@ Caty Agent Harness は、その全部をただのテキストファイルと確�
 
 **自己成長しながら、指示したタスクを最後まで完走してくれるようになるツール。**
 
-**実測** — コンテキストが溢れる量の仕事を対象とした、封印付き・事前登録済みの2実験（2026-08）:
+**実測** — 封印付き・事前登録済みの3実験（2026-08）。表はコンテキストが溢れる量の仕事への介入2レーン、第3の実験（P2-WIN⁵）は素のモデルに窓の内外をまたぐ仕事を当てた梯子です:
 
 | モデル | 完了ハルシネーション¹ | 検証済み結果 | 素とのトークン差 |
 |---|---|---|---|
@@ -37,6 +37,7 @@ Caty Agent Harness は、その全部をただのテキストファイルと確�
 <br><sub>² EV-006 — 素 vs **出荷済みハーネス**・各腕30走行（M/L サイズ）の検証済み完了率</sub>
 <br><sub>³ EV-008 — 素 vs **オーバーフロー・センチネル**。Sentinel v1 は claude-code runtime 向けの opt-in 機能として v0.17.0 で出荷済みです（[#180](https://github.com/caty-ai/caty-agent-harness/issues/180) は [#159](https://github.com/caty-ai/caty-agent-harness/issues/159) を実装）。有効化は [`OVF_SENTINEL=shadow|active`](adapters/claude-code/INSTALL.md)、未設定 = 完全オフ（byte-identical passthrough）です。default-on は今後の課題で、[#159](https://github.com/caty-ai/caty-agent-harness/issues/159) の条件に照らしてモデルごとに判断します。詳しくは [モデル別プロファイル](#model-effects) を参照してください。EV-008 はその実装に先立つリグ事前測定であり、出荷済み実装ではまだ再測定していません。`低下なし` = 全セルで両腕とも隠し答案 20/20。`素とのトークン差` = 封印4セルの median(sentinel/bare) を 1 から引いた値: sonnet **0.801** → −20%、opus **0.923** → −8%。`—` = このレーンでは未測定</sub>
 <br><sub>⁴ descriptive・post-GO</sub>
+<br><sub>⁵ P2-WIN — 素のモデルのみ（ハーネスなし・センチネルなし）: 仕事がどの大きさになると走行が完遂しなくなるか。≈0.6M / ≈1.2M / ≈2.4M トークンの仕事で、sonnet は ≈1.2M 帯から両 hold-out seed とも完遂しなくなり（transfer band = XXL・完遂 0/2 となる最小の帯・その表の記述として）、opus は2つの hold-out seed の判定がある帯で割れ（1/2 — どの帯かは表を参照）→ **no unique transfer**（凍結規則により帯を特定しません）、2.4M 帯の個票では attempt 1 のファイル数読了率（coverage_001）が 0.02〜0.04 まで落ちても opus の正答は 19〜20/20 を保ちました。セルあたり n=2 seed・記述のみ — 介入効果の主張ではありません: [表と限界](docs/benchmark.ja.md#p2-win)</sub>
 
 <sub>Codex・qwen・grok・gemini と、テレメトリが見えないランタイム（glm/muse/kimi）も測定済みです — sentinel の方が素より高コストだったセルも含みます: [モデル別プロファイル](#model-effects) ・ [全数字と経緯](docs/benchmark.ja.md#ev-008) ・ローカルモデル（Ollama）を含む計画レーン: [#129](https://github.com/caty-ai/caty-agent-harness/issues/129)</sub>
 
@@ -196,6 +197,8 @@ workspace としてインストールし、ヘルスチェックを実行し、�
 | **発火・結果混合型** — 早期発現の発火・重い全読み込み | gemini-3.7-flash（descriptive — 事前登録 GO 条件の対象外） | 4/4 発火（t31〜82）。bare は L帯で崩壊。分解が L帯1セルの完遂を救済した一方、sentinel セルの 2/4（M-i3・L-i2）は正答 0（子ステップの headless permission 停滞） | **記述のみ — 効率主張も default-on 判断もしない。**[セル別の数字](docs/benchmark.ja.md#ev-008) |
 
 <sub>比は sentinel/bare のトークンコスト（小さいほど安い）・モデルごと封印4セルの中央値・実測 2026-08-25。引用前に必ず読むこと: ① codex 条件は最初 **FAIL** した（M4・n=1・幾何平均 1.337）。通ったのは n=3 反復 — データを見た後の事後設計を 3席 delta レビュー経由で封印したもの（0.9944 ≤ 1.05）— であり、FAIL は消さずに歴史として残す。② sonnet の 0.801 は判定閾値（<1.0）は満たしたが努力目標（<0.8）には僅差で未達。③ ペア比の多くは n=1 — 走行間のばらつきは実在する（codex 平均の SE ≈25%）。[全数字・方法・弱点](docs/benchmark.ja.md#ev-008)。</sub>
+
+第3の封印実験 **P2-WIN** は、素のモデルで仕事そのものを特性化しました — 3つの仕事サイズ帯での完遂結果の測定であり、介入の結果ではありません: [表と限界](docs/benchmark.ja.md#p2-win)。
 
 **盲目テレメトリ経路 — 実測なしで有効化しないこと。** 現行の shim 経由では glm / muse の per-turn usage は全ゼロ、kimi は usage を出しません。生きたテレメトリが見えないランタイムでセンチネルを default-on にしてはいけません — 見張るべき水位がそもそも見えないからです。
 

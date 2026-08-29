@@ -25,7 +25,7 @@ Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决�
 
 **一个会自我成长、并学会把你交办的任务一路跑到「完成」的工具。**
 
-**实测** — 针对上下文溢出任务的两项密封、预先注册实验（2026-08）：
+**实测** — 三项密封、预先注册实验（2026-08）。表格展示的是上下文溢出任务的两条介入赛道；第三项（P2-WIN⁵）则是让裸模型分别在窗口内、窗口边缘与超出窗口的任务规模上依次测试的阶梯：
 
 | 模型 | 完成幻觉¹ | 已验证结果 | token 相对裸跑 |
 |---|---|---|---|
@@ -37,6 +37,7 @@ Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决�
 <br><sub>² EV-006 — 裸跑 vs **已发布 harness**；每臂30次运行（M/L 规模）的已验证完成率</sub>
 <br><sub>³ EV-008 — 裸跑 vs **overflow sentinel**；Sentinel v1 已作为 claude-code runtime 的 opt-in 功能在 v0.17.0 发布（[#180](https://github.com/caty-ai/caty-agent-harness/issues/180) 实现了 [#159](https://github.com/caty-ai/caty-agent-harness/issues/159)）；通过 [`OVF_SENTINEL=shadow|active`](adapters/claude-code/INSTALL.md) 启用，未设置 = 完全关闭（byte-identical passthrough）。default-on 仍属后续工作，将按模型对照 [#159](https://github.com/caty-ai/caty-agent-harness/issues/159) 的条件决定；详见[各模型档案](#model-effects)。EV-008 仍是该实现之前取得的 rig 预先测量，且尚未在已发布实现上重新测量。`无下降` = 每个单元的两臂均按隐藏答案取得 20/20；`token 相对裸跑` = 1 − 四个密封单元的 median(sentinel/bare)：sonnet **0.801** → −20%，opus **0.923** → −8%；`—` = 本赛道未测量</sub>
 <br><sub>⁴ 描述性、post-GO</sub>
+<br><sub>⁵ P2-WIN — 仅裸模型，没有 harness、没有 sentinel：任务做到多大时，运行会开始无法完成？在 ≈0.6M / ≈1.2M / ≈2.4M token 的任务上，sonnet 从 ≈1.2M 档开始，在两个 hold-out seed 上都不再完成（transfer band = XXL——完成率为 0/2 的最小档位，作为该表的一种记述）；opus 的两个 hold-out seed 在某一档位上出现分歧（1/2——具体是哪个档位见表格）→ **no unique transfer**（冻结规则未指明具体档位），而在 2.4M 档的 ticket 中，opus 仍持续拿到 19–20/20，与此同时 attempt-1 的文件数读取覆盖率（coverage_001）却降到 0.02–0.04。每个单元 n=2 seed，仅作记述——不构成介入效果的主张：[表格与局限（英文）](docs/benchmark.md#p2-win)</sub>
 
 <sub>Codex、qwen、grok、gemini 以及遥测不可见的运行时（glm/muse/kimi）也已测量——包括 sentinel 成本高于裸跑的单元：[各模型档案](#model-effects) ・ [完整数字与历史（英文）](docs/benchmark.md#ev-008) ・含本地模型（Ollama）的计划赛道：[#129](https://github.com/caty-ai/caty-agent-harness/issues/129)</sub>
 
@@ -195,6 +196,8 @@ flowchart LR
 | **触发但结果混合型** — 早期触发・重型全量读取 | gemini-3.7-flash（descriptive——不在预先注册的 GO 条件之内） | 4/4 触发（t31–82）。bare 在 L 档崩溃；分解在一个 L 单元中挽救了完成，但 2/4 的 sentinel 单元（M-i3、L-i2）正确数为 0（子步骤在 headless 下的 permission 停滞） | **仅作记述——不做效率主张，也不做 default-on 判断。**[单元级数字](docs/benchmark.md#ev-008) |
 
 <sub>比值为 sentinel/bare 的 token 成本（数值越低越省）・每个模型 4 个密封单元的中位数・实测于 2026-08-25。引用前请先读：① codex 条件最初 **FAIL**（M4，n=1，几何平均 1.337），只有在 n=3 重复测试——这是看到数据后才制定、并经 3 席 delta 审核封印的事后设计（0.9944 ≤ 1.05）——中才通过；FAIL 是历史，不会被抹去；② sonnet 的 0.801 达到了判定阈值（<1.0），但以微弱差距未达到努力目标（<0.8）；③ 大多数逐对比值都是 n=1——run 与 run 之间的方差是真实存在的（codex 平均值的 SE ≈25%）。[完整数字、方法与注意事项（英文）](docs/benchmark.md#ev-008)。</sub>
+
+第三项密封实验 **P2-WIN**，在裸模型上刻画了任务本身的特性——这是对三个任务规模档位上完成结果的测量，而不是介入效果的结果：[表格与局限（英文）](docs/benchmark.md#p2-win)。
 
 **盲态遥测路径——未经实测前不要开启。** 通过目前的 shim，glm / muse 报告的每轮 usage 全部为零，kimi 则完全不输出 usage。看不到实时遥测的运行时，绝不能把 sentinel 设为 default-on：因为根本没有水位可看。
 

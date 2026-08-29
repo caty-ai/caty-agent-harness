@@ -25,7 +25,7 @@ a small system, wrapped around the AI you already use.
 
 **A tool that grows on its own — and learns to run your tasks all the way to done.**
 
-**Measured** — two sealed, pre-registered experiments on context-overflow jobs (2026-08):
+**Measured** — three sealed, pre-registered experiments (2026-08). The table shows the two intervention lanes on context-overflow jobs; the third (P2-WIN⁵) is a ladder of bare-model jobs inside, at, and past the window:
 
 | Model | Completion hallucination¹ | Verified outcome | Tokens vs bare |
 |---|---|---|---|
@@ -37,6 +37,7 @@ a small system, wrapped around the AI you already use.
 <br><sub>² EV-006 — bare vs **shipped harness**; verified completion rate over 30 runs/arm (M/L sizes)</sub>
 <br><sub>³ EV-008 — bare vs **overflow sentinel**. Sentinel v1 shipped as opt-in for the claude-code runtime in v0.17.0 ([#180](https://github.com/caty-ai/caty-agent-harness/issues/180), implementing [#159](https://github.com/caty-ai/caty-agent-harness/issues/159)); enable with [`OVF_SENTINEL=shadow|active`](adapters/claude-code/INSTALL.md), unset = fully off (byte-identical passthrough). Default-on remains future work, decided per model against the [#159](https://github.com/caty-ai/caty-agent-harness/issues/159) conditions; see [per-model profiles](#model-effects). EV-008 remains a rig pre-measurement taken ahead of that implementation and has not been re-measured on the shipped implementation. `no loss` = both arms scored 20/20 (hidden key) in every cell; `Tokens vs bare` = 1 − median(sentinel/bare) over 4 sealed cells: sonnet **0.801** → −20%, opus **0.923** → −8%. `—` = not measured in this lane</sub>
 <br><sub>⁴ descriptive, post-GO</sub>
+<br><sub>⁵ P2-WIN — bare models only, no harness, no sentinel: at what job size do runs stop completing? On jobs of ≈0.6M / ≈1.2M / ≈2.4M tokens, sonnet stopped completing from the ≈1.2M band on both hold-out seeds (transfer band = XXL — the smallest band with 0/2 completion, as a description of that table); opus's two hold-out seeds disagreed in one band (1/2 — the table shows which) → **no unique transfer** (the frozen rule names no band), and in its 2.4M tickets opus kept scoring 19–20/20 while attempt-1 file-count read coverage (coverage_001) fell to 0.02–0.04. n=2 seeds per cell, descriptive only — no intervention claim: [tables & limitations](docs/benchmark.md#p2-win)</sub>
 
 <sub>Codex, qwen, grok, gemini and the blind-telemetry runtimes (glm/muse/kimi) are measured too — including cells where the sentinel cost more than bare: [per-model profiles](#model-effects) · [full numbers & history](docs/benchmark.md#ev-008) · planned lanes incl. local models (Ollama): [#129](https://github.com/caty-ai/caty-agent-harness/issues/129)</sub>
 
@@ -196,6 +197,8 @@ The **overflow sentinel** ([design issue #159](https://github.com/caty-ai/caty-a
 | **Fires, mixed outcomes** — early-onset firing, heavy full-read | gemini-3.7-flash (descriptive — outside the pre-registered GO conditions) | fires 4/4 (turns 31–82); bare collapses on L-band jobs; decomposition rescued completion in one L cell; 2/4 sentinel cells (M-i3, L-i2) scored 0 (headless permission stalls in the child steps) | **Descriptive only — no efficiency claim, no default-on judgement.** [Per-cell numbers](docs/benchmark.md#ev-008) |
 
 <sub>Ratios are sentinel/bare token cost (lower = cheaper), median of 4 sealed cells per model, measured 2026-08-25. Read before quoting: ① the codex condition first **FAILed** (M4, n=1, geometric mean 1.337) and passed only on the n=3 repeat — a data-informed post-design sealed via a 3-seat delta review (0.9944 ≤ 1.05) — the FAIL is history, not erased; ② sonnet's 0.801 met the decision threshold (<1.0) but narrowly missed the stretch goal (<0.8); ③ most per-pair ratios are n=1 — run-to-run variance is real (≈25 % SE on the codex mean). [Full numbers, method and caveats](docs/benchmark.md#ev-008).</sub>
+
+A third sealed experiment, **P2-WIN**, characterized the jobs themselves on bare models — a measurement of completion outcomes across three job-size bands, not an intervention result: [tables & limitations](docs/benchmark.md#p2-win).
 
 **Blind telemetry paths — do not switch these on unmeasured.** Through the current shim, glm / muse report all-zero per-turn usage, and kimi emits no usage at all. A runtime whose live telemetry cannot be seen must not run the sentinel default-on: there is no water level to watch.
 
