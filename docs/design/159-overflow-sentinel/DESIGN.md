@@ -1,7 +1,8 @@
 # DESIGN: #159 overflow sentinel — 文脈圧力の実測で task-runner を発火する
 
-status: **v0.5.3**（2026-08-25・Alpha・L1-9 r3 PASS〔3席 CUMULATIVE GO 収束・blocking 残0〕+
-**EV-008 完了・default-on GO 宣言済み（案A・2026-08-25）を「設計の現在地」として反映**・サイズ H）
+status: **v0.6 DRAFT**（2026-08-29・Alpha・外部レビュー採用2件〔@pm25coder〕の条文化 + D4 閾値注入点の
+設計凍結（数値は P2 窓プローブ待ちで保留）・L1-9 異種5席 delta レビュー待ち・サイズ H。
+直前の凍結版= v0.5.4〔§10。v0.5.3 表記のまま header 未更新だった誤記を本版で訂正〕）
 inputs: PILOT.md（訂正節含む）/ REPORT-runtime-context-survey.md / REPORT-pattern4-rootcause.md /
 REPORT-hermes-provider-layer.md / REPORT-hermes-provider-deep-research.md / REPORT-qwen38-artifacts.md /
 #159 clarify 決裁5点 / L1-9 r1〜r3 裁定（reviews/ADJUDICATION-r1〜r3-FINAL.md）/
@@ -121,6 +122,27 @@ EV-006 確定の3パターン（第4パターンは配線バグで撤回・訂�
 - 未知フィールドは無視（前方互換）。tap の無いランタイムでは sentinel 無効（現状維持）。ただし
   非発火サマリに `tap_status: absent` を記録し、「発火しなかった」と「見えていなかった」を区別する。
 
+### 3-1. 計器の第3状態: tap_drift（外部レビュー採用 @pm25coder・2026-08-27）
+
+計器（tap）の状態は3つに区別する — ①正常報告 ②観測不能（`tap_status: absent` /
+`no-cache-accounting` = 「見えていなかった」）③**計器が嘘をついた（tap_drift）**。①②は既存条文が
+カバーするが、③には従来イベントが無かった。同一アダプタ+同一 model id のまま、供給側が静かに
+別プロバイダ/別トークナイザに差し替わる事象（proxy/mirror fallback・routing 変更・base_url の
+無告知付け替え）では、`input_tokens` の意味論がタスク中に変わり、per-runtime 正規化（§3 冒頭）では
+捕捉できない系統バイアスが水位に入る — 正規化は tap 時点のアダプタ単位で行われるが、drift は
+アダプタの**取得元の報告**の側で起きるため。
+
+**契約（v1）**:
+- アダプタは**一定周期（cadence は config・既定は N_drift ターンごと）**で、報告済み usage を
+  プロバイダ側リファレンス（直近レスポンスの usage オブジェクト）と突合する。
+- 累積バイアスが閾値を超えたら **countable な `tap_drift` イベント**（スキーマ= §6）を記録する。
+  判定は**方向非依存**（過大・過小のどちらも水位を歪めるため）。
+- v1 の動作は**記録のみ**（発火・sentinel 無効化・ナッジはしない — D3「提案のみ」と整合。
+  drift 実測が蓄積してから v2 で degrade 動作を検討する）。
+- 位置づけ: §9-1 が警告する「系統バイアスは静かに入る」クラスの実装化であり、§6 イベント族の補完。
+  リファレンス側も取得不能なランタイムでは本チェックは実施不能 — その場合は
+  `tap_status: no-drift-reference` を申告し（②観測不能の変種）、無言でスキップしない。
+
 ## 4. 発火規則（v1 で凍結する一意の述語・F1/F2）
 
 **観測量**: `injected_t = input_tokens + cache_read_tokens + cache_creation_tokens`（turn イベント由来・実測のみ）。
@@ -149,6 +171,15 @@ alert       = ts_first_byte 不在のまま TTFB 床超過（fire とは別イ�
 - **auto-compaction を観測したら**（注入の急落で検出 or ランタイムイベント）: MA と傾きをリセットし、
   保留中のナッジは取り下げる（ランタイムが自衛した直後に分解を勧めない）。圧縮検出は v1 では
   ヒューリスティック（前ターン比 40% 超の急落）でよい — 誤検出のコストはナッジ1回の抑制のみ。
+- **モデル/ランタイム変更を観測したら**（外部レビュー採用 @pm25coder・2026-08-27・v1 必須）:
+  turn イベントの `model` / `runtime` フィールドを前ターンと比較するだけで検知し（フィールド比較のみ・
+  ヒューリスティック不要= compaction 検出より安価で確実）、auto-compaction と同型で **MA と傾きを
+  リセット**し、保留中のナッジを取り下げ、`ctx_window` を §5 の梯子で**再解決**する（旧
+  `ctx_window_claimed` を引き継がない）。根拠は EV-006/EV-008 の per-model プロファイルそのもの —
+  「同族でも読み方の regime が違う」（sonnet 選択読み vs opus 網羅読み・qwen on claude CLI）は実測済み
+  であり、タスク途中のモデル切替（別モデルでの retry・プロバイダ側 fallback）後は、旧モデルのターンから
+  計算した傾きは stale ではなく**誤った regime** になる。リセット発生は task_end の
+  `model_change_resets: int` で数えられる形にする（§6）。
 - **モデル class prior は v1 では使わない**（unknown 一択・実測のみ。search prior の「実質オフ」は
   Qwen の runtime≠挙動問題で誤爆するため v2 の明示オプトインへ・F6）。
 - **送信直前チェックポイントは v2**: 取得元（claude stream-json / codex turn.completed / agy result）は
@@ -184,6 +215,22 @@ hard 5s timeout で取得、`OVF_HF_CACHE_DIR` 配下へ flat な `sha256(model)
 HF id / cache validation / cache I/O / fetch の失敗は warning を 1 行出して catalog/default へ fall through
 する。128k 実窓モデルに 200k 既定が当たる過大方向の見逃しも T_abs が受ける。
 
+### 5-1. per-model 閾値の注入点（D4 の残余 — 注入点は本版で凍結・数値は P2 窓プローブ待ち）
+
+D4 の未決分= 「データ由来の per-model 閾値の数値」。数値の供給源となる **P2 窓プローブ**
+（overflow-band の corpus-size ladder・封緘 p2 generator・sonnet 先行→opus。#159 2026-08-28
+コメント参照）は走行待ちのため、**本版では数値を確定しない**。凍結するのは注入点の設計のみ:
+
+- **解決順序（凍結）**: config 明示上書き > **per-model 閾値表**（model パターン → `{T_abs?, w?}` の
+  部分上書き・欠けたキーは次段へ） > 製品既定（T_abs=80k / w=50%・§5 表）。
+- 採用段を fire / task_end の `run_meta` に **`threshold_source: config|per-model|default`** として
+  記録する（ctx_window_source と同じ思想 — どの段が勝ったかを後から復元できない値は較正に使えない）。
+- per-model 表は **config データ（コード定数ではない）**とし、P2 の数値確定は表の writeback として
+  入る — 発火述語（§4）にも解決順序にも触れないため、コード変更・再設計を要しない。
+- 空の per-model 表は正常（= 全モデル製品既定）。P2 完了までは空のまま出荷する。
+- tap_drift の cadence（N_drift）・バイアス閾値も同じ config 面に置く（§3-1。数値既定は実装 Issue で
+  仮置きし、drift 実測の蓄積後に較正 — per-model 表と同じ「注入点先行・数値後追い」の型）。
+
 ## 6. 発火時の動作（D3: v1 は提案のみ + 発火実測ログ）
 
 **ナッジの中身（セロの段階介入モデルを輸入）**: 発火時にランタイムへ返す1メッセージは
@@ -204,10 +251,15 @@ fire:     {ts, started_at, task_id, turn_idx, axis: level|slope|both, injected_m
            schema_version}
 alert:    {ts, task_id, turn_idx, ttfb_ms, floor_applied, model, runtime, schema_version}
            （TTFB は fire と別イベント。Grok r2#5: codex の「発火0」合格判定を alert が汚染しないため）
+tap_drift: {ts, task_id, turn_idx, reported_cum_tokens, reference_cum_tokens, bias_ratio,
+           direction: over|under, threshold, cadence_turns, model, runtime, tap_status, schema_version}
+           （§3-1。fire / alert と独立の countable イベント — 発火統計を汚染せず、「計器が嘘をついた」
+           を後から数えられる形で残す。v1 は記録のみ）
 task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|aborted,
            window_error: bool, runtime_compaction: bool, compaction_suspected: bool
            （Opus r2 B3: API 拒否とランタイム自衛を混同しない・ヒューリスティック検出は別フィールド）,
            total_tokens, injected_summary: {max, last3_mean}, fired_turns: [..], alert_turns: [..],
+           model_change_resets: int, tap_drift_count: int（§3-1/§4 のリセット・drift をタスク単位で集計）,
            nudge_disposition_final, tap_status, run_meta, elapsed_s, schema_version}
 ```
 
@@ -254,6 +306,13 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
   Fable r2: 契約は「書けば守られる」側に倒れやすい — 違反は水位の系統誤差として静かに入るため）
 - reasoning floor 表の実体収載（v1 表= 90/150/240s + 記名 override。無記名モデル= reasoning 含め 240s）
 - TTFB 床の tier キー= 前 monitored run の last injected MA（v0.5.3 実装 delta で旧「前ターン」表現を訂正）
+- tap_drift 突合の golden-file テスト（固定入力で: バイアス方向2通りの検出・閾値未満の非検出・
+  リファレンス取得不能時の `no-drift-reference` 申告。§3-1）
+- モデル/ランタイム変更リセットの unit テスト（タスク途中の model 切替 fixture で: MA/slope リセット・
+  保留ナッジ取り下げ・ctx_window 再解決・`model_change_resets` 集計。§4）
+- 閾値解決順序のテスト（config > per-model 表 > 既定の3段・部分上書き・`threshold_source` 記録。§5-1）
+- **実装 Issue には外部レビュー由来2件（§3-1・§4 モデル変更リセット）のクレジットとして
+  @pm25coder（harness#159 2026-08-27 コメント）を仕様として明記する**（翔さん決裁 2026-08-29）
 
 ## 10. レビュー履歴
 
@@ -302,3 +361,11 @@ task_end: {ts, started_at, task_id, outcome: completed|overflowed|decomposed|abo
   outcome ownership は裁定済み設計として FINAL burned attempt の分類に属し（codex r2 の any-attempt derivation は棄却）、途中に overflow evidence があっても最終 attempt が non-window failure の mixed run は `aborted` とし、overflow evidence は folded `attempt_end` records に保持する。
   また `maximum context length` / `context window` は error-shape guard 付きのままとする（main の unguarded arm に対する deliberate prose-hardening であり、retry fix 後のコストは outcome label だけで retry budget には影響しない）。
   per-run `attempt_end` と monitor の schema/state は変更しない。
+- v0.6（2026-08-29・Alpha・**外部レビュー採用の条文化 + D4 注入点凍結**）: @pm25coder の設計レビュー
+  （#159 comment 2026-08-27・external, association NONE・採用決裁= 翔さん 2026-08-28 返信
+  comment 5457427311）から採用2件を条文化 — ①tap_drift= 計器の第3状態「計器が嘘をついた」
+  （§3-1 新設・§6 イベント追加・v1 は記録のみ）②モデル/ランタイム変更時の MA/slope リセット
+  （§4・auto-compaction リセットと同型・フィールド比較のみ・v1 必須）。あわせて D4 の残余を
+  §5-1 として凍結: per-model 閾値の**注入点**（解決順序・threshold_source・config データ化）のみ
+  確定し、**数値は P2 窓プローブ（overflow-band ladder）完了後の writeback へ保留**。§9-1 に
+  対応する検査項目3点とクレジット明記義務を追加。header の v0.5.4 未反映誤記を訂正
