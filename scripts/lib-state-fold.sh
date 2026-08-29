@@ -78,6 +78,7 @@ annotate_reply_dedup_keys() {
   local stripped_line
   local source_anchored_line
   local lesson_hash
+  local LC_ALL=C
 
   state_fold_trace annotate
 
@@ -105,8 +106,9 @@ annotate_reply_dedup_keys() {
     if [[ "$section" != other && -n "$section" \
       && "$source_anchored_line" =~ ^-\ [0-9]{4}-[0-9]{2}-[0-9]{2}\  \
       && "$source_anchored_line" == *" $source_marker" ]]; then
-      lesson_hash=$(candidate_lesson_hash "$stripped_line")
-      printf '%s [dedup_key: %s:%s]\n' "$stripped_line" "$task_id" "$lesson_hash" >>"$annotated_reply"
+      if lesson_hash=$(candidate_lesson_hash "$stripped_line"); then
+        printf '%s [dedup_key: %s:%s]\n' "$stripped_line" "$task_id" "$lesson_hash" >>"$annotated_reply"
+      fi
     else
       printf '%s\n' "$stripped_line" >>"$annotated_reply"
     fi
@@ -128,7 +130,12 @@ normalize_state_candidate() {
 
 normalize_state_candidate_key_text() {
   local normalized
-  normalized=$(normalize_state_candidate "$1")
+  if ! normalized=$(normalize_state_candidate "$1"); then
+    return 1
+  fi
+  if [[ -n "$1" && -z "$normalized" ]]; then
+    return 1
+  fi
 
   # NFKC intentionally has a broad compatibility effect, not just the NBSP and
   # fullwidth-ASCII folds needed here. For example, it maps x²/x₂ to x2,
@@ -155,7 +162,7 @@ SMART_QUOTES = str.maketrans({
 value = unicodedata.normalize("NFKC", sys.argv[1]).translate(SMART_QUOTES)
 # Compatibility spaces introduced by NFKC join the existing whitespace fold.
 value = re.sub(r" +", " ", value).strip(" ")
-sys.stdout.write(value + "\n")
+sys.stdout.buffer.write((value + "\n").encode("utf-8"))
 PY
 }
 
@@ -164,7 +171,10 @@ PY
 # before a newly normalized key is recorded for later folds.
 candidate_lesson_hash() {
   local normalized
-  normalized=$(normalize_state_candidate_key_text "$1")
+  if ! normalized=$(normalize_state_candidate_key_text "$1"); then
+    return 1
+  fi
+  [[ -n "$normalized" ]] || return 1
   sha256_text "$normalized"
 }
 
@@ -215,8 +225,9 @@ snapshot_state_normalized_candidates() {
   local section_headings=$3
   local raw_file="$output.raw.$$"
   local line
+  local normalized
 
-  awk -v section_headings="$section_headings" '
+  LC_ALL=C awk -v section_headings="$section_headings" '
     BEGIN {
       count = split(section_headings, headings, "|")
       for (i = 1; i <= count; i++) allowed[headings[i]] = 1
@@ -236,7 +247,9 @@ snapshot_state_normalized_candidates() {
 
   : >"$output"
   while IFS= read -r line || [[ -n "$line" ]]; do
-    normalize_state_candidate_key_text "$line" >>"$output"
+    if normalized=$(normalize_state_candidate_key_text "$line"); then
+      [[ -n "$normalized" ]] && printf '%s\n' "$normalized" >>"$output"
+    fi
   done <"$raw_file"
   rm -f "$raw_file"
 }
@@ -253,7 +266,8 @@ state_fold_candidate_is_duplicate() {
 
   state_fold_trace dedup
 
-  normalized=$(normalize_state_candidate_key_text "$candidate_line")
+  normalized=$(normalize_state_candidate_key_text "$candidate_line") || return 1
+  [[ -n "$normalized" ]] || return 1
   grep -Fqx -- "$lesson_hash" "$prior_hashes" \
     || grep -Fqx -- "$lesson_hash" "$batch_hashes" \
     || grep -Fqx -- "$normalized" "$normalized_state" \
