@@ -180,7 +180,7 @@ model-keyed thresholds re-resolve — including the per-model threshold table
 (`OVF_MODEL_THRESHOLDS`), which ships empty so calibrated per-model values can
 later land as pure configuration with no code change. The sentinel also audits
 its own tap: it replays each turn's raw usage through the normalization rules
-on a fixed cadence and records a `tap_drift` event when the reconciled sums disagree beyond a
+and, on a fixed cadence, records a `tap_drift` event when the reconciled sums disagree beyond a
 threshold or the usage schema changes mid-regime — a log-only third instrument state ("the
 tap lied") alongside "didn't fire" and "couldn't see".
 
