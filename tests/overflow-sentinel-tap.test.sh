@@ -174,6 +174,44 @@ assert [(x["turn_idx"],x["slope"] is None) for x in fires]==[(6,True),(7,False)]
 assert end["regime_change_resets"]==1
 ' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
 
+case_root="$TMP_ROOT/regime-model-thresholds"
+make_attempt "$case_root"
+run_monitor_fixture_with_args regime-switch.jsonl "$case_root/artifact/attempts/001" shadow \
+  --model model-a \
+  --model-thresholds '{"models":{"model-a":{"T_abs":60000,"w":0.4},"model-b":{"T_abs":100000,"w":0.75}}}'
+assert_python "regime switch re-resolves two per-model threshold entries" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+fires=[x for x in events if x["event"]=="fire"]
+change=next(x for x in events if x["event"]=="regime_change")
+end=next(x for x in events if x["event"]=="attempt_end")
+source={"T_abs":"per-model","w":"per-model"}
+entry_a=next(x for x in fires if x["turn_idx"]==3)
+entry_b=next(x for x in fires if x["turn_idx"]==6)
+assert entry_a["run_meta"]["T_abs"]==60000 and entry_a["run_meta"]["w"]==0.4
+assert entry_a["run_meta"]["threshold_sources"]==source
+assert entry_b["run_meta"]["T_abs"]==100000 and entry_b["run_meta"]["w"]==0.75
+assert entry_b["run_meta"]["threshold_sources"]==source
+assert change["resolved"]["T_abs"]==100000 and change["resolved"]["w"]==0.75
+assert change["sources"]["threshold_sources"]==source
+assert end["run_meta"]["T_abs"]==100000 and end["run_meta"]["w"]==0.75
+assert end["run_meta"]["threshold_sources"]==source
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
+
+case_root="$TMP_ROOT/explicit-over-model-threshold"
+make_attempt "$case_root"
+run_monitor_fixture_with_args fire.jsonl "$case_root/artifact/attempts/001" shadow \
+  --model claude-sonnet-4-5 --t-abs 85000 \
+  --model-thresholds '{"models":{"claude-sonnet-4-5":{"T_abs":70000,"w":0.4}}}'
+assert_python "explicit T_abs beats the table while w retains per-model provenance" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+fire=next(x for x in events if x["event"]=="fire")
+end=next(x for x in events if x["event"]=="attempt_end")
+expected={"T_abs":"config","w":"per-model"}
+assert fire["run_meta"]["T_abs"]==85000 and fire["run_meta"]["w"]==0.4
+assert fire["run_meta"]["threshold_sources"]==expected
+assert end["run_meta"]["threshold_sources"]==expected
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
+
 case_root="$TMP_ROOT/alias-version-sway"
 make_attempt "$case_root"
 run_monitor_fixture_with_args alias-version-sway.jsonl "$case_root/artifact/attempts/001" shadow \
@@ -437,6 +475,22 @@ assert not [x for x in events if x["event"]=="regime_change"]
 assert next(x for x in events if x["event"]=="attempt_end")["regime_change_resets"]==0
 ' "$alias_adapter_root/artifact/attempts/001/sentinel-events.jsonl"
 
+threshold_adapter_root="$TMP_ROOT/threshold-adapter"
+make_attempt "$threshold_adapter_root"
+OVF_SENTINEL=shadow OVF_COMPACTION_OWNER=sentinel \
+CLAUDE_MODEL=claude-sonnet-4-5 \
+OVF_MODEL_THRESHOLDS='{"models":{"claude-sonnet-4-5":{"T_abs":70000,"w":0.4}}}' \
+OVF_STEP_CMD="$MOCK_CLI" MOCK_STREAM_FILE="$FIXTURES/fire.jsonl" \
+  "$ADAPTER" "$threshold_adapter_root/workspace/task.md" "$threshold_adapter_root/workspace" \
+  "$threshold_adapter_root/artifact/attempts/001" 1 \
+  >"$threshold_adapter_root/out" 2>"$threshold_adapter_root/err"
+assert_python "spawn-step validates and forwards OVF_MODEL_THRESHOLDS" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+fire=next(x for x in events if x["event"]=="fire")
+assert fire["run_meta"]["T_abs"]==70000 and fire["run_meta"]["w"]==0.4
+assert fire["run_meta"]["threshold_sources"]=={"T_abs":"per-model","w":"per-model"}
+' "$threshold_adapter_root/artifact/attempts/001/sentinel-events.jsonl"
+
 off_root="$TMP_ROOT/off"
 make_attempt "$off_root"
 off_attempt="$off_root/artifact/attempts/001"
@@ -488,6 +542,7 @@ OVF_W_PCT=x
 OVF_CTX_WINDOW=0
 OVF_CTX_WINDOW=x
 OVF_MODEL_ALIASES=[]
+OVF_MODEL_THRESHOLDS={
 OVF_COMPACTION_OWNER=bad
 OVF_FINALIZE_TIMEOUT_S=0
 OVF_FINALIZE_TIMEOUT_S=x

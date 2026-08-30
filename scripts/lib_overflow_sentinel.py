@@ -25,6 +25,9 @@ M = 10
 DEFAULT_T_ABS = 80000
 DEFAULT_W = 0.50
 DEFAULT_CTX_WINDOW = 200000
+# Placeholders pending calibration from the #218 drift-telemetry lane.
+DEFAULT_N_DRIFT = 5
+DEFAULT_THETA_DRIFT = 0.10
 HF_CACHE_SCHEMA_VERSION = 1
 HF_NETWORK_TIMEOUT_S = 5
 HF_NETWORK_MAX_BYTES = 1024 * 1024
@@ -78,6 +81,148 @@ def parse_model_aliases(raw: Optional[str]) -> Dict[str, str]:
     return aliases
 
 
+def parse_model_thresholds(
+    raw: Optional[str],
+) -> Tuple[Dict[str, Dict[str, Any]], int, float]:
+    """Parse the optional per-model threshold surface.
+
+    Model ids and glob patterns are canonicalized by trimming whitespace and
+    lowercasing, exactly like runtime model identities. Only ``*`` is treated
+    as glob syntax.
+    """
+    if raw is None or not str(raw).strip():
+        return {}, DEFAULT_N_DRIFT, DEFAULT_THETA_DRIFT
+
+    def reject_non_json_constant(value: str) -> None:
+        raise ValueError(f"non-standard JSON numeric constant: {value}")
+
+    try:
+        payload = json.loads(
+            raw,
+            object_pairs_hook=_JsonObjectPairs,
+            parse_constant=reject_non_json_constant,
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("model thresholds must be valid JSON") from exc
+    if not isinstance(payload, _JsonObjectPairs):
+        raise ValueError("model thresholds must be a JSON object")
+
+    top_level: Dict[str, Any] = {}
+    allowed_top_level = {"models", "N_drift", "theta_drift"}
+    for key, value in payload:
+        if key in top_level:
+            raise ValueError(f"duplicate model-thresholds top-level key: {key}")
+        if key not in allowed_top_level:
+            raise ValueError(f"unknown model-thresholds top-level key: {key}")
+        top_level[key] = value
+
+    raw_models = top_level.get("models", _JsonObjectPairs())
+    if not isinstance(raw_models, _JsonObjectPairs):
+        raise ValueError("model thresholds models must be a JSON object")
+
+    table: Dict[str, Dict[str, Any]] = {}
+    raw_keys = set()
+    pattern_prefixes: Dict[str, str] = {}
+    for raw_key, raw_entry in raw_models:
+        normalized_key = raw_key.strip().lower()
+        is_pattern = "*" in normalized_key
+        if raw_key in raw_keys:
+            if is_pattern:
+                raise ValueError(f"duplicate model threshold pattern: {normalized_key}")
+            raise ValueError(f"duplicate JSON model threshold key: {raw_key}")
+        raw_keys.add(raw_key)
+        if not normalized_key:
+            raise ValueError("model threshold pattern must be non-empty")
+        if any(marker in normalized_key for marker in ("?", "[", "{")):
+            raise ValueError(
+                f"model threshold pattern contains unsupported glob syntax: {normalized_key}"
+            )
+        if normalized_key in table:
+            if is_pattern:
+                raise ValueError(f"duplicate model threshold pattern: {normalized_key}")
+            raise ValueError(
+                f"duplicate exact model threshold key after canonicalization: {normalized_key}"
+            )
+        if is_pattern:
+            literal_prefix = normalized_key.split("*", 1)[0]
+            previous_pattern = pattern_prefixes.get(literal_prefix)
+            if previous_pattern is not None:
+                raise ValueError(
+                    "same-specificity model threshold patterns share literal prefix "
+                    f"{literal_prefix!r}: {previous_pattern}, {normalized_key}"
+                )
+            pattern_prefixes[literal_prefix] = normalized_key
+        if not isinstance(raw_entry, _JsonObjectPairs):
+            raise ValueError(f"model threshold entry must be a JSON object: {normalized_key}")
+        if not raw_entry:
+            raise ValueError(
+                f"model threshold entry must contain T_abs or w: {normalized_key}"
+            )
+
+        entry: Dict[str, Any] = {}
+        for entry_key, value in raw_entry:
+            if entry_key in entry:
+                raise ValueError(
+                    f"duplicate model threshold entry key for {normalized_key}: {entry_key}"
+                )
+            if entry_key not in {"T_abs", "w"}:
+                raise ValueError(
+                    f"unknown model threshold entry key for {normalized_key}: {entry_key}"
+                )
+            if entry_key == "T_abs":
+                if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                    raise ValueError(
+                        f"model threshold T_abs must be an integer >= 1: {normalized_key}"
+                    )
+                entry[entry_key] = value
+            else:
+                if (
+                    not isinstance(value, (int, float))
+                    or isinstance(value, bool)
+                    or not 0 < value < 1
+                ):
+                    raise ValueError(
+                        f"model threshold w must be greater than 0 and less than 1: {normalized_key}"
+                    )
+                entry[entry_key] = float(value)
+        table[normalized_key] = entry
+
+    n_drift = top_level.get("N_drift", DEFAULT_N_DRIFT)
+    if not isinstance(n_drift, int) or isinstance(n_drift, bool) or n_drift < 1:
+        raise ValueError("model thresholds N_drift must be an integer >= 1")
+    theta_drift = top_level.get("theta_drift", DEFAULT_THETA_DRIFT)
+    if not isinstance(theta_drift, float) or theta_drift <= 0:
+        raise ValueError("model thresholds theta_drift must be a float greater than 0")
+    return table, n_drift, theta_drift
+
+
+def match_threshold_entry(
+    identity: Any, table: Optional[Mapping[str, Mapping[str, Any]]]
+) -> Optional[Mapping[str, Any]]:
+    """Return the exact or longest-literal-prefix threshold entry."""
+    normalized_identity = canonical_model(identity)
+    if normalized_identity is None or not table:
+        return None
+    exact = table.get(normalized_identity)
+    if exact is not None and "*" not in normalized_identity:
+        return exact
+
+    matches = []
+    for pattern, entry in table.items():
+        if "*" not in pattern:
+            continue
+        expression = "".join(".*" if char == "*" else re.escape(char) for char in pattern)
+        if re.fullmatch(expression, normalized_identity):
+            matches.append((len(pattern.split("*", 1)[0]), pattern, entry))
+    if not matches:
+        return None
+    longest = max(item[0] for item in matches)
+    winners = [item for item in matches if item[0] == longest]
+    if len(winners) != 1:
+        raise ValueError("same-specificity model threshold patterns matched at runtime")
+    return winners[0][2]
+
+
 def canonical_model(model: Any, aliases: Optional[Mapping[str, str]] = None) -> Optional[str]:
     """Return the lowercase/trimmed model identity with one alias lookup."""
     if not isinstance(model, str):
@@ -117,18 +262,36 @@ def reset_regime_state() -> Dict[str, Any]:
 
 
 def resolve_thresholds(
-    explicit_t_abs: Optional[int], explicit_w: Optional[float]
+    explicit_t_abs: Optional[int],
+    explicit_w: Optional[float],
+    model_identity: Any = None,
+    table: Optional[Mapping[str, Mapping[str, Any]]] = None,
 ) -> Tuple[int, float, Dict[str, str]]:
-    """Resolve product thresholds with per-key provenance."""
-    t_abs = DEFAULT_T_ABS if explicit_t_abs is None else explicit_t_abs
-    w = DEFAULT_W if explicit_w is None else explicit_w
+    """Resolve config, per-model, then product-default thresholds per key."""
+    entry = match_threshold_entry(model_identity, table)
+    table_t_abs = entry.get("T_abs") if entry is not None else None
+    table_w = entry.get("w") if entry is not None else None
+    t_abs = (
+        explicit_t_abs
+        if explicit_t_abs is not None
+        else table_t_abs if table_t_abs is not None else DEFAULT_T_ABS
+    )
+    w = explicit_w if explicit_w is not None else table_w if table_w is not None else DEFAULT_W
     if not isinstance(t_abs, int) or isinstance(t_abs, bool) or t_abs < 1:
         raise ValueError("T_abs must be an integer >= 1")
     if not isinstance(w, (int, float)) or isinstance(w, bool) or not 0 < w < 1:
         raise ValueError("w must be greater than 0 and less than 1")
     sources = {
-        "T_abs": "default" if explicit_t_abs is None else "config",
-        "w": "default" if explicit_w is None else "config",
+        "T_abs": (
+            "config"
+            if explicit_t_abs is not None
+            else "per-model" if table_t_abs is not None else "default"
+        ),
+        "w": (
+            "config"
+            if explicit_w is not None
+            else "per-model" if table_w is not None else "default"
+        ),
     }
     return t_abs, w, sources
 
@@ -314,7 +477,7 @@ def fire_axes(axis: Optional[str]) -> List[str]:
 def eligible_fire_axes(
     axis: Optional[str], ma_value: float, ctx_window: int, last_fire_ma: Mapping[str, float]
 ) -> List[str]:
-    """Apply task-scoped per-axis hysteresis; exact +10% re-arms (>=)."""
+    """Apply regime-scoped per-axis hysteresis; exact +10% re-arms (>=)."""
     eligible = []
     increment = 0.10 * ctx_window
     for candidate in fire_axes(axis):
@@ -587,6 +750,8 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
     validate_hf.add_argument("path")
     validate_aliases = sub.add_parser("validate-aliases")
     validate_aliases.add_argument("aliases")
+    validate_thresholds = sub.add_parser("validate-thresholds")
+    validate_thresholds.add_argument("thresholds")
     prepare_hf_cache = sub.add_parser("prepare-hf-cache")
     prepare_hf_cache.add_argument("path")
     args = parser.parse_args(argv)
@@ -604,6 +769,23 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
     if args.command == "validate-aliases":
         try:
             print(json.dumps(parse_model_aliases(args.aliases), sort_keys=True))
+        except ValueError as exc:
+            print(str(exc), file=os.sys.stderr)
+            return 2
+        return 0
+    if args.command == "validate-thresholds":
+        try:
+            table, n_drift, theta_drift = parse_model_thresholds(args.thresholds)
+            print(
+                json.dumps(
+                    {
+                        "models": table,
+                        "N_drift": n_drift,
+                        "theta_drift": theta_drift,
+                    },
+                    sort_keys=True,
+                )
+            )
         except ValueError as exc:
             print(str(exc), file=os.sys.stderr)
             return 2

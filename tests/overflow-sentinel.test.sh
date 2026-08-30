@@ -121,6 +121,117 @@ else:
     raise AssertionError("non-integer T_abs accepted")
 '
 
+run_python_case "threshold resolution applies config then per-model then default per key" '
+table, _, _ = parse_model_thresholds(
+    "{\"models\":{\"model-a\":{\"T_abs\":70000,\"w\":0.4}}}"
+)
+assert resolve_thresholds(90000, None, "model-a", table) == (
+    90000, 0.4, {"T_abs": "config", "w": "per-model"}
+)
+assert resolve_thresholds(None, 0.7, "model-a", table) == (
+    70000, 0.7, {"T_abs": "per-model", "w": "config"}
+)
+'
+
+run_python_case "partial per-model T_abs falls through to default w with per-key attribution" '
+table, _, _ = parse_model_thresholds("{\"models\":{\"model-a\":{\"T_abs\":70000}}}")
+assert resolve_thresholds(None, None, " MODEL-A ", table) == (
+    70000, 0.50, {"T_abs": "per-model", "w": "default"}
+)
+'
+
+run_python_case "partial per-model w falls through to default T_abs with per-key attribution" '
+table, _, _ = parse_model_thresholds("{\"models\":{\"model-a\":{\"w\":0.25}}}")
+assert resolve_thresholds(None, None, "model-a", table) == (
+    80000, 0.25, {"T_abs": "default", "w": "per-model"}
+)
+'
+
+run_python_case "exact threshold key beats a matching glob" '
+table, _, _ = parse_model_thresholds(
+    "{\"models\":{\"claude-sonnet-4-5\":{\"T_abs\":91000},"
+    "\"claude-*\":{\"T_abs\":72000}}}"
+)
+assert match_threshold_entry("claude-sonnet-4-5", table)["T_abs"] == 91000
+assert match_threshold_entry("claude-opus-x", table)["T_abs"] == 72000
+'
+
+run_python_case "longest literal prefix selects the most specific matching glob" '
+table, _, _ = parse_model_thresholds(
+    "{\"models\":{\"claude-*\":{\"w\":0.3},"
+    "\"claude-sonnet-*\":{\"w\":0.4}}}"
+)
+assert match_threshold_entry("claude-sonnet-4-5", table)["w"] == 0.4
+'
+
+run_python_case "glob matching escapes regex metacharacters and no match uses defaults" '
+table, _, _ = parse_model_thresholds(
+    "{\"models\":{\"model.v1+*\":{\"T_abs\":1}}}"
+)
+assert match_threshold_entry("model.v1+x", table)["T_abs"] == 1
+assert match_threshold_entry("modelXv11x", table) is None
+assert resolve_thresholds(None, None, "unlisted", table) == (
+    80000, 0.50, {"T_abs": "default", "w": "default"}
+)
+'
+
+run_python_case "empty threshold surface exposes the placeholder drift defaults" '
+assert parse_model_thresholds(None) == ({}, DEFAULT_N_DRIFT, DEFAULT_THETA_DRIFT)
+assert parse_model_thresholds("") == ({}, 5, 0.10)
+assert parse_model_thresholds("{}") == ({}, 5, 0.10)
+table, n_drift, theta_drift = parse_model_thresholds(
+    "{\"N_drift\":7,\"theta_drift\":0.2}"
+)
+assert table == {} and n_drift == 7 and theta_drift == 0.2
+'
+
+run_python_case "threshold parser rejects every frozen invalid shape with a precise message" '
+cases = [
+    ("[]", "model thresholds must be a JSON object"),
+    ("{\"theta_drift\":NaN}", "model thresholds must be valid JSON"),
+    ("{\"theta_drift\":Infinity}", "model thresholds must be valid JSON"),
+    ("{\"theta_drift\":-Infinity}", "model thresholds must be valid JSON"),
+    ("{\"extra\":1}", "unknown model-thresholds top-level key: extra"),
+    ("{\"models\":{},\"models\":{}}", "duplicate model-thresholds top-level key"),
+    ("{\"models\":{\"m\":{\"extra\":1}}}", "unknown model threshold entry key"),
+    ("{\"models\":{\"m\":{\"T_abs\":0}}}", "T_abs must be an integer >= 1"),
+    ("{\"models\":{\"m\":{\"T_abs\":true}}}", "T_abs must be an integer >= 1"),
+    ("{\"models\":{\"m\":{\"T_abs\":1,\"T_abs\":2}}}",
+     "duplicate model threshold entry key"),
+    ("{\"models\":{\"m\":{\"w\":0}}}", "w must be greater than 0 and less than 1"),
+    ("{\"models\":{\"m\":{\"w\":1}}}", "w must be greater than 0 and less than 1"),
+    ("{\"models\":{\"m\":{\"w\":1.5}}}", "w must be greater than 0 and less than 1"),
+    ("{\"models\":{\"bad?\":{\"w\":0.5}}}", "unsupported glob syntax"),
+    ("{\"models\":{\"bad[\":{\"w\":0.5}}}", "unsupported glob syntax"),
+    ("{\"models\":{\"bad{\":{\"w\":0.5}}}", "unsupported glob syntax"),
+    ("{\"models\":{\"model-a\":{\"T_abs\":1},\"model-a\":{\"w\":0.5}}}",
+     "duplicate JSON model threshold key"),
+    ("{\"models\":{\" Model-A \":{\"T_abs\":1},\"model-a\":{\"w\":0.5}}}",
+     "duplicate exact model threshold key after canonicalization"),
+    ("{\"models\":{\"claude-*\":{\"T_abs\":1},\"claude-*\":{\"w\":0.5}}}",
+     "duplicate model threshold pattern"),
+    ("{\"models\":{\"claude-*a\":{\"T_abs\":1},\"claude-*b\":{\"w\":0.5}}}",
+     "same-specificity model threshold patterns share literal prefix"),
+    ("{\"models\":{\"\":{\"T_abs\":1}}}", "pattern must be non-empty"),
+    ("{\"models\":{\"m\":{}}}", "entry must contain T_abs or w"),
+    ("{\"models\":{\"m\":1}}", "entry must be a JSON object"),
+    ("{\"models\":[]}", "models must be a JSON object"),
+    ("{\"N_drift\":0}", "N_drift must be an integer >= 1"),
+    ("{\"N_drift\":true}", "N_drift must be an integer >= 1"),
+    ("{\"theta_drift\":0}", "theta_drift must be a float greater than 0"),
+    ("{\"theta_drift\":1}", "theta_drift must be a float greater than 0"),
+    ("{\"theta_drift\":true}", "theta_drift must be a float greater than 0"),
+    ("{\"theta_drift\":\"x\"}", "theta_drift must be a float greater than 0"),
+]
+for raw, expected in cases:
+    try:
+        parse_model_thresholds(raw)
+    except ValueError as exc:
+        assert expected in str(exc), (raw, str(exc))
+    else:
+        raise AssertionError("invalid threshold surface accepted: " + raw)
+'
+
 run_python_case "context-window ladder resolves all four sources offline" '
 import json
 from pathlib import Path
@@ -189,6 +300,31 @@ run_alias_cli_rejection() {
 run_alias_cli_rejection "validate-aliases rejects non-object JSON" '["model-a"]'
 run_alias_cli_rejection "validate-aliases rejects non-string values" '{"model-a":1}'
 run_alias_cli_rejection "validate-aliases rejects duplicate normalized keys" '{" Model-A ":"one","model-a":"two"}'
+
+set +e
+python3 -B "$ROOT/scripts/lib_overflow_sentinel.py" validate-thresholds \
+  '{"models":{"model-a":{"T_abs":70000}},"N_drift":5,"theta_drift":0.1}' \
+  >"$TMP_ROOT/thresholds.out" 2>"$TMP_ROOT/thresholds.err"
+thresholds_valid_rc=$?
+set -e
+if [[ "$thresholds_valid_rc" -eq 0 && ! -s "$TMP_ROOT/thresholds.err" ]]; then
+  pass "validate-thresholds accepts a valid threshold surface"
+else
+  fail_case "validate-thresholds accepts a valid threshold surface"
+fi
+
+set +e
+python3 -B "$ROOT/scripts/lib_overflow_sentinel.py" validate-thresholds \
+  '{"models":{"model-a":{"w":1}}}' \
+  >"$TMP_ROOT/thresholds.out" 2>"$TMP_ROOT/thresholds.err"
+thresholds_invalid_rc=$?
+set -e
+if [[ "$thresholds_invalid_rc" -eq 2 ]] \
+  && grep -Fq 'model threshold w must be greater than 0 and less than 1' "$TMP_ROOT/thresholds.err"; then
+  pass "validate-thresholds exits 2 with the validation message"
+else
+  fail_case "validate-thresholds exits 2 with the validation message"
+fi
 
 if (( failures )); then
   printf '%s overflow sentinel core test(s) failed; %s passed\n' "$failures" "$passes" >&2

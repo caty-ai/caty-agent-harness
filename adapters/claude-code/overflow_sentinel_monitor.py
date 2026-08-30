@@ -31,6 +31,7 @@ from lib_overflow_sentinel import (  # noqa: E402
     load_state,
     outcome_from_result,
     parse_model_aliases,
+    parse_model_thresholds,
     reset_regime_state,
     resolve_ctx_window,
     resolve_thresholds,
@@ -169,7 +170,10 @@ def _resolve_regime_config(
         hf_network=args.hf_network,
         hf_cache_dir=args.hf_cache_dir,
     )
-    t_abs, w, threshold_sources = resolve_thresholds(args.t_abs, args.w)
+    threshold_table, _, _ = args.model_thresholds
+    t_abs, w, threshold_sources = resolve_thresholds(
+        args.t_abs, args.w, model_identity, threshold_table
+    )
     floor_s = ttfb_floor_seconds(previous_injected_ma, model_identity)
     if os.environ.get("_CATY_TESTING") == "1" and os.environ.get("_CATY_OVF_TEST_TTFB_FLOOR_S"):
         floor_s = max(0, int(os.environ["_CATY_OVF_TEST_TTFB_FLOOR_S"]))
@@ -527,6 +531,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--t-abs", type=int)
     parser.add_argument("--w", type=float)
     parser.add_argument("--model-aliases", type=parse_model_aliases, default={})
+    parser.add_argument(
+        "--model-thresholds",
+        type=parse_model_thresholds,
+        default=parse_model_thresholds(None),
+    )
     parser.add_argument("--ctx-window", type=int)
     parser.add_argument("--hf-config")
     parser.add_argument("--hf-network", action="store_true")
