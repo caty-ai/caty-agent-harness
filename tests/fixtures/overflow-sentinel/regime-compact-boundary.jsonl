@@ -1,0 +1,3 @@
+{"type":"assistant","message":{"id":"compact-regime-a","model":"model-a","usage":{"input_tokens":90000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}
+{"type":"system","subtype":"compact_boundary"}
+{"type":"assistant","message":{"id":"compact-regime-b","model":"model-b","usage":{"input_tokens":30000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}

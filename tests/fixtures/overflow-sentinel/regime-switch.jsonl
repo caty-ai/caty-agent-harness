@@ -1,0 +1,7 @@
+{"type":"assistant","message":{"id":"regime-a-1","model":"model-a","usage":{"input_tokens":1000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}
+{"type":"assistant","message":{"id":"regime-a-2","model":"model-a","usage":{"input_tokens":99000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}
+{"type":"assistant","message":{"id":"regime-a-3","model":"model-a","usage":{"input_tokens":99000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}
+{"type":"assistant","message":{"id":"regime-b-1","model":"model-b","usage":{"input_tokens":99000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}
+{"type":"assistant","message":{"id":"regime-b-2","model":"model-b","usage":{"input_tokens":101000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}
+{"type":"assistant","message":{"id":"regime-b-3","model":"model-b","usage":{"input_tokens":102000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}
+{"type":"assistant","message":{"id":"regime-b-4","model":"model-b","usage":{"input_tokens":170000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}

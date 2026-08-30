@@ -91,16 +91,21 @@ if [[ -z "$ovf_mode" ]]; then
   exit "$step_status"
 fi
 
-ovf_t_abs=${OVF_T_ABS:-80000}
-case "$ovf_t_abs" in
-  ''|*[!0-9]*|0|0[0-9]*) config_fail 'OVF_T_ABS must be an integer >= 1' ;;
-esac
-ovf_w_pct=${OVF_W_PCT:-50}
-case "$ovf_w_pct" in
-  ''|*[!0-9]*|0|0[0-9]*) config_fail 'OVF_W_PCT must be an integer from 1 through 99' ;;
-esac
-(( ovf_w_pct <= 99 )) || config_fail 'OVF_W_PCT must be an integer from 1 through 99'
-printf -v ovf_w '0.%02d' "$ovf_w_pct"
+ovf_t_abs=${OVF_T_ABS:-}
+if [[ -n "$ovf_t_abs" ]]; then
+  case "$ovf_t_abs" in
+    *[!0-9]*|0|0[0-9]*) config_fail 'OVF_T_ABS must be an integer >= 1' ;;
+  esac
+fi
+ovf_w_pct=${OVF_W_PCT:-}
+ovf_w=
+if [[ -n "$ovf_w_pct" ]]; then
+  case "$ovf_w_pct" in
+    *[!0-9]*|0|0[0-9]*) config_fail 'OVF_W_PCT must be an integer from 1 through 99' ;;
+  esac
+  (( ovf_w_pct <= 99 )) || config_fail 'OVF_W_PCT must be an integer from 1 through 99'
+  printf -v ovf_w '0.%02d' "$ovf_w_pct"
+fi
 
 ovf_ctx_window=${OVF_CTX_WINDOW:-}
 if [[ -n "$ovf_ctx_window" ]]; then
@@ -124,6 +129,12 @@ ovf_hf_config=${OVF_HF_CONFIG:-}
 if [[ -n "$ovf_hf_config" ]]; then
   python3 -B "$repo_root/scripts/lib_overflow_sentinel.py" validate-hf "$ovf_hf_config" >/dev/null \
     || config_fail 'OVF_HF_CONFIG must name a validated local HF config.json'
+fi
+
+ovf_model_aliases=${OVF_MODEL_ALIASES:-}
+if [[ -n "$ovf_model_aliases" ]]; then
+  python3 -B "$repo_root/scripts/lib_overflow_sentinel.py" validate-aliases "$ovf_model_aliases" >/dev/null \
+    || config_fail 'OVF_MODEL_ALIASES must be a JSON object mapping string aliases to strings'
 fi
 
 ovf_hf_network=${OVF_HF_NETWORK:-}
@@ -219,11 +230,12 @@ monitor_args=(
   --attempt "$attempt_name"
   --mode "$ovf_mode"
   --model "${CLAUDE_MODEL:-claude-unknown}"
-  --t-abs "$ovf_t_abs"
-  --w "$ovf_w"
 )
+[[ -z "$ovf_t_abs" ]] || monitor_args+=(--t-abs "$ovf_t_abs")
+[[ -z "$ovf_w" ]] || monitor_args+=(--w "$ovf_w")
 [[ -z "$ovf_ctx_window" ]] || monitor_args+=(--ctx-window "$ovf_ctx_window")
 [[ -z "$ovf_hf_config" ]] || monitor_args+=(--hf-config "$ovf_hf_config")
+[[ -z "$ovf_model_aliases" ]] || monitor_args+=(--model-aliases "$ovf_model_aliases")
 if [[ "$ovf_hf_network" == 1 ]]; then
   monitor_args+=(--hf-network --hf-cache-dir "$ovf_hf_cache_dir")
 fi

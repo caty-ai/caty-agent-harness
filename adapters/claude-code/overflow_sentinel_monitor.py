@@ -10,7 +10,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -23,12 +23,17 @@ from lib_overflow_sentinel import (  # noqa: E402
     SCHEMA_VERSION,
     atomic_write_json,
     axis_name,
+    canonical_model,
     compaction_suspected,
+    compare_regime_identity,
     eligible_fire_axes,
     evaluate_series,
     load_state,
     outcome_from_result,
+    parse_model_aliases,
+    reset_regime_state,
     resolve_ctx_window,
+    resolve_thresholds,
     save_state,
     ttfb_floor_seconds,
 )
@@ -140,7 +145,7 @@ def _write_pending(path: Path, text: str) -> None:
     os.replace(str(temporary), str(path))
 
 
-def _run_meta(mode: str, t_abs: int, w: float) -> Dict[str, Any]:
+def _run_meta(mode: str, t_abs: int, w: float, threshold_sources: Mapping[str, str]) -> Dict[str, Any]:
     return {
         "arm": mode,
         "seed": None,
@@ -150,7 +155,32 @@ def _run_meta(mode: str, t_abs: int, w: float) -> Dict[str, Any]:
         "N": N,
         "M": M,
         "K": K,
+        "threshold_sources": dict(threshold_sources),
     }
+
+
+def _resolve_regime_config(
+    args: argparse.Namespace, model_identity: str, previous_injected_ma: Optional[float]
+) -> Tuple[int, str, int, float, Dict[str, str], int]:
+    ctx_window, ctx_source = resolve_ctx_window(
+        args.ctx_window,
+        args.hf_config,
+        model_identity,
+        hf_network=args.hf_network,
+        hf_cache_dir=args.hf_cache_dir,
+    )
+    t_abs, w, threshold_sources = resolve_thresholds(args.t_abs, args.w)
+    floor_s = ttfb_floor_seconds(previous_injected_ma, model_identity)
+    if os.environ.get("_CATY_TESTING") == "1" and os.environ.get("_CATY_OVF_TEST_TTFB_FLOOR_S"):
+        floor_s = max(0, int(os.environ["_CATY_OVF_TEST_TTFB_FLOOR_S"]))
+    return ctx_window, ctx_source, t_abs, w, threshold_sources, floor_s
+
+
+def _withdraw_pending(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
 
 
 def monitor(args: argparse.Namespace) -> int:
@@ -167,17 +197,17 @@ def monitor(args: argparse.Namespace) -> int:
         started_monotonic -= max(0.0, float(os.environ["_CATY_OVF_TEST_ELAPSED_S"]))
     state = load_state(state_path)
     last_fire_ma = dict(state["last_fire_ma"])
-    ctx_window, ctx_source = resolve_ctx_window(
-        args.ctx_window,
-        args.hf_config,
-        args.model,
-        hf_network=args.hf_network,
-        hf_cache_dir=args.hf_cache_dir,
+    last_run_injected_ma = state["last_run_injected_ma"]
+    persisted_identity = state["regime_identity"]
+    startup_model_identity = (
+        persisted_identity["model"]
+        if persisted_identity is not None
+        else canonical_model(args.model, args.model_aliases) or "claude-unknown"
     )
-    floor_s = ttfb_floor_seconds(state["last_run_injected_ma"], args.model)
-    if os.environ.get("_CATY_TESTING") == "1" and os.environ.get("_CATY_OVF_TEST_TTFB_FLOOR_S"):
-        floor_s = max(0, int(os.environ["_CATY_OVF_TEST_TTFB_FLOOR_S"]))
-    meta = _run_meta(args.mode, args.t_abs, args.w)
+    ctx_window, ctx_source, t_abs, w, threshold_sources, floor_s = _resolve_regime_config(
+        args, startup_model_identity, last_run_injected_ma
+    )
+    meta = _run_meta(args.mode, t_abs, w, threshold_sources)
 
     offset = 0
     pending = b""
@@ -191,6 +221,9 @@ def monitor(args: argparse.Namespace) -> int:
     alert_turns = []
     compaction_seen = False
     runtime_compaction_seen = False
+    runtime_compaction_pending = False
+    regime_change_resets = 0
+    previous_identity: Optional[Dict[str, str]] = persisted_identity
     last_injected = None
     turn_count = 0
     blind_seen = False
@@ -218,12 +251,8 @@ def monitor(args: argparse.Namespace) -> int:
                 continue
             if event.get("type") == "system" and event.get("subtype") == "compact_boundary":
                 runtime_compaction_seen = True
-                series = []
-                last_injected = None
-                try:
-                    pending_path.unlink()
-                except FileNotFoundError:
-                    pass
+                runtime_compaction_pending = True
+                _withdraw_pending(pending_path)
                 continue
             if event.get("type") != "assistant" or event.get("parent_tool_use_id") is not None:
                 continue
@@ -259,7 +288,62 @@ def monitor(args: argparse.Namespace) -> int:
                 if not has_cache:
                     saw_no_cache = True
             turn_count += 1
-            model = str(message.get("model") or model)
+            raw_model = message.get("model") if "model" in message else None
+            regime_changed, current_identity = compare_regime_identity(
+                previous_identity, raw_model, "claude-code", args.model_aliases
+            )
+            identity_established = previous_identity is None and current_identity is not None
+            if regime_changed:
+                old_identity = previous_identity
+                cleared = reset_regime_state()
+                series = cleared["series"]
+                last_injected = cleared["last_injected"]
+                last_fire_ma = cleared["last_fire_ma"]
+                # drift_accumulator and cadence_counter are intentionally unused until #218.
+                _ = (cleared["drift_accumulator"], cleared["cadence_counter"])
+                _withdraw_pending(pending_path)
+                last_run_injected_ma = None
+                save_state(state_path, last_fire_ma, None, current_identity)
+                ctx_window, ctx_source, t_abs, w, threshold_sources, floor_s = _resolve_regime_config(
+                    args, current_identity["model"], None
+                )
+                meta = _run_meta(args.mode, t_abs, w, threshold_sources)
+                regime_change_resets += 1
+                append_event(
+                    events_path,
+                    {
+                        "event": "regime_change",
+                        "schema_version": SCHEMA_VERSION,
+                        "ts": str(event.get("timestamp") or now_utc()),
+                        "task_id": args.task_id,
+                        "attempt": args.attempt,
+                        "turn_idx": turn_count,
+                        "from_model": old_identity["model"],
+                        "to_model": current_identity["model"],
+                        "from_runtime": old_identity["runtime"],
+                        "to_runtime": current_identity["runtime"],
+                        "resolved": {
+                            "ctx_window": ctx_window,
+                            "T_abs": t_abs,
+                            "w": w,
+                            "ttfb_floor": floor_s,
+                        },
+                        "sources": {
+                            "ctx_window_source": ctx_source,
+                            "threshold_sources": dict(threshold_sources),
+                        },
+                        "drift_reference": {"from": "none", "to": "none"},
+                    },
+                )
+                runtime_compaction_pending = False
+            elif runtime_compaction_pending:
+                series = []
+                last_injected = None
+                runtime_compaction_pending = False
+            if identity_established:
+                save_state(state_path, last_fire_ma, last_run_injected_ma, current_identity)
+            previous_identity = current_identity
+            model = str(raw_model or model)
             total_tokens += injected + output_tokens
             turn_event = {
                 "event": "turn",
@@ -273,6 +357,7 @@ def monitor(args: argparse.Namespace) -> int:
                 "cache_creation_tokens": cache_creation,
                 "output_tokens": output_tokens,
                 "model": model,
+                "runtime": "claude-code",
                 "tap_status": turn_tap_status,
             }
             append_event(events_path, turn_event)
@@ -284,23 +369,20 @@ def monitor(args: argparse.Namespace) -> int:
                 continue
             if evaluation_disabled:
                 continue
-            if compaction_suspected(last_injected, injected):
+            if not regime_changed and compaction_suspected(last_injected, injected):
                 compaction_seen = True
                 series = []
-                try:
-                    pending_path.unlink()
-                except FileNotFoundError:
-                    pass
+                _withdraw_pending(pending_path)
             series.append(injected)
             last_injected = injected
-            turn = evaluate_series(series, args.t_abs, args.w, ctx_window)["turns"][-1]
+            turn = evaluate_series(series, t_abs, w, ctx_window)["turns"][-1]
             axes = eligible_fire_axes(turn["axis"], turn["injected_ma"], ctx_window, last_fire_ma)
             if not axes:
                 continue
             fire_axis = axis_name(axes)
             for fire_candidate in axes:
                 last_fire_ma[fire_candidate] = turn["injected_ma"]
-            save_state(state_path, last_fire_ma, state["last_run_injected_ma"])
+            save_state(state_path, last_fire_ma, last_run_injected_ma, previous_identity)
             fire_event = {
                 "event": "fire",
                 "schema_version": SCHEMA_VERSION,
@@ -355,6 +437,10 @@ def monitor(args: argparse.Namespace) -> int:
             break
         time.sleep(args.poll_interval)
 
+    if runtime_compaction_pending:
+        series = []
+        last_injected = None
+
     if os.environ.get("_CATY_TESTING") == "1" and os.environ.get("_CATY_OVF_TEST_HANG_FINALIZE") == "1":
         while True:
             time.sleep(1)
@@ -372,7 +458,7 @@ def monitor(args: argparse.Namespace) -> int:
 
     last_run_ma = sum(series[-N:]) / float(len(series[-N:])) if series else None
     if last_run_ma is not None:
-        save_state(state_path, last_fire_ma, last_run_ma)
+        save_state(state_path, last_fire_ma, last_run_ma, previous_identity)
     result = _read_step_result(attempt_dir / "step-result.json")
     outcome = outcome_from_result(cli_exit_code, result)
     window_error = outcome == "overflowed"
@@ -393,6 +479,7 @@ def monitor(args: argparse.Namespace) -> int:
         "window_error": window_error,
         "runtime_compaction": runtime_compaction_seen,
         "compaction_suspected": compaction_seen,
+        "regime_change_resets": regime_change_resets,
         "total_tokens": total_tokens,
         "injected_summary": {
             "max": max(series) if series else 0,
@@ -437,8 +524,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--attempt", required=True)
     parser.add_argument("--mode", required=True, choices=("shadow", "active"))
     parser.add_argument("--model", default="claude-unknown")
-    parser.add_argument("--t-abs", required=True, type=int)
-    parser.add_argument("--w", required=True, type=float)
+    parser.add_argument("--t-abs", type=int)
+    parser.add_argument("--w", type=float)
+    parser.add_argument("--model-aliases", type=parse_model_aliases, default={})
     parser.add_argument("--ctx-window", type=int)
     parser.add_argument("--hf-config")
     parser.add_argument("--hf-network", action="store_true")
