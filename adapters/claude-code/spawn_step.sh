@@ -137,6 +137,12 @@ if [[ -n "$ovf_model_aliases" ]]; then
     || config_fail 'OVF_MODEL_ALIASES must be a JSON object mapping string aliases to strings'
 fi
 
+ovf_model_thresholds=${OVF_MODEL_THRESHOLDS:-}
+if [[ -n "$ovf_model_thresholds" ]]; then
+  python3 -B "$repo_root/scripts/lib_overflow_sentinel.py" validate-thresholds "$ovf_model_thresholds" >/dev/null \
+    || config_fail 'OVF_MODEL_THRESHOLDS must be a valid model-thresholds JSON object'
+fi
+
 ovf_hf_network=${OVF_HF_NETWORK:-}
 case "$ovf_hf_network" in
   ''|0|1) ;;
@@ -236,6 +242,7 @@ monitor_args=(
 [[ -z "$ovf_ctx_window" ]] || monitor_args+=(--ctx-window "$ovf_ctx_window")
 [[ -z "$ovf_hf_config" ]] || monitor_args+=(--hf-config "$ovf_hf_config")
 [[ -z "$ovf_model_aliases" ]] || monitor_args+=(--model-aliases "$ovf_model_aliases")
+[[ -z "$ovf_model_thresholds" ]] || monitor_args+=(--model-thresholds "$ovf_model_thresholds")
 if [[ "$ovf_hf_network" == 1 ]]; then
   monitor_args+=(--hf-network --hf-cache-dir "$ovf_hf_cache_dir")
 fi
