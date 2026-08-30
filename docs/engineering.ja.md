@@ -150,7 +150,15 @@ sentinel heuristic を選びます。
 Claude の明示的な `system/compact_boundary` event を観測すると measured series を reset します。
 この event が得られない場合は injected-token の急落 heuristic が fallback のままです。
 
-監視対象の各 attempt は `turn`、`fire`、`alert`、`attempt_end` を独立した
+task 途中で model や runtime が切り替わった場合は、regime を混ぜずに計測をリセットします:
+移動平均・傾き履歴・nudge hysteresis が再スタートし、model-keyed な閾値がすべて再解決されます —
+per-model 閾値表（`OVF_MODEL_THRESHOLDS`）もここに含まれ、表は空で出荷されるため、較正済みの
+per-model 値は後からコード変更なしの純粋な設定として投入できます。sentinel は自分の計器（tap）も
+監査します: turn ごとの生 usage を一定周期で正規化ルールに再適用し、数値が食い違う場合や regime 途中で
+usage schema が変わった場合に `tap_drift` event を記録します — 「発火しなかった」「見えていなかった」と
+並ぶ、記録のみの第 3 の計器状態（「計器が嘘をついた」）です。
+
+監視対象の各 attempt は `turn`、`fire`、`alert`、`regime_change`、`tap_drift`、`attempt_end` を独立した
 `sentinel-events.jsonl` へ append します。task-runner ledger に confluence point ができるまでは
 このファイルを分離して保持します。次 step 境界で nudge を配送するため、発火した attempt で task が
 終了すると pending nudge を受け取る runtime がない、という既知の制限があります。`suppressed` の
