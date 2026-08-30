@@ -910,6 +910,21 @@ def reducer(status, terminal_reason, emitted_at, vector):
         sourced = [end.get(field) for _, end in ends if field in end]
         return any(bool(value) for value in sourced) if sourced else None
 
+    def reduced_sum(field):
+        sourced = [
+            end.get(field) for _, end in ends
+            if isinstance(end.get(field), (int, float)) and not isinstance(end.get(field), bool)
+        ]
+        return sum(sourced) if sourced else None
+
+    def reduced_drift_reference():
+        rank = {"none": 0, "derived": 1, "independent": 2}
+        sourced = [
+            end.get("drift_reference_status") for _, end in ends
+            if end.get("drift_reference_status") in rank
+        ]
+        return min(sourced, key=lambda value: rank[value]) if sourced else None
+
     window_error = reduced_or("window_error")
     runtime_compaction = reduced_or("runtime_compaction")
     compaction_suspected = reduced_or("compaction_suspected")
@@ -957,6 +972,9 @@ def reducer(status, terminal_reason, emitted_at, vector):
         "window_error": window_error,
         "runtime_compaction": runtime_compaction,
         "compaction_suspected": compaction_suspected,
+        "tap_drift_count": reduced_sum("tap_drift_count"),
+        "regime_change_resets": reduced_sum("regime_change_resets"),
+        "drift_reference_status": reduced_drift_reference(),
         "total_tokens": total_tokens,
         "injected_summary": {"max": injected_max, "last3_mean": last3_mean},
         "fired_turns": fired_turns,

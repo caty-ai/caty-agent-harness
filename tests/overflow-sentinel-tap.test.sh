@@ -96,16 +96,22 @@ turns=[x for x in events if x["event"]=="turn"]
 assert len(turns)==2
 assert (turns[0]["input_tokens"],turns[0]["cache_read_tokens"],turns[0]["cache_creation_tokens"])==(100,20,10)
 assert turns[0]["input_tokens"]+turns[0]["cache_read_tokens"]+turns[0]["cache_creation_tokens"]==130
+assert turns[0]["raw_usage"]=={"input_tokens":100,"cache_read_input_tokens":20,"cache_creation_input_tokens":10,"output_tokens":5,"future_usage":999}
+assert turns[0]["raw_usage_schema"]==sorted(turns[0]["raw_usage"])
 assert turns[1]["tap_status"]=="no-cache-accounting"
 assert not [x for x in events if x["event"]=="fire"]
 ' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
 assert_python "unknown fields and init/keepalive noise do not create turns" '
 events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
 assert len([x for x in events if x["event"]=="turn"])==2
-assert {x["event"] for x in events}=={"turn","attempt_end"}
+assert {x["event"] for x in events}=={"turn","tap_drift","attempt_end"}
 assert all("task_end" not in x.values() for x in events)
 assert all(x["runtime"]=="claude-code" for x in events if x["event"]=="turn")
-assert next(x for x in events if x["event"]=="attempt_end")["regime_change_resets"]==0
+drift=next(x for x in events if x["event"]=="tap_drift")
+end=next(x for x in events if x["event"]=="attempt_end")
+assert drift["drift_kind"]=="schema-change" and drift["drift_reference"]=="derived"
+assert end["regime_change_resets"]==0 and end["tap_drift_count"]==1
+assert end["drift_reference_status"]=="derived" and end["fired_turns"]==[]
 ' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
 assert_python "attempt.json has the complete pinned field set and non-null first_byte_at" '
 p=json.loads(pathlib.Path(sys.argv[1]).read_text())
@@ -167,11 +173,57 @@ assert (change["from_model"],change["to_model"])==("model-a","model-b")
 assert (change["from_runtime"],change["to_runtime"])==("claude-code","claude-code")
 assert change["resolved"]=={"ctx_window":200000,"T_abs":100000,"w":0.9,"ttfb_floor":240}
 assert change["sources"]=={"ctx_window_source":"default","threshold_sources":{"T_abs":"config","w":"config"}}
-assert change["drift_reference"]=={"from":"none","to":"none"}
+assert change["drift_reference"]=={"from":"derived","to":"derived"}
 assert change["attempt"]=="001" and change["schema_version"]==1
 assert not [x for x in fires if x["turn_idx"]==4]
 assert [(x["turn_idx"],x["slope"] is None) for x in fires]==[(6,True),(7,False)]
 assert end["regime_change_resets"]==1
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
+
+case_root="$TMP_ROOT/drift-schema-regime"
+make_attempt "$case_root"
+run_monitor_fixture_with_args drift-schema-regime.jsonl "$case_root/artifact/attempts/001" shadow \
+  --model model-a --model-thresholds '{"N_drift":10,"theta_drift":0.1}'
+assert_python "schema signatures detect per-epoch episodes and reset accumulators at the regime boundary" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+turns=[x for x in events if x["event"]=="turn"]
+drifts=[x for x in events if x["event"]=="tap_drift"]
+change=next(x for x in events if x["event"]=="regime_change")
+end=next(x for x in events if x["event"]=="attempt_end")
+assert len(turns)==4 and all(isinstance(x["raw_usage"],dict) for x in turns)
+assert all(x["raw_usage_schema"]==sorted(x["raw_usage"]) for x in turns)
+assert [(x["turn_idx"],x["drift_kind"],x["drift_reference"]) for x in drifts]==[
+    (2,"schema-change","derived"),(4,"schema-change","derived")
+]
+drift_fields={"event","schema_version","ts","task_id","attempt","turn_idx","drift_kind",
+              "drift_reference","reported_cum_tokens","reference_cum_tokens","signed_bias",
+              "bias_ratio","threshold","cadence_turns","model","runtime"}
+assert all(set(x)==drift_fields for x in drifts)
+assert all(x["cadence_turns"]==10 and x["threshold"]==.1 for x in drifts)
+assert [(x["reported_cum_tokens"],x["reference_cum_tokens"]) for x in drifts]==[(260,260),(260,260)]
+assert change["turn_idx"]==3 and change["drift_reference"]=={"from":"derived","to":"derived"}
+assert end["tap_drift_count"]==2 and end["drift_reference_status"]=="derived"
+assert end["fired_turns"]==[] and not [x for x in events if x["event"]=="fire"]
+assert json.loads(pathlib.Path(sys.argv[2]).read_text())["fired"] is False
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl" \
+  "$case_root/artifact/attempts/001/attempt.json"
+
+case_root="$TMP_ROOT/drift-capability-regimes"
+make_attempt "$case_root"
+_CATY_TESTING=1 \
+_CATY_OVF_TEST_DRIFT_REFERENCES='{"model-a":"independent","model-b":"none"}' \
+run_monitor_fixture_with_args drift-schema-regime.jsonl "$case_root/artifact/attempts/001" shadow \
+  --model model-a --model-thresholds '{"N_drift":10,"theta_drift":0.1}'
+assert_python "capability changes carry real values and attempt_end reports the weakest value" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+drift=next(x for x in events if x["event"]=="tap_drift")
+change=next(x for x in events if x["event"]=="regime_change")
+end=next(x for x in events if x["event"]=="attempt_end")
+assert drift["drift_reference"]=="independent" and drift["drift_kind"]=="schema-change"
+assert change["drift_reference"]=={"from":"independent","to":"none"}
+assert end["drift_reference_status"]=="none" and end["tap_drift_count"]==1
+none_turns=[x for x in events if x["event"]=="turn" and x["model"]=="model-b"]
+assert all("raw_usage" not in x and "raw_usage_schema" not in x for x in none_turns)
 ' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
 
 case_root="$TMP_ROOT/regime-model-thresholds"
@@ -351,8 +403,9 @@ assert_python "zero-injected and unparsable usage never corrupt the measured ser
 events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
 turns=[x for x in events if x["event"]=="turn"]
 end=next(x for x in events if x["event"]=="attempt_end")
-assert [x["input_tokens"] for x in turns]==[90000,0,90001]
-assert not any(x.get("cache_read_tokens")=="garbage" for x in turns)
+assert [x["input_tokens"] for x in turns]==[90000,0,1,90001]
+assert turns[2]["cache_read_tokens"] is None
+assert turns[2]["raw_usage"]["cache_read_input_tokens"]=="garbage"
 assert end["compaction_suspected"] is False
 assert end["injected_summary"]=={"max":90001,"last3_mean":90000.5}
 assert end["tap_status"]=="no-cache-accounting"
@@ -782,10 +835,10 @@ turn=next(x for x in fire_events if x["event"]=="turn")
 fire=next(x for x in fire_events if x["event"]=="fire")
 end=next(x for x in fire_events if x["event"]=="attempt_end")
 alert=next(x for x in alert_events if x["event"]=="alert")
-assert {"event","schema_version","ts","task_id","attempt","turn_idx","input_tokens","cache_read_tokens","cache_creation_tokens","output_tokens","model","runtime","tap_status"} <= set(turn)
+assert {"event","schema_version","ts","task_id","attempt","turn_idx","input_tokens","cache_read_tokens","cache_creation_tokens","output_tokens","model","runtime","tap_status","raw_usage","raw_usage_schema"} <= set(turn)
 assert {"event","schema_version","ts","started_at","task_id","attempt","turn_idx","axis","injected_ma","injected_last","value_kind","threshold_hit","ctx_window","ctx_window_source","slope","projection_turns","decision","nudge_disposition","model","runtime","tap_status","run_meta"} <= set(fire)
 assert {"event","schema_version","ts","task_id","attempt","turn_idx","ttfb_ms","floor_applied","model","runtime"} <= set(alert)
-assert {"event","schema_version","ts","started_at","task_id","attempt","outcome","window_error","runtime_compaction","compaction_suspected","regime_change_resets","total_tokens","injected_summary","fired_turns","alert_turns","nudge_disposition_final","tap_status","run_meta","elapsed_s"} <= set(end)
+assert {"event","schema_version","ts","started_at","task_id","attempt","outcome","window_error","runtime_compaction","compaction_suspected","regime_change_resets","tap_drift_count","drift_reference_status","total_tokens","injected_summary","fired_turns","alert_turns","nudge_disposition_final","tap_status","run_meta","elapsed_s"} <= set(end)
 assert end["outcome"] in {"step_completed","aborted","overflowed"}
 ' "$w_root/artifact/attempts/001/sentinel-events.jsonl" "$tier_root/artifact/attempts/001/sentinel-events.jsonl"
 

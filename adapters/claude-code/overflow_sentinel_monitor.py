@@ -27,19 +27,24 @@ from lib_overflow_sentinel import (  # noqa: E402
     compaction_suspected,
     compare_regime_identity,
     eligible_fire_axes,
+    evaluate_drift_turn,
     evaluate_series,
     load_state,
+    new_drift_accumulator,
     outcome_from_result,
     parse_model_aliases,
     parse_model_thresholds,
     reset_regime_state,
+    raw_usage_signature,
     resolve_ctx_window,
     resolve_thresholds,
     save_state,
     ttfb_floor_seconds,
+    weakest_drift_reference,
 )
 
 
+DRIFT_REFERENCE = "derived"
 ATTEMPT_FIELDS = {
     "schema_version",
     "task_id",
@@ -55,6 +60,25 @@ ATTEMPT_FIELDS = {
     "fired",
     "events_path",
 }
+
+
+def _drift_reference_for_model(model_identity: str) -> str:
+    """Return this adapter's capability, with a test-only regime override."""
+    if os.environ.get("_CATY_TESTING") != "1":
+        return DRIFT_REFERENCE
+    raw = os.environ.get("_CATY_OVF_TEST_DRIFT_REFERENCES")
+    if not raw:
+        return DRIFT_REFERENCE
+    try:
+        overrides = json.loads(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("test drift references must be valid JSON") from exc
+    if not isinstance(overrides, dict):
+        raise ValueError("test drift references must be a JSON object")
+    value = overrides.get(model_identity, overrides.get("*", DRIFT_REFERENCE))
+    if value not in {"independent", "derived", "none"}:
+        raise ValueError("test drift reference must be independent, derived, or none")
+    return value
 
 
 def now_utc() -> str:
@@ -79,18 +103,6 @@ def _read_complete_lines(path: Path, offset: int, pending: bytes) -> Tuple[List[
     parts = data.split(b"\n")
     pending = parts.pop()
     return [part.decode("utf-8", errors="replace") for part in parts if part], offset, pending
-
-
-def _usage_from_assistant(event: Dict[str, Any]) -> Optional[Tuple[Dict[str, Any], Dict[str, Any]]]:
-    if event.get("type") != "assistant":
-        return None
-    message = event.get("message")
-    if not isinstance(message, dict):
-        return None
-    usage = message.get("usage")
-    if not isinstance(usage, dict) or usage.get("input_tokens") is None:
-        return None
-    return message, usage
 
 
 def _usage_int(value: Any) -> Optional[int]:
@@ -212,6 +224,7 @@ def monitor(args: argparse.Namespace) -> int:
         args, startup_model_identity, last_run_injected_ma
     )
     meta = _run_meta(args.mode, t_abs, w, threshold_sources)
+    _, n_drift, theta_drift = args.model_thresholds
 
     offset = 0
     pending = b""
@@ -227,7 +240,11 @@ def monitor(args: argparse.Namespace) -> int:
     runtime_compaction_seen = False
     runtime_compaction_pending = False
     regime_change_resets = 0
+    tap_drift_count = 0
     previous_identity: Optional[Dict[str, str]] = persisted_identity
+    current_drift_reference = _drift_reference_for_model(startup_model_identity)
+    drift_references = [current_drift_reference] if persisted_identity is not None else []
+    drift_accumulator = new_drift_accumulator()
     last_injected = None
     turn_count = 0
     blind_seen = False
@@ -262,35 +279,60 @@ def monitor(args: argparse.Namespace) -> int:
                 continue
             if first_byte_at is None:
                 first_byte_at = str(event.get("timestamp") or now_utc())
-            parsed = _usage_from_assistant(event)
-            if parsed is None or args.tap_status == "disabled-host":
+            message = event.get("message")
+            if not isinstance(message, dict) or args.tap_status == "disabled-host":
                 continue
-            message, usage = parsed
             identity = message.get("id")
             if isinstance(identity, str) and identity:
                 if identity in seen_ids:
                     continue
                 seen_ids.add(identity)
-            saw_usage = True
-            has_cache = "cache_read_input_tokens" in usage and "cache_creation_input_tokens" in usage
-            input_tokens = _usage_int(usage.get("input_tokens"))
-            cache_read = _usage_int(usage.get("cache_read_input_tokens", 0))
-            cache_creation = _usage_int(usage.get("cache_creation_input_tokens", 0))
-            output_tokens = _usage_int(usage.get("output_tokens", 0))
-            if None in (input_tokens, cache_read, cache_creation, output_tokens):
-                saw_no_cache = True
-                continue
-            injected = input_tokens + cache_read + cache_creation
-            blind = has_cache and injected == 0 and output_tokens == 0
+            usage_value = message.get("usage")
+            usage = usage_value if isinstance(usage_value, dict) else None
+            if usage is not None and usage.get("input_tokens") is not None:
+                saw_usage = True
+            has_cache = usage is not None and (
+                "cache_read_input_tokens" in usage
+                and "cache_creation_input_tokens" in usage
+            )
+            input_tokens = (
+                _usage_int(usage.get("input_tokens"))
+                if usage is not None and usage.get("input_tokens") is not None
+                else None
+            )
+            cache_read = (
+                _usage_int(usage.get("cache_read_input_tokens", 0))
+                if usage is not None
+                else None
+            )
+            cache_creation = (
+                _usage_int(usage.get("cache_creation_input_tokens", 0))
+                if usage is not None
+                else None
+            )
+            output_tokens = (
+                _usage_int(usage.get("output_tokens", 0)) if usage is not None else None
+            )
+            normalized = None not in (input_tokens, cache_read, cache_creation, output_tokens)
+            injected = (
+                int(input_tokens) + int(cache_read) + int(cache_creation) if normalized else None
+            )
+            blind = bool(
+                normalized and has_cache and injected == 0 and output_tokens == 0
+            )
             if blind:
                 turn_tap_status = "blind"
                 blind_seen = True
                 consecutive_blind += 1
-            else:
+            elif normalized:
                 turn_tap_status = "ok" if has_cache else "no-cache-accounting"
                 consecutive_blind = 0
                 if not has_cache:
                     saw_no_cache = True
+            else:
+                turn_tap_status = "absent" if usage is None else "no-cache-accounting"
+                consecutive_blind = 0
+                saw_no_cache = saw_no_cache or usage is not None
             turn_count += 1
             raw_model = message.get("model") if "model" in message else None
             regime_changed, current_identity = compare_regime_identity(
@@ -303,8 +345,7 @@ def monitor(args: argparse.Namespace) -> int:
                 series = cleared["series"]
                 last_injected = cleared["last_injected"]
                 last_fire_ma = cleared["last_fire_ma"]
-                # drift_accumulator and cadence_counter are intentionally unused until #218.
-                _ = (cleared["drift_accumulator"], cleared["cadence_counter"])
+                drift_accumulator = new_drift_accumulator()
                 _withdraw_pending(pending_path)
                 last_run_injected_ma = None
                 save_state(state_path, last_fire_ma, None, current_identity)
@@ -313,6 +354,11 @@ def monitor(args: argparse.Namespace) -> int:
                 )
                 meta = _run_meta(args.mode, t_abs, w, threshold_sources)
                 regime_change_resets += 1
+                old_drift_reference = current_drift_reference
+                current_drift_reference = _drift_reference_for_model(
+                    current_identity["model"]
+                )
+                drift_references.append(current_drift_reference)
                 append_event(
                     events_path,
                     {
@@ -336,7 +382,10 @@ def monitor(args: argparse.Namespace) -> int:
                             "ctx_window_source": ctx_source,
                             "threshold_sources": dict(threshold_sources),
                         },
-                        "drift_reference": {"from": "none", "to": "none"},
+                        "drift_reference": {
+                            "from": old_drift_reference,
+                            "to": current_drift_reference,
+                        },
                     },
                 )
                 runtime_compaction_pending = False
@@ -345,10 +394,13 @@ def monitor(args: argparse.Namespace) -> int:
                 last_injected = None
                 runtime_compaction_pending = False
             if identity_established:
+                current_drift_reference = _drift_reference_for_model(
+                    current_identity["model"]
+                )
+                drift_references.append(current_drift_reference)
                 save_state(state_path, last_fire_ma, last_run_injected_ma, current_identity)
             previous_identity = current_identity
             model = str(raw_model or model)
-            total_tokens += injected + output_tokens
             turn_event = {
                 "event": "turn",
                 "schema_version": SCHEMA_VERSION,
@@ -364,7 +416,23 @@ def monitor(args: argparse.Namespace) -> int:
                 "runtime": "claude-code",
                 "tap_status": turn_tap_status,
             }
+            if current_drift_reference != "none":
+                turn_event["raw_usage"] = usage
+                turn_event["raw_usage_schema"] = raw_usage_signature(usage)
             append_event(events_path, turn_event)
+            drift_events = evaluate_drift_turn(
+                drift_accumulator,
+                turn_event,
+                current_drift_reference,
+                n_drift,
+                theta_drift,
+            )
+            for drift_event in drift_events:
+                append_event(events_path, drift_event)
+            tap_drift_count += len(drift_events)
+            if not normalized:
+                continue
+            total_tokens += int(injected) + int(output_tokens)
             if blind:
                 if consecutive_blind >= 3:
                     evaluation_disabled = True
@@ -472,6 +540,9 @@ def monitor(args: argparse.Namespace) -> int:
         final_disposition = "shadow" if args.mode == "shadow" else "suppressed"
     else:
         final_disposition = "none"
+    drift_reference_status = weakest_drift_reference(
+        drift_references or [current_drift_reference]
+    )
     attempt_end = {
         "event": "attempt_end",
         "schema_version": SCHEMA_VERSION,
@@ -484,6 +555,8 @@ def monitor(args: argparse.Namespace) -> int:
         "runtime_compaction": runtime_compaction_seen,
         "compaction_suspected": compaction_seen,
         "regime_change_resets": regime_change_resets,
+        "tap_drift_count": tap_drift_count,
+        "drift_reference_status": drift_reference_status,
         "total_tokens": total_tokens,
         "injected_summary": {
             "max": max(series) if series else 0,

@@ -107,6 +107,94 @@ run_python_case "regime reset clears predicate hysteresis and exposes the future
 cleared = reset_regime_state()
 assert cleared == {"series": [], "last_injected": None, "last_fire_ma": {},
                    "drift_accumulator": None, "cadence_counter": 0}
+state=new_drift_accumulator()
+turn={"input_tokens":120,"cache_read_tokens":0,"cache_creation_tokens":0,
+      "raw_usage":{"input_tokens":100},"runtime":"claude-code"}
+assert evaluate_drift_turn(state,turn,"derived",3,.1)==[]
+assert evaluate_drift_turn(state,turn,"derived",3,.1)==[]
+fresh=new_drift_accumulator()
+assert evaluate_drift_turn(fresh,turn,"derived",3,.1)==[]
+assert fresh["cadence_counter"]==1
+assert (fresh["reported_cum_tokens"],fresh["reference_cum_tokens"])==(120,100)
+'
+
+run_python_case "core reconciliation detects both bias directions and stamps reference capability" '
+def turn(reported, raw, idx=1, reference=None):
+    value={"schema_version":1,"ts":"2026-08-30T00:00:00Z","task_id":"t",
+           "attempt":"001","turn_idx":idx,"input_tokens":reported,
+           "cache_read_tokens":0,"cache_creation_tokens":0,"output_tokens":0,
+           "raw_usage":raw,"model":"m","runtime":"claude-code"}
+    if reference is not None: value["reference_injected_tokens"]=reference
+    return value
+high=evaluate_drift_turn(new_drift_accumulator(),turn(120,{"input_tokens":100}),"derived",1,.1)
+low=evaluate_drift_turn(new_drift_accumulator(),turn(80,{"input_tokens":100}),"derived",1,.1)
+independent=evaluate_drift_turn(
+    new_drift_accumulator(),turn(120,{"input_tokens":100},reference=100),"independent",1,.1
+)
+assert [(x[0]["signed_bias"],x[0]["drift_reference"]) for x in (high,low,independent)] == [
+    (20,"derived"),(-20,"derived"),(20,"independent")
+]
+assert all(x[0]["drift_kind"]=="bias" for x in (high,low,independent))
+'
+
+run_python_case "sub-threshold derived replay emits no drift and never claims independent PASS" '
+state=new_drift_accumulator()
+turn={"turn_idx":1,"input_tokens":105,"cache_read_tokens":0,"cache_creation_tokens":0,
+      "raw_usage":{"input_tokens":100},"runtime":"claude-code"}
+assert evaluate_drift_turn(state,turn,"derived",1,.1)==[]
+assert state["reported_cum_tokens"]==105 and state["reference_cum_tokens"]==100
+assert "independent" not in state and "verified" not in state
+'
+
+run_python_case "persistent bias is one episode and recovery re-arms a second episode" '
+state=new_drift_accumulator(); events=[]
+for idx,(reported,reference) in enumerate([(120,100),(120,100),(60,100),(120,100),(200,100)],1):
+    turn={"turn_idx":idx,"input_tokens":reported,"cache_read_tokens":0,
+          "cache_creation_tokens":0,"raw_usage":{"input_tokens":reference},
+          "runtime":"claude-code"}
+    events.extend(evaluate_drift_turn(state,turn,"derived",1,.1))
+assert [event["turn_idx"] for event in events if event["drift_kind"]=="bias"]==[1,5]
+'
+
+run_python_case "zero reference uses the denominator guard and returns a sane ratio" '
+state=new_drift_accumulator()
+turn={"turn_idx":1,"input_tokens":1,"cache_read_tokens":0,"cache_creation_tokens":0,
+      "raw_usage":{"input_tokens":0},"runtime":"claude-code"}
+event=evaluate_drift_turn(state,turn,"derived",1,.1)[0]
+assert event["reference_cum_tokens"]==0 and event["signed_bias"]==1
+assert event["bias_ratio"]==1.0
+'
+
+run_python_case "missing references advance cadence and are pairwise excluded from both sums" '
+state=new_drift_accumulator(); events=[]
+turns=[
+ {"input_tokens":120,"cache_read_tokens":0,"cache_creation_tokens":0,"raw_usage":{"input_tokens":100}},
+ {"input_tokens":None,"cache_read_tokens":None,"cache_creation_tokens":None,"raw_usage":None},
+ {"input_tokens":80,"cache_read_tokens":0,"cache_creation_tokens":0,"raw_usage":{"input_tokens":100}},
+ {"input_tokens":100,"cache_read_tokens":0,"cache_creation_tokens":0,"raw_usage":{"input_tokens":100}},
+]
+for idx,turn in enumerate(turns,1):
+    turn.update({"turn_idx":idx,"runtime":"claude-code"})
+    events.extend(evaluate_drift_turn(state,turn,"derived",2,.1))
+assert events==[] and state["cadence_counter"]==4
+assert state["reported_cum_tokens"]==300 and state["reference_cum_tokens"]==300
+'
+
+run_python_case "cache-inclusive replay shares one normalization basis and detects tampering" '
+raw={"input_tokens":100,"cache_read_input_tokens":20,"cache_creation_input_tokens":10}
+clean={"turn_idx":1,"input_tokens":100,"cache_read_tokens":20,"cache_creation_tokens":10,
+       "raw_usage":raw,"runtime":"claude-code"}
+assert evaluate_drift_turn(new_drift_accumulator(),clean,"derived",1,.1)==[]
+tampered=dict(clean); tampered["cache_read_tokens"]=0
+event=evaluate_drift_turn(new_drift_accumulator(),tampered,"derived",1,.1)[0]
+assert event["reported_cum_tokens"]==110 and event["reference_cum_tokens"]==130
+assert event["signed_bias"]==-20
+'
+
+run_python_case "weakest drift capability ordering is none then derived then independent" '
+assert weakest_drift_reference(["independent","derived"])=="derived"
+assert weakest_drift_reference(["independent","none","derived"])=="none"
+assert weakest_drift_reference(["independent"])=="independent"
 '
 
 run_python_case "threshold resolution preserves per-key explicit/default provenance" '

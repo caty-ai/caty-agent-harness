@@ -28,6 +28,7 @@ DEFAULT_CTX_WINDOW = 200000
 # Placeholders pending calibration from the #218 drift-telemetry lane.
 DEFAULT_N_DRIFT = 5
 DEFAULT_THETA_DRIFT = 0.10
+DRIFT_REFERENCE_RANK = {"none": 0, "derived": 1, "independent": 2}
 HF_CACHE_SCHEMA_VERSION = 1
 HF_NETWORK_TIMEOUT_S = 5
 HF_NETWORK_MAX_BYTES = 1024 * 1024
@@ -259,6 +260,187 @@ def reset_regime_state() -> Dict[str, Any]:
         "drift_accumulator": None,
         "cadence_counter": 0,
     }
+
+
+def new_drift_accumulator() -> Dict[str, Any]:
+    """Return the empty core state for one model/runtime regime epoch."""
+    return {
+        "reported_cum_tokens": 0,
+        "reference_cum_tokens": 0,
+        "cadence_counter": 0,
+        "bias_active": False,
+        "schema_signature": None,
+    }
+
+
+def weakest_drift_reference(values: Sequence[str]) -> str:
+    """Return the weakest declared capability using none < derived < independent."""
+    valid = [value for value in values if value in DRIFT_REFERENCE_RANK]
+    if not valid:
+        return "none"
+    return min(valid, key=lambda value: DRIFT_REFERENCE_RANK[value])
+
+
+def raw_usage_signature(raw_usage: Any) -> Optional[List[str]]:
+    """Return the sorted field-set signature for a raw usage object."""
+    if not isinstance(raw_usage, dict):
+        return None
+    return sorted(str(key) for key in raw_usage)
+
+
+def _usage_token(value: Any) -> Optional[int]:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        token_count = int(value or 0)
+    except (TypeError, ValueError):
+        return None
+    return max(0, token_count)
+
+
+def normalize_raw_usage(raw_usage: Any, runtime: Any) -> Optional[int]:
+    """Replay the runtime normalization rule over a ledger-held raw usage object."""
+    if runtime != "claude-code" or not isinstance(raw_usage, dict):
+        return None
+    if raw_usage.get("input_tokens") is None:
+        return None
+    parts = (
+        _usage_token(raw_usage.get("input_tokens")),
+        _usage_token(raw_usage.get("cache_read_input_tokens", 0)),
+        _usage_token(raw_usage.get("cache_creation_input_tokens", 0)),
+    )
+    if any(part is None for part in parts):
+        return None
+    return sum(int(part) for part in parts if part is not None)
+
+
+def _reported_injected_tokens(turn: Mapping[str, Any]) -> Optional[int]:
+    parts = tuple(
+        _usage_token(turn.get(field))
+        for field in ("input_tokens", "cache_read_tokens", "cache_creation_tokens")
+    )
+    if any(part is None for part in parts):
+        return None
+    return sum(int(part) for part in parts if part is not None)
+
+
+def _drift_event(
+    turn: Mapping[str, Any],
+    accumulator: Mapping[str, Any],
+    drift_kind: str,
+    drift_reference: str,
+    n_drift: int,
+    theta_drift: float,
+) -> Dict[str, Any]:
+    reported = int(accumulator["reported_cum_tokens"])
+    reference = int(accumulator["reference_cum_tokens"])
+    signed_bias = reported - reference
+    event = {
+        "event": "tap_drift",
+        "schema_version": turn.get("schema_version", SCHEMA_VERSION),
+        "ts": turn.get("ts"),
+        "task_id": turn.get("task_id"),
+        "turn_idx": turn.get("turn_idx"),
+        "drift_kind": drift_kind,
+        "drift_reference": drift_reference,
+        "reported_cum_tokens": reported,
+        "reference_cum_tokens": reference,
+        "signed_bias": signed_bias,
+        "bias_ratio": signed_bias / float(max(reference, 1)),
+        "threshold": theta_drift,
+        "cadence_turns": n_drift,
+        "model": turn.get("model"),
+        "runtime": turn.get("runtime"),
+    }
+    if "attempt" in turn:
+        event["attempt"] = turn.get("attempt")
+    return event
+
+
+def evaluate_drift_turn(
+    accumulator: Dict[str, Any],
+    turn: Mapping[str, Any],
+    drift_reference: str,
+    n_drift: int,
+    theta_drift: float,
+) -> List[Dict[str, Any]]:
+    """Evaluate one ledger turn and mutate the regime-scoped drift state.
+
+    Missing observations advance cadence but are excluded from both cumulative
+    sums. Derived references are recomputed from ``raw_usage`` in core. Future
+    independent adapters may persist ``reference_injected_tokens`` on the turn.
+    """
+    if drift_reference not in DRIFT_REFERENCE_RANK:
+        raise ValueError(f"unknown drift reference capability: {drift_reference}")
+    if not isinstance(n_drift, int) or isinstance(n_drift, bool) or n_drift < 1:
+        raise ValueError("N_drift must be an integer >= 1")
+    if not isinstance(theta_drift, (int, float)) or isinstance(theta_drift, bool):
+        raise ValueError("theta_drift must be numeric")
+
+    accumulator["cadence_counter"] = int(accumulator.get("cadence_counter", 0)) + 1
+    if drift_reference == "none":
+        return []
+
+    events: List[Dict[str, Any]] = []
+    raw_usage = turn.get("raw_usage")
+    signature = raw_usage_signature(raw_usage)
+    previous_signature = accumulator.get("schema_signature")
+    schema_changed = (
+        signature is not None
+        and previous_signature is not None
+        and signature != previous_signature
+    )
+    if signature is not None:
+        accumulator["schema_signature"] = signature
+
+    reported = _reported_injected_tokens(turn)
+    if drift_reference == "derived":
+        reference = normalize_raw_usage(raw_usage, turn.get("runtime"))
+    else:
+        reference = _usage_token(turn.get("reference_injected_tokens"))
+    observation_exists = reported is not None and reference is not None
+    if observation_exists:
+        accumulator["reported_cum_tokens"] = int(
+            accumulator.get("reported_cum_tokens", 0)
+        ) + int(reported)
+        accumulator["reference_cum_tokens"] = int(
+            accumulator.get("reference_cum_tokens", 0)
+        ) + int(reference)
+
+    if schema_changed:
+        events.append(
+            _drift_event(
+                turn,
+                accumulator,
+                "schema-change",
+                drift_reference,
+                n_drift,
+                float(theta_drift),
+            )
+        )
+
+    cadence = int(accumulator["cadence_counter"])
+    if cadence % n_drift != 0 or not observation_exists:
+        return events
+
+    reported_cum = int(accumulator["reported_cum_tokens"])
+    reference_cum = int(accumulator["reference_cum_tokens"])
+    bias_ratio = (reported_cum - reference_cum) / float(max(reference_cum, 1))
+    in_drift = abs(bias_ratio) > float(theta_drift)
+    was_in_drift = bool(accumulator.get("bias_active"))
+    if in_drift and not was_in_drift:
+        events.append(
+            _drift_event(
+                turn,
+                accumulator,
+                "bias",
+                drift_reference,
+                n_drift,
+                float(theta_drift),
+            )
+        )
+    accumulator["bias_active"] = in_drift
+    return events
 
 
 def resolve_thresholds(
