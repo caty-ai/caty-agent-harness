@@ -156,6 +156,31 @@ for idx,(reported,reference) in enumerate([(120,100),(120,100),(60,100),(120,100
 assert [event["turn_idx"] for event in events if event["drift_kind"]=="bias"]==[1,5]
 '
 
+run_python_case "regime reset starts a fresh bias epoch without cumulative bleed" '
+def turn(idx, reported, reference):
+    return {"turn_idx":idx,"input_tokens":reported,"cache_read_tokens":0,
+            "cache_creation_tokens":0,"raw_usage":{"input_tokens":reference},
+            "runtime":"claude-code"}
+state=new_drift_accumulator(); events=[]
+for idx in range(1,5):
+    events.extend(evaluate_drift_turn(state,turn(idx,120,100),"derived",2,.1))
+assert [(event["turn_idx"],abs(event["bias_ratio"])>event["threshold"])
+        for event in events if event["drift_kind"]=="bias"]==[(2,True)]
+assert state["bias_active"] is True
+assert (state["reported_cum_tokens"],state["reference_cum_tokens"])==(480,400)
+state=new_drift_accumulator()
+assert state["bias_active"] is False
+assert (state["reported_cum_tokens"],state["reference_cum_tokens"])==(0,0)
+epoch_two=[]
+for idx in range(1,3):
+    epoch_two.extend(evaluate_drift_turn(state,turn(idx,105,100),"derived",2,.1))
+events.extend(epoch_two)
+assert epoch_two==[]
+assert len([event for event in events if event["drift_kind"]=="bias"])==1
+assert (state["reported_cum_tokens"],state["reference_cum_tokens"])==(210,200)
+assert state["bias_active"] is False
+'
+
 run_python_case "zero reference uses the denominator guard and returns a sane ratio" '
 state=new_drift_accumulator()
 turn={"turn_idx":1,"input_tokens":1,"cache_read_tokens":0,"cache_creation_tokens":0,

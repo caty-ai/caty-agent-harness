@@ -331,7 +331,6 @@ def monitor(args: argparse.Namespace) -> int:
                     saw_no_cache = True
             else:
                 turn_tap_status = "absent" if usage is None else "no-cache-accounting"
-                consecutive_blind = 0
                 saw_no_cache = saw_no_cache or usage is not None
             turn_count += 1
             raw_model = message.get("model") if "model" in message else None

@@ -433,6 +433,56 @@ assert not [x for x in events if x["event"]=="fire"]
 assert end["tap_status"]=="blind" and end["injected_summary"]=={"max":0,"last3_mean":0}
 ' "$case_root/artifact/attempts/001/sentinel-events.jsonl"
 
+case_root="$TMP_ROOT/blind-garbage-blind"
+make_attempt "$case_root"
+run_monitor_fixture blind-garbage-blind.jsonl "$case_root/artifact/attempts/001"
+assert_python "unnormalizable usage preserves the blind streak and disables evaluation" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+turns=[x for x in events if x["event"]=="turn"]
+end=next(x for x in events if x["event"]=="attempt_end")
+receipt=json.loads(pathlib.Path(sys.argv[2]).read_text())
+assert [x["tap_status"] for x in turns]==[
+    "blind","blind","no-cache-accounting","blind","ok"
+]
+assert not [x for x in events if x["event"]=="fire"]
+assert end["fired_turns"]==[] and end["injected_summary"]=={"max":0,"last3_mean":0}
+assert receipt["fired"] is False
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl" \
+  "$case_root/artifact/attempts/001/attempt.json"
+
+case_root="$TMP_ROOT/blind-absent-blind"
+make_attempt "$case_root"
+python3 -B - "$FIXTURES/blind-garbage-blind.jsonl" \
+  "$case_root/artifact/attempts/001/stream.jsonl" <<'PY'
+import json
+import pathlib
+import sys
+events = [json.loads(line) for line in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+events[2]["message"].pop("usage")
+pathlib.Path(sys.argv[2]).write_text(
+    "".join(json.dumps(event, separators=(",", ":")) + "\n" for event in events)
+)
+PY
+printf '0\n' >"$case_root/artifact/attempts/001/overflow-stream.eof"
+python3 -B "$MONITOR" \
+  --stream "$case_root/artifact/attempts/001/stream.jsonl" \
+  --eof "$case_root/artifact/attempts/001/overflow-stream.eof" \
+  --attempt-dir "$case_root/artifact/attempts/001" \
+  --artifact-dir "$case_root/artifact" \
+  --task-id fixture-task --attempt 001 --mode shadow \
+  --model claude-sonnet-4-5 --t-abs 80000 --w 0.50
+assert_python "absent usage preserves the blind streak and disables evaluation" '
+events=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+turns=[x for x in events if x["event"]=="turn"]
+end=next(x for x in events if x["event"]=="attempt_end")
+receipt=json.loads(pathlib.Path(sys.argv[2]).read_text())
+assert [x["tap_status"] for x in turns]==["blind","blind","absent","blind","ok"]
+assert not [x for x in events if x["event"]=="fire"]
+assert end["fired_turns"]==[] and end["injected_summary"]=={"max":0,"last3_mean":0}
+assert receipt["fired"] is False
+' "$case_root/artifact/attempts/001/sentinel-events.jsonl" \
+  "$case_root/artifact/attempts/001/attempt.json"
+
 case_root="$TMP_ROOT/blind-short"
 make_attempt "$case_root"
 printf '%s\n' '{"last_fire_ma":{"level":91000.0},"last_run_injected_ma":87000.0,"schema_version":1}' \
