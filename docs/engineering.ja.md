@@ -154,7 +154,7 @@ task 途中で model や runtime が切り替わった場合は、regime を混�
 移動平均・傾き履歴・nudge hysteresis が再スタートし、model-keyed な閾値がすべて再解決されます —
 per-model 閾値表（`OVF_MODEL_THRESHOLDS`）もここに含まれ、表は空で出荷されるため、較正済みの
 per-model 値は後からコード変更なしの純粋な設定として投入できます。sentinel は自分の計器（tap）も
-監査します: turn ごとの生 usage を一定周期で正規化ルールに再適用し、数値が食い違う場合や regime 途中で
+監査します: turn ごとの生 usage を一定周期で正規化ルールに再適用し、突合した累積値が閾値を超えて食い違う場合や regime 途中で
 usage schema が変わった場合に `tap_drift` event を記録します — 「発火しなかった」「見えていなかった」と
 並ぶ、記録のみの第 3 の計器状態（「計器が嘘をついた」）です。
 

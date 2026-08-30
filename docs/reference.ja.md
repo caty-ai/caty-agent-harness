@@ -164,7 +164,7 @@ sentinel の動作も無効です。CLI は `prompt.md` を stdin から直接�
 | `OVF_T_ABS` | optional の 1 以上の整数。設定時のみ forward — unset なら閾値の解決順（明示上書き > per-model 表 > 製品既定 `80000`）で解決し、どの段が勝ったかを key ごとに `run_meta.threshold_sources` へ記録 |
 | `OVF_W_PCT` | optional の 1–99 の整数、100 で割って変換。設定時のみ forward — unset は `OVF_T_ABS` と同じ解決（製品既定 `0.50`） |
 | `OVF_MODEL_ALIASES` | optional の JSON object。model-id alias → canonical id の写像（string、trim+lowercase、single-step で連鎖なし）。不正な値は spawn 前に exit 2 |
-| `OVF_MODEL_THRESHOLDS` | optional の JSON object `{"models": {"<exact-id-or-glob>": {"T_abs"?, "w"?}}, "N_drift"?, "theta_drift"?}`。entry は key ごとの部分上書き。matching は canonical 完全一致 > 最長リテラル接頭辞の glob（`*` のみ）。重複 key・未知 key・リテラル接頭辞を共有する pattern の組・範囲外の値は spawn 前に exit 2。表は空で出荷され、書き戻しまで全 model が明示/既定の段で解決 |
+| `OVF_MODEL_THRESHOLDS` | optional の JSON object `{"models": {"<exact-id-or-glob>": {"T_abs"?, "w"?}}, "N_drift"?, "theta_drift"?}`。entry は key ごとの部分上書き。matching は canonical 完全一致 > 最長リテラル接頭辞の glob（`*` のみ）。重複 key・未知 key・リテラル接頭辞が同一の pattern の組・範囲外の値は spawn 前に exit 2。placeholder 既定は `N_drift` `5` / `theta_drift` `0.10`。表は空で出荷され、書き戻しまで全 model が明示/既定の段で解決 |
 | `OVF_CTX_WINDOW` | optional の 1 以上の整数。context-window 梯子の第 1 段 |
 | `OVF_HF_CONFIG` | optional の local・non-symlink HF `config.json` path（またはその directory）。network lookup なし |
 | `OVF_HF_NETWORK` | unset/空/`0` = 無効、`1` = best-effort の HF network rung を有効化 |
@@ -210,8 +210,8 @@ identity により、attempt 境界での model 切替 retry も検出されま�
 
 さらに各 regime の tap 自体を突合します（第 3 の計器状態:「計器が嘘をついた」。「発火しなかった」
 「見えていなかった」と並ぶ区別です）。Claude Code adapter は `drift_reference: derived` を申告し、
-turn ごとの生 usage object をそのまま保存します。core が `N_drift` turn ごとに ledger 上で正規化を
-再適用して paired cumulative sum を比較し（参照を欠く turn は cadence を進めつつ両辺の和から対で
+turn ごとの生 usage object をそのまま保存します。core が毎 turn ledger 上で正規化を再適用し、`N_drift` turn ごとに
+paired cumulative sum を比較して（参照を欠く turn は cadence を進めつつ両辺の和から対で
 除外）、`|bias_ratio| > theta_drift` で episode 起動・方向非依存の `tap_drift` event を、regime 内で
 生 usage の field set が変われば `schema-change` episode を記録します。v1 は記録のみで、`tap_drift`
 が発火・nudge・無効化を起こすことはなく、derived の count は provider drift の証拠になりません。

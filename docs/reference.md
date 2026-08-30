@@ -197,7 +197,7 @@ is created.
 | `OVF_T_ABS` | optional integer >= 1; forwarded only when set — unset resolves through the threshold order (explicit override, then the per-model table, then the product default `80000`), and the winning tier is recorded per key in `run_meta.threshold_sources` |
 | `OVF_W_PCT` | optional integer 1–99, converted by dividing by 100; forwarded only when set — unset resolves like `OVF_T_ABS` (product default `0.50`) |
 | `OVF_MODEL_ALIASES` | optional JSON object mapping model-id aliases to canonical ids (strings; trimmed and lowercased; single-step, no chains); invalid values exit 2 before spawn |
-| `OVF_MODEL_THRESHOLDS` | optional JSON object `{"models": {"<exact-id-or-glob>": {"T_abs"?, "w"?}}, "N_drift"?, "theta_drift"?}`; entries are partial per-key overrides; matching is canonical exact id, then longest-literal-prefix glob (`*` only); duplicate or unknown keys, two patterns sharing a literal prefix, and out-of-range values exit 2 before spawn; ships empty, so every model uses the explicit/default tiers until values are written back |
+| `OVF_MODEL_THRESHOLDS` | optional JSON object `{"models": {"<exact-id-or-glob>": {"T_abs"?, "w"?}}, "N_drift"?, "theta_drift"?}`; entries are partial per-key overrides; matching is canonical exact id, then longest-literal-prefix glob (`*` only); duplicate or unknown keys, two patterns whose literal prefixes are identical, and out-of-range values exit 2 before spawn; placeholder defaults `N_drift` `5` / `theta_drift` `0.10`; ships empty, so every model uses the explicit/default tiers until values are written back |
 | `OVF_CTX_WINDOW` | optional integer >= 1; first context-window ladder rung |
 | `OVF_HF_CONFIG` | optional local non-symlink HF `config.json` path (or its directory); no network lookup |
 | `OVF_HF_NETWORK` | unset/empty/`0` = disabled; `1` enables one best-effort HF network rung |
@@ -254,8 +254,8 @@ at the attempt boundary.
 Each regime's tap is additionally reconciled (the third instrument state: "the
 tap lied", alongside "didn't fire" and "couldn't see"). The Claude Code adapter
 declares `drift_reference: derived` and persists each turn's verbatim raw usage
-object; core replays the normalization over the ledger every `N_drift` turns
-and compares paired cumulative sums — reference-missing turns advance the
+object; core replays the normalization over the ledger each turn and, every
+`N_drift` turns, compares the paired cumulative sums — reference-missing turns advance the
 cadence but drop out of both sums — recording an episode-triggered,
 direction-agnostic `tap_drift` event when `|bias_ratio| > theta_drift`, and a
 `schema-change` episode when the raw-usage field set changes within a regime.
