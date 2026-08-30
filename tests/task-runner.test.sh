@@ -3097,6 +3097,40 @@ case_ledger_fired_delivered_is_completed() {
   fi
 }
 
+case_ledger_drift_members_and_receipt_reduction() {
+  local name=ledger-drift-members-and-receipt-reduction ws artifact
+  ws=$(make_ws)
+  write_terminal_ledger_fixture "$ws" drift-fold delivered
+  artifact="$ws/loop/artifacts/drift-fold"
+  printf '%s\n' \
+    '{"event":"tap_drift","task_id":"drift-fold","attempt":"001","turn_idx":2,"drift_kind":"bias"}' \
+    '{"event":"regime_change","task_id":"drift-fold","attempt":"001","turn_idx":3,"drift_reference":{"from":"independent","to":"derived"}}' \
+    '{"event":"attempt_end","task_id":"drift-fold","attempt":"001","started_at":"2026-08-27T00:00:00Z","tap_drift_count":1,"regime_change_resets":2,"drift_reference_status":"independent","fired_turns":[],"alert_turns":[]}' \
+    >"$artifact/attempts/001/sentinel-events.jsonl"
+  mkdir -p "$artifact/attempts/002"
+  printf '%s\n' '{"started":"2026-08-27T00:00:02Z"}' >"$artifact/attempts/002/driver.json"
+  printf '%s\n' \
+    '{"event":"tap_drift","task_id":"drift-fold","attempt":"002","turn_idx":4,"drift_kind":"schema-change"}' \
+    '{"event":"attempt_end","task_id":"drift-fold","attempt":"002","started_at":"2026-08-27T00:00:02Z","tap_drift_count":2,"regime_change_resets":1,"drift_reference_status":"derived","fired_turns":[],"alert_turns":[]}' \
+    >"$artifact/attempts/002/sentinel-events.jsonl"
+  run_tick "$ws" >/dev/null
+  if [[ "$(ledger_event_count "$artifact/ledger.jsonl" tap_drift)" -eq 2 ]] \
+    && [[ "$(ledger_event_count "$artifact/ledger.jsonl" regime_change)" -eq 1 ]] \
+    && python3 - "$artifact/task-end.json" <<'PY'
+import json, sys
+r=json.load(open(sys.argv[1],encoding="utf-8"))
+assert r["tap_drift_count"]==3
+assert r["regime_change_resets"]==3
+assert r["drift_reference_status"]=="derived"
+assert r["fired_turns"]==[]
+PY
+  then
+    pass "$name"
+  else
+    fail "$name" "drift members were filtered or receipt fields reduced incorrectly"
+  fi
+}
+
 case_ledger_direct_dlq_reap_folds_once() {
   local name=ledger-direct-dlq-reap-folds-once ws artifact
   ws=$(make_ws)
@@ -3674,6 +3708,7 @@ case_empty_stderr_is_degenerate_and_retries
 case_metrics_idempotent
 case_ledger_terminal_pre_projection_reconcile
 case_ledger_fired_delivered_is_completed
+case_ledger_drift_members_and_receipt_reduction
 case_ledger_direct_dlq_reap_folds_once
 case_ledger_torn_tail_repair
 case_ledger_zero_attempt_dlq

@@ -1,0 +1,4 @@
+{"type":"assistant","timestamp":"2026-08-30T00:00:01Z","message":{"id":"drift-a-1","model":"model-a","usage":{"input_tokens":100,"cache_read_input_tokens":20,"cache_creation_input_tokens":10,"output_tokens":1}}}
+{"type":"assistant","timestamp":"2026-08-30T00:00:02Z","message":{"id":"drift-a-2","model":"model-a","usage":{"input_tokens":100,"cache_read_input_tokens":20,"cache_creation_input_tokens":10,"output_tokens":1,"provider_marker":"changed"}}}
+{"type":"assistant","timestamp":"2026-08-30T00:00:03Z","message":{"id":"drift-b-1","model":"model-b","usage":{"input_tokens":100,"cache_read_input_tokens":20,"cache_creation_input_tokens":10,"output_tokens":1,"other_marker":"new-regime"}}}
+{"type":"assistant","timestamp":"2026-08-30T00:00:04Z","message":{"id":"drift-b-2","model":"model-b","usage":{"input_tokens":100,"cache_read_input_tokens":20,"cache_creation_input_tokens":10,"output_tokens":1,"other_marker":"new-regime","new_epoch_change":true}}}
