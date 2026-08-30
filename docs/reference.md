@@ -194,8 +194,10 @@ is created.
 | Variable | Contract |
 | --- | --- |
 | `OVF_SENTINEL` | unset/empty = off; otherwise exactly `shadow` or `active` |
-| `OVF_T_ABS` | integer >= 1; default `80000` tokens |
-| `OVF_W_PCT` | integer 1–99; default `50`, converted by dividing by 100 |
+| `OVF_T_ABS` | optional integer >= 1; forwarded only when set — unset resolves through the threshold order (explicit override, then the per-model table, then the product default `80000`), and the winning tier is recorded per key in `run_meta.threshold_sources` |
+| `OVF_W_PCT` | optional integer 1–99, converted by dividing by 100; forwarded only when set — unset resolves like `OVF_T_ABS` (product default `0.50`) |
+| `OVF_MODEL_ALIASES` | optional JSON object mapping model-id aliases to canonical ids (strings; trimmed and lowercased; single-step, no chains); invalid values exit 2 before spawn |
+| `OVF_MODEL_THRESHOLDS` | optional JSON object `{"models": {"<exact-id-or-glob>": {"T_abs"?, "w"?}}, "N_drift"?, "theta_drift"?}`; entries are partial per-key overrides; matching is canonical exact id, then longest-literal-prefix glob (`*` only); duplicate or unknown keys, two patterns whose literal prefixes are identical, and out-of-range values exit 2 before spawn; placeholder defaults `N_drift` `5` / `theta_drift` `0.10`; ships empty, so every model uses the explicit/default tiers until values are written back |
 | `OVF_CTX_WINDOW` | optional integer >= 1; first context-window ladder rung |
 | `OVF_HF_CONFIG` | optional local non-symlink HF `config.json` path (or its directory); no network lookup |
 | `OVF_HF_NETWORK` | unset/empty/`0` = disabled; `1` enables one best-effort HF network rung |
@@ -236,13 +238,42 @@ strict greater-than-40% injected drop remains the fallback heuristic. This
 mixed-magnitude heuristic can suppress one otherwise valid nudge; that bounded
 false positive is an accepted v1 cost.
 
+A model or runtime change between turns triggers exactly one regime reset on
+the switch turn (canonical model identity is trimmed and lowercased with one
+`OVF_MODEL_ALIASES` lookup; a turn without an identity field neither compares
+nor resets). The reset clears the measured series, the pending nudge, the
+per-axis nudge hysteresis, and the drift accumulators, then re-resolves all
+model-keyed config — the context window (a run-level `OVF_CTX_WINDOW` override
+still wins), `T_abs`/`w` through the threshold order, and the TTFB floor —
+records a `regime_change` event with the from/to identities, resolved values,
+and per-key sources, and evaluates the switch turn as the first sample of the
+new regime. The compaction drop heuristic is never evaluated across a regime
+boundary, and the persisted regime identity also detects a model-changing retry
+at the attempt boundary.
+
+Each regime's tap is additionally reconciled (the third instrument state: "the
+tap lied", alongside "didn't fire" and "couldn't see"). The Claude Code adapter
+declares `drift_reference: derived` and persists each turn's verbatim raw usage
+object; core replays the normalization over the ledger each turn and, every
+`N_drift` turns, compares the paired cumulative sums — reference-missing turns advance the
+cadence but drop out of both sums — recording an episode-triggered,
+direction-agnostic `tap_drift` event when `|bias_ratio| > theta_drift`, and a
+`schema-change` episode when the raw-usage field set changes within a regime.
+v1 is log-only: `tap_drift` never fires, nudges, or disables anything, and
+derived counts are never evidence of provider drift.
+
 Hysteresis-blocked predicate crossings intentionally append no `fire` event to
 avoid event floods. They remain reconstructable from the append-only `turn`
 series. On slope-only fires, `threshold_hit` is omitted because neither level
 threshold crossed.
 
-`sentinel-events.jsonl` is append-only and contains `turn`, `fire`, `alert`, and
-per-run `attempt_end` records. The task runner folds those records into the
+`sentinel-events.jsonl` is append-only and contains `turn`, `fire`, `alert`,
+`regime_change`, `tap_drift`, and per-run `attempt_end` records. Turn records
+carry `runtime` and, whenever the drift capability is not `none`, the verbatim
+`raw_usage` object; `attempt_end` and the folded task-level receipt carry
+`regime_change_resets`, `tap_drift_count` (episodes), and
+`drift_reference_status` (the weakest capability across the task's regimes).
+The task runner folds those records into the
 per-task ledger and emits the distinct task-level `task_end` described above.
 `attempt.json` is atomically finalized with exactly
 these fields: `schema_version`, `task_id`, `attempt`, `mode`, `model`,

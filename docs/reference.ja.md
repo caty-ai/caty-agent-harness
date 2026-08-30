@@ -161,8 +161,10 @@ sentinel の動作も無効です。CLI は `prompt.md` を stdin から直接�
 | 変数 | 契約 |
 | --- | --- |
 | `OVF_SENTINEL` | unset/空 = off。それ以外は厳密に `shadow` または `active` |
-| `OVF_T_ABS` | 1 以上の整数。既定 `80000` token |
-| `OVF_W_PCT` | 1–99 の整数。既定 `50`、100 で割って変換 |
+| `OVF_T_ABS` | optional の 1 以上の整数。設定時のみ forward — unset なら閾値の解決順（明示上書き > per-model 表 > 製品既定 `80000`）で解決し、どの段が勝ったかを key ごとに `run_meta.threshold_sources` へ記録 |
+| `OVF_W_PCT` | optional の 1–99 の整数、100 で割って変換。設定時のみ forward — unset は `OVF_T_ABS` と同じ解決（製品既定 `0.50`） |
+| `OVF_MODEL_ALIASES` | optional の JSON object。model-id alias → canonical id の写像（string、trim+lowercase、single-step で連鎖なし）。不正な値は spawn 前に exit 2 |
+| `OVF_MODEL_THRESHOLDS` | optional の JSON object `{"models": {"<exact-id-or-glob>": {"T_abs"?, "w"?}}, "N_drift"?, "theta_drift"?}`。entry は key ごとの部分上書き。matching は canonical 完全一致 > 最長リテラル接頭辞の glob（`*` のみ）。重複 key・未知 key・リテラル接頭辞が同一の pattern の組・範囲外の値は spawn 前に exit 2。placeholder 既定は `N_drift` `5` / `theta_drift` `0.10`。表は空で出荷され、書き戻しまで全 model が明示/既定の段で解決 |
 | `OVF_CTX_WINDOW` | optional の 1 以上の整数。context-window 梯子の第 1 段 |
 | `OVF_HF_CONFIG` | optional の local・non-symlink HF `config.json` path（またはその directory）。network lookup なし |
 | `OVF_HF_NETWORK` | unset/空/`0` = 無効、`1` = best-effort の HF network rung を有効化 |
@@ -196,13 +198,34 @@ last injected MA が厳密に 50k 超なら 150 秒、厳密に 100k 超なら 2
 見る heuristic が fallback です。異なる大きさの turn が混在すると、本来有効な nudge を 1 回だけ
 抑制することがありますが、これは v1 で受容する bounded false-positive cost です。
 
+turn 間で model または runtime が変わると、切替 turn でちょうど 1 回の regime reset が走ります
+（canonical な model identity は trim+lowercase に `OVF_MODEL_ALIASES` の single-step lookup を
+適用したもの。identity field を欠く turn は比較もresetもしません）。reset は measured series・
+pending nudge・軸ごとの nudge hysteresis・drift accumulator をクリアし、model-keyed config を
+すべて再解決します — context window（run-level の `OVF_CTX_WINDOW` 上書きは引き続き最優先）、
+閾値解決順による `T_abs`/`w`、TTFB floor。from/to identity・解決値・key ごとの source を持つ
+`regime_change` event を記録し、切替 turn を新 regime の sample 1 として評価します。
+compaction の急落 heuristic は regime 境界をまたいで評価されません。persist された regime
+identity により、attempt 境界での model 切替 retry も検出されます。
+
+さらに各 regime の tap 自体を突合します（第 3 の計器状態:「計器が嘘をついた」。「発火しなかった」
+「見えていなかった」と並ぶ区別です）。Claude Code adapter は `drift_reference: derived` を申告し、
+turn ごとの生 usage object をそのまま保存します。core が毎 turn ledger 上で正規化を再適用し、`N_drift` turn ごとに
+paired cumulative sum を比較して（参照を欠く turn は cadence を進めつつ両辺の和から対で
+除外）、`|bias_ratio| > theta_drift` で episode 起動・方向非依存の `tap_drift` event を、regime 内で
+生 usage の field set が変われば `schema-change` episode を記録します。v1 は記録のみで、`tap_drift`
+が発火・nudge・無効化を起こすことはなく、derived の count は provider drift の証拠になりません。
+
 hysteresis で block された predicate crossing は event flood 防止のため意図的に `fire` を追加しません。
 append-only の `turn` series から再構成できます。slope-only fire では level threshold を跨いでいないため、
 `threshold_hit` を省略します。
 
-`sentinel-events.jsonl` は append-only で、`turn`、`fire`、`alert`、run ごとの
-`attempt_end` を収録します。task runner はこれらを per-task ledger へ fold し、上記の distinct な
-task-level `task_end` を emit します。
+`sentinel-events.jsonl` は append-only で、`turn`、`fire`、`alert`、`regime_change`、
+`tap_drift`、run ごとの `attempt_end` を収録します。turn record は `runtime` を持ち、drift
+capability が `none` でない限り生の `raw_usage` object をそのまま持ちます。`attempt_end` と
+fold 後の task-level receipt は `regime_change_resets`、`tap_drift_count`（episode 数）、
+`drift_reference_status`（task 内の全 regime の最弱 capability）を持ちます。task runner は
+これらを per-task ledger へ fold し、上記の distinct な task-level `task_end` を emit します。
 `attempt.json` は厳密に `schema_version`、`task_id`、`attempt`、`mode`、`model`、
 `ctx_window`、`ctx_window_source`、`started_at`、nullable な `first_byte_at`、
 `cli_exit_code`、`tap_status_final`、`fired`、`events_path` の field で atomic に確定します。attempt identity は

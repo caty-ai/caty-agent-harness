@@ -174,7 +174,18 @@ An explicit Claude `system/compact_boundary` event resets the measured series;
 when that event is unavailable, the injected-token drop heuristic remains the
 fallback.
 
-Each monitored attempt appends `turn`, `fire`, `alert`, and `attempt_end` records
+A mid-task model or runtime switch resets the measurement instead of mixing
+regimes: moving averages, slope history, and nudge hysteresis restart, and all
+model-keyed thresholds re-resolve — including the per-model threshold table
+(`OVF_MODEL_THRESHOLDS`), which ships empty so calibrated per-model values can
+later land as pure configuration with no code change. The sentinel also audits
+its own tap: it replays each turn's raw usage through the normalization rules
+and, on a fixed cadence, records a `tap_drift` event when the reconciled sums disagree beyond a
+threshold or the usage schema changes mid-regime — a log-only third instrument state ("the
+tap lied") alongside "didn't fire" and "couldn't see".
+
+Each monitored attempt appends `turn`, `fire`, `alert`, `regime_change`,
+`tap_drift`, and `attempt_end` records
 to its standalone `sentinel-events.jsonl`. This file remains separate until the
 task-runner ledger has a confluence point. The next-step delivery boundary has
 one known limitation: a task that ends on its firing attempt cannot receive the
