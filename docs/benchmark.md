@@ -222,6 +222,8 @@ goals, budgets, scoring; only the model field swapped, original seal hash
 untouched) on **claude-sonnet-5** (90 seqs) and **claude-opus-5** (60 seqs,
 M/L only). Public record: [#129 comment](https://github.com/caty-ai/caty-agent-harness/issues/129#issuecomment-5457130272).
 
+`correct_resolved` = correct against the hidden answer key with delivery verified — the pre-registered secondary endpoint (the primary, `task_resolved`, is discussed below).
+
 | Model | Completion, bare vs harness | Efficiency, bare÷harness median charge |
 |---|---|---|
 | claude-haiku-4.5 (main run) | 13% vs 43% (M/L pooled, task_resolved) | tokens −59% |

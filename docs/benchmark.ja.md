@@ -211,6 +211,8 @@ P1 は封印設計をそのまま（同じコーパス・ゴール・予算・�
 M/L のみ）で繰り返しました。公開記録:
 [#129 コメント](https://github.com/caty-ai/caty-agent-harness/issues/129#issuecomment-5457130272)。
 
+`correct_resolved` = 隠し答案に対して正答かつ成果物検証済み — 事前登録済みの副次エンドポイント（主要 `task_resolved` は下の注記を参照）。
+
 | モデル | 完遂・素 vs ハーネス | 効率・素÷ハーネス（charge 中央値） |
 |---|---|---|
 | claude-haiku-4.5（本走） | 13% vs 43%（M/L プール・task_resolved） | トークン −59% |
