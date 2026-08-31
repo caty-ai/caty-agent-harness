@@ -61,7 +61,7 @@ make lint    # syntax-checks every tracked shell script, rejects bash 4.2+ ANSI-
 <!-- claim: make-target lint -->
 
 - Expected: `Suite Summary: <n> PASS, 0 FAIL`. `make lint` refuses a vacuous green — zero files checked is a failure.
-- Prerequisites are listed in [CONTRIBUTING.md](CONTRIBUTING.md) — bash 3.2+, `make`, git 2.34+, `ssh-keygen -Y` (OpenSSH 8.2+), python3, and standard Unix tools.
+- Prerequisites are listed in [CONTRIBUTING.md](CONTRIBUTING.md) — bash 3.2+, `make`, git 2.34+, `ssh-keygen -Y` (OpenSSH 8.2+), python3 (3.9+), and standard Unix tools.
 - If you edit the Makefile `test` recipe, resync `.github/ci/make-test-recipe.pin` in the same change. That pin is checked after merge, not on your PR, so skipping it turns `main` red.
 
 CI, accurately:

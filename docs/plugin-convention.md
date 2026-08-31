@@ -56,7 +56,7 @@ Anything not listed above is engine-internal and may change without notice.
   `ARTIFACT_DIR`, `TR_DC_CWD`, and `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, plus `HOME`,
   `LANG`, `LC_ALL`, and `TZ` only when the runner has them. The shell also creates
   variables such as `PWD`, `SHLVL`, and `_`. Because `PATH` is fixed, tools such as
-  `python3` must be reachable there or invoked by absolute path in donechecks. The
+  `python3` (3.9+) must be reachable there or invoked by absolute path in donechecks. The
   bundled `templates/examples/img-pilot.task.md` donecheck depends on `python3` in
   that `PATH`; macOS ships `/usr/bin/python3`, while Linux distributions may not.
   Donechecks that depended on any other inherited variable, including `TR_PUSH_CMD`,
