@@ -121,7 +121,7 @@ review notification、48時間を超える沈黙、設定 threshold 以上の ze
   extraction を終了させるため、使用禁止です。
 - donecheck に渡るのは `TASK_ID`、`TASK_FILE`、`ARTIFACT_DIR`、`TR_DC_CWD`、固定の
   `PATH=/usr/bin:/bin:/usr/sbin:/sbin`、runner 側で set 済みの
-  `HOME`/`LANG`/`LC_ALL`/`TZ`、および shell が作る変数だけです。`python3` などの tool は
+  `HOME`/`LANG`/`LC_ALL`/`TZ`、および shell が作る変数だけです。`python3`（3.9+）などの tool は
   この固定 `PATH` から到達できるか、donecheck 内で絶対パス指定する必要があります。
   同梱の `templates/examples/img-pilot.task.md` の donecheck はこの `PATH` 内の `python3` に
   依存します。macOS には `/usr/bin/python3` がありますが、Linux distribution にはない場合が

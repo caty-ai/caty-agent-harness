@@ -146,7 +146,7 @@ configuration.
   terminates extraction textually and is therefore prohibited.
 - Donechecks receive only `TASK_ID`, `TASK_FILE`, `ARTIFACT_DIR`, `TR_DC_CWD`, fixed
   `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, any set `HOME`/`LANG`/`LC_ALL`/`TZ`, and
-  shell-created variables. Tools such as `python3` must be reachable in that fixed
+  shell-created variables. Tools such as `python3` (3.9+) must be reachable in that fixed
   `PATH` or invoked by absolute path. The bundled `templates/examples/img-pilot.task.md`
   donecheck depends on `python3` there; macOS ships `/usr/bin/python3`, while Linux
   distributions may not. Other inherited variables disappear and dependent checks

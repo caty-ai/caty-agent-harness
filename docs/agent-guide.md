@@ -23,7 +23,7 @@ Run these read-only checks and note the results for your final report:
 ```sh
 git --version
 bash --version          # 3.2+ is fine (macOS default works)
-command -v python3      # needed for hooks and automated paths
+command -v python3      # needed for hooks and automated paths (3.9+)
 ```
 
 If `python3` is missing, you can still complete steps 1–4; say so in your report and point the human at their platform's Python 3 install. This repository is public at <https://github.com/caty-ai/caty-agent-harness>, so no invitation is needed. If the repository URL is not reachable, stop and tell the human which error you saw.
