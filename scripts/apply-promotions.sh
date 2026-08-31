@@ -749,7 +749,8 @@ text = "\n".join([
     one("theme"),
     "",
 ])
-out.write_text(text, encoding="utf-8", newline="\n")
+with out.open("w", encoding="utf-8", newline="\n") as fh:
+    fh.write(text)
 PY
 }
 
