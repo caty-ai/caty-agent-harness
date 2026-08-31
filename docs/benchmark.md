@@ -7,6 +7,28 @@ places where the harness did **not** win. One benchmark lane exists per model;
 new lanes are added as they are measured (tracking:
 [#129](https://github.com/caty-ai/caty-agent-harness/issues/129)).
 
+## The four experiment families — how to read this page
+
+1. **EV-006 — bare vs the shipped harness.** Does external machinery rescue
+   completion? Main run on claude-haiku-4.5 (the headline 13%→43%); the **P1
+   model swap** repeats the sealed design on sonnet-5 / opus-5 and answers
+   "was that just because haiku is weak?" — see [EV-006 P1](#ev-006-p1).
+2. **EV-008 — bare vs the overflow sentinel** (adaptive activation instead of
+   always-on). Per-model activation profiles, the default-on GO conditions,
+   and an **n=3 repetition addendum** with confidence intervals — see
+   [EV-008](#ev-008) and [the addendum](#ev-008-n3).
+3. **P2-WIN — bare models only.** Where does completion stop as jobs outgrow
+   the window, and what does failure look like — see [P2-WIN](#p2-win).
+4. **EV-009 — bare vs harness inside the overflow bands.** The intervention
+   arm P2-WIN deliberately left out: 8 sealed hold-out runs, reported in
+   [#235](https://github.com/caty-ai/caty-agent-harness/issues/235); the full
+   section lands on this page via its own reviewed lane
+   ([#254](https://github.com/caty-ai/caty-agent-harness/issues/254)).
+
+Everything here is sealed and pre-registered before any run, machine-scored,
+and reported with its limitations attached — including the places where the
+harness did not win.
+
 ---
 
 ## What was measured
@@ -190,6 +212,40 @@ prose, the prose is wrong.
 
 ---
 
+<a id="ev-006-p1"></a>
+
+## EV-006 P1 — the model swap: was the rescue just haiku being weak? (2026-08)
+
+The external question after the main run: "+30pt appeared on a weak model —
+would it survive on strong ones?" P1 repeats the sealed design (same corpora,
+goals, budgets, scoring; only the model field swapped, original seal hash
+untouched) on **claude-sonnet-5** (90 seqs) and **claude-opus-5** (60 seqs,
+M/L only). Public record: [#129 comment](https://github.com/caty-ai/caty-agent-harness/issues/129#issuecomment-5457130272).
+
+| Model | Completion, bare vs harness (correct_resolved) | Efficiency, bare÷harness median charge |
+|---|---|---|
+| claude-haiku-4.5 (main run) | 13% vs 43% (M/L pooled, task_resolved) | tokens −59% |
+| claude-sonnet-5 | 28/30 vs 28/30 — dead even | S 0.52× · M 0.63× · **L 2.40×** |
+| claude-opus-5 | 30/30 vs 30/30 — full ceiling, zero false completions | M 1.17× · **L 1.46×** |
+
+Read before quoting:
+
+- The completion rescue is **haiku-band-only** — strong models complete these
+  jobs bare. What they gain instead is **same-accuracy token savings emerging
+  at the L band** (a ratio above 1.0 = harness cheaper; sonnet's S/M cells sit
+  below 1.0 — the harness costs extra where the job fits comfortably).
+- On the primary `task_resolved` metric, sonnet's harness arm shows −27pt —
+  entirely p2 read-coverage-style violations (the known selective-reading
+  artifact; the pre-registered secondary endpoint `correct_resolved` corrects
+  it, and the near-miss ledger for P1 is empty). Both metrics are reported.
+- The pilot's n=1 ratios (opus L ≈2×) converged to **1.46×** at n=15 — a live
+  demonstration of why single-pair ratios are unreliable (see also the
+  [EV-008 n=3 addendum](#ev-008-n3)).
+- opus never overflowed on this corpus band (perfect ceiling) — which is what
+  motivated [P2-WIN](#p2-win): find where the band actually is.
+
+---
+
 <a id="ev-008"></a>
 
 ## EV-008 — overflow sentinel, per-model activation profiles (2026-08)
@@ -325,6 +381,36 @@ values (mock passes do not exercise the live path — measured the hard way).
 The full final report, pre-registration with its correction ledger, and the
 per-model module reports live with the rig and are surfaced through
 [#159](https://github.com/caty-ai/caty-agent-harness/issues/159).
+
+<a id="ev-008-n3"></a>
+
+### The n=3 repetition addendum — putting intervals on the single-run ratios (2026-08-29)
+
+The FINAL report's stated residual uncertainty was that standard-cell pair
+ratios were n=1 with run-to-run SD ≈ 30–40% of the mean. The addendum re-ran
+the 4 standard cells × 2 arms × 2 extra reps per model under the sealed
+module conditions (rep1 = the sealed main-run results, reused; account
+rotation across reps; pre-registered locally with its own seal before
+launch). 16/16 new runs driver-ok; all 16 sentinel runs fired. Public
+record: [#159 comment](https://github.com/caty-ai/caty-agent-harness/issues/159#issuecomment-5457351973).
+
+Pooled pair ratio (12 log-ratios per model, t-based 95% CI, df=11):
+
+| Model | pooled GM | 95% CI | verdict (pre-registered rule) |
+|---|---|---|---|
+| claude-sonnet-5 | **0.617** | [0.439, 0.867] | savings confirmed — robustly below 1.0 |
+| claude-opus-5 | **0.806** | [0.651, **0.997**] | savings confirmed — but the upper bound is 0.997: a razor-thin exclusion, not a comfortable one |
+
+- The single-run medians (sonnet 0.801, opus 0.923) sat well inside these
+  spreads; individual reps ranged **0.28–1.50 under identical conditions** —
+  the n=1 caveat was warranted.
+- Correctness: 15/16 new runs 20/20; one 19/20 (same lone-miss pattern as the
+  main run). Disclosed; no endpoint impact.
+- This tightens the shipped claim: sentinel token savings on window-firing
+  models is now backed by n=3 with intervals, not single runs. The sentinel
+  itself remains **opt-in** on the shipped claude-code runtime (v0.17.0,
+  `OVF_SENTINEL=shadow|active`, unset = byte-identical passthrough) and has
+  not been re-measured on the shipped implementation.
 
 ---
 

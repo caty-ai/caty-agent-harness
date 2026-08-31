@@ -23,23 +23,15 @@ Caty Agent Harness fixes those — with plain text files and real checks.<br>
 Not magic. The machinery remembers, drives, and checks, so the AI can focus on thinking —<br>
 a small system, wrapped around the AI you already use.
 
-**A tool that grows on its own — and learns to run your tasks all the way to done.**
+**It breaks big jobs into stages, checks the work really got done — and publishes its own scorecard, losses included.**
 
-**Measured** — three sealed, pre-registered experiments (2026-08). The table shows the two intervention lanes on context-overflow jobs; the third (P2-WIN⁵) is a ladder of bare-model jobs inside, at, and past the window:
+**What actually gets better** — measured, not promised:
 
-| Model | Completion hallucination¹ | Verified outcome | Tokens vs bare |
-|---|---|---|---|
-| claude-haiku-4.5 ² | 98% → 8% | 13% → 43% (p=0.0079) | −59% |
-| claude-sonnet-5 ³ | — | no loss | −20% (cells −71%…+11%) |
-| claude-opus-5 ³ ⁴ | — | no loss | −8% |
+- **Fake "done" stops on a weak model — jobs actually finish.** On Claude Haiku 4.5 (a lower-capability model) that claimed "done" without doing the work 98% of the time, false claims fell to 8% — and verified completions rose from 13% to 43%.
+- **Strong models keep their accuracy and use fewer tokens on big jobs.** sonnet and opus scored the same with and without the harness — but on large jobs, running without it used 2.40× (sonnet) / 1.46× (opus) as many tokens. On sonnet's smaller jobs in these tests the harness used more, not fewer — use it where the work is big. And on jobs ~2.4× past the context window, where opus without the harness read 2–4% of the files and kept submitting, the harness finished verified — 100% of files read — in every measured cell ([2/2 in both overflow bands](https://github.com/caty-ai/caty-agent-harness/issues/235); the two arms ran under different budget envelopes).
+- **The results show its limits too.** Search-style runtimes (e.g. Codex) gained nothing — by design — and one runtime fired but cost more than running without the harness. sonnet in the overflow bands stayed 20/20-correct while skipping ~10–12% of the files — the verification gate refused "done" every time, listing the unread files. Every losing result is published next to the wins.
 
-<sub>¹ Claiming "done" without having read the work — machine-scored from tool-call transcripts, not self-reports (222 → 2 claims, 30 runs/arm): [full numbers & limitations](docs/benchmark.md)</sub>
-<br><sub>² EV-006 — bare vs **shipped harness**; verified completion rate over 30 runs/arm (M/L sizes)</sub>
-<br><sub>³ EV-008 — bare vs **overflow sentinel**. Sentinel v1 shipped as opt-in for the claude-code runtime in v0.17.0 ([#180](https://github.com/caty-ai/caty-agent-harness/issues/180), implementing [#159](https://github.com/caty-ai/caty-agent-harness/issues/159)); enable with [`OVF_SENTINEL=shadow|active`](adapters/claude-code/INSTALL.md), unset = fully off (byte-identical passthrough). Default-on remains future work, decided per model against the [#159](https://github.com/caty-ai/caty-agent-harness/issues/159) conditions; see [per-model profiles](#model-effects). EV-008 remains a rig pre-measurement taken ahead of that implementation and has not been re-measured on the shipped implementation. `no loss` = both arms scored 20/20 (hidden key) in every cell; `Tokens vs bare` = 1 − median(sentinel/bare) over 4 sealed cells: sonnet **0.801** → −20%, opus **0.923** → −8%. `—` = not measured in this lane</sub>
-<br><sub>⁴ descriptive, post-GO</sub>
-<br><sub>⁵ P2-WIN — bare models only, no harness, no sentinel: at what job size do runs stop completing? On jobs of ≈0.6M / ≈1.2M / ≈2.4M tokens, sonnet stopped completing from the ≈1.2M band on both hold-out seeds (transfer band = XXL — the smallest band with 0/2 completion, as a description of that table); opus's two hold-out seeds disagreed in one band (1/2 — the table shows which) → **no unique transfer** (the frozen rule names no band), and in its 2.4M tickets opus kept scoring 19–20/20 while attempt-1 file-count read coverage (coverage_001) fell to 0.02–0.04. n=2 seeds per cell, descriptive only — no intervention claim: [tables & limitations](docs/benchmark.md#p2-win)</sub>
-
-<sub>Codex, qwen, grok, gemini and the blind-telemetry runtimes (glm/muse/kimi) are measured too — including cells where the sentinel cost more than bare: [per-model profiles](#model-effects) · [full numbers & history](docs/benchmark.md#ev-008) · planned lanes incl. local models (Ollama): [#129](https://github.com/caty-ai/caty-agent-harness/issues/129)</sub>
+<sub>Four sealed, pre-registered, machine-scored experiment families (2026-08) — every number, method, and caveat, including where the harness costs extra: [benchmark](docs/benchmark.md) ・ **Try it in 2 minutes** — [one pasted prompt](#get-started) into the AI tool you already use.</sub>
 
 🔧 [Engineering guide](docs/engineering.md) ｜ 📘 [Reference](docs/reference.md)
 
@@ -120,6 +112,7 @@ Whether you can use it comes down to the tools you already have — here's the t
 ---
 
 <a id="environments"></a>
+<a id="what-you-need"></a>
 
 ## What you need
 
@@ -132,7 +125,7 @@ The supported AI tools all run in a terminal — **but you won't be the one typi
 | WSL2 (Ubuntu on Windows) | 🟡 supported with conditions — verified 2026-08-23 on `win11-test-vm` (30/30 suites, `umask 0002`, non-root, Linux filesystem), but not CI-tested.<br>Your AI tool (Claude Code / Codex CLI) must run inside the same WSL2 distro; a Windows-side agent can install successfully and the hooks will simply never fire.<br>Keep the repo on the Linux filesystem (`/home/...`, not `/mnt/c/...`) for correctness, not speed; use `git 2.34+`, run as a non-root user, and keep wrapper-type files not group/world-writable (for example `chmod 0755`). CI approximation: `ubuntu-wsl2-profile` (`umask 002`, non-root container). [Measured details](docs/wsl2-support.md) |
 | AI tools | Claude Code ✅ ／ Codex CLI ✅ ／ Kimi Code CLI ✅ ／ Hermes Agent ✅ ／ OpenClaw ✅ |
 | Shell | bash 3.2+ ✅ (the macOS default is fine) |
-| Python 3 | used by behind-the-scenes automation (technically, a mechanism called hooks) — your AI will check this for you |
+| Python 3 (3.9+) | used by behind-the-scenes automation (technically, a mechanism called hooks) — your AI will check this for you |
 
 Support depth differs by tool on purpose — the details live in the [engineering guide](docs/engineering.md).
 
@@ -196,7 +189,7 @@ The **overflow sentinel** ([design issue #159](https://github.com/caty-ai/caty-a
 | **Fires but uneconomic** — grows, yet bare is cheap | grok-4.6 | fires 4/4, decomposes and completes correctly (20/20) — but bare runs are so cheap that decomposition costs more (median ratio **2.145**) | The mechanism is proven on this runtime; **default-on is not recommended**. Judge by economics vs bare, not by whether it fires |
 | **Fires, mixed outcomes** — early-onset firing, heavy full-read | gemini-3.7-flash (descriptive — outside the pre-registered GO conditions) | fires 4/4 (turns 31–82); bare collapses on L-band jobs; decomposition rescued completion in one L cell; 2/4 sentinel cells (M-i3, L-i2) scored 0 (headless permission stalls in the child steps) | **Descriptive only — no efficiency claim, no default-on judgement.** [Per-cell numbers](docs/benchmark.md#ev-008) |
 
-<sub>Ratios are sentinel/bare token cost (lower = cheaper), median of 4 sealed cells per model, measured 2026-08-25. Read before quoting: ① the codex condition first **FAILed** (M4, n=1, geometric mean 1.337) and passed only on the n=3 repeat — a data-informed post-design sealed via a 3-seat delta review (0.9944 ≤ 1.05) — the FAIL is history, not erased; ② sonnet's 0.801 met the decision threshold (<1.0) but narrowly missed the stretch goal (<0.8); ③ most per-pair ratios are n=1 — run-to-run variance is real (≈25 % SE on the codex mean). [Full numbers, method and caveats](docs/benchmark.md#ev-008).</sub>
+<sub>Ratios are sentinel/bare token cost (lower = cheaper), median of 4 sealed cells per model, measured 2026-08-25. Read before quoting: ① the codex condition first **FAILed** (M4, n=1, geometric mean 1.337) and passed only on the n=3 repeat — a data-informed post-design sealed via a 3-seat delta review (0.9944 ≤ 1.05) — the FAIL is history, not erased; ② sonnet's 0.801 met the decision threshold (<1.0) but narrowly missed the stretch goal (<0.8); ③ most per-pair ratios are n=1 — run-to-run variance is real (≈25 % SE on the codex mean); the n=3 repetition addendum (2026-08-29) quantified it — pooled over 12 log-ratios per model: sonnet GM **0.617** [0.439, 0.867], opus **0.806** [0.651, **0.997**] — the single-run medians sat inside these spreads (individual reps ranged 0.28–1.50), and opus's upper bound is 0.997: savings confirmed, by a razor-thin margin. [Full numbers, method and caveats](docs/benchmark.md#ev-008) · [n=3 addendum](docs/benchmark.md#ev-008-n3).</sub>
 
 A third sealed experiment, **P2-WIN**, characterized the jobs themselves on bare models — a measurement of completion outcomes across three job-size bands, not an intervention result: [tables & limitations](docs/benchmark.md#p2-win).
 
@@ -222,7 +215,7 @@ The page you just read is a map. The substance is real, and it's all documented.
 | Document | What's inside |
 | --- | --- |
 | [docs/agent-guide.md](docs/agent-guide.md) | **The installer's playbook** — a step-by-step guide your AI follows: choices, commands, checks, and how to report back |
-| [docs/benchmark.md](docs/benchmark.md) | **The sealed benchmark** — full numbers behind the hero table, method, and the honest limitations |
+| [docs/benchmark.md](docs/benchmark.md) | **The sealed benchmark** — full numbers behind the hero claims, method, and the honest limitations |
 | [docs/engineering.md](docs/engineering.md) | **The full technical guide** — what's enforced where, per-tool depth, pause semantics, architecture, directory map |
 | [docs/reference.md](docs/reference.md) | **The exact contracts** — every flag, every state, every pointer to the design documents |
 | [Runtime setup](docs/engineering.md#runtime-setup) | **Per-tool wiring** — hooks, verifiers, and schedules for each of the five AI tools |
