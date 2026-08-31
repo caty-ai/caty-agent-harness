@@ -317,14 +317,18 @@ What this project owns, and what it deliberately does not.
 
 ## Updating CI reusable-workflow pins
 
-The six caller workflows pin `caty-ai/family-dev-handbook` reusable workflows to a commit SHA. A mutable `ci-v1` tag at the required merge-gate boundary could change reviewed CI code without a review in this repository; the SHA pins close that supply-chain and review-bypass path. First-party actions were already SHA-pinned.
+The six caller workflows pin `caty-ai/family-dev-handbook` reusable workflows to a commit SHA. A mutable `ci-v1` tag at the required merge-gate boundary could change reviewed CI code without a review in this repository; the SHA pins close that supply-chain and review-bypass path. The `actions/*` steps in this repository's workflows were already SHA-pinned; `repo-state.yml` and `external-input-caller.yml` reference caty-ai reusable workflows by tag/branch and are tracked separately.
 
 When the handbook rolls `ci-v1`:
 
 1. Run `git ls-remote https://github.com/caty-ai/family-dev-handbook.git 'refs/tags/ci-v1*'`.
 2. Because `ci-v1` is an annotated tag, copy the SHA from the exact `refs/tags/ci-v1^{}` line. The plain `refs/tags/ci-v1` line is the tag object; using that SHA in `uses:` breaks reusable-workflow resolution.
-3. In one pull request, update all six callers (`test-lint.yml`, `gitleaks.yml`, `history-check.yml`, `pr-size.yml`, `review-labels.yml`, and `release-sync.yml`) and retain the trailing `# ci-v1` tracking comment.
-4. Merge only after that pull request's CI is green.
+3. Before opening the roll pull request, confirm that all six `reusable-*.yml` files exist at the new peeled SHA (for example, `gh api 'repos/caty-ai/family-dev-handbook/contents/.github/workflows?ref=<new-sha>'`) and review the handbook diff from the old SHA to the new SHA. A roll is still a trust transfer even though the new pin freezes its code.
+4. Re-check each reusable workflow's `permissions:` block against its caller grant because permission needs can widen or narrow. Then, in one pull request, update all six callers (`test-lint.yml`, `gitleaks.yml`, `history-check.yml`, `pr-size.yml`, `review-labels.yml`, and `release-sync.yml`) and retain the trailing `# ci-v1` tracking comment.
+5. The roll pull request's CI exercises only the five pull-request-triggered callers. Because the change touches high-risk `.github/workflows/*` paths, `risk-review-gate` remains red until a roster human applies `risk-reviewed`; that red is a process gate, not evidence of broken workflow code.
+6. Merge only after that pull request's CI is green. `release-sync` runs only for `v*` tag pushes (`on.push.tags`), so after the merge, verify at the next `v*` tag that `release-sync` succeeds and the GitHub Release exists.
+
+Pin rolls are noticed manually through handbook release notes or an occasional `git ls-remote` comparison; no automation watches `ci-v1` movement.
 
 ---
 

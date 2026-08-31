@@ -289,14 +289,18 @@ plugin は `tr-enqueue`、pinned template、read-only artifact consumption を�
 
 ## CI reusable workflow の pin 更新
 
-6 つの caller workflow は、`caty-ai/family-dev-handbook` の reusable workflow を commit SHA で pin しています。required merge gate の境界で可変な `ci-v1` tag を使うと、この repository で review 済みの CI コードを review なしで変更できるため、SHA pin でその supply-chain / review-bypass 経路を閉じます。first-party action はすでに SHA pin 済みです。
+6 つの caller workflow は、`caty-ai/family-dev-handbook` の reusable workflow を commit SHA で pin しています。required merge gate の境界で可変な `ci-v1` tag を使うと、この repository で review 済みの CI コードを review なしで変更できるため、SHA pin でその supply-chain / review-bypass 経路を閉じます。この repository の workflow 内の `actions/*` step はすでに SHA pin 済みです。一方、`repo-state.yml` と `external-input-caller.yml` は caty-ai の reusable workflow を tag / branch で参照しており、別途追跡されています。
 
 handbook が `ci-v1` を更新したときは、次の手順で pin を進めます。
 
 1. `git ls-remote https://github.com/caty-ai/family-dev-handbook.git 'refs/tags/ci-v1*'` を実行します。
 2. `ci-v1` は annotated tag なので、正確に `refs/tags/ci-v1^{}` と表示された行の SHA をコピーします。`refs/tags/ci-v1` の行は tag object です。その SHA を `uses:` に指定すると reusable workflow の解決に失敗します。
-3. 1 つの pull request で 6 つの caller（`test-lint.yml`、`gitleaks.yml`、`history-check.yml`、`pr-size.yml`、`review-labels.yml`、`release-sync.yml`）をすべて更新し、末尾の追跡コメント `# ci-v1` は残します。
-4. その pull request の CI が green になってから merge します。
+3. roll pull request を開く前に、6 つの `reusable-*.yml` がすべて新しい peeled SHA に存在することを確認し（例: `gh api 'repos/caty-ai/family-dev-handbook/contents/.github/workflows?ref=<new-sha>'`）、handbook の旧 SHA から新 SHA までの差分を review します。新しい pin がコードを固定しても、roll 自体は trust transfer です。
+4. permission の必要量は増減し得るため、各 reusable workflow の `permissions:` block を caller の grant と照合し直します。そのうえで、1 つの pull request で 6 つの caller（`test-lint.yml`、`gitleaks.yml`、`history-check.yml`、`pr-size.yml`、`review-labels.yml`、`release-sync.yml`）をすべて更新し、末尾の追跡コメント `# ci-v1` は残します。
+5. roll pull request の CI が実行するのは、pull request trigger を持つ 5 つの caller だけです。また、この変更は high-risk な `.github/workflows/*` path に触れるため、roster human が `risk-reviewed` を付けるまで `risk-review-gate` は red のままです。この red は process gate であり、workflow code の破損を示すものではありません。
+6. その pull request の CI が green になってから merge します。`release-sync` は `v*` tag push（`on.push.tags`）でのみ実行されるため、merge 後の次回 `v*` tag で `release-sync` の成功と GitHub Release の存在を確認します。
+
+pin roll は handbook の release note、または時折行う `git ls-remote` の比較で手動検知します。`ci-v1` の移動を監視する automation はありません。
 
 ---
 
