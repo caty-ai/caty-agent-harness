@@ -287,6 +287,19 @@ plugin は `tr-enqueue`、pinned template、read-only artifact consumption を�
 
 ---
 
+## CI reusable workflow の pin 更新
+
+6 つの caller workflow は、`caty-ai/family-dev-handbook` の reusable workflow を commit SHA で pin しています。required merge gate の境界で可変な `ci-v1` tag を使うと、この repository で review 済みの CI コードを review なしで変更できるため、SHA pin でその supply-chain / review-bypass 経路を閉じます。first-party action はすでに SHA pin 済みです。
+
+handbook が `ci-v1` を更新したときは、次の手順で pin を進めます。
+
+1. `git ls-remote https://github.com/caty-ai/family-dev-handbook.git 'refs/tags/ci-v1*'` を実行します。
+2. `ci-v1` は annotated tag なので、正確に `refs/tags/ci-v1^{}` と表示された行の SHA をコピーします。`refs/tags/ci-v1` の行は tag object です。その SHA を `uses:` に指定すると reusable workflow の解決に失敗します。
+3. 1 つの pull request で 6 つの caller（`test-lint.yml`、`gitleaks.yml`、`history-check.yml`、`pr-size.yml`、`review-labels.yml`、`release-sync.yml`）をすべて更新し、末尾の追跡コメント `# ci-v1` は残します。
+4. その pull request の CI が green になってから merge します。
+
+---
+
 ## コントリビュートとテスト
 
 変更提案の流れ・issue-first のルール・コードスタイルは [CONTRIBUTING.md](../CONTRIBUTING.md)（英語）へ。現在の checkout の repository root で、canonical target を通して全 shell suite を実行します。

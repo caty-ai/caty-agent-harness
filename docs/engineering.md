@@ -315,6 +315,19 @@ What this project owns, and what it deliberately does not.
 
 ---
 
+## Updating CI reusable-workflow pins
+
+The six caller workflows pin `caty-ai/family-dev-handbook` reusable workflows to a commit SHA. A mutable `ci-v1` tag at the required merge-gate boundary could change reviewed CI code without a review in this repository; the SHA pins close that supply-chain and review-bypass path. First-party actions were already SHA-pinned.
+
+When the handbook rolls `ci-v1`:
+
+1. Run `git ls-remote https://github.com/caty-ai/family-dev-handbook.git 'refs/tags/ci-v1*'`.
+2. Because `ci-v1` is an annotated tag, copy the SHA from the exact `refs/tags/ci-v1^{}` line. The plain `refs/tags/ci-v1` line is the tag object; using that SHA in `uses:` breaks reusable-workflow resolution.
+3. In one pull request, update all six callers (`test-lint.yml`, `gitleaks.yml`, `history-check.yml`, `pr-size.yml`, `review-labels.yml`, and `release-sync.yml`) and retain the trailing `# ci-v1` tracking comment.
+4. Merge only after that pull request's CI is green.
+
+---
+
 ## Contributing and tests
 
 Contribution flow, issue-first rules, and code style live in [CONTRIBUTING.md](../CONTRIBUTING.md). From the repository root of the current checkout, run every shell suite through the canonical target:
