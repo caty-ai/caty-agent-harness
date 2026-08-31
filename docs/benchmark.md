@@ -222,25 +222,26 @@ goals, budgets, scoring; only the model field swapped, original seal hash
 untouched) on **claude-sonnet-5** (90 seqs) and **claude-opus-5** (60 seqs,
 M/L only). Public record: [#129 comment](https://github.com/caty-ai/caty-agent-harness/issues/129#issuecomment-5457130272).
 
-| Model | Completion, bare vs harness (correct_resolved) | Efficiency, bare÷harness median charge |
+| Model | Completion, bare vs harness | Efficiency, bare÷harness median charge |
 |---|---|---|
 | claude-haiku-4.5 (main run) | 13% vs 43% (M/L pooled, task_resolved) | tokens −59% |
-| claude-sonnet-5 | 28/30 vs 28/30 — dead even | S 0.52× · M 0.63× · **L 2.40×** |
-| claude-opus-5 | 30/30 vs 30/30 — full ceiling, zero false completions | M 1.17× · **L 1.46×** |
+| claude-sonnet-5 | 28/30 vs 28/30 — dead even (correct_resolved) | S 0.52× · M 0.63× · **L 2.40×** |
+| claude-opus-5 | 30/30 vs 30/30 — full ceiling, zero false completions (correct_resolved) | M 1.17× · **L 1.46×** |
 
 Read before quoting:
 
 - The completion rescue is **haiku-band-only** — strong models complete these
   jobs bare. What they gain instead is **same-accuracy token savings emerging
-  at the L band** (a ratio above 1.0 = harness cheaper; sonnet's S/M cells sit
-  below 1.0 — the harness costs extra where the job fits comfortably).
+  at the L band** (a ratio above 1.0 = the harness used fewer tokens; sonnet's
+  S/M cells sit below 1.0 — the harness used more tokens where the job fits
+  comfortably).
 - On the primary `task_resolved` metric, sonnet's harness arm shows −27pt —
   entirely p2 read-coverage-style violations (the known selective-reading
   artifact; the pre-registered secondary endpoint `correct_resolved` corrects
   it, and the near-miss ledger for P1 is empty). Both metrics are reported.
-- The pilot's n=1 ratios (opus L ≈2×) converged to **1.46×** at n=15 — a live
-  demonstration of why single-pair ratios are unreliable (see also the
-  [EV-008 n=3 addendum](#ev-008-n3)).
+- The pilot's n=1 opus-L ratio overshot the final value; it converged to
+  **1.46×** at n=15 — a live demonstration of why single-pair ratios are
+  unreliable (see also the [EV-008 n=3 addendum](#ev-008-n3)).
 - opus never overflowed on this corpus band (perfect ceiling) — which is what
   motivated [P2-WIN](#p2-win): find where the band actually is.
 
@@ -282,8 +283,8 @@ records: [#159](https://github.com/caty-ai/caty-agent-harness/issues/159).
 | grok-4.6 (descriptive, candidate) | 4 | 4/4 (turns 6/6/6/8) | 20/20 all | **2.145** (1.611 / 1.775 / 2.514 / 4.057) — fires correctly, never pays |
 | gemini-3.7-flash (descriptive, M6 addendum — outside the pre-registered GO conditions) | 4 | 4/4 (turns 31/36/75/82; max injected 82.1K–90.6K @ 80K) | mixed — see the per-cell table below | ratio median not quoted: only 1 pair (M-i2) completed on both arms — cannot support an efficiency claim |
 
-The hero's `Tokens vs bare` converts the ratio to a reduction as
-`1 − median(sentinel/bare)`, with the minus sign showing lower token charge:
+Expressed as a reduction, the ratio converts as `1 − median(sentinel/bare)`,
+with the minus sign showing lower token charge:
 sonnet **0.801** → −20%; opus **0.923** → −8% (rounded to whole percent).
 
 Absolute token charge per cell (sonnet / opus, bare → sentinel; transcribed
@@ -401,7 +402,7 @@ Pooled pair ratio (12 log-ratios per model, t-based 95% CI, df=11):
 | claude-sonnet-5 | **0.617** | [0.439, 0.867] | savings confirmed — robustly below 1.0 |
 | claude-opus-5 | **0.806** | [0.651, **0.997**] | savings confirmed — but the upper bound is 0.997: a razor-thin exclusion, not a comfortable one |
 
-- The single-run medians (sonnet 0.801, opus 0.923) sat well inside these
+- The single-run medians (sonnet 0.801, opus 0.923) sat inside these
   spreads; individual reps ranged **0.28–1.50 under identical conditions** —
   the n=1 caveat was warranted.
 - Correctness: 15/16 new runs 20/20; one 19/20 (same lone-miss pattern as the
