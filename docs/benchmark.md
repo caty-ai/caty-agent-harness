@@ -47,6 +47,8 @@ S ≈ 75K size fits in-context and serves as the control).
   Self-reported "I read everything" logs are never trusted — the tool-call
   transcript is.
 
+<a id="ev-006"></a>
+
 ## Lane 1 — Claude Haiku 4.5 (2026-08)
 
 Setup: 3 task genres (fictional-corpus research / real-OSS code questions on a
