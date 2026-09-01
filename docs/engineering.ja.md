@@ -133,6 +133,23 @@ fold 経路は workspace につき 1 本だけです。この consumer か、Ope
 
 詳しいセットアップ手順・ledger の形式・schedule の詳細は [adapters/claude-code/INSTALL.md](../adapters/claude-code/INSTALL.md) を参照してください。
 
+<a id="accepted-risk-cron-wrapper-secrets-env-race"></a>
+
+### Accepted risk: cron wrapper `SECRETS_ENV` race
+
+チェックイン済みの cron wrapper は `SECRETS_ENV` を open 前後で検証しますが、portable な
+Bash 3.2 では依然として `O_NOFOLLOW` 付きで path を open できません。したがって、同じ
+実行 user としてすでに filesystem write 権限を持つ local attacker は、その検証と実際の
+open/read の境界のあいだで path replacement race をまだ狙えます。
+
+この risk は現時点では受容します。残る window は狭く、実際の前提条件として attacker は
+もともとその invoking user の filesystem context に書き込めなければならず、wrapper 自体も
+より安価な abuse class には fail closed します: symlink、owner mismatch、missing /
+unreadable file、open 後の identity drift、embedded NUL、data-only でない assignment です。
+この residual window を完全になくすには、Bash 3.2 が expose していない substrate が必要です。
+したがってこの accepted-risk record は「race が消えた」という主張ではなく、documentation と
+fail-closed guardrail の明文化です。
+
 ### Overflow sentinel
 
 Claude Code の step adapter は、passive な overflow sentinel を opt-in で利用できます。

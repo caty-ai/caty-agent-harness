@@ -612,6 +612,7 @@ check_secrets_env_file() {
   local workspace=$1
   local secrets_file=$2
   local source_file=$3
+  local home_resolution_note=${4:-}
   local wrapper_rel
   local shape_reasons shape_reason mode
   local nul_line
@@ -623,15 +624,19 @@ check_secrets_env_file() {
     shape_reasons=$(secrets_env_file_shape_reasons "$secrets_file")
     while IFS= read -r shape_reason; do
       [[ -n "$shape_reason" ]] || continue
-      printf 'warning: cron wrapper %s SECRETS_ENV %s: %s\n' "$wrapper_rel" "$shape_reason" "$secrets_file" >&2
+      printf 'FAIL: cron wrapper %s SECRETS_ENV %s: %s%s\n' "$wrapper_rel" "$shape_reason" "$secrets_file" "$home_resolution_note" >&2
     done <<EOF
 $shape_reasons
 EOF
-    return 0
+    return 1
+  fi
+  if [[ ! -e "$secrets_file" ]]; then
+    printf 'FAIL: cron wrapper %s SECRETS_ENV file not found: %s%s\n' "$wrapper_rel" "$secrets_file" "$home_resolution_note" >&2
+    return 1
   fi
   if [[ ! -f "$secrets_file" ]]; then
-    printf 'warning: cron wrapper %s SECRETS_ENV file not found: %s\n' "$wrapper_rel" "$secrets_file" >&2
-    return 0
+    printf 'FAIL: cron wrapper %s SECRETS_ENV must be a regular file: %s%s\n' "$wrapper_rel" "$secrets_file" "$home_resolution_note" >&2
+    return 1
   fi
 
   shape_reasons=$(secrets_env_file_shape_reasons "$secrets_file")
@@ -650,6 +655,11 @@ EOF
 $shape_reasons
 EOF
 
+  if [[ ! -r "$secrets_file" ]]; then
+    printf 'FAIL: cron wrapper %s SECRETS_ENV file is not readable: %s%s\n' "$wrapper_rel" "$secrets_file" "$home_resolution_note" >&2
+    return 1
+  fi
+
   if ! nul_line=$(secrets_env_first_nul_line "$secrets_file"); then
     printf 'warning: cron wrapper %s SECRETS_ENV could not be scanned for embedded NUL bytes: %s\n' "$wrapper_rel" "$secrets_file" >&2
     return 0
@@ -660,8 +670,8 @@ EOF
   fi
 
   if ! exec 8<"$secrets_file"; then
-    printf 'warning: cron wrapper %s SECRETS_ENV file is not readable: %s\n' "$wrapper_rel" "$secrets_file" >&2
-    return 0
+    printf 'FAIL: cron wrapper %s SECRETS_ENV file is not readable: %s%s\n' "$wrapper_rel" "$secrets_file" "$home_resolution_note" >&2
+    return 1
   fi
   while IFS= read -r -u 8 raw_line || [[ -n "$raw_line" ]]; do
     line_number=$((line_number + 1))
@@ -696,41 +706,203 @@ EOF
   exec 8<&-
 }
 
+trim_wrapper_secrets_env_value() {
+  local value=$1
+
+  value=${value#"${value%%[![:space:]]*}"}
+  case "$value" in
+    *[![:space:]]*)
+      value=${value%"${value##*[![:space:]]}"}
+      ;;
+    *)
+      value=
+      ;;
+  esac
+
+  printf '%s\n' "$value"
+}
+
+strip_wrapper_secrets_env_comment() {
+  local value=$1
+  local idx char quote='' prev_char=''
+
+  for (( idx=0; idx<${#value}; idx++ )); do
+    char=${value:idx:1}
+    if [[ -z "$quote" ]]; then
+      case "$char" in
+        "'"|'"'|'`')
+          quote=$char
+          ;;
+        '#')
+          if [[ "$prev_char" =~ [[:space:]] ]]; then
+            value=${value:0:idx}
+            break
+          fi
+          ;;
+      esac
+    elif [[ "$char" == "$quote" ]]; then
+      quote=
+    fi
+    prev_char=$char
+  done
+
+  trim_wrapper_secrets_env_value "$value"
+}
+
+wrapper_secrets_env_home_note() {
+  local secrets_assignment=$1
+  local home_brace_pattern="\${HOME}"
+
+  if [[ "$secrets_assignment" == *"$home_brace_pattern"* ]] \
+    || [[ "$secrets_assignment" =~ \$HOME([^A-Za-z0-9_]|$) ]]; then
+    printf ' (resolution uses the checking process HOME and may differ under sudo/other users)'
+  fi
+}
+
+substitute_wrapper_home_tokens() {
+  local value=$1
+  local home_value=${HOME:-}
+  local resolved=
+  local cursor=0
+  local remaining token_suffix
+
+  while (( cursor < ${#value} )); do
+    remaining=${value:cursor}
+    if [[ "$remaining" == "\${HOME}"* ]]; then
+      resolved=$resolved$home_value
+      cursor=$((cursor + 7))
+      continue
+    fi
+    if [[ "$remaining" == "\$HOME"* ]]; then
+      token_suffix=${remaining:5:1}
+      if [[ -z "$token_suffix" || ! "$token_suffix" =~ [A-Za-z0-9_] ]]; then
+        resolved=$resolved$home_value
+        cursor=$((cursor + 5))
+        continue
+      fi
+    fi
+    resolved=$resolved${value:cursor:1}
+    cursor=$((cursor + 1))
+  done
+
+  if [[ "$resolved" == *'$'* ]]; then
+    return 1
+  fi
+
+  printf '%s\n' "$resolved"
+}
+
+resolve_wrapper_secrets_env_audit_path() {
+  local secrets_assignment=$1
+  local stripped_assignment first_char last_char inner_value
+
+  stripped_assignment=$(strip_wrapper_secrets_env_comment "$secrets_assignment")
+  WRAPPER_SECRETS_ENV_HOME_NOTE=$(wrapper_secrets_env_home_note "$stripped_assignment")
+  WRAPPER_SECRETS_ENV_AUDIT_PATH=
+
+  if [[ -z "$stripped_assignment" ]]; then
+    return 1
+  fi
+  if [[ "$stripped_assignment" == *'`'* ]]; then
+    return 1
+  fi
+
+  first_char=${stripped_assignment:0:1}
+  last_char=${stripped_assignment: -1}
+
+  if [[ "$stripped_assignment" != *"'"* && "$stripped_assignment" != *'"'* ]]; then
+    if ! WRAPPER_SECRETS_ENV_AUDIT_PATH=$(substitute_wrapper_home_tokens "$stripped_assignment"); then
+      return 1
+    fi
+    return 0
+  fi
+
+  if (( ${#stripped_assignment} >= 2 )) && [[ "$first_char" == '"' && "$last_char" == '"' ]]; then
+    inner_value=${stripped_assignment:1:${#stripped_assignment}-2}
+    if [[ "$inner_value" == *'"'* || "$inner_value" == *"'"* || "$inner_value" == *'`'* ]]; then
+      return 1
+    fi
+    if ! WRAPPER_SECRETS_ENV_AUDIT_PATH=$(substitute_wrapper_home_tokens "$inner_value"); then
+      return 1
+    fi
+    return 0
+  fi
+
+  if (( ${#stripped_assignment} >= 2 )) && [[ "$first_char" == "'" && "$last_char" == "'" ]]; then
+    inner_value=${stripped_assignment:1:${#stripped_assignment}-2}
+    if [[ "$inner_value" == *'"'* || "$inner_value" == *"'"* || "$inner_value" == *'`'* ]]; then
+      return 1
+    fi
+    WRAPPER_SECRETS_ENV_HOME_NOTE=
+    WRAPPER_SECRETS_ENV_AUDIT_PATH=$inner_value
+    return 0
+  fi
+
+  return 1
+}
+
 extract_wrapper_secrets_env() {
   local wrapper=$1
+  local line assignment
+  local default_rhs_braced="\${SECRETS_ENV:-}"
+  local default_rhs_plain="\${SECRETS_ENV-}"
+  local default_rhs_braced_quoted="\"\${SECRETS_ENV:-}\""
+  local default_rhs_plain_quoted="\"\${SECRETS_ENV-}\""
 
-  awk '
-    /^[[:space:]]*SECRETS_ENV=/ {
-      line = $0
-      sub(/^[[:space:]]*SECRETS_ENV=/, "", line)
-      sub(/[[:space:]]+#.*$/, "", line)
-      sub(/^[[:space:]]+/, "", line)
-      sub(/[[:space:]]+$/, "", line)
-      gsub(/^"|"$/, "", line)
-      gsub(/^'\''|'\''$/, "", line)
-      print line
-      exit
-    }
-  ' "$wrapper"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ ^[[:space:]]*SECRETS_ENV= ]]; then
+      assignment=${line#*=}
+      assignment=$(trim_wrapper_secrets_env_value "$assignment")
+      if [[ "$assignment" == "$default_rhs_braced" || "$assignment" == "$default_rhs_plain" \
+        || "$assignment" == "$default_rhs_braced_quoted" || "$assignment" == "$default_rhs_plain_quoted" ]]; then
+        continue
+      fi
+      printf '%s\n' "$assignment"
+      return 0
+    fi
+  done <"$wrapper"
 }
 
 check_cron_wrappers() {
   local workspace=$1
   local scripts_dir="$workspace/scripts"
   local wrapper
-  local secrets_file
+  local secrets_assignment secrets_file
+  local wrapper_rel
+  local failures=0
+  local unauditable_count=0
+  local home_resolution_note
 
   [[ -d "$scripts_dir" ]] || return 0
 
   while IFS= read -r wrapper; do
     [[ -n "$wrapper" ]] || continue
     if grep -Fq '# fable-loop cron wrapper template v1' "$wrapper"; then
-      secrets_file=$(extract_wrapper_secrets_env "$wrapper")
-      if [[ -n "$secrets_file" && "$secrets_file" != *'$'* ]]; then
-        check_secrets_env_file "$workspace" "$secrets_file" "$wrapper"
+      secrets_assignment=$(extract_wrapper_secrets_env "$wrapper")
+      if [[ -z "$secrets_assignment" ]]; then
+        continue
+      fi
+      if resolve_wrapper_secrets_env_audit_path "$secrets_assignment"; then
+        secrets_file=$WRAPPER_SECRETS_ENV_AUDIT_PATH
+        home_resolution_note=${WRAPPER_SECRETS_ENV_HOME_NOTE:-}
+        if ! check_secrets_env_file "$workspace" "$secrets_file" "$wrapper" "$home_resolution_note"; then
+          failures=1
+        fi
+      else
+        wrapper_rel=$(print_relative "$workspace" "$wrapper")
+        home_resolution_note=${WRAPPER_SECRETS_ENV_HOME_NOTE:-}
+        printf 'warning: cron wrapper %s SECRETS_ENV unauditable - manual check required: SECRETS_ENV=%s%s\n' \
+          "$wrapper_rel" "$secrets_assignment" "$home_resolution_note" >&2
+        unauditable_count=$((unauditable_count + 1))
       fi
     fi
   done < <(find "$scripts_dir" -type f -print)
+
+  if (( unauditable_count > 0 )); then
+    printf 'warning: cron wrapper SECRETS_ENV unauditable count: %s\n' "$unauditable_count" >&2
+  fi
+
+  return "$failures"
 }
 
 check_instruction_files() {
@@ -999,6 +1171,7 @@ probe_adapter_distiller_cron() {
 
   case "$adapter" in
     claude-code|codex|kimi)
+      # shellcheck disable=SC2016
       probe_executable_contains "$repo_root/adapters/claude-code/flush-intake.sh" \
         'source "$repo_root/scripts/flush-intake.sh"' \
         && grep -Fq -- "snapshot_pending_dedup_keys \"\$pending_dir\"" \
@@ -1335,7 +1508,9 @@ EOF
     done
   done < <(find "$workspace/skills" -type f -name 'SKILL.md' -print 2>/dev/null)
 
-  check_cron_wrappers "$workspace"
+  if ! check_cron_wrappers "$workspace"; then
+    failures=1
+  fi
   check_instruction_files "$workspace"
   check_raw_review "$workspace"
   check_learning_paths
