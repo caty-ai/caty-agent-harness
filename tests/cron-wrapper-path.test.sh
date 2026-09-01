@@ -50,6 +50,23 @@ install_wrapper_with_secrets_assignment() {
   printf '%s\n' "$wrapper"
 }
 
+insert_wrapper_secrets_assignment_after_default() {
+  local workspace=$1
+  local wrapper_name=$2
+  local secrets_assignment=$3
+  local wrapper=$workspace/scripts/$wrapper_name
+
+  mkdir -p "$workspace/scripts"
+  awk -v secrets_assignment="$secrets_assignment" '
+    { print }
+    $0 == "SECRETS_ENV=${SECRETS_ENV:-}" {
+      printf "SECRETS_ENV=%s\n", secrets_assignment
+    }
+  ' "$CRON_WRAPPER" >"$wrapper"
+  chmod +x "$wrapper"
+  printf '%s\n' "$wrapper"
+}
+
 capture_run() {
   local key=$1
   shift
@@ -225,6 +242,41 @@ if [[ "$home_missing_rc" -ne 0 \
 else
   fail_case 'install check appends the HOME-resolution note on resolved FAIL diagnostics' \
     "rc=$home_missing_rc output=$home_missing_output"
+fi
+
+check_workspace=$(seed_check_workspace pristine-template-default)
+mkdir -p "$check_workspace/scripts"
+cp "$CRON_WRAPPER" "$check_workspace/scripts/cron-pristine.sh"
+chmod +x "$check_workspace/scripts/cron-pristine.sh"
+set +e
+pristine_output=$("$ROOT/install.sh" --check --workspace "$check_workspace" 2>&1)
+pristine_rc=$?
+set -e
+if [[ "$pristine_rc" -eq 0 \
+  && "$pristine_output" != *'scripts/cron-pristine.sh SECRETS_ENV unauditable - manual check required'* \
+  && "$pristine_output" != *'warning: cron wrapper SECRETS_ENV unauditable count:'* ]]; then
+  pass 'install check skips the template default SECRETS_ENV assignment without noise'
+else
+  fail_case 'install check skips the template default SECRETS_ENV assignment without noise' \
+    "rc=$pristine_rc output=$pristine_output"
+fi
+
+check_workspace=$(seed_check_workspace trailing-operator-assignment)
+late_secret=$TMP_ROOT/trailing-operator.env
+printf 'GOOD=plain\n' >"$late_secret"
+chmod 644 "$late_secret"
+insert_wrapper_secrets_assignment_after_default "$check_workspace" cron-trailing-assignment.sh "\"$late_secret\"" >/dev/null
+set +e
+trailing_assignment_output=$("$ROOT/install.sh" --check --workspace "$check_workspace" 2>&1)
+trailing_assignment_rc=$?
+set -e
+if [[ "$trailing_assignment_rc" -eq 0 \
+  && "$trailing_assignment_output" == *"warning: cron wrapper scripts/cron-trailing-assignment.sh SECRETS_ENV permissions should be 0600 or 0400: $late_secret has 644"* \
+  && "$trailing_assignment_output" != *'scripts/cron-trailing-assignment.sh SECRETS_ENV unauditable - manual check required'* ]]; then
+  pass 'install check audits an operator SECRETS_ENV assignment that appears after the template default'
+else
+  fail_case 'install check audits an operator SECRETS_ENV assignment that appears after the template default' \
+    "rc=$trailing_assignment_rc output=$trailing_assignment_output"
 fi
 
 check_workspace=$(seed_check_workspace unresolved-dollar)

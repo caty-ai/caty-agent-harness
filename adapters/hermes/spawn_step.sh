@@ -74,6 +74,14 @@ reduce_current_exported_environment() {
     fi
     unset -v "$exported_name" 2>/dev/null || true
   done < <(compgen -A export)
+
+  while IFS= read -r exported_name; do
+    [[ -n "$exported_name" ]] || continue
+    if step_env_name_is_kept "$exported_name"; then
+      continue
+    fi
+    infra_fail "environment reduction could not strip: $exported_name"
+  done < <(compgen -A export)
 }
 
 if (($# != 4)); then

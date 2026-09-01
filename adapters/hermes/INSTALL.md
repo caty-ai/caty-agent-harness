@@ -451,6 +451,13 @@ match `[A-Za-z_][A-Za-z0-9_]*`. Any invalid name fails the step before launch wi
 infra diagnostic naming the rejected identifier instead of ignoring it. Use this
 extension sparingly and prefer dedicated non-secret configuration files where possible.
 
+Environment reduction is fail-closed. If the parent shell readonly-exports a variable
+that is not on the keep list, Bash 3.2 cannot unset it, so `spawn_step.sh` exits 111
+before the probe or provider launches and names the surviving variable. Remediation:
+do not `readonly -x` secrets into the cron wrapper environment; keep them in
+`SECRETS_ENV` or pass through only the needed variable names with
+`HERMES_STEP_ENV_ALLOW`.
+
 Migration note: upgrading an existing install drops every parent variable outside that
 explicit contract. The first visible symptom is usually a provider network or auth
 failure on the next cron tick. If a provider still needs one specific parent variable,

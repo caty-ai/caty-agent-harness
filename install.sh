@@ -844,11 +844,20 @@ resolve_wrapper_secrets_env_audit_path() {
 extract_wrapper_secrets_env() {
   local wrapper=$1
   local line assignment
+  local default_rhs_braced="\${SECRETS_ENV:-}"
+  local default_rhs_plain="\${SECRETS_ENV-}"
+  local default_rhs_braced_quoted="\"\${SECRETS_ENV:-}\""
+  local default_rhs_plain_quoted="\"\${SECRETS_ENV-}\""
 
   while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ "$line" =~ ^[[:space:]]*SECRETS_ENV= ]]; then
       assignment=${line#*=}
-      trim_wrapper_secrets_env_value "$assignment"
+      assignment=$(trim_wrapper_secrets_env_value "$assignment")
+      if [[ "$assignment" == "$default_rhs_braced" || "$assignment" == "$default_rhs_plain" \
+        || "$assignment" == "$default_rhs_braced_quoted" || "$assignment" == "$default_rhs_plain_quoted" ]]; then
+        continue
+      fi
+      printf '%s\n' "$assignment"
       return 0
     fi
   done <"$wrapper"

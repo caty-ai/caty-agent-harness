@@ -705,6 +705,48 @@ case_provider_runs_with_reduced_environment() {
   fi
 }
 
+case_readonly_export_survivor_fails_closed() {
+  local name=readonly-export-survivor-fails-closed
+  local dir code output probe_env_file probe_argv_file named_var
+  local probe_started provider_started
+  dir=$(make_case_dir)
+  write_env_dump_cli "$dir/fake-hermes"
+  probe_env_file="$dir/attempt/probe.env"
+  probe_argv_file="$dir/attempt/probe.argv"
+  write_probe_env_dump_cli "$dir/fake-probe" "$probe_env_file" "$probe_argv_file"
+  set +e
+  output=$(
+    (
+      declare -rx LEAKED_READONLY_SECRET_CANARY=sentinel
+      HERMES_STEP_CMD="$dir/fake-hermes"
+      HERMES_PROBE_CMD="$dir/fake-probe"
+      set -- "$dir/task.md" "$dir/ws" "$dir/attempt" 1
+      # Source in a subshell so the exported readonly state survives into the
+      # reducer. `exit 111` then terminates only this isolated shell.
+      . "$ADAPTER"
+    ) 2>&1
+  )
+  code=$?
+  set -e
+  named_var=0
+  probe_started=0
+  provider_started=0
+  if grep -Fq 'environment reduction could not strip: LEAKED_READONLY_SECRET_CANARY' <<<"$output"; then
+    named_var=1
+  fi
+  if [[ -e "$probe_env_file" || -e "$probe_argv_file" ]]; then
+    probe_started=1
+  fi
+  if [[ -e "$dir/attempt/provider.env" || -e "$dir/attempt/provider.argv" || -e "$dir/attempt/step-result.json" ]]; then
+    provider_started=1
+  fi
+  if [[ "$code" -eq 111 && "$named_var" -eq 1 && "$probe_started" -eq 0 && "$provider_started" -eq 0 ]]; then
+    pass "$name"
+  else
+    fail "$name" "expected pre-probe rc=111 and no child launch: rc=$code named_var=$named_var probe_started=$probe_started provider_started=$provider_started"
+  fi
+}
+
 case_invalid_step_env_allow_fails_closed() {
   local name=invalid-step-env-allow-fails-closed
   local dir code output
@@ -721,6 +763,33 @@ case_invalid_step_env_allow_fails_closed() {
     pass "$name"
   else
     fail "$name" "expected rc=111 without provider launch: rc=$code output=$output"
+  fi
+}
+
+case_step_env_allow_glob_is_not_expanded() {
+  local name=step-env-allow-glob-is-not-expanded
+  local dir code output
+  dir=$(make_case_dir)
+  mkdir -p "$dir/glob-cwd"
+  : >"$dir/glob-cwd/VALID_AB"
+  write_env_dump_cli "$dir/fake-hermes"
+  set +e
+  output=$(
+    (
+      cd "$dir/glob-cwd" || exit 1
+      HERMES_STEP_CMD="$dir/fake-hermes" HERMES_STEP_ENV_ALLOW='VALID_A*' run_adapter "$dir"
+    ) 2>&1
+  )
+  code=$?
+  set -e
+  if [[ "$code" -eq 111 ]] \
+    && grep -Fq 'HERMES_STEP_ENV_ALLOW contains an invalid variable name: VALID_A*' <<<"$output" \
+    && ! grep -Fq 'VALID_AB' <<<"$output" \
+    && [[ ! -e "$dir/attempt/provider.env" ]] \
+    && [[ ! -e "$dir/attempt/step-result.json" ]]; then
+    pass "$name"
+  else
+    fail "$name" "expected literal glob rejection before launch: rc=$code"
   fi
 }
 
@@ -745,7 +814,9 @@ case_underlying_exit75_passthrough
 case_runner_rejects_relative_spawn_step
 case_runner_rejects_nonexecutable_spawn_step
 case_provider_runs_with_reduced_environment
+case_readonly_export_survivor_fails_closed
 case_invalid_step_env_allow_fails_closed
+case_step_env_allow_glob_is_not_expanded
 
 log "TOTAL pass=$pass_count fail=$fail_count"
 if (( fail_count > 0 )); then
