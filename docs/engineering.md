@@ -171,6 +171,25 @@ embedded NUL, and non-data assignments. Eliminating the residual window would re
 different implementation substrate than Bash 3.2 exposes. The accepted-risk record is
 therefore documentation plus fail-closed guardrails, not a claim that the race is gone.
 
+### Accepted risk: risk-review gate actor identity under shared credentials
+
+As of the ci-v1 pin at handbook v0.21.0, the risk-review gate mechanically verifies the
+risk-reviewed label's most recent labeled-event actor against the base-side roster
+(`.github/risk-reviewers.txt`), with recency established from event timestamps rather
+than API response order, and every ambiguity failing closed (missing event, missing
+timestamp, newer removal, ghost actor, non-roster actor, fetch failure).
+
+The residual risk is actor identity itself: in current family operation every agent
+calls the GitHub API with the owner's credentials, so a label applied by an agent is
+recorded with the owner's login and passes the roster check. The mechanical guarantee
+is therefore bounded by credential separation and completes only once per-agent
+identities (separate author/token) exist. Until then, unauthorized labeling remains a
+protocol violation (handbook E-5) with a permanent audit trail in the PR timeline —
+the gate narrows the hole to actors who can authenticate as a roster member, it does
+not close it. Tracked upstream as caty-ai/caty-agent-harness#242 (finding
+`rv-security-codex-0b96f0e5111f-f5cb2ac2`); implementation record: family-dev-handbook
+PR #141.
+
 ### Overflow sentinel
 
 The Claude Code step adapter can opt into a passive overflow sentinel. It tails

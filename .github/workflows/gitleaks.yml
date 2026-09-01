@@ -8,5 +8,5 @@ permissions: {contents: read}
 concurrency: {group: 'gitleaks-${{ github.event.pull_request.number }}', cancel-in-progress: true}
 jobs:
   gitleaks:
-    uses: caty-ai/family-dev-handbook/.github/workflows/reusable-gitleaks.yml@8430452c1a22943c805ba2a940a75960299cfb2f # ci-v1
+    uses: caty-ai/family-dev-handbook/.github/workflows/reusable-gitleaks.yml@0e8eceee64b2c5a25e47d15fb4ffbead491e0479 # ci-v1
     permissions: {contents: read}

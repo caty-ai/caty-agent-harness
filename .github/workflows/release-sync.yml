@@ -8,6 +8,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release-sync:
-    uses: caty-ai/family-dev-handbook/.github/workflows/reusable-release-sync.yml@8430452c1a22943c805ba2a940a75960299cfb2f # ci-v1
+    uses: caty-ai/family-dev-handbook/.github/workflows/reusable-release-sync.yml@0e8eceee64b2c5a25e47d15fb4ffbead491e0479 # ci-v1
     # release 作成に contents: write が必要。pin により実行コードは SHA 固定済み。
     permissions: {contents: write}
