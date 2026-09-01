@@ -18,7 +18,8 @@ set -euo pipefail
 # are refused by scripts/lib-secrets-env.sh, which must be installed beside the
 # pause helper. The refusal list is a hazard guard, not an exhaustive safety
 # boundary. Portable Bash 3.2 cannot open with O_NOFOLLOW, so a residual path
-# replacement race remains despite the pre/post-open identity checks.
+# replacement race remains despite the pre/post-open identity checks; accepted
+# risk record: docs/engineering.md#accepted-risk-cron-wrapper-secrets-env-race.
 
 fail() {
   printf 'cron-wrapper infra error: %s\n' "$1" >&2
@@ -214,36 +215,44 @@ if [[ -n "$SECRETS_ENV" ]]; then
   if [[ -L "$SECRETS_ENV" ]]; then
     validate_secrets_env "$SECRETS_ENV"
   fi
-  if [[ -f "$SECRETS_ENV" ]]; then
-    validate_secrets_env "$SECRETS_ENV"
-
-    if ! exec 9<"$SECRETS_ENV"; then
-      fail "SECRETS_ENV is not readable: $SECRETS_ENV"
-    fi
-    if [[ -L "$SECRETS_ENV" ]] || ! same_open_file "$SECRETS_ENV" /dev/fd/9; then
-      exec 9<&-
-      fail "SECRETS_ENV changed while opening: $SECRETS_ENV"
-    fi
-
-    validate_secrets_env "$SECRETS_ENV"
-
-    if ! nul_line=$(secrets_env_first_nul_line "$SECRETS_ENV"); then
-      exec 9<&-
-      fail "SECRETS_ENV could not be scanned for embedded NUL bytes: $SECRETS_ENV"
-    fi
-    if [[ -n "$nul_line" ]]; then
-      exec 9<&-
-      fail "SECRETS_ENV line $nul_line contains an embedded NUL byte: $SECRETS_ENV"
-    fi
-
-    if [[ -L "$SECRETS_ENV" ]] || ! same_open_file "$SECRETS_ENV" /dev/fd/9; then
-      exec 9<&-
-      fail "SECRETS_ENV changed while validating: $SECRETS_ENV"
-    fi
-
-    parse_secrets_env "$SECRETS_ENV"
-    exec 9<&-
+  if [[ ! -e "$SECRETS_ENV" ]]; then
+    fail "SECRETS_ENV file not found: $SECRETS_ENV"
   fi
+  if [[ ! -f "$SECRETS_ENV" ]]; then
+    fail "SECRETS_ENV must be a regular file: $SECRETS_ENV"
+  fi
+
+  validate_secrets_env "$SECRETS_ENV"
+
+  if [[ ! -r "$SECRETS_ENV" ]]; then
+    fail "SECRETS_ENV is not readable: $SECRETS_ENV"
+  fi
+  if ! exec 9<"$SECRETS_ENV"; then
+    fail "SECRETS_ENV is not readable: $SECRETS_ENV"
+  fi
+  if [[ -L "$SECRETS_ENV" ]] || ! same_open_file "$SECRETS_ENV" /dev/fd/9; then
+    exec 9<&-
+    fail "SECRETS_ENV changed while opening: $SECRETS_ENV"
+  fi
+
+  validate_secrets_env "$SECRETS_ENV"
+
+  if ! nul_line=$(secrets_env_first_nul_line "$SECRETS_ENV"); then
+    exec 9<&-
+    fail "SECRETS_ENV could not be scanned for embedded NUL bytes: $SECRETS_ENV"
+  fi
+  if [[ -n "$nul_line" ]]; then
+    exec 9<&-
+    fail "SECRETS_ENV line $nul_line contains an embedded NUL byte: $SECRETS_ENV"
+  fi
+
+  if [[ -L "$SECRETS_ENV" ]] || ! same_open_file "$SECRETS_ENV" /dev/fd/9; then
+    exec 9<&-
+    fail "SECRETS_ENV changed while validating: $SECRETS_ENV"
+  fi
+
+  parse_secrets_env "$SECRETS_ENV"
+  exec 9<&-
 fi
 
 if [[ "$TARGET" != /* || ! -x "$TARGET" ]]; then

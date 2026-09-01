@@ -89,6 +89,43 @@ assert_prediction() {
   fi
 }
 
+assert_fail_closed_missing_or_unreadable() {
+  local name=$1
+  local secrets_file=$2
+  local check_fragment=$3
+  local wrapper_fragment=$4
+  local workspace wrapper check_rc wrapper_rc canary
+
+  workspace=$(seed_workspace "$name")
+  wrapper=$(install_configured_wrapper "$workspace" "$secrets_file")
+  canary=$TMP_ROOT/$name.canary
+  cat >"$TMP_ROOT/$name-target" <<EOF
+#!/usr/bin/env bash
+printf 'target-ran\n' >"$canary"
+EOF
+  chmod +x "$TMP_ROOT/$name-target"
+
+  "$ROOT/install.sh" --check --workspace "$workspace" \
+    >"$TMP_ROOT/$name.check.out" 2>"$TMP_ROOT/$name.check.err"
+  check_rc=$?
+
+  TARGET="$TMP_ROOT/$name-target" CATY_HARNESS_ROOT="$ROOT" CATY_WORKSPACE="$workspace" \
+    "$wrapper" >"$TMP_ROOT/$name.wrapper.out" 2>"$TMP_ROOT/$name.wrapper.err"
+  wrapper_rc=$?
+
+  if [ "$check_rc" -ne 0 ] \
+    && grep -Fq 'FAIL: cron wrapper scripts/cron-wrapper.sh SECRETS_ENV ' "$TMP_ROOT/$name.check.err" \
+    && grep -Fq "$check_fragment" "$TMP_ROOT/$name.check.err" \
+    && [ "$wrapper_rc" -eq 3 ] \
+    && grep -Fq "cron-wrapper infra error: $wrapper_fragment" "$TMP_ROOT/$name.wrapper.err" \
+    && [ ! -e "$canary" ]; then
+    pass "$name missing/unreadable SECRETS_ENV fails closed in check and wrapper"
+  else
+    fail_case "$name fail-closed contract" \
+      "check_rc=$check_rc wrapper_rc=$wrapper_rc canary=$(test -e "$canary" && printf present || printf absent) check_stderr=$(cat "$TMP_ROOT/$name.check.err") wrapper_stderr=$(cat "$TMP_ROOT/$name.wrapper.err")"
+  fi
+}
+
 assert_secrets_lib_failure() {
   local name=$1
   local harness_root=$2
@@ -158,6 +195,22 @@ assert_prediction symlink "$symlink_file" reject 'SECRETS_ENV must not be a syml
 dangling_file=$TMP_ROOT/dangling.env
 ln -s "$TMP_ROOT/absent.env" "$dangling_file"
 assert_prediction dangling-symlink "$dangling_file" reject 'SECRETS_ENV must not be a symlink'
+
+missing_file=$TMP_ROOT/missing.env
+assert_fail_closed_missing_or_unreadable missing-file "$missing_file" \
+  'SECRETS_ENV file not found:' \
+  'SECRETS_ENV file not found:'
+
+unreadable_file=$TMP_ROOT/unreadable.env
+printf 'GOOD=plain\n' >"$unreadable_file"
+chmod 000 "$unreadable_file"
+if [ -r "$unreadable_file" ]; then
+  pass 'unreadable SECRETS_ENV check skipped because this user can read mode 000 files'
+else
+  assert_fail_closed_missing_or_unreadable unreadable-file "$unreadable_file" \
+    'SECRETS_ENV file is not readable:' \
+    'SECRETS_ENV permissions must be 0600 or 0400:'
+fi
 
 fake_root=$TMP_ROOT/harness-without-secrets-lib
 mkdir -p "$fake_root/scripts"

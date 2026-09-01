@@ -629,8 +629,12 @@ $shape_reasons
 EOF
     return 0
   fi
+  if [[ ! -e "$secrets_file" ]]; then
+    printf 'FAIL: cron wrapper %s SECRETS_ENV file not found: %s\n' "$wrapper_rel" "$secrets_file" >&2
+    return 1
+  fi
   if [[ ! -f "$secrets_file" ]]; then
-    printf 'warning: cron wrapper %s SECRETS_ENV file not found: %s\n' "$wrapper_rel" "$secrets_file" >&2
+    printf 'warning: cron wrapper %s SECRETS_ENV must be a regular file: %s\n' "$wrapper_rel" "$secrets_file" >&2
     return 0
   fi
 
@@ -650,6 +654,11 @@ EOF
 $shape_reasons
 EOF
 
+  if [[ ! -r "$secrets_file" ]]; then
+    printf 'FAIL: cron wrapper %s SECRETS_ENV file is not readable: %s\n' "$wrapper_rel" "$secrets_file" >&2
+    return 1
+  fi
+
   if ! nul_line=$(secrets_env_first_nul_line "$secrets_file"); then
     printf 'warning: cron wrapper %s SECRETS_ENV could not be scanned for embedded NUL bytes: %s\n' "$wrapper_rel" "$secrets_file" >&2
     return 0
@@ -660,8 +669,8 @@ EOF
   fi
 
   if ! exec 8<"$secrets_file"; then
-    printf 'warning: cron wrapper %s SECRETS_ENV file is not readable: %s\n' "$wrapper_rel" "$secrets_file" >&2
-    return 0
+    printf 'FAIL: cron wrapper %s SECRETS_ENV file is not readable: %s\n' "$wrapper_rel" "$secrets_file" >&2
+    return 1
   fi
   while IFS= read -r -u 8 raw_line || [[ -n "$raw_line" ]]; do
     line_number=$((line_number + 1))
@@ -696,6 +705,41 @@ EOF
   exec 8<&-
 }
 
+resolve_wrapper_secrets_env_audit_path() {
+  local secrets_assignment=$1
+  local resolved=$secrets_assignment
+  local home_value=${HOME:-}
+  local prefix suffix next_char
+  local home_brace_pattern="\${HOME}"
+  local home_plain_pattern="\$HOME"
+
+  if [[ -n "$home_value" ]]; then
+    while [[ "$resolved" == *"$home_brace_pattern"* ]]; do
+      prefix=${resolved%%"$home_brace_pattern"*}
+      suffix=${resolved#*"$home_brace_pattern"}
+      resolved=$prefix$home_value$suffix
+    done
+
+    while [[ "$resolved" == *"$home_plain_pattern"* ]]; do
+      prefix=${resolved%%"$home_plain_pattern"*}
+      suffix=${resolved#*"$home_plain_pattern"}
+      next_char=${suffix:0:1}
+      if [[ -z "$next_char" || ! "$next_char" =~ [A-Za-z0-9_] ]]; then
+        resolved=$prefix$home_value$suffix
+      else
+        resolved=$prefix$home_plain_pattern$suffix
+        break
+      fi
+    done
+  fi
+
+  if [[ "$resolved" == *'$'* ]]; then
+    return 1
+  fi
+
+  printf '%s\n' "$resolved"
+}
+
 extract_wrapper_secrets_env() {
   local wrapper=$1
 
@@ -718,19 +762,38 @@ check_cron_wrappers() {
   local workspace=$1
   local scripts_dir="$workspace/scripts"
   local wrapper
-  local secrets_file
+  local secrets_assignment secrets_file
+  local wrapper_rel
+  local failures=0
+  local unauditable_count=0
 
   [[ -d "$scripts_dir" ]] || return 0
 
   while IFS= read -r wrapper; do
     [[ -n "$wrapper" ]] || continue
     if grep -Fq '# fable-loop cron wrapper template v1' "$wrapper"; then
-      secrets_file=$(extract_wrapper_secrets_env "$wrapper")
-      if [[ -n "$secrets_file" && "$secrets_file" != *'$'* ]]; then
-        check_secrets_env_file "$workspace" "$secrets_file" "$wrapper"
+      secrets_assignment=$(extract_wrapper_secrets_env "$wrapper")
+      if [[ -z "$secrets_assignment" ]]; then
+        continue
+      fi
+      if secrets_file=$(resolve_wrapper_secrets_env_audit_path "$secrets_assignment"); then
+        if ! check_secrets_env_file "$workspace" "$secrets_file" "$wrapper"; then
+          failures=1
+        fi
+      else
+        wrapper_rel=$(print_relative "$workspace" "$wrapper")
+        printf 'warning: cron wrapper %s SECRETS_ENV unauditable - manual check required: SECRETS_ENV=%s\n' \
+          "$wrapper_rel" "$secrets_assignment" >&2
+        unauditable_count=$((unauditable_count + 1))
       fi
     fi
   done < <(find "$scripts_dir" -type f -print)
+
+  if (( unauditable_count > 0 )); then
+    printf 'warning: cron wrapper SECRETS_ENV unauditable count: %s\n' "$unauditable_count" >&2
+  fi
+
+  return "$failures"
 }
 
 check_instruction_files() {
@@ -999,6 +1062,7 @@ probe_adapter_distiller_cron() {
 
   case "$adapter" in
     claude-code|codex|kimi)
+      # shellcheck disable=SC2016
       probe_executable_contains "$repo_root/adapters/claude-code/flush-intake.sh" \
         'source "$repo_root/scripts/flush-intake.sh"' \
         && grep -Fq -- "snapshot_pending_dedup_keys \"\$pending_dir\"" \
@@ -1335,7 +1399,9 @@ EOF
     done
   done < <(find "$workspace/skills" -type f -name 'SKILL.md' -print 2>/dev/null)
 
-  check_cron_wrappers "$workspace"
+  if ! check_cron_wrappers "$workspace"; then
+    failures=1
+  fi
   check_instruction_files "$workspace"
   check_raw_review "$workspace"
   check_learning_paths

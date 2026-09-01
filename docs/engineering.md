@@ -154,6 +154,23 @@ Exactly one fold route may run per workspace: this consumer, or OpenClaw's `dist
 
 See [adapters/claude-code/INSTALL.md](../adapters/claude-code/INSTALL.md) for the full setup steps, ledger format, and scheduling detail.
 
+<a id="accepted-risk-cron-wrapper-secrets-env-race"></a>
+
+### Accepted risk: cron wrapper `SECRETS_ENV` race
+
+The checked-in cron wrapper validates `SECRETS_ENV` before and after opening it, but on
+portable Bash 3.2 it still cannot open the path with `O_NOFOLLOW`. A local attacker who
+already has filesystem-write access as the same invoking user could still race the path
+replacement between those checks and the actual open/read boundary.
+
+This risk is accepted for now because the remaining window is narrow, every practical
+deployment already requires the attacker to write into the invoking user's filesystem
+context, and the current wrapper already fails closed on the cheaper classes of abuse:
+symlinks, ownership mismatch, unreadable or missing files, post-open identity drift,
+embedded NUL, and non-data assignments. Eliminating the residual window would require a
+different implementation substrate than Bash 3.2 exposes. The accepted-risk record is
+therefore documentation plus fail-closed guardrails, not a claim that the race is gone.
+
 ### Overflow sentinel
 
 The Claude Code step adapter can opt into a passive overflow sentinel. It tails

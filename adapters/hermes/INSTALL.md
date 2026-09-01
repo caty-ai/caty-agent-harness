@@ -404,7 +404,8 @@ the absolute adapter/script path and pass the target arguments after the wrapper
 
 Adapter stdout is now captured per attempt in `attempts/NNN/model.stdout` and no longer appears in the tick log.
 
-`SECRETS_ENV` is optional. When set and present, the wrapper parses it as data-only
+`SECRETS_ENV` is optional. When set, the wrapper fails closed unless the path exists,
+is readable, and passes the data-only validation below. It parses the file as
 `KEY=VALUE`, one assignment per physical line; it does not source or execute the file.
 The file must be owned by the cron user, have `0600` or `0400` permissions, and not be
 a symlink. Interpreter- and loader-control names are refused by a deliberately
@@ -429,6 +430,24 @@ inspected, so glued operator fragments stay literal arguments and are not diagno
 Accepted glued gaps include `echo x|wc`, `2>`, `&>`, `|&`, and `<<`. `TR_PUSH_CMD`'s
 move to argv is a breaking contract change, so shell snippets must move into a wrapper
 script with explicit arguments.
+
+`adapters/hermes/spawn_step.sh` no longer passes the provider command the full caller
+environment. That old full-inheritance shape trusted every secret the cron wrapper
+loaded to every provider binary. The provider now runs under `/usr/bin/env -i` with an
+explicit contract only:
+
+- Baseline pass-through when set: `PATH`, `HOME`, `TMPDIR`, `LANG`, `LC_ALL`
+- Step-contract vars always passed: `TASK_FILE`, `ARTIFACT_DIR`, `ATTEMPT_DIR`,
+  `WORKSPACE`, `HERMES_HTTP_TIMEOUT_S`, `HERMES_STEP_TIMEOUT_S`,
+  `HERMES_STEP_GRACE_S`
+- Operator extension: `HERMES_STEP_ENV_ALLOW`, a whitespace-separated list of variable
+  names to pass through when those variables are set in the parent environment
+
+Every other parent variable is stripped from the provider invocation. `HERMES_STEP_ENV_ALLOW`
+accepts names only; quotes are not special, and each name must match
+`[A-Za-z_][A-Za-z0-9_]*`. Any invalid name fails the step before launch with an infra
+diagnostic instead of being ignored. Use this extension sparingly and prefer dedicated
+non-secret configuration files where possible.
 
 When configured, `push.log` persists the push command's combined output. Only shell
 diagnostics whose basename is exactly `task-runner.sh` and that match

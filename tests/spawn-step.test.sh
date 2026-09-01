@@ -442,6 +442,18 @@ SH
   chmod +x "$path"
 }
 
+write_env_dump_cli() {
+  local path=$1
+  cat >"$path" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+attempt_dir=$2
+env | LC_ALL=C sort >"$attempt_dir/provider.env"
+printf '{"step_complete":true}\n' >"$attempt_dir/step-result.json"
+SH
+  chmod +x "$path"
+}
+
 case_timeout_quarantines_partial_output_and_kills_group() {
   local name=timeout-quarantines-partial-output-and-kills-group
   local dir code grandchild_pid tries
@@ -613,6 +625,69 @@ case_runner_rejects_nonexecutable_spawn_step() {
   fi
 }
 
+case_provider_runs_with_reduced_environment() {
+  local name=provider-runs-with-reduced-environment
+  local dir env_file expected_workspace expected_artifact_dir
+  dir=$(make_case_dir)
+  mkdir -p "$dir/tmp"
+  expected_workspace=$(cd "$dir/ws" && pwd -P)
+  expected_artifact_dir=$(cd "$dir/attempt/.." && cd .. && pwd)
+  write_env_dump_cli "$dir/fake-hermes"
+  if LEAKED_SECRET_CANARY=sentinel \
+    EXTRA_VISIBLE_CANARY=visible \
+    HERMES_STEP_CMD="$dir/fake-hermes" \
+    HERMES_STEP_ENV_ALLOW='EXTRA_VISIBLE_CANARY' \
+    HERMES_HTTP_TIMEOUT_S=31 \
+    HERMES_STEP_TIMEOUT_S=40 \
+    HERMES_STEP_GRACE_S=5 \
+    LANG=C \
+    LC_ALL=C \
+    TMPDIR="$dir/tmp" \
+    run_adapter "$dir" >/dev/null 2>&1; then
+    env_file="$dir/attempt/provider.env"
+    if [[ -f "$dir/attempt/step-result.json" ]] \
+      && grep -Fqx "PATH=$PATH" "$env_file" \
+      && grep -Fqx "HOME=$HOME" "$env_file" \
+      && grep -Fqx "TMPDIR=$dir/tmp" "$env_file" \
+      && grep -Fqx 'LANG=C' "$env_file" \
+      && grep -Fqx 'LC_ALL=C' "$env_file" \
+      && grep -Fqx "TASK_FILE=$dir/task.md" "$env_file" \
+      && grep -Fqx "ARTIFACT_DIR=$expected_artifact_dir" "$env_file" \
+      && grep -Fqx "ATTEMPT_DIR=$dir/attempt" "$env_file" \
+      && grep -Fqx "WORKSPACE=$expected_workspace" "$env_file" \
+      && grep -Fqx 'HERMES_HTTP_TIMEOUT_S=31' "$env_file" \
+      && grep -Fqx 'HERMES_STEP_TIMEOUT_S=40' "$env_file" \
+      && grep -Fqx 'HERMES_STEP_GRACE_S=5' "$env_file" \
+      && grep -Fqx 'EXTRA_VISIBLE_CANARY=visible' "$env_file" \
+      && ! grep -Fq 'LEAKED_SECRET_CANARY=sentinel' "$env_file"; then
+      pass "$name"
+    else
+      fail "$name" 'provider env contract check failed'
+    fi
+  else
+    fail "$name" "expected reduced-env provider launch to succeed"
+  fi
+}
+
+case_invalid_step_env_allow_fails_closed() {
+  local name=invalid-step-env-allow-fails-closed
+  local dir code output
+  dir=$(make_case_dir)
+  write_env_dump_cli "$dir/fake-hermes"
+  set +e
+  output=$(HERMES_STEP_CMD="$dir/fake-hermes" HERMES_STEP_ENV_ALLOW='GOOD-NAME *.bad' run_adapter "$dir" 2>&1)
+  code=$?
+  set -e
+  if [[ "$code" -eq 111 ]] \
+    && grep -Fq 'HERMES_STEP_ENV_ALLOW contains an invalid variable name' <<<"$output" \
+    && [[ ! -e "$dir/attempt/provider.env" ]] \
+    && [[ ! -e "$dir/attempt/step-result.json" ]]; then
+    pass "$name"
+  else
+    fail "$name" "expected rc=111 without provider launch: rc=$code output=$output"
+  fi
+}
+
 case_success
 case_ordering_guards
 case_step_cmd_unset
@@ -633,6 +708,8 @@ case_pause_boundary_returns_zero_status_record
 case_underlying_exit75_passthrough
 case_runner_rejects_relative_spawn_step
 case_runner_rejects_nonexecutable_spawn_step
+case_provider_runs_with_reduced_environment
+case_invalid_step_env_allow_fails_closed
 
 log "TOTAL pass=$pass_count fail=$fail_count"
 if (( fail_count > 0 )); then

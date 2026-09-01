@@ -17,8 +17,11 @@ set -euo pipefail
 # Optional env:
 #   HERMES_PROBE_CMD
 #     Cheap pre-flight reachability check. Failure exits 111 before launch.
+#   HERMES_STEP_ENV_ALLOW
+#     Whitespace-separated environment variable names to pass through to the
+#     provider command when set. Names must match [A-Za-z_][A-Za-z0-9_]*.
 #   HERMES_HTTP_TIMEOUT_S
-#     Exported to the CLI environment. Defaults to 540.
+#     Exported to the provider environment. Defaults to 540.
 #   HERMES_STEP_TIMEOUT_S
 #     Wall-clock limit for the step command. It must stay below the driver's
 #     TR_STEP_TIMEOUT_S (scripts/task-runner.sh), or the driver's hard group
@@ -44,6 +47,14 @@ infra_fail() {
   exit 111
 }
 
+append_step_env_if_set() {
+  local name=$1
+
+  if [[ -n "${!name+x}" ]]; then
+    step_env_vars+=("$name=${!name}")
+  fi
+}
+
 if (($# != 4)); then
   usage
   exit 2
@@ -54,9 +65,13 @@ workspace=$2
 attempt_dir=$3
 step_k=$4
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+# shellcheck disable=SC1091
 source "$repo_root/scripts/lib-classify.sh"
+# shellcheck disable=SC1091
 source "$repo_root/scripts/lib-bounded.sh"
+# shellcheck disable=SC1091
 source "$repo_root/scripts/lib-command-argv.sh"
+# shellcheck disable=SC1091
 source "$repo_root/scripts/lib-pause.sh"
 prompt_file="$attempt_dir/prompt.md"
 
@@ -112,21 +127,27 @@ if [[ -z "${HERMES_STEP_CMD:-}" ]]; then
 fi
 
 if ! validate_cmd_argv HERMES_STEP_CMD "$HERMES_STEP_CMD"; then
+  # shellcheck disable=SC2154
   infra_fail "HERMES_STEP_CMD: $_validated_reason"
 fi
 if ! resolve_cmd_argv0 HERMES_STEP_CMD; then
+  # shellcheck disable=SC2154
   infra_fail "HERMES_STEP_CMD: $_validated_reason"
 fi
+# shellcheck disable=SC2154
 step_argv=("${_validated_argv[@]+"${_validated_argv[@]}"}")
 
 probe_argv=()
 if [[ -n "${HERMES_PROBE_CMD:-}" ]]; then
   if ! validate_cmd_argv HERMES_PROBE_CMD "$HERMES_PROBE_CMD"; then
+    # shellcheck disable=SC2154
     infra_fail "HERMES_PROBE_CMD: $_validated_reason"
   fi
   if ! resolve_cmd_argv0 HERMES_PROBE_CMD; then
+    # shellcheck disable=SC2154
     infra_fail "HERMES_PROBE_CMD: $_validated_reason"
   fi
+  # shellcheck disable=SC2154
   probe_argv=("${_validated_argv[@]+"${_validated_argv[@]}"}")
   cd "$workspace"
   if ! "${probe_argv[@]+"${probe_argv[@]}"}"; then
@@ -140,9 +161,44 @@ fi
 artifact_dir=$(cd "$attempt_dir/.." && cd .. && pwd)
 export TASK_FILE="$task_file" ARTIFACT_DIR="$artifact_dir" ATTEMPT_DIR="$attempt_dir" WORKSPACE="$workspace"
 
+step_env_vars=()
+append_step_env_if_set PATH
+append_step_env_if_set HOME
+append_step_env_if_set TMPDIR
+append_step_env_if_set LANG
+append_step_env_if_set LC_ALL
+step_env_vars+=(
+  "TASK_FILE=$TASK_FILE"
+  "ARTIFACT_DIR=$ARTIFACT_DIR"
+  "ATTEMPT_DIR=$ATTEMPT_DIR"
+  "WORKSPACE=$WORKSPACE"
+  "HERMES_HTTP_TIMEOUT_S=$HERMES_HTTP_TIMEOUT_S"
+  "HERMES_STEP_TIMEOUT_S=$HERMES_STEP_TIMEOUT_S"
+  "HERMES_STEP_GRACE_S=$HERMES_STEP_GRACE_S"
+)
+step_env_allow_had_noglob=0
+case $- in
+  *f*) step_env_allow_had_noglob=1 ;;
+esac
+set -f
+for allowed_name in ${HERMES_STEP_ENV_ALLOW:-}; do
+  if [[ ! "$allowed_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    if (( step_env_allow_had_noglob == 0 )); then
+      set +f
+    fi
+    infra_fail 'HERMES_STEP_ENV_ALLOW contains an invalid variable name'
+  fi
+  append_step_env_if_set "$allowed_name"
+done
+if (( step_env_allow_had_noglob == 0 )); then
+  set +f
+fi
+step_exec_argv=(/usr/bin/env -i "${step_env_vars[@]}" "${step_argv[@]+"${step_argv[@]}"}")
+
 cd "$workspace"
 step_stderr="$attempt_dir/step.stderr"
 step_call_finished=0
+# shellcheck disable=SC2329
 _spawn_step_exit_quarantine() {
   if [[ "${step_call_finished:-0}" -eq 0 ]] && [[ -f "${attempt_dir:-}/step-result.json" ]]; then
     mv -f "$attempt_dir/step-result.json" "$attempt_dir/step-result.json.partial"
@@ -150,7 +206,7 @@ _spawn_step_exit_quarantine() {
 }
 trap _spawn_step_exit_quarantine EXIT
 set +e
-run_bounded "$HERMES_STEP_TIMEOUT_S" "$HERMES_STEP_GRACE_S" "${step_argv[@]+"${step_argv[@]}"}" "$prompt_file" "$attempt_dir" 2>"$step_stderr"
+run_bounded "$HERMES_STEP_TIMEOUT_S" "$HERMES_STEP_GRACE_S" "${step_exec_argv[@]+"${step_exec_argv[@]}"}" "$prompt_file" "$attempt_dir" 2>"$step_stderr"
 step_status=$?
 set -e
 step_call_finished=1
