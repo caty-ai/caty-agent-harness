@@ -85,6 +85,28 @@ api_base = (
     f"{parsed_api_base.scheme}://{parsed_api_base.netloc}{parsed_api_base.path}"
 ).rstrip("/")
 
+allowed_hosts_value = os.environ.get("VERIFIER_API_ALLOWED_HOSTS")
+if allowed_hosts_value is None or allowed_hosts_value == "":
+    allowed_hosts = ["api.anthropic.com"]
+else:
+    allowed_hosts = []
+    for allowed_host_value in allowed_hosts_value.split(","):
+        allowed_host = allowed_host_value.strip(" \t")
+        allowed_host_valid = (
+            bool(allowed_host)
+            and allowed_host.isascii()
+            and not any(
+                character.isspace() or unicodedata.category(character) == "Cc"
+                for character in allowed_host
+            )
+            and not any(character in allowed_host for character in "/:@")
+        )
+        if not allowed_host_valid:
+            fail("provider host allowlist is invalid")
+        allowed_hosts.append(allowed_host.lower())
+if parsed_api_base.hostname.lower() not in allowed_hosts:
+    fail("provider API base host is not allowlisted")
+
 model = os.environ.get("VERIFIER_MODEL", "claude-sonnet-5")
 try:
     timeout_seconds = float(os.environ.get("VERIFIER_HTTP_TIMEOUT_S", "120"))

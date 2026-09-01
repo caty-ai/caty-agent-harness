@@ -185,7 +185,10 @@ The rules there apply in addition to the Hermes-specific wiring below.
 
    For the API-backed shape, Anthropic remains the default: set an Anthropic key in
    `VERIFIER_API_KEY`, optionally set `VERIFIER_MODEL`, and leave
-   `VERIFIER_API_BASE` unset to use `https://api.anthropic.com`.
+   `VERIFIER_API_BASE` unset to use `https://api.anthropic.com`. Credential attachment
+   is restricted to an allowlist of hosts that defaults to `api.anthropic.com`; any
+   other base requires explicitly opting its host in through
+   `VERIFIER_API_ALLOWED_HOSTS`.
 
    **Z.ai GLM 5.2 configuration.** Set these values through the job's protected
    `SECRETS_ENV`:
@@ -194,7 +197,11 @@ The rules there apply in addition to the Hermes-specific wiring below.
    VERIFIER_API_KEY=<Z.ai member key>
    VERIFIER_MODEL=glm-5.2
    VERIFIER_API_BASE=https://api.z.ai/api/anthropic
+   VERIFIER_API_ALLOWED_HOSTS=api.z.ai
    ```
+
+   The allowlist line is the explicit opt-in that authorizes sending
+   `VERIFIER_API_KEY` to the non-default `api.z.ai` host.
 
    `SECRETS_ENV` is an additive overlay. When switching vendors, remove or overwrite
    the old key line: a leftover key for vendor A will be sent to vendor B. Prefer
