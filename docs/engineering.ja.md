@@ -162,7 +162,7 @@ fetch failure のどの ambiguity に対しても fail closed します。
 owner の credentials で GitHub API を呼ぶため、agent が付けた label も owner の login で
 記録され、roster check を通過します。したがって mechanical guarantee の境界は credential
 separation にあり、agent ごとの identity（別々の author/token）が存在して初めて完成します。
-それまでも unauthorized labeling は handbook E-5 に反する protocol violation であり、
+それまでは unauthorized labeling は handbook E-5 に反する protocol violation であり、
 PR timeline には恒久的な audit trail が残ります。gate が狭めるのは roster member として
 authenticate できる actor までの hole であり、hole 自体を閉じるものではありません。
 上流では caty-ai/caty-agent-harness#242（finding
