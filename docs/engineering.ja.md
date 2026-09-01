@@ -150,6 +150,25 @@ unreadable file、open 後の identity drift、embedded NUL、data-only でな�
 したがってこの accepted-risk record は「race が消えた」という主張ではなく、documentation と
 fail-closed guardrail の明文化です。
 
+### Accepted risk: risk-review gate actor identity under shared credentials
+
+handbook v0.21.0 の ci-v1 pin 以降、risk-review gate は risk-reviewed label の
+最も新しい labeled event の actor を base-side roster（`.github/risk-reviewers.txt`）と
+機械的に照合します。recency は API response order ではなく event timestamp から確定し、
+missing event、missing timestamp、より新しい removal、ghost actor、non-roster actor、
+fetch failure のどの ambiguity に対しても fail closed します。
+
+残る risk は actor identity 自体です。現在の family operation では、すべての agent が
+owner の credentials で GitHub API を呼ぶため、agent が付けた label も owner の login で
+記録され、roster check を通過します。したがって mechanical guarantee の境界は credential
+separation にあり、agent ごとの identity（別々の author/token）が存在して初めて完成します。
+それまでは unauthorized labeling は handbook E-5 に反する protocol violation であり、
+PR timeline には恒久的な audit trail が残ります。gate が狭めるのは roster member として
+authenticate できる actor までの hole であり、hole 自体を閉じるものではありません。
+上流では caty-ai/caty-agent-harness#242（finding
+`rv-security-codex-0b96f0e5111f-f5cb2ac2`）として追跡し、implementation record は
+family-dev-handbook PR #141 です。
+
 ### Overflow sentinel
 
 Claude Code の step adapter は、passive な overflow sentinel を opt-in で利用できます。

@@ -9,7 +9,7 @@ permissions: {contents: read}
 concurrency: {group: 'risk-review-${{ github.event.pull_request.number }}', cancel-in-progress: true}
 jobs:
   risk-review-gate:
-    uses: caty-ai/family-dev-handbook/.github/workflows/reusable-review-labels.yml@8430452c1a22943c805ba2a940a75960299cfb2f # ci-v1
+    uses: caty-ai/family-dev-handbook/.github/workflows/reusable-review-labels.yml@0e8eceee64b2c5a25e47d15fb4ffbead491e0479 # ci-v1
     permissions: {contents: read, issues: read, pull-requests: write}
     with:
       risk_paths_billing: 'none' # 課金・支出コードなし (#30 で明示宣言)
