@@ -17,6 +17,9 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 mkdir -p "$TMP_ROOT"
 
+# Prevent ambient operator configuration from leaking into test cases.
+unset VERIFIER_API_BASE VERIFIER_API_ALLOWED_HOSTS
+
 pass() {
   PASS_COUNT=$((PASS_COUNT + 1))
   printf 'PASS %s\n' "$1"
@@ -815,6 +818,7 @@ fi
 host_rejection_guard_ok=1
 for host_rejection_case in \
   'default-rejects-attacker||https://attacker.example.test' \
+  'set-empty-rejects-attacker|@EMPTY@|https://attacker.example.test' \
   'explicit-replaces-default|api.z.ai|https://api.anthropic.com'; do
   host_rejection_name=${host_rejection_case%%|*}
   host_rejection_rest=${host_rejection_case#*|}
@@ -822,7 +826,15 @@ for host_rejection_case in \
   host_rejection_base=${host_rejection_rest#*|}
   rm -f "$request_count_marker"
   set +e
-  if [ -n "$host_rejection_allowlist" ]; then
+  if [ "$host_rejection_allowlist" = '@EMPTY@' ]; then
+    host_rejection_output=$(VERIFIER_API_KEY=fixture \
+      VERIFIER_API_BASE="$host_rejection_base" \
+      VERIFIER_API_ALLOWED_HOSTS= \
+      REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+      REQUEST_COUNT_MARKER="$request_count_marker" \
+      python3 "$opener_stub" "$PROVIDER" "$bundle" \
+      2>"$TMP_ROOT/host-rejection-$host_rejection_name.err")
+  elif [ -n "$host_rejection_allowlist" ]; then
     host_rejection_output=$(VERIFIER_API_KEY=fixture \
       VERIFIER_API_BASE="$host_rejection_base" \
       VERIFIER_API_ALLOWED_HOSTS="$host_rejection_allowlist" \
@@ -860,7 +872,9 @@ for invalid_allowlist in \
   'https://api.z.ai' \
   'api.z.ai/' \
   'api.z.ai,,' \
-  'api.z.ai:443'; do
+  'api.z.ai:443' \
+  'api.z%2e.ai' \
+  '*'; do
   rm -f "$request_count_marker"
   set +e
   invalid_allowlist_output=$(VERIFIER_API_KEY=fixture VERIFIER_API_BASE="$zai_base" \

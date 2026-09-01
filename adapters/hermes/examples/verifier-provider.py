@@ -92,18 +92,15 @@ else:
     allowed_hosts = []
     for allowed_host_value in allowed_hosts_value.split(","):
         allowed_host = allowed_host_value.strip(" \t")
-        allowed_host_valid = (
-            bool(allowed_host)
-            and allowed_host.isascii()
-            and not any(
-                character.isspace() or unicodedata.category(character) == "Cc"
-                for character in allowed_host
-            )
-            and not any(character in allowed_host for character in "/:@")
-        )
-        if not allowed_host_valid:
+        if not allowed_host:
             fail("provider host allowlist is invalid")
-        allowed_hosts.append(allowed_host.lower())
+        allowed_host = allowed_host.lower()
+        if re.fullmatch(
+            r"[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*",
+            allowed_host,
+        ) is None:
+            fail("provider host allowlist is invalid")
+        allowed_hosts.append(allowed_host)
 if parsed_api_base.hostname.lower() not in allowed_hosts:
     fail("provider API base host is not allowlisted")
 
