@@ -47,12 +47,33 @@ infra_fail() {
   exit 111
 }
 
-append_step_env_if_set() {
-  local name=$1
+append_step_env_keep_name() {
+  step_env_keep_names+=("$1")
+}
 
-  if [[ -n "${!name+x}" ]]; then
-    step_env_vars+=("$name=${!name}")
-  fi
+step_env_name_is_kept() {
+  local candidate=$1
+  local kept_name
+
+  for kept_name in "${step_env_keep_names[@]+"${step_env_keep_names[@]}"}"; do
+    if [[ "$kept_name" == "$candidate" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+reduce_current_exported_environment() {
+  local exported_name
+
+  while IFS= read -r exported_name; do
+    [[ -n "$exported_name" ]] || continue
+    if step_env_name_is_kept "$exported_name"; then
+      continue
+    fi
+    unset -v "$exported_name" 2>/dev/null || true
+  done < <(compgen -A export)
 }
 
 if (($# != 4)); then
@@ -149,10 +170,6 @@ if [[ -n "${HERMES_PROBE_CMD:-}" ]]; then
   fi
   # shellcheck disable=SC2154
   probe_argv=("${_validated_argv[@]+"${_validated_argv[@]}"}")
-  cd "$workspace"
-  if ! "${probe_argv[@]+"${probe_argv[@]}"}"; then
-    infra_fail 'HERMES_PROBE_CMD failed'
-  fi
 fi
 
 # Weak-model sessions lean on env vars they can echo — export the location
@@ -161,20 +178,23 @@ fi
 artifact_dir=$(cd "$attempt_dir/.." && cd .. && pwd)
 export TASK_FILE="$task_file" ARTIFACT_DIR="$artifact_dir" ATTEMPT_DIR="$attempt_dir" WORKSPACE="$workspace"
 
-step_env_vars=()
-append_step_env_if_set PATH
-append_step_env_if_set HOME
-append_step_env_if_set TMPDIR
-append_step_env_if_set LANG
-append_step_env_if_set LC_ALL
-step_env_vars+=(
-  "TASK_FILE=$TASK_FILE"
-  "ARTIFACT_DIR=$ARTIFACT_DIR"
-  "ATTEMPT_DIR=$ATTEMPT_DIR"
-  "WORKSPACE=$WORKSPACE"
-  "HERMES_HTTP_TIMEOUT_S=$HERMES_HTTP_TIMEOUT_S"
-  "HERMES_STEP_TIMEOUT_S=$HERMES_STEP_TIMEOUT_S"
-  "HERMES_STEP_GRACE_S=$HERMES_STEP_GRACE_S"
+export HERMES_HTTP_TIMEOUT_S HERMES_STEP_TIMEOUT_S HERMES_STEP_GRACE_S
+step_env_keep_names=(
+  PATH
+  HOME
+  TMPDIR
+  LANG
+  LC_ALL
+  HTTPS_PROXY
+  HTTP_PROXY
+  ALL_PROXY
+  TASK_FILE
+  ARTIFACT_DIR
+  ATTEMPT_DIR
+  WORKSPACE
+  HERMES_HTTP_TIMEOUT_S
+  HERMES_STEP_TIMEOUT_S
+  HERMES_STEP_GRACE_S
 )
 step_env_allow_had_noglob=0
 case $- in
@@ -186,16 +206,28 @@ for allowed_name in ${HERMES_STEP_ENV_ALLOW:-}; do
     if (( step_env_allow_had_noglob == 0 )); then
       set +f
     fi
-    infra_fail 'HERMES_STEP_ENV_ALLOW contains an invalid variable name'
+    infra_fail "HERMES_STEP_ENV_ALLOW contains an invalid variable name: $allowed_name"
   fi
-  append_step_env_if_set "$allowed_name"
+  append_step_env_keep_name "$allowed_name"
 done
 if (( step_env_allow_had_noglob == 0 )); then
   set +f
 fi
-step_exec_argv=(/usr/bin/env -i "${step_env_vars[@]}" "${step_argv[@]+"${step_argv[@]}"}")
+
+export -n task_file workspace attempt_dir step_k repo_root prompt_file artifact_dir \
+  pause_state step_env_allow_had_noglob allowed_name step_stderr step_call_finished \
+  failure_class step_status nul_line 2>/dev/null || true
+export -n step_argv probe_argv step_env_keep_names 2>/dev/null || true
+
+reduce_current_exported_environment
 
 cd "$workspace"
+if [[ ${#probe_argv[@]} -gt 0 ]]; then
+  if ! "${probe_argv[@]+"${probe_argv[@]}"}"; then
+    infra_fail 'HERMES_PROBE_CMD failed'
+  fi
+fi
+
 step_stderr="$attempt_dir/step.stderr"
 step_call_finished=0
 # shellcheck disable=SC2329
@@ -206,7 +238,7 @@ _spawn_step_exit_quarantine() {
 }
 trap _spawn_step_exit_quarantine EXIT
 set +e
-run_bounded "$HERMES_STEP_TIMEOUT_S" "$HERMES_STEP_GRACE_S" "${step_exec_argv[@]+"${step_exec_argv[@]}"}" "$prompt_file" "$attempt_dir" 2>"$step_stderr"
+run_bounded "$HERMES_STEP_TIMEOUT_S" "$HERMES_STEP_GRACE_S" "${step_argv[@]+"${step_argv[@]}"}" "$prompt_file" "$attempt_dir" 2>"$step_stderr"
 step_status=$?
 set -e
 step_call_finished=1

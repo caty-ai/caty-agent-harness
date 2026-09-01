@@ -431,23 +431,30 @@ Accepted glued gaps include `echo x|wc`, `2>`, `&>`, `|&`, and `<<`. `TR_PUSH_CM
 move to argv is a breaking contract change, so shell snippets must move into a wrapper
 script with explicit arguments.
 
-`adapters/hermes/spawn_step.sh` no longer passes the provider command the full caller
-environment. That old full-inheritance shape trusted every secret the cron wrapper
-loaded to every provider binary. The provider now runs under `/usr/bin/env -i` with an
-explicit contract only:
+`adapters/hermes/spawn_step.sh` no longer passes the probe or the provider command the
+full caller environment. That old full-inheritance shape trusted every secret the cron
+wrapper loaded to every probe and provider binary. The adapter now reduces its own
+environment in place before the probe runs, then launches the same reduced environment
+for the step. No secret value is copied into a process command line during that handoff.
 
-- Baseline pass-through when set: `PATH`, `HOME`, `TMPDIR`, `LANG`, `LC_ALL`
+- Baseline pass-through when set: `PATH`, `HOME`, `TMPDIR`, `LANG`, `LC_ALL`,
+  `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`
 - Step-contract vars always passed: `TASK_FILE`, `ARTIFACT_DIR`, `ATTEMPT_DIR`,
   `WORKSPACE`, `HERMES_HTTP_TIMEOUT_S`, `HERMES_STEP_TIMEOUT_S`,
   `HERMES_STEP_GRACE_S`
 - Operator extension: `HERMES_STEP_ENV_ALLOW`, a whitespace-separated list of variable
   names to pass through when those variables are set in the parent environment
 
-Every other parent variable is stripped from the provider invocation. `HERMES_STEP_ENV_ALLOW`
-accepts names only; quotes are not special, and each name must match
-`[A-Za-z_][A-Za-z0-9_]*`. Any invalid name fails the step before launch with an infra
-diagnostic instead of being ignored. Use this extension sparingly and prefer dedicated
-non-secret configuration files where possible.
+Every other parent variable is stripped from both the probe and the provider invocation.
+`HERMES_STEP_ENV_ALLOW` accepts names only; quotes are not special, and each name must
+match `[A-Za-z_][A-Za-z0-9_]*`. Any invalid name fails the step before launch with an
+infra diagnostic naming the rejected identifier instead of ignoring it. Use this
+extension sparingly and prefer dedicated non-secret configuration files where possible.
+
+Migration note: upgrading an existing install drops every parent variable outside that
+explicit contract. The first visible symptom is usually a provider network or auth
+failure on the next cron tick. If a provider still needs one specific parent variable,
+add only that variable name to `HERMES_STEP_ENV_ALLOW`.
 
 When configured, `push.log` persists the push command's combined output. Only shell
 diagnostics whose basename is exactly `task-runner.sh` and that match

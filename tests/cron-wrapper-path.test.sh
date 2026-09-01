@@ -5,6 +5,7 @@ ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 CRON_WRAPPER=$ROOT/templates/cron-wrapper.tmpl.sh
 UPDATER_WRAPPER=$ROOT/templates/updater-cron.tmpl.sh
 BASELINE_PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+HOME_RESOLUTION_NOTE=' (resolution uses the checking process HOME and may differ under sudo/other users)'
 TMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/cron-wrapper-path-test.XXXXXX")
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -212,6 +213,20 @@ else
     "rc=$brace_rc output=$brace_output"
 fi
 
+check_workspace=$(seed_check_workspace home-resolution-fail-note)
+install_wrapper_with_secrets_assignment "$check_workspace" cron-home-missing.sh '"$HOME/home-missing.env"' >/dev/null
+set +e
+home_missing_output=$(HOME="$fake_home" "$ROOT/install.sh" --check --workspace "$check_workspace" 2>&1)
+home_missing_rc=$?
+set -e
+if [[ "$home_missing_rc" -ne 0 \
+  && "$home_missing_output" == *"FAIL: cron wrapper scripts/cron-home-missing.sh SECRETS_ENV file not found: $fake_home/home-missing.env$HOME_RESOLUTION_NOTE"* ]]; then
+  pass 'install check appends the HOME-resolution note on resolved FAIL diagnostics'
+else
+  fail_case 'install check appends the HOME-resolution note on resolved FAIL diagnostics' \
+    "rc=$home_missing_rc output=$home_missing_output"
+fi
+
 check_workspace=$(seed_check_workspace unresolved-dollar)
 install_wrapper_with_secrets_assignment "$check_workspace" cron-unresolved.sh '"$SECRETS_DIR/unresolved.env"' >/dev/null
 install_wrapper_with_secrets_assignment "$check_workspace" cron-home-boundary.sh '"$HOMELESS/not-home.env"' >/dev/null
@@ -220,13 +235,48 @@ unresolved_output=$("$ROOT/install.sh" --check --workspace "$check_workspace" 2>
 unresolved_rc=$?
 set -e
 if [[ "$unresolved_rc" -eq 0 \
-  && "$unresolved_output" == *'warning: cron wrapper scripts/cron-unresolved.sh SECRETS_ENV unauditable - manual check required: SECRETS_ENV=$SECRETS_DIR/unresolved.env'* \
-  && "$unresolved_output" == *'warning: cron wrapper scripts/cron-home-boundary.sh SECRETS_ENV unauditable - manual check required: SECRETS_ENV=$HOMELESS/not-home.env'* \
+  && "$unresolved_output" == *'warning: cron wrapper scripts/cron-unresolved.sh SECRETS_ENV unauditable - manual check required: SECRETS_ENV="$SECRETS_DIR/unresolved.env"'* \
+  && "$unresolved_output" == *'warning: cron wrapper scripts/cron-home-boundary.sh SECRETS_ENV unauditable - manual check required: SECRETS_ENV="$HOMELESS/not-home.env"'* \
   && "$unresolved_output" == *'warning: cron wrapper SECRETS_ENV unauditable count: 2'* ]]; then
   pass 'install check reports unresolved dollar paths and $HOME boundary misses as unauditable with a summary count'
 else
   fail_case 'install check reports unresolved dollar paths and $HOME boundary misses as unauditable with a summary count' \
     "rc=$unresolved_rc output=$unresolved_output"
+fi
+
+check_workspace=$(seed_check_workspace invalid-quote-shapes)
+install_wrapper_with_secrets_assignment "$check_workspace" cron-internal-double-quote.sh '"$HOME"/split.env' >/dev/null
+install_wrapper_with_secrets_assignment "$check_workspace" cron-single-quoted-literal.sh "'\$HOME/literal.env'" >/dev/null
+install_wrapper_with_secrets_assignment "$check_workspace" cron-backtick.sh '`$HOME/backtick.env`' >/dev/null
+set +e
+quote_shape_output=$(HOME="$fake_home" "$ROOT/install.sh" --check --workspace "$check_workspace" 2>&1)
+quote_shape_rc=$?
+set -e
+if [[ "$quote_shape_rc" -ne 0 \
+  && "$quote_shape_output" == *'warning: cron wrapper scripts/cron-internal-double-quote.sh SECRETS_ENV unauditable - manual check required: SECRETS_ENV="$HOME"/split.env'"$HOME_RESOLUTION_NOTE"* \
+  && "$quote_shape_output" == *'FAIL: cron wrapper scripts/cron-single-quoted-literal.sh SECRETS_ENV file not found: $HOME/literal.env'* \
+  && "$quote_shape_output" != *"$fake_home/literal.env"* \
+  && "$quote_shape_output" == *'warning: cron wrapper scripts/cron-backtick.sh SECRETS_ENV unauditable - manual check required: SECRETS_ENV=`$HOME/backtick.env`'"$HOME_RESOLUTION_NOTE"* \
+  && "$quote_shape_output" == *'warning: cron wrapper SECRETS_ENV unauditable count: 2'* ]]; then
+  pass 'install check treats internal quotes and backticks as unauditable and single quotes as literal paths'
+else
+  fail_case 'install check treats internal quotes and backticks as unauditable and single quotes as literal paths' \
+    "rc=$quote_shape_rc output=$quote_shape_output"
+fi
+
+check_workspace=$(seed_check_workspace pathological-home)
+install_wrapper_with_secrets_assignment "$check_workspace" cron-pathological-home.sh '"$HOME/pathological.env"' >/dev/null
+set +e
+pathological_home_output=$(HOME='$HOME' "$ROOT/install.sh" --check --workspace "$check_workspace" 2>&1)
+pathological_home_rc=$?
+set -e
+if [[ "$pathological_home_rc" -eq 0 \
+  && "$pathological_home_output" == *'warning: cron wrapper scripts/cron-pathological-home.sh SECRETS_ENV unauditable - manual check required: SECRETS_ENV="$HOME/pathological.env"'"$HOME_RESOLUTION_NOTE"* \
+  && "$pathological_home_output" == *'warning: cron wrapper SECRETS_ENV unauditable count: 1'* ]]; then
+  pass 'install check bounds pathological HOME resolution and reports unauditable'
+else
+  fail_case 'install check bounds pathological HOME resolution and reports unauditable' \
+    "rc=$pathological_home_rc output=$pathological_home_output"
 fi
 
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
