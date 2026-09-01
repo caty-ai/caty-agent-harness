@@ -23,7 +23,7 @@ Caty Agent Harness fixes those — with plain text files and real checks.<br>
 Not magic. The machinery remembers, drives, and checks, so the AI can focus on thinking —<br>
 a small system, wrapped around the AI you already use.
 
-**It breaks big jobs into stages, checks the work really got done — and publishes its own scorecard, losses included.**
+**A system that doesn't take the AI's "done!" at face value — it runs work in stages, verifies "done" against evidence, and publishes its own scorecard, losses included.**
 
 **What actually gets better** — measured, not promised:
 
