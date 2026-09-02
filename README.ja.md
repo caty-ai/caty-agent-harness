@@ -6,7 +6,7 @@
 
 > **お知らせ（2026-08-24）:** この README と実装のあいだに一部乖離が見つかりました（[#144](https://github.com/caty-ai/caty-agent-harness/issues/144)）。以下に記載している学習ループのうち「その方法はまず『教訓』としてメモされるだけ。別の仕事でもう一度検証に合格して、はじめて『ルール』に昇格します。何度も使う手順は、作った本人ではない別の AI が審査し、合格したものだけが『スキル』として保存されます」の部分は、設計済みですがまだ実装されていません。現在実装を進めており（[#147](https://github.com/caty-ai/caty-agent-harness/issues/147), [#148](https://github.com/caty-ai/caty-agent-harness/issues/148), [#149](https://github.com/caty-ai/caty-agent-harness/issues/149)）、完了後にドキュメントを調整して再公開します。追跡: [#146](https://github.com/caty-ai/caty-agent-harness/issues/146)。
 
-![Caty Agent Harness — 自己成長しながら、タスクを最後まで完走する](assets/readme/hero.png)
+![Caty Agent Harness ヒーロー画像（画像内スローガンは英語: Grows on its own. Runs your tasks all the way to done.）](assets/readme/hero.png)
 
 [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml)
 [![CI: matrix (main)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/ci-matrix.yml/badge.svg?branch=main)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/ci-matrix.yml?query=branch%3Amain)
@@ -23,23 +23,15 @@ Caty Agent Harness は、その全部をただのテキストファイルと確�
 魔法ではありません。覚える・進める・確かめるは機械が受け持ち、AI は考えることに集中する —<br>
 いつもの AI のまわりに置く、小さな仕組みです。
 
-**自己成長しながら、指示したタスクを最後まで完走してくれるようになるツール。**
+**AIの『できました！』を鵜呑みにしない仕組み — 仕事を段に割って進め、証拠で確かめてから「完了」にする。成績表は勝ち負けごと公開中。**
 
-**実測** — 封印付き・事前登録済みの3実験（2026-08）。表はコンテキストが溢れる量の仕事への介入2レーン、第3の実験（P2-WIN⁵）は素のモデルに窓の内外をまたぐ仕事を当てた梯子です:
+**何がどう良くなるのか** — 約束ではなく、実測です:
 
-| モデル | 完了ハルシネーション¹ | 検証済み結果 | 素とのトークン差 |
-|---|---|---|---|
-| claude-haiku-4.5 ² | 98% → 8% | 13% → 43%（p=0.0079） | −59% |
-| claude-sonnet-5 ³ | — | 低下なし | −20%（セル −71%…+11%） |
-| claude-opus-5 ³ ⁴ | — | 低下なし | −8% |
+- **弱いモデルの「できました！」詐称が止まり、仕事の完了率が3倍になります。** Claude Haiku 4.5（能力低めのモデル）で、読み残したまま「done」と申告する率は完了申告の 98% から 8% へ（222/226 → 2/26・各腕30走行・M/L サイズの仕事）— 検証済みの完了は 13% から 43% に上がりました（[実測の全数字](docs/benchmark.ja.md#ev-006)）。
+- **強いモデルは精度そのまま — 大きな仕事のトークンを 58%（sonnet）/ 31%（opus）削減。** sonnet と opus は隠し答案のスコアがハーネス有無で同一 — 大きな仕事では、ハーネスなしの走行がハーネスありの 2.40 倍（sonnet）/ 1.46 倍（opus）のトークンを使いました（= 削減率 58% / 31%・L帯中央値・[P1 の表](docs/benchmark.ja.md#ev-006-p1)）。この一連のテストでは sonnet の小さめの仕事ではハーネスの方がトークンを多く使います — 使いどころは大きな仕事です。さらに測定した最大の仕事（≈2.4M トークン・窓の約2.4倍）では、ハーネスなしの opus がファイルの 2〜4% しか読まずに提出を繰り返した一方、ハーネス下の opus は全ファイル実読で検証済み完遂に至りました（[両溢れ帯とも 2/2](https://github.com/caty-ai/caty-agent-harness/issues/235)・両腕の予算枠は非同一）。
+- **結果は限界も示しています。** 検索型ランタイム（例: Codex）ではオーバーフロー・ガードは一度も発火せず — 救うものが無いのが設計どおりで、あるランタイムでは発火したもののハーネスなしよりトークンを多く使いました（[モデル別プロファイル](#model-effects)）。sonnet の溢れ帯セルは 0/2 のまま: 4走とも成果物は提出され 20/20 正答・引用も全て有効でしたが、ファイルの約 10〜12% を読み飛ばしており、検証ゲートは毎回「done」を拒否して未読ファイルを列挙しました（事前登録済みの honest-failure 枝）。負けた結果も、勝ちの隣にすべて公開しています。
 
-<sub>¹ 仕事を読み切っていないのに「done」と申告すること — 自己申告ではなくツール呼び出し記録から機械採点（申告 222件 → 2件・各腕30走行）: [全数字と弱点](docs/benchmark.ja.md)</sub>
-<br><sub>² EV-006 — 素 vs **出荷済みハーネス**・各腕30走行（M/L サイズ）の検証済み完了率</sub>
-<br><sub>³ EV-008 — 素 vs **オーバーフロー・センチネル**。Sentinel v1 は claude-code runtime 向けの opt-in 機能として v0.17.0 で出荷済みです（[#180](https://github.com/caty-ai/caty-agent-harness/issues/180) は [#159](https://github.com/caty-ai/caty-agent-harness/issues/159) を実装）。有効化は [`OVF_SENTINEL=shadow|active`](adapters/claude-code/INSTALL.md)、未設定 = 完全オフ（byte-identical passthrough）です。default-on は今後の課題で、[#159](https://github.com/caty-ai/caty-agent-harness/issues/159) の条件に照らしてモデルごとに判断します。詳しくは [モデル別プロファイル](#model-effects) を参照してください。EV-008 はその実装に先立つリグ事前測定であり、出荷済み実装ではまだ再測定していません。`低下なし` = 全セルで両腕とも隠し答案 20/20。`素とのトークン差` = 封印4セルの median(sentinel/bare) を 1 から引いた値: sonnet **0.801** → −20%、opus **0.923** → −8%。`—` = このレーンでは未測定</sub>
-<br><sub>⁴ descriptive・post-GO</sub>
-<br><sub>⁵ P2-WIN — 素のモデルのみ（ハーネスなし・センチネルなし）: 仕事がどの大きさになると走行が完遂しなくなるか。≈0.6M / ≈1.2M / ≈2.4M トークンの仕事で、sonnet は ≈1.2M 帯から両 hold-out seed とも完遂しなくなり（transfer band = XXL・完遂 0/2 となる最小の帯・その表の記述として）、opus は2つの hold-out seed の判定がある帯で割れ（1/2 — どの帯かは表を参照）→ **no unique transfer**（凍結規則により帯を特定しません）、2.4M 帯の個票では attempt 1 のファイル数読了率（coverage_001）が 0.02〜0.04 まで落ちても opus の正答は 19〜20/20 を保ちました。セルあたり n=2 seed・記述のみ — 介入効果の主張ではありません: [表と限界](docs/benchmark.ja.md#p2-win)</sub>
-
-<sub>Codex・qwen・grok・gemini と、テレメトリが見えないランタイム（glm/muse/kimi）も測定済みです — sentinel の方が素より高コストだったセルも含みます: [モデル別プロファイル](#model-effects) ・ [全数字と経緯](docs/benchmark.ja.md#ev-008) ・ローカルモデル（Ollama）を含む計画レーン: [#129](https://github.com/caty-ai/caty-agent-harness/issues/129)</sub>
+<sub>封印付き・事前登録・機械採点の4実験ファミリー（2026-08） — すべての数字・方法・弱点は、ハーネスの方がトークンを多く使う場面も含めて: [benchmark](docs/benchmark.ja.md) ・ **2分で試す** — [貼り付け1回のプロンプト](#get-started)を、いつもの AI ツールへ。</sub>
 
 🔧 [エンジニア向けドキュメント](docs/engineering.ja.md) ｜ 📘 [詳細仕様](docs/reference.ja.md)
 
@@ -132,7 +124,7 @@ flowchart LR
 | WSL2 (Ubuntu on Windows) | 🟡 条件つき対応 — 2026-08-23 に `win11-test-vm` 上で実測済み（30/30 suites、`umask 0002`、非root、Linux filesystem）ですが、CI テストは未実施です。<br>AI ツール（Claude Code / Codex CLI）は同じ WSL2 distro の中で動かす必要があり、Windows 側で動かすと install は通っても hooks は一度も発火しません。<br>repo は速度のためではなく正しさのために Linux filesystem（`/home/...`、`/mnt/c/...` ではない）へ置き、`git 2.34+`・非rootユーザー・wrapper 系ファイルを group/world-writable にしないこと（例 `chmod 0755`）。CI 上の近似セルは `ubuntu-wsl2-profile`（`umask 002`、非root container）です。[実測詳細](docs/wsl2-support.md) |
 | 対応 AI ツール | Claude Code ✅ ／ Codex CLI ✅ ／ Kimi Code CLI ✅ ／ Hermes Agent ✅ ／ OpenClaw ✅ |
 | シェル | bash 3.2+ ✅（macOS 標準のままで OK） |
-| Python 3 | 裏方の自動処理（技術的には hook と呼ばれる仕組み）が使います（有無は AI が確認してくれます） |
+| Python 3 (3.9+) | 裏方の自動処理（技術的には hook と呼ばれる仕組み）が使います（有無は AI が確認してくれます） |
 
 ツールごとの対応の深さはわざと違えてあります。詳しくは[エンジニア向けドキュメント](docs/engineering.ja.md)へ。
 
@@ -196,7 +188,7 @@ workspace としてインストールし、ヘルスチェックを実行し、�
 | **発火するが経済が合わない型** — 水位は増えるが bare が安い | grok-4.6 | 4/4 発火・分解・完走とも正常（20/20）— ただし bare が安すぎて分解の方が高くつく（比の中央値 **2.145**） | 機構はこのランタイムでも実証済み。ただし **default-on は非推奨**。発火するかではなく、bare 対比の経済で判断する |
 | **発火・結果混合型** — 早期発現の発火・重い全読み込み | gemini-3.7-flash（descriptive — 事前登録 GO 条件の対象外） | 4/4 発火（t31〜82）。bare は L帯で崩壊。分解が L帯1セルの完遂を救済した一方、sentinel セルの 2/4（M-i3・L-i2）は正答 0（子ステップの headless permission 停滞） | **記述のみ — 効率主張も default-on 判断もしない。**[セル別の数字](docs/benchmark.ja.md#ev-008) |
 
-<sub>比は sentinel/bare のトークンコスト（小さいほど安い）・モデルごと封印4セルの中央値・実測 2026-08-25。引用前に必ず読むこと: ① codex 条件は最初 **FAIL** した（M4・n=1・幾何平均 1.337）。通ったのは n=3 反復 — データを見た後の事後設計を 3席 delta レビュー経由で封印したもの（0.9944 ≤ 1.05）— であり、FAIL は消さずに歴史として残す。② sonnet の 0.801 は判定閾値（<1.0）は満たしたが努力目標（<0.8）には僅差で未達。③ ペア比の多くは n=1 — 走行間のばらつきは実在する（codex 平均の SE ≈25%）。[全数字・方法・弱点](docs/benchmark.ja.md#ev-008)。</sub>
+<sub>比は sentinel/bare のトークンコスト（小さいほど安い）・モデルごと封印4セルの中央値・実測 2026-08-25。引用前に必ず読むこと: ① codex 条件は最初 **FAIL** した（M4・n=1・幾何平均 1.337）。通ったのは n=3 反復 — データを見た後の事後設計を 3席 delta レビュー経由で封印したもの（0.9944 ≤ 1.05）— であり、FAIL は消さずに歴史として残す。② sonnet の 0.801 は判定閾値（<1.0）は満たしたが努力目標（<0.8）には僅差で未達。③ ペア比の多くは n=1 — 走行間のばらつきは実在する（codex 平均の SE ≈25%）。この n=1 の注意は n=3 反復補遺（2026-08-29）で定量化済み — モデルごと 12 の対数比をプール: sonnet 幾何平均 **0.617** [0.439, 0.867]・opus **0.806** [0.651, **0.997**] — 単走の中央値は両方この幅の内側にあり（個々の反復は 0.28〜1.50）、opus の上限 0.997 は紙一重です。なお sentinel 自体は opt-in のままで、出荷済み実装上での再測定は未実施です。[全数字・方法・弱点](docs/benchmark.ja.md#ev-008) ・ [n=3 補遺](docs/benchmark.ja.md#ev-008-n3)。</sub>
 
 第3の封印実験 **P2-WIN** は、素のモデルで仕事そのものを特性化しました — 3つの仕事サイズ帯での完遂結果の測定であり、介入の結果ではありません: [表と限界](docs/benchmark.ja.md#p2-win)。
 
@@ -222,7 +214,7 @@ workspace としてインストールし、ヘルスチェックを実行し、�
 | ドキュメント | 中身 |
 | --- | --- |
 | [docs/agent-guide.md](docs/agent-guide.md) | **導入する AI のための台本** — 選択肢・コマンド・確認・報告の仕方まで一本道（英語） |
-| [docs/benchmark.ja.md](docs/benchmark.ja.md) | **封印付きベンチマーク** — 冒頭の表の全根拠・測定方法・正直な弱点 |
+| [docs/benchmark.ja.md](docs/benchmark.ja.md) | **封印付きベンチマーク** — 冒頭の主張の全根拠・測定方法・正直な弱点 |
 | [docs/engineering.ja.md](docs/engineering.ja.md) | **技術ガイド全部** — どこで何が強制されるか、ツール別の深さ、pause の意味論、アーキテクチャ、ディレクトリ地図 |
 | [docs/reference.ja.md](docs/reference.ja.md) | **正確な契約** — 全フラグ・全状態・設計文書への索引 |
 | [Runtime 別設定](docs/engineering.ja.md#runtime-setup) | **ツール別の配線** — 5つの AI ツールそれぞれの hook・verifier・スケジュール |
@@ -232,7 +224,7 @@ workspace としてインストールし、ヘルスチェックを実行し、�
 ## プロジェクトの現況
 
 - **CI**: [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml) — すべての pull request で `make test` + `make lint` を実行
-- **検証済み環境**: macOS（GitHub Actions `macos-latest`・Apple シリコン）、Linux（`ubuntu-latest`）、WSL2（Ubuntu on Windows。2026-08-23 に `win11-test-vm` 上で 30/30 suites、Linux filesystem、非root、`umask 0002` を実測。CI テストではない）—「[使うのに必要なもの](#使うのに必要なもの)」の表と [WSL2 サポートメモ](docs/wsl2-support.md) を参照
+- **検証済み環境**: macOS（GitHub Actions `macos-latest`・Apple シリコン）、Linux（`ubuntu-latest`）、WSL2（Ubuntu on Windows。2026-08-23 に `win11-test-vm` 上で 30/30 suites、Linux filesystem、非root、`umask 0002` を実測。CI テストではない）—「[使うのに必要なもの](#environments)」の表と [WSL2 サポートメモ](docs/wsl2-support.md) を参照
 - **成熟度**: public preview — [docs/cli-conventions.md](docs/cli-conventions.md) の FROZEN な CLI 出力契約は安定・それ以外は変わり得ます
 - **既知の制約**: Native Windows は非対応です。Windows 系で実測済みなのは上の WSL2 行だけです。加えて updater 系スイートの一部は `ssh-keygen` が必要です（[CONTRIBUTING の Prerequisites](CONTRIBUTING.md#prerequisites) 参照）
 

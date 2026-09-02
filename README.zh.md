@@ -6,7 +6,7 @@
 
 > **公告（2026-08-24）：** 我们发现本 README 与当前实现之间存在部分差距（[#144](https://github.com/caty-ai/caty-agent-harness/issues/144)）：下文所述学习循环中"这个方法先只作为「经验」记下，在另一个任务中再次通过核查后才升格为「规则」。反复出现的流程由另一个 AI（不是写它的那个）审查，只有通过的才会存为「技能」"的部分已完成设计，但尚未实现。我们正在实现它（[#147](https://github.com/caty-ai/caty-agent-harness/issues/147), [#148](https://github.com/caty-ai/caty-agent-harness/issues/148), [#149](https://github.com/caty-ai/caty-agent-harness/issues/149)），完成后将调整并重新发布本文档。跟踪：[#146](https://github.com/caty-ai/caty-agent-harness/issues/146)。
 
-![Caty Agent Harness — 自我成长，把任务一路跑到完成](assets/readme/hero.png)
+![Caty Agent Harness 主视觉图（图片中的标语为英文原文：Grows on its own. Runs your tasks all the way to done.）](assets/readme/hero.png)
 
 [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml)
 [![CI: matrix (main)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/ci-matrix.yml/badge.svg?branch=main)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/ci-matrix.yml?query=branch%3Amain)
@@ -23,23 +23,15 @@ Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决�
 不是魔法：记住、推进、核查都交给机械来做，AI 只管专心思考——<br>
 一套包在你现有 AI 外面的小机制。
 
-**一个会自我成长、并学会把你交办的任务一路跑到「完成」的工具。**
+**一套不轻信 AI「完成了！」的机制——把工作拆成阶段推进，用证据确认之后才算「完成」。成绩单持续公开，输赢都在。**
 
-**实测** — 三项密封、预先注册实验（2026-08）。表格展示的是上下文溢出任务的两条介入赛道；第三项（P2-WIN⁵）则是让裸模型分别在窗口内、窗口边缘与超出窗口的任务规模上依次测试的阶梯：
+**实际会变好的地方** — 是实测出来的，不是承诺：
 
-| 模型 | 完成幻觉¹ | 已验证结果 | token 相对裸跑 |
-|---|---|---|---|
-| claude-haiku-4.5 ² | 98% → 8% | 13% → 43%（p=0.0079） | −59% |
-| claude-sonnet-5 ³ | — | 无下降 | −20%（各单元 −71%…+11%） |
-| claude-opus-5 ³ ⁴ | — | 无下降 | −8% |
+- **在弱模型上，虚假的「完成」不再蒙混过关——已验证的任务完成率达到原来的约三倍。** 在 Claude Haiku 4.5（能力较弱的模型）上，宣称「完成」却没读完工作的申报从完成申报的 98% 降到 8%（222/226 → 2/26；每组 30 次运行，M/L 规模任务）——已验证的完成率也从 13% 升到了 43%（[完整数字](docs/benchmark.md#ev-006)）。
+- **强模型保持准确率——大任务的 token 用量减少 58%（sonnet）/ 31%（opus）。** sonnet 和 opus 在隐藏答案上的得分在有无 harness 时相同——在大任务上，不用 harness 时用掉的 token 是有 harness 时的 2.40 倍（sonnet）/ 1.46 倍（opus）（相当于用 harness 时少用 58% / 31%；L 档中位数——[P1 表格](docs/benchmark.md#ev-006-p1)）。在这些测试里，sonnet 的小任务用 harness 反而更费 token——用在大任务上才合适。而在实测最大的任务上（≈2.4M token，约为上下文窗口的 2.4 倍），没有 harness 的 opus 只读了 2–4% 的文件就不断尝试提交，而 harness 下的 opus 以 100% 的文件实读完成了验证通过（[两个溢出档位均为 2/2](https://github.com/caty-ai/caty-agent-harness/issues/235)；两组测试使用的预算范围并不相同）。
+- **结果也展示了它的局限。** 在搜索型运行时（例如 Codex）上，溢出防护一次都没有触发——按设计，本就没有需要拯救的东西——还有一个运行时触发了，但比不用 harness 用掉了更多 token（[各模型详情](#model-effects)）。sonnet 的溢出档位停在 0/2：四次运行都交付了成果、20/20 正确、引用全部有效，但漏读了约 10–12% 的文件——验证关卡每次都拒绝了「完成」，并列出未读的文件（这正是预先注册的 honest-failure 分支）。每一个失败的结果，都和成功的结果一起公开。
 
-<sub>¹ 尚未读完工作内容便宣称「完成」——根据工具调用 transcript 进行机器评分，而非自我报告（宣称 222 次 → 2 次，每臂 30 次运行）：[完整数据与局限（英文）](docs/benchmark.md)</sub>
-<br><sub>² EV-006 — 裸跑 vs **已发布 harness**；每臂30次运行（M/L 规模）的已验证完成率</sub>
-<br><sub>³ EV-008 — 裸跑 vs **overflow sentinel**；Sentinel v1 已作为 claude-code runtime 的 opt-in 功能在 v0.17.0 发布（[#180](https://github.com/caty-ai/caty-agent-harness/issues/180) 实现了 [#159](https://github.com/caty-ai/caty-agent-harness/issues/159)）；通过 [`OVF_SENTINEL=shadow|active`](adapters/claude-code/INSTALL.md) 启用，未设置 = 完全关闭（byte-identical passthrough）。default-on 仍属后续工作，将按模型对照 [#159](https://github.com/caty-ai/caty-agent-harness/issues/159) 的条件决定；详见[各模型档案](#model-effects)。EV-008 仍是该实现之前取得的 rig 预先测量，且尚未在已发布实现上重新测量。`无下降` = 每个单元的两臂均按隐藏答案取得 20/20；`token 相对裸跑` = 1 − 四个密封单元的 median(sentinel/bare)：sonnet **0.801** → −20%，opus **0.923** → −8%；`—` = 本赛道未测量</sub>
-<br><sub>⁴ 描述性、post-GO</sub>
-<br><sub>⁵ P2-WIN — 仅裸模型，没有 harness、没有 sentinel：任务做到多大时，运行会开始无法完成？在 ≈0.6M / ≈1.2M / ≈2.4M token 的任务上，sonnet 从 ≈1.2M 档开始，在两个 hold-out seed 上都不再完成（transfer band = XXL——完成率为 0/2 的最小档位，作为该表的一种记述）；opus 的两个 hold-out seed 在某一档位上出现分歧（1/2——具体是哪个档位见表格）→ **no unique transfer**（冻结规则未指明具体档位），而在 2.4M 档的 ticket 中，opus 仍持续拿到 19–20/20，与此同时 attempt-1 的文件数读取覆盖率（coverage_001）却降到 0.02–0.04。每个单元 n=2 seed，仅作记述——不构成介入效果的主张：[表格与局限（英文）](docs/benchmark.md#p2-win)</sub>
-
-<sub>Codex、qwen、grok、gemini 以及遥测不可见的运行时（glm/muse/kimi）也已测量——包括 sentinel 成本高于裸跑的单元：[各模型档案](#model-effects) ・ [完整数字与历史（英文）](docs/benchmark.md#ev-008) ・含本地模型（Ollama）的计划赛道：[#129](https://github.com/caty-ai/caty-agent-harness/issues/129)</sub>
+<sub>四组密封、预先注册、机器评分的实验系列（2026-08） — 全部数字、方法与注意事项，包括 harness 反而用掉更多 token 的地方：[benchmark](docs/benchmark.md) ・ **2 分钟即可上手** — 把[这一段可直接粘贴的提示词](#get-started)，贴进你已经在用的 AI 工具。</sub>
 
 🔧 [工程指南（英文）](docs/engineering.md) ｜ 📘 [详细规范（英文）](docs/reference.md)
 
@@ -132,7 +124,7 @@ flowchart LR
 | WSL2 (Ubuntu on Windows) | 🟡 有条件支持 — 已于 2026-08-23 在 `win11-test-vm` 上实测通过（30/30 suites、`umask 0002`、非 root、Linux filesystem），但不是 CI 已测试 tier。<br>你的 AI tool（Claude Code / Codex CLI）必须运行在同一个 WSL2 distro 里；如果 agent 运行在 Windows 侧，安装会成功，但 hooks 会始终不触发。<br>repo 必须放在 Linux filesystem（`/home/...`，不要放在 `/mnt/c/...`），这是正确性要求，不是速度建议；并使用 `git 2.34+`、非 root 用户，且确保 wrapper 类文件不是 group/world-writable（例如 `chmod 0755`）。CI 里的近似单元是 `ubuntu-wsl2-profile`（`umask 002`、非 root container）。[实测详情](docs/wsl2-support.md) |
 | AI 工具 | Claude Code ✅ ／ Codex CLI ✅ ／ Kimi Code CLI ✅ ／ Hermes Agent ✅ ／ OpenClaw ✅ |
 | Shell | bash 3.2+ ✅（macOS 默认版本即可） |
-| Python 3 | 幕后自动化（技术上叫 hooks 的机制）会用到——你的 AI 会替你确认 |
+| Python 3 (3.9+) | 幕后自动化（技术上叫 hooks 的机制）会用到——你的 AI 会替你确认 |
 
 对每个工具的支持深度是刻意不同的——详见[工程指南（英文）](docs/engineering.md)。
 
@@ -195,7 +187,7 @@ flowchart LR
 | **触发但不划算型** — 上下文增长，但 bare 很便宜 | grok-4.6 | 4/4 触发，分解并正确完成（20/20）——但 bare 运行太便宜，分解反而更贵（比值中位数 **2.145**） | 机制在这个运行时上已被证实有效；**但不建议 default-on**。判断标准是相对 bare 的经济性，而不是是否触发 |
 | **触发但结果混合型** — 早期触发・重型全量读取 | gemini-3.7-flash（descriptive——不在预先注册的 GO 条件之内） | 4/4 触发（t31–82）。bare 在 L 档崩溃；分解在一个 L 单元中挽救了完成，但 2/4 的 sentinel 单元（M-i3、L-i2）正确数为 0（子步骤在 headless 下的 permission 停滞） | **仅作记述——不做效率主张，也不做 default-on 判断。**[单元级数字](docs/benchmark.md#ev-008) |
 
-<sub>比值为 sentinel/bare 的 token 成本（数值越低越省）・每个模型 4 个密封单元的中位数・实测于 2026-08-25。引用前请先读：① codex 条件最初 **FAIL**（M4，n=1，几何平均 1.337），只有在 n=3 重复测试——这是看到数据后才制定、并经 3 席 delta 审核封印的事后设计（0.9944 ≤ 1.05）——中才通过；FAIL 是历史，不会被抹去；② sonnet 的 0.801 达到了判定阈值（<1.0），但以微弱差距未达到努力目标（<0.8）；③ 大多数逐对比值都是 n=1——run 与 run 之间的方差是真实存在的（codex 平均值的 SE ≈25%）。[完整数字、方法与注意事项（英文）](docs/benchmark.md#ev-008)。</sub>
+<sub>比值为 sentinel/bare 的 token 成本（数值越低越省）・每个模型 4 个密封单元的中位数・实测于 2026-08-25。引用前请先读：① codex 条件最初 **FAIL**（M4，n=1，几何平均 1.337），只有在 n=3 重复测试——这是看到数据后才制定、并经 3 席 delta 审核封印的事后设计（0.9944 ≤ 1.05）——中才通过；FAIL 是历史，不会被抹去；② sonnet 的 0.801 达到了判定阈值（<1.0），但以微弱差距未达到努力目标（<0.8）；③ 大多数逐对比值都是 n=1——run 与 run 之间的方差是真实存在的（codex 平均值的 SE ≈25%）；n=3 重复补充测试（2026-08-29）对此做了量化——每个模型汇总 12 个对数比后：sonnet 几何平均 **0.617** [0.439, 0.867]，opus **0.806** [0.651, **0.997**]——单次测量的中位数都落在这个区间之内（各次重复范围为 0.28–1.50），opus 的置信上限是 0.997：token 节省得到确认，但把 1.0 排除在外只差一线。另外 sentinel 本身仍是 opt-in，且尚未在已发布的实现上重新实测。[完整数字、方法与注意事项（英文）](docs/benchmark.md#ev-008) ・ [n=3 补充测试（英文）](docs/benchmark.md#ev-008-n3)。</sub>
 
 第三项密封实验 **P2-WIN**，在裸模型上刻画了任务本身的特性——这是对三个任务规模档位上完成结果的测量，而不是介入效果的结果：[表格与局限（英文）](docs/benchmark.md#p2-win)。
 
@@ -221,7 +213,7 @@ flowchart LR
 | 文档 | 内容 |
 | --- | --- |
 | [docs/agent-guide.md](docs/agent-guide.md) | **给安装 AI 的剧本** — 选择、命令、核查、汇报方式，一条路走到底（英文） |
-| [docs/benchmark.md](docs/benchmark.md) | **密封基准测试** — 开头表格背后的完整数字、测量方法与诚实的局限（英文） |
+| [docs/benchmark.md](docs/benchmark.md) | **密封基准测试** — 开头主张背后的完整数字、测量方法与诚实的局限（英文） |
 | [docs/engineering.md](docs/engineering.md) | **完整技术指南** — 哪里强制什么、各工具深度、暂停语义、架构、目录地图（英文） |
 | [docs/reference.md](docs/reference.md) | **精确契约** — 每个参数、每种状态、设计文档索引（英文） |
 | [运行环境设置（英文）](docs/engineering.md#runtime-setup) | **各工具接线** — 5 种 AI 工具各自的 hooks、verifier 与调度 |
@@ -231,7 +223,7 @@ flowchart LR
 ## 项目现状
 
 - **CI**: [![CI: Test + Lint](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml/badge.svg)](https://github.com/caty-ai/caty-agent-harness/actions/workflows/test-lint.yml) — 每个 pull request 都会运行 `make test` + `make lint`
-- **已验证环境**: macOS（GitHub Actions `macos-latest`，Apple 芯片）、Linux（`ubuntu-latest`）以及 WSL2（Ubuntu on Windows；2026-08-23 在 `win11-test-vm` 上实测 30/30 suites，Linux filesystem、非 root、`umask 0002`；不是 CI 已测试 tier）— 参见「[使用前提](#使用前提)」中的表格与 [WSL2 support note](docs/wsl2-support.md)
+- **已验证环境**: macOS（GitHub Actions `macos-latest`，Apple 芯片）、Linux（`ubuntu-latest`）以及 WSL2（Ubuntu on Windows；2026-08-23 在 `win11-test-vm` 上实测 30/30 suites，Linux filesystem、非 root、`umask 0002`；不是 CI 已测试 tier）— 参见「[使用前提](#environments)」中的表格与 [WSL2 support note](docs/wsl2-support.md)
 - **成熟度**: public preview — [docs/cli-conventions.md](docs/cli-conventions.md) 中标记为 FROZEN 的 CLI 输出契约是稳定的，其余部分仍可能变动
 - **已知限制**: Native Windows 不受支持；上面的 WSL2 行是唯一经过实测的 Windows 相关路径。另有部分 updater 测试套件需要 `ssh-keygen`（参见 [CONTRIBUTING 的 Prerequisites](CONTRIBUTING.md#prerequisites)）
 
