@@ -1016,6 +1016,18 @@ check_raw_review() {
           config_value=${config_line#*=}
           case "$config_value" in ''|*[!0-9]*|0) config_invalid=1 ;; esac
           ;;
+        recurrence_unit=*)
+          config_value=${config_line#recurrence_unit=}
+          case "$config_value" in sessions|weeks) ;; *) config_invalid=1 ;; esac
+          ;;
+        promote_min_k=*)
+          config_value=${config_line#promote_min_k=}
+          case "$config_value" in ''|*[!0-9]*|0) config_invalid=1 ;; esac
+          ;;
+        promote_min_weeks=*)
+          config_value=${config_line#promote_min_weeks=}
+          case "$config_value" in ''|*[!0-9]*) config_invalid=1 ;; esac
+          ;;
         zero_streak_threshold=*)
           configured_threshold=${config_line#zero_streak_threshold=}
           case "$configured_threshold" in

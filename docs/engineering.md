@@ -43,7 +43,7 @@ The **completion rail** means work managed by `scripts/task-runner.sh`. It gives
 ### Across jobs: carry forward only proven learning
 
 1. A successful check can save a method first as a lesson.
-2. Turn that lesson into reusable guidance or a known fact only after the same lesson passes independent verification checks in two different jobs, or when a human explicitly promotes it.
+2. Turn that lesson into reusable guidance or a known fact only after a theme recurs in at least two distinct sessions, or when a human explicitly promotes it. The raw-review configuration can instead require distinct ISO weeks or add a calendar-spread minimum.
 3. At the next similar job, read the confirmed record before acting.
 
 This reduces repeated failures and reuses verified solutions. It does **not** mean "never fail again" or "always succeed."

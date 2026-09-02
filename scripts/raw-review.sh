@@ -241,6 +241,9 @@ fabricated_floor=2
 fabricated_pct=50
 zero_streak_threshold=14
 prompt_max_bytes=2000000
+recurrence_unit=sessions
+promote_min_k=2
+promote_min_weeks=0
 reviewer_count=0
 declare -a reviewer_names reviewer_cmds
 config_invalid=0
@@ -258,6 +261,9 @@ while IFS= read -r config_line || [[ -n "$config_line" ]]; do
     fabricated_pct=*) fabricated_pct=${config_line#fabricated_pct=} ;;
     zero_streak_threshold=*) zero_streak_threshold=${config_line#zero_streak_threshold=} ;;
     prompt_max_bytes=*) prompt_max_bytes=${config_line#prompt_max_bytes=} ;;
+    recurrence_unit=*) recurrence_unit=${config_line#recurrence_unit=} ;;
+    promote_min_k=*) promote_min_k=${config_line#promote_min_k=} ;;
+    promote_min_weeks=*) promote_min_weeks=${config_line#promote_min_weeks=} ;;
     reviewer[[:space:]]*)
       read -r -a config_argv <<<"$config_line" || config_invalid=1
       if (( ${#config_argv[@]} < 3 )); then
@@ -278,6 +284,9 @@ fabricated_floor=$(parse_decimal_config "$fabricated_floor" 1) || config_invalid
 fabricated_pct=$(parse_decimal_config "$fabricated_pct" 1 100) || config_invalid=1
 zero_streak_threshold=$(parse_decimal_config "$zero_streak_threshold" 1) || config_invalid=1
 prompt_max_bytes=$(parse_decimal_config "$prompt_max_bytes" 1) || config_invalid=1
+promote_min_k=$(parse_decimal_config "$promote_min_k" 1) || config_invalid=1
+promote_min_weeks=$(parse_decimal_config "$promote_min_weeks" 0) || config_invalid=1
+case "$recurrence_unit" in sessions|weeks) ;; *) config_invalid=1 ;; esac
 if [[ -z "$producer" || "$reviewer_count" -eq 0 || "$config_invalid" -ne 0 ]]; then
   finish_failure 2 config
 fi
@@ -434,14 +443,41 @@ for raw_line in sys.stdin.buffer:
 
 build_normalized_source_cache() {
   local cache_root=$tmp_root/normalized-sources
-  local relative source target
-  mkdir -p "$cache_root"
+  local session_root=$tmp_root/source-sessions
+  local relative source target session_target
+  mkdir -p "$cache_root" "$session_root"
   while IFS= read -r relative || [[ -n "$relative" ]]; do
     [[ -n "$relative" ]] || continue
     source=$workspace/$relative
     target=$cache_root/$relative
+    session_target=$session_root/$relative
     mkdir -p "${target%/*}" || return 1
+    mkdir -p "${session_target%/*}" || return 1
     citation_canonicalize_stream <"$source" >"$target" || return 1
+    python3 -B - "$source" "$relative" >"$session_target" <<'PY' || return 1
+from pathlib import Path
+import re
+import sys
+
+source = Path(sys.argv[1])
+relative = sys.argv[2]
+block_index = 0
+identity = f"pseudo:{relative}#block-{block_index}"
+raw = source.read_bytes()
+raw_lines = raw.split(b"\n") if raw else []
+if raw_lines and raw_lines[-1] == b"":
+    raw_lines.pop()
+for raw_line in raw_lines:
+    line = raw_line.rstrip(b"\r").decode("utf-8", errors="surrogateescape")
+    if re.match(r"^<!--[ \t]*(?:flush|intake evictions?|caps eviction)[ \t]", line):
+        block_index += 1
+        identity = f"pseudo:{relative}#block-{block_index}"
+        if re.match(r"^<!--[ \t]*flush[ \t]", line):
+            match = re.search(r"(?:^|[ \t])session=([A-Za-z0-9._-]+)(?=[ \t]|-->)", line)
+            if match:
+                identity = f"session:{match.group(1)}"
+    print(identity)
+PY
   done <"$tmp_root/files"
 }
 
@@ -658,8 +694,9 @@ PY
 
 validate_parsed_blocks() {
   local parse_dir=$1 accepted_dir=$2 rejects_file=$3
-  local block_dir member basename quote source_path source_cache normalized_quote canonical_quote canonical_source
+  local block_dir member basename quote source_path source_cache session_cache normalized_quote canonical_quote canonical_source
   local block_bad member_week member_hash truncated_quote truncated_canonical_quote citation_found source_suffix
+  local member_session source_line_number
   # Short normalized prefixes collide too easily; empty prefixes match every
   # line. Eight characters is the minimum useful citation discriminator.
   local minimum_quote_chars=8
@@ -676,6 +713,7 @@ validate_parsed_blocks() {
     : >"$block_dir/validated-members"
     : >"$block_dir/member-hashes"
     : >"$block_dir/current-weeks"
+    : >"$block_dir/current-sessions"
     while IFS= read -r member || [[ -n "$member" ]]; do
       basename=${member%%:*}
       quote=${member#*:}
@@ -711,12 +749,15 @@ validate_parsed_blocks() {
         continue
       fi
       source_cache=$tmp_root/normalized-sources/$source_path
-      if [[ ! -f "$source_cache" ]]; then
+      session_cache=$tmp_root/source-sessions/$source_path
+      if [[ ! -f "$source_cache" || ! -f "$session_cache" ]]; then
         block_bad=1
         continue
       fi
       citation_found=0
+      source_line_number=0
       while IFS= read -r canonical_source || [[ -n "$canonical_source" ]]; do
+        source_line_number=$((source_line_number + 1))
         if [[ "$canonical_source" == "$canonical_quote"* ]]; then
           source_suffix=${canonical_source#"$canonical_quote"}
           case "$source_suffix" in
@@ -759,6 +800,11 @@ PY
         block_bad=1
         continue
       fi
+      member_session=$(sed -n "${source_line_number}p" "$session_cache")
+      if [[ -z "$member_session" ]]; then
+        block_bad=1
+        continue
+      fi
       member_week=$(python3 -B - "$basename" <<'PY'
 import datetime
 import re
@@ -780,6 +826,7 @@ PY
       printf '%s:%s\n' "$basename" "$quote" >>"$block_dir/validated-members"
       printf '%s\n' "$member_hash" >>"$block_dir/member-hashes"
       printf '%s\n' "$member_week" >>"$block_dir/current-weeks"
+      printf '%s\n' "$member_session" >>"$block_dir/current-sessions"
     done <"$block_dir/members"
     if [[ "$block_bad" -ne 0 ]]; then
       fabricated=$((fabricated + 1))
@@ -790,6 +837,8 @@ PY
     fi
     LC_ALL=C sort -u "$block_dir/current-weeks" >"$block_dir/current-weeks.sorted"
     mv "$block_dir/current-weeks.sorted" "$block_dir/current-weeks"
+    LC_ALL=C sort -u "$block_dir/current-sessions" >"$block_dir/current-sessions.sorted"
+    mv "$block_dir/current-sessions.sorted" "$block_dir/current-sessions"
     cp -R "$block_dir" "$accepted_dir/"
     candidates=$((candidates + 1))
   done
@@ -896,9 +945,17 @@ for block_dir in "$tmp_root/accepted"/block.*; do
   class=$(sed -n '1p' "$block_dir/class")
   requested_promote=$(sed -n '1p' "$block_dir/promote")
   current_weeks=$(paste -sd, "$block_dir/current-weeks")
-  current_k=$(awk 'END {print NR + 0}' "$block_dir/current-weeks")
+  current_week_count=$(awk 'END {print NR + 0}' "$block_dir/current-weeks")
+  current_sessions=$(awk 'END {print NR + 0}' "$block_dir/current-sessions")
+  if [[ "$recurrence_unit" == sessions ]]; then
+    current_k=$current_sessions
+  else
+    current_k=$current_week_count
+  fi
   host_promote=$requested_promote
-  if [[ "$requested_promote" == yes && "$current_k" -lt 2 ]]; then
+  if [[ "$requested_promote" == yes \
+    && ( "$current_k" -lt "$promote_min_k" \
+      || "$current_week_count" -lt "$promote_min_weeks" ) ]]; then
     host_promote=not-yet
   fi
   supersedes=
@@ -950,6 +1007,7 @@ for block_dir in "$tmp_root/accepted"/block.*; do
     printf 'class: %s\n' "$class"
     printf 'reviewer: %s\n' "$model_used"
     printf 'run-weeks: %s\n' "$current_weeks"
+    printf 'run-sessions: %s\n' "$current_sessions"
     printf 'run-k: %s\n' "$current_k"
     printf 'promote: %s\n' "$host_promote"
     [[ -n "$supersedes" ]] && printf 'supersedes: %s\n' "$supersedes"

@@ -31,4 +31,6 @@ When there are no groups, write
 `NO_GROUPS:` inside the markers and no THEME block. Put no extra prose beyond this
 grammar inside the markers, and put none outside them. Citation authenticity is checked
 by the host. `WEEKS` and `PROMOTE` are advisory: the host recomputes recurrence from the
-cited filenames and demotes promotion when fewer than two distinct ISO weeks are present.
+cited members' enclosing session headers and filenames, then applies the configured
+session and optional calendar-spread thresholds. Do not demote a strong recurring theme
+only because its citations fall in one ISO week; distinct sessions are the default unit.

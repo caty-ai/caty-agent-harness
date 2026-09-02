@@ -91,6 +91,20 @@ THEME block 間の空行は許容しますが、block 内の空行は不正で�
 `fabricated_pct` の既定値は 50、許容範囲は 1〜100 です。`loop/review.conf` の数値は 10 進として解釈するため、
 `08` と `0100` は 8 と 100 を意味します。
 
+promotion recurrence の既定は `recurrence_unit=sessions`、`promote_min_k=2` です。
+検証済み member は、それを囲む flush header の `session=` 値ごとに数え、同じ session の
+複数 member は 1 回だけ数えます。intake-eviction block は session を持たないため、source file と
+block index を key にした pseudo-session を各 block に割り当てます。旧形式の headerless block も
+同じ fallback を使います。task-runner rig では、fresh-context の各 step は別 session です。
+以前の release と同様に `run-k` を異なる ISO 週の数にするには `recurrence_unit=weeks` を指定します。
+`promote_min_weeks` の既定は `0`（calendar requirement なし）で、正の値なら recurrence unit に
+かかわらず、`promote_min_k` に加えてその数の異なる ISO 週を必須にします。`promote_min_k` は 1 以上、
+`promote_min_weeks` は 0 以上の整数でなければなりません。
+
+candidate file は apply consumer との互換性のため、既存の `run-weeks` / `run-k` / `weeks` field を
+維持します。append-only の promotions ledger だけが情報用の `run-sessions` を追加で記録し、
+candidate parsing は変えません。
+
 reviewer route には約 30 個の THEME block を返せる output token 数を設定してください。
 claude CLI で wrap した chain では `CLAUDE_CODE_MAX_OUTPUT_TOKENS` も十分な値にします。
 output cap に達した route が fence 外の `API Error: ...` 1 行だけを出すと、その call は
