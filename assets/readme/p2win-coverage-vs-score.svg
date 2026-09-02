@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="760" height="474" viewBox="0 0 760 474" font-family="Helvetica, Arial, sans-serif">
 <rect width="760" height="474" fill="#fcfcfb"/>
-<text x="64" y="30" font-size="16" font-weight="bold" fill="#333330">Reading is not what the score measures — bare runs, probe score vs files actually read</text>
+<text x="64" y="30" font-size="16" font-weight="bold" fill="#333330">Reading is not what the score measures — 12 sealed bare runs</text>
 <text x="64" y="50" font-size="12" fill="#66665f">12 sealed P2-WIN hold-out runs (no harness). x: share of corpus files read on attempt 1 (log). y: probe score, hidden answer key.</text>
 <circle cx="69" cy="64" r="5" fill="#2a78d6"/>
 <text x="78" y="68" font-size="12" fill="#333330">sonnet</text>

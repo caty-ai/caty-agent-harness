@@ -20,8 +20,9 @@ new lanes are added as they are measured (tracking:
 3. **P2-WIN — bare models only.** Where does completion stop as jobs outgrow
    the window, and what does failure look like — see [P2-WIN](#p2-win).
 4. **EV-009 — bare vs harness inside the overflow bands.** The intervention
-   arm P2-WIN deliberately left out: 8 sealed hold-out runs, zero deviations,
-   incl. the pre-registered honest-failure branch — see [EV-009](#ev-009).
+   arm P2-WIN deliberately left out: 8 sealed hold-out runs (including the
+   pre-registered honest-failure branch), zero deviations — see
+   [EV-009](#ev-009).
 
 Everything here is sealed and pre-registered before any run, machine-scored,
 and reported with its limitations attached — including the places where the
@@ -484,16 +485,16 @@ transfer**, and no band is named in prose either.
 | XXL | 0.905 / 0.161 | 0.181 / **1.000** |
 | XXXL | 0.294 / 0.139 | 0.041 / 0.024 |
 
-![Scatter plot of the 12 sealed P2-WIN hold-out runs. x-axis: share of corpus files read on attempt 1, log scale from 2% to 100%. y-axis: probe score out of 20 against the hidden answer key. The opus 2.4M-band points sit at 2–4% coverage yet score 20/20; one sonnet point scores 3/20 despite 90% read; the completing runs cluster at 100% coverage and 20/20.](../assets/readme/p2win-coverage-vs-score.svg)
+![Scatter plot of the 12 sealed P2-WIN hold-out runs. x-axis: share of corpus files read on attempt 1, log scale from 2% to 100%. y-axis: probe score out of 20 against the hidden answer key. The opus 2.4M-band points sit at 2–4% coverage yet score 20/20; one sonnet point scores 3/20 despite 90% read; five points sit at 100% coverage and 20/20, dodged horizontally for visibility.](../assets/readme/p2win-coverage-vs-score.svg)
 
 The picture the table compresses: **the probe score alone cannot tell whether
-the files were read.** opus's ≈2.4M-band tickets kept scoring 19–20/20 while
-reading 2–4% of the files, and the low-score outliers are sonnet burn-through
-tickets that *had* read most of the corpus. In these 12 runs, only the
-read-verification gate separated the two — which is why
-[EV-009](#ev-009) pins its endpoint to that gate. (Sealed values only:
-coverage from the report's coverage_001 table above, scores from the per-run
-`score.json`. Descriptive — no intervention claim.)
+the files were read.** The plotted opus ≈2.4M-band tickets read 2–4% of the
+files and still scored 20/20, while the deepest low-score outlier is a sonnet
+burn-through ticket that *had* read ~90% of the corpus. In these 12 runs, only
+the measured read coverage separated reading from scoring. (Sealed values
+only: coverage from the report's coverage_001 table above, scores from the
+per-run `score.json`. Descriptive — no intervention claim.) The follow-up
+experiment inside these two bands is [EV-009](#ev-009).
 
 ### Degradation bits (k/2 hold-out cells where the bit fired)
 
@@ -622,8 +623,8 @@ then refused verified completion in all four, listing the ~10–12% of corpus
 files that appeared in the processing roster without ever being read
 (targeted-search behaviour, same shape as the 9102 pilot). This branch was
 pre-registered as a publishable outcome, and it doubles as a negative control
-on the instrument: the same gate passed 4 runs and refused 4 — it
-discriminates, it does not rubber-stamp.
+on the instrument: within these eight runs, the same gate passed 4 and
+refused 4 — it discriminated; it did not rubber-stamp.
 
 ### Per-run detail (sealed formulas; unread = files in roster never read)
 
@@ -642,7 +643,7 @@ Across the 8 runs: **160/160 correct, zero unsupported answers.** The four
 opus runs read 100% of the corpus files with attempts exactly equal to plan
 stages (zero wasted attempts) — in P2-WIN the same model's XXXL tickets read
 2–4% of the files and kept submitting (the scatter figure in the
-[P2-WIN section](#p2-win) is that "before" picture). Coverage is computed on
+[P2-WIN section](#p2-win) shows those bare runs). Coverage is computed on
 different planes across arms (bare: attempt-1 gate; harness: run-union
 telemetry) — a sealed, footnoted difference.
 
