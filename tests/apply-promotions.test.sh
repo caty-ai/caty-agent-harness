@@ -3,6 +3,7 @@ set -u
 
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 APPLY_SCRIPT=$ROOT/scripts/apply-promotions.sh
+RAW_REVIEW_SCRIPT=$ROOT/scripts/raw-review.sh
 APPLY_FIXTURE_TMP=${TMPDIR:-/tmp}/apply-promotions-test.$$
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -169,13 +170,65 @@ case_k_lifecycle_and_approval() {
   fixture_candidate_begin "$ws" "$run1"
   fixture_candidate_block "$run1" 1 capability-fact 'Recurrence must be host recounted.' '2026-W34'
   fixture_run_apply "$ws" --approve "theme-$run1-001" >/dev/null || return 1
-  assert_file_contains "$ws/loop/promotions/apply-index.tsv" $'\tk-below-2\t' || return 1
+  assert_file_contains "$ws/loop/promotions/apply-index.tsv" $'\tk-below-2\t' \
+    && assert_file_contains "$ws/loop/promotions/apply.log" 'k=1 unit=weeks' || return 1
   fixture_candidate_begin "$ws" "$run2"
   fixture_candidate_block "$run2" 1 capability-fact 'Recurrence must be host recounted.' '2026-W34,2026-W35'
   fixture_run_apply "$ws" --approve "theme-$run1-001" --approve "theme-$run2-001" >"$APPLY_FIXTURE_TMP/k.out" || return 1
   note_second_run "$ws" 0
   assert_file_contains "$APPLY_FIXTURE_TMP/k.out" "theme=theme-$run1-001 decision=skipped reason=unknown-approval" \
-    && assert_file_contains "$ws/STATE.md" "source: theme-$run2-001"
+    && assert_file_contains "$ws/STATE.md" "source: theme-$run2-001" \
+    && assert_file_contains "$ws/loop/promotions/apply.log" 'k=2 unit=weeks'
+}
+
+case_recurrence_unit_sessions() {
+  local ws runid
+  ws=$(fixture_new_workspace recurrence-sessions); runid=20260827T010042Z-142
+  printf '%s\n' 'recurrence_unit=sessions' 'promote_min_k=02' 'promote_min_weeks=00' >>"$ws/loop/review.conf"
+  fixture_candidate_begin "$ws" "$runid"
+  fixture_session_candidate_block "$runid" 1 capability-fact 'Two same-week sessions promote a fact.' '2026-W34' 02
+  fixture_session_candidate_block "$runid" 2 rule 'Two same-week sessions still require rule approval.' '2026-W34' 2
+  fixture_session_candidate_block "$runid" 3 capability-fact 'One effective session remains below threshold.' '2026-W34' 1
+  fixture_session_candidate_block "$runid" 4 capability-fact 'An inflated session count fails hygiene.' '2026-W34' 3
+  fixture_run_apply "$ws" --auto-capability-facts >"$APPLY_FIXTURE_TMP/recurrence-sessions.out" || return 1
+  note_second_run "$ws" 0
+  assert_file_contains "$ws/STATE.md" 'Two same-week sessions promote a fact.' \
+    && ! grep -Fq 'Two same-week sessions still require rule approval.' "$ws/STATE.md" \
+    && assert_file_contains "$APPLY_FIXTURE_TMP/recurrence-sessions.out" "theme=theme-$runid-002 decision=skipped reason=awaiting-approval" \
+    && assert_file_contains "$APPLY_FIXTURE_TMP/recurrence-sessions.out" "theme=theme-$runid-003 decision=skipped reason=k-below-2" \
+    && assert_file_contains "$APPLY_FIXTURE_TMP/recurrence-sessions.out" "theme=theme-$runid-004 decision=skipped reason=hygiene" \
+    && assert_file_contains "$ws/loop/promotions/apply.log" 'k=2 unit=sessions' \
+    && assert_file_contains "$ws/loop/promotions/apply.log" 'k=1 unit=sessions'
+}
+
+case_sessions_min_weeks() {
+  local ws runid
+  ws=$(fixture_new_workspace sessions-min-weeks); runid=20260827T010043Z-143
+  printf '%s\n' 'recurrence_unit=sessions' 'promote_min_weeks=2' >>"$ws/loop/review.conf"
+  fixture_candidate_begin "$ws" "$runid"
+  fixture_session_candidate_block "$runid" 1 capability-fact 'Calendar spread remains independently enforced.' '2026-W34' 2
+  fixture_run_apply "$ws" --auto-capability-facts >"$APPLY_FIXTURE_TMP/sessions-min-weeks.out" || return 1
+  note_second_run "$ws" 0
+  assert_file_contains "$APPLY_FIXTURE_TMP/sessions-min-weeks.out" "theme=theme-$runid-001 decision=skipped reason=weeks-below-min" \
+    && assert_file_contains "$ws/loop/promotions/apply-index.tsv" $'\tweeks-below-min\t' \
+    && assert_file_contains "$ws/loop/promotions/apply.log" 'k=2 unit=sessions'
+}
+
+case_recurrence_config_lockstep() {
+  local invalid name ws apply_rc raw_rc before after
+  for invalid in 'recurrence_unit=days' 'promote_min_k=0' 'promote_min_weeks=-1'; do
+    name=${invalid%%=*}
+    ws=$(fixture_new_workspace "config-$name")
+    printf '%s\n' 'producer=producer-model' 'reviewer fixture /usr/bin/true' "$invalid" >>"$ws/loop/review.conf"
+    before=$(state_sha "$ws")
+    fixture_run_apply "$ws" >"$APPLY_FIXTURE_TMP/config-$name.apply.out" 2>&1; apply_rc=$?
+    "$RAW_REVIEW_SCRIPT" --workspace "$ws" --week 2026-W34 >"$APPLY_FIXTURE_TMP/config-$name.raw.out" 2>&1; raw_rc=$?
+    after=$(state_sha "$ws")
+    [[ "$apply_rc" -eq 2 && "$raw_rc" -eq 2 && "$before" == "$after" ]] || return 1
+    tail -n 1 "$ws/loop/promotions/apply.log" | grep -Fq 'reason=config' || return 1
+    tail -n 1 "$ws/loop/promotions/runs.log" | grep -Fq 'error=config' || return 1
+  done
+  return 0
 }
 
 case_poisoned_rejects() {
@@ -258,7 +311,7 @@ case_unknown_and_symlink_manifest() {
   manifest=$APPLY_FIXTURE_TMP/approvals.txt
   printf '%s\n' 'theme-20260827T999999Z-999-999' >"$manifest"
   fixture_run_apply "$ws" --approve-file "$manifest" >/dev/null || return 1
-  assert_file_contains "$ws/loop/promotions/apply.log" 'reason=unknown-approval' || return 1
+  assert_file_contains "$ws/loop/promotions/apply.log" 'reason=unknown-approval note=- k=- unit=-' || return 1
   ln -s "$manifest" "$APPLY_FIXTURE_TMP/approvals.link"
   before=$(state_sha "$ws")
   fixture_run_apply "$ws" --approve-file "$APPLY_FIXTURE_TMP/approvals.link" >/dev/null 2>&1; rc=$?
@@ -820,7 +873,9 @@ assert reasons, "missing summary reason token table"
 reason_tokens = [line for line in reasons.group(1).splitlines() if line.strip()]
 assert "supersedes-not-owned" in tokens
 assert "awaiting-approval" in tokens
+assert "weeks-below-min" in tokens
 assert "rollback-refused" in reason_tokens
+assert "config" in reason_tokens
 assert "rollback-refused" not in tokens
 assert len(tokens) == len(set(tokens))
 assert len(reason_tokens) == len(set(reason_tokens))
@@ -867,6 +922,9 @@ run_case '[reason:already-applied/index] byte-identical immediate rerun emits no
 run_case '[reason:already-applied/stamp] missing index self-heals from anchored STATE stamp' case_stamp_self_heal
 run_case '[reason:duplicate-content] normalized section content blocks a new id' case_duplicate_content
 run_case '[reason:k-below-2 + unknown-approval] approval cannot override k and re-emitted id is reconsidered' case_k_lifecycle_and_approval
+run_case '[263/sessions] effective run-k promotes facts, leaves rules pending, and bounds host counts' case_recurrence_unit_sessions
+run_case '[263/weeks-min] sessions mode independently enforces calendar spread' case_sessions_min_weeks
+run_case '[263/config-lockstep] raw review and apply reject the same invalid recurrence settings' case_recurrence_config_lockstep
 run_case '[poisoned-rejects] anchored enumeration excludes model-raw rejects' case_poisoned_rejects
 run_case '[provenance-spoof] reviewer weeks theme-id control oversize and banned source token fail hygiene' case_hygiene_injections
 run_case '[slug-traversal + yaml-breakout] validated-id slug and JSON frontmatter encoding contain input' case_theme_slug_and_yaml

@@ -85,14 +85,17 @@ The retirement policy explicitly selects **no automatic retirement trigger**: me
 therefore retained permanently unless a human explicitly deletes them; no automated
 deletion path exists.
 
-ISO-8601 weeks are the downstream comparison unit for recurrence, not a capacity
-measure. Finding the same topic in last week's raw and this week's raw establishes that
-it came from separate jobs without depending on task IDs or individual dates. Week
-membership is derived from each filename's UTC date, so the archive layout remains
-flat. `scripts/raw-week.sh` lists the raw-layer files for a requested ISO week.
-`scripts/raw-review.sh` sends whole files from the trailing review window to a declared
-non-producer model, validates its cited source-line prefixes, and records host-computed
-theme recurrence without writing STATE.md or skills.
+Distinct sessions are the default downstream comparison unit for recurrence. A flush
+member inherits the `session=` value from its enclosing `<!-- flush ... -->` header;
+multiple cited members from that session count once. Intake-eviction blocks carry no
+session, so each block receives a stable pseudo-session keyed by archive filename and
+block index (legacy headerless blocks use the same fallback). ISO-8601 week membership
+is still derived from each filename's UTC date, keeping the archive layout flat and
+supporting an optional calendar-spread gate. `scripts/raw-week.sh` lists the raw-layer
+files for a requested ISO week. `scripts/raw-review.sh` sends whole files from the
+trailing review window to a declared non-producer model, validates its cited source-line
+prefixes, and records host-computed session and week recurrence without writing
+STATE.md or skills.
 
 A pending flush enters the raw layer only after its UTC date has passed because
 `flush-intake.sh` archives dates strictly before `today`; deferred files enter later.
@@ -191,10 +194,13 @@ degraded no-template fallback does not render this block.
 - The former exact-lesson verify-pass k≥2 gate is retired because measurement found
   **0 exact reoccurrences in 1,045 lessons**: the equality count had no promotion
   population. **General rules** and **Verified facts** instead require theme-level
-  recurrence across at least two ISO weeks judged by a model different from the
-  workspace's declared current producer, or explicit promotion by the operational
-  agent. Raw flush headers do not carry per-lesson model lineage, so this guarantee is
-  deliberately no stronger than the declared producer wiring.
+  recurrence across at least two distinct sessions by default, judged by a model
+  different from the workspace's declared current producer, or explicit promotion by
+  the operational agent. `recurrence_unit=weeks` restores ISO-week counting;
+  `promote_min_k` sets the recurrence threshold, and a nonzero `promote_min_weeks` adds
+  a calendar-spread gate in either mode. Task-runner fresh-context steps are separate
+  sessions for this gate. Raw flush headers do not carry per-lesson model lineage, so
+  this guarantee is deliberately no stronger than the declared producer wiring.
 - `lesson_hash` remains an intake deduplication key only; it is never recurrence
   evidence. The existing `confirmations:` field is not redefined by raw review.
 - OpenClaw distillation records use a host-computed

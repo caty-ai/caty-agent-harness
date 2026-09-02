@@ -23,12 +23,32 @@ new_ws() {
 
 seed_two_weeks() {
   local ws=$1
-  printf '%s\n' '<!-- flush origin=fixture -->' '- 2026-08-10 Durable retries need bounded backoff and receipts.' \
+  printf '%s\n' '<!-- flush origin=fixture session=session-a ts=2026-08-10T01:00:00Z -->' '- 2026-08-10 Durable retries need bounded backoff and receipts.' \
     >"$ws/loop/archive/flush-2026-08-10.md"
-  printf '%s\n' '<!-- flush origin=fixture -->' '- 2026-08-17 Retry loops should cap backoff and leave an explicit receipt.' \
+  printf '%s\n' '<!-- flush origin=fixture session=session-b ts=2026-08-17T01:00:00Z -->' '- 2026-08-17 Retry loops should cap backoff and leave an explicit receipt.' \
     >"$ws/loop/archive/flush-2026-08-17.md"
   printf '%s\n' '<!-- intake evictions -->' '- 2026-08-18 Evicted lessons remain reviewable in the raw layer.' \
     >"$ws/loop/archive/intake-evictions-2026-08-18.md"
+}
+
+seed_same_week_sessions() {
+  local ws=$1 first_session=$2 second_session=$3
+  printf '%s\n' \
+    "<!-- flush origin=fixture session=$first_session ts=2026-08-10T01:00:00Z -->" \
+    '- 2026-08-10 Session alpha records bounded retry guidance.' \
+    "<!-- flush origin=fixture session=$second_session ts=2026-08-10T02:00:00Z -->" \
+    '- 2026-08-10 Session beta independently records retry receipts.' \
+    >"$ws/loop/archive/flush-2026-08-10.md"
+}
+
+seed_intake_eviction_sessions() {
+  local ws=$1
+  printf '%s\n' \
+    '<!-- intake eviction adapter=claude-code ts=2026-08-10T01:00:00Z -->' \
+    '- 2026-08-10 First evicted block records bounded retry guidance.' \
+    '<!-- intake eviction adapter=codex ts=2026-08-10T02:00:00Z -->' \
+    '- 2026-08-10 Second evicted block independently records retry receipts.' \
+    >"$ws/loop/archive/intake-evictions-2026-08-10.md"
 }
 
 write_reviewer() {
@@ -51,6 +71,36 @@ MEMBERS:
 - flush-2026-08-17.md:- 2026-08-17 Retry loops should cap backoff
 WEEKS: 1900-W01
 EVIDENCE: The two weeks express the same operational rule in different words.
+PROMOTE: yes
+RAW-REVIEW-OUTPUT-END
+OUT'
+
+SAME_WEEK=$TMP_ROOT/same-week-reviewer
+write_reviewer "$SAME_WEEK" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: same-week session recurrence
+CLASS: rule
+MEMBERS:
+- flush-2026-08-10.md:Session alpha records bounded retry guidance
+- flush-2026-08-10.md:Session beta independently records retry receipts
+WEEKS: 2026-W33
+EVIDENCE: The citations are independently attributable by their enclosing flush headers.
+PROMOTE: yes
+RAW-REVIEW-OUTPUT-END
+OUT'
+
+INTAKE_EVICTIONS=$TMP_ROOT/intake-evictions-reviewer
+write_reviewer "$INTAKE_EVICTIONS" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: intake eviction recurrence
+CLASS: capability-fact
+MEMBERS:
+- intake-evictions-2026-08-10.md:First evicted block records bounded retry guidance
+- intake-evictions-2026-08-10.md:Second evicted block independently records retry receipts
+WEEKS: 2026-W33
+EVIDENCE: Production intake-eviction headers delimit independently attributable blocks.
 PROMOTE: yes
 RAW-REVIEW-OUTPUT-END
 OUT'
@@ -93,6 +143,7 @@ write_conf() {
 latest_candidate() { find "$1/loop/promotions" -type f -name 'candidates-*.md' ! -name '*.rejects.md' | LC_ALL=C sort | tail -n 1; }
 
 ws=$(new_ws promote)
+promote_ws=$ws
 seed_two_weeks "$ws"
 capture=$TMP_ROOT/captured-prompt
 write_conf "$ws" producer-model "fixture $CAPTURE $capture"
@@ -108,15 +159,128 @@ else
   fail_case '[1] paraphrased cross-week citations promote with host K=2 and evictions stay whole' "rc=$rc candidate=$candidate stderr=$(cat "$TMP_ROOT/promote.err")"
 fi
 
-receipt=$(tail -n 1 "$ws/loop/promotions/runs.log")
+ws=$(new_ws intake-eviction-sessions)
+seed_intake_eviction_sessions "$ws"
+write_conf "$ws" producer-model "fixture $INTAKE_EVICTIONS"
+"$RAW_REVIEW" --workspace "$ws" --week 2026-W33 >/dev/null 2>"$TMP_ROOT/intake-eviction-sessions.err"
+rc=$?
+candidate=$(latest_candidate "$ws")
+if [[ "$rc" -eq 0 && -f "$candidate" ]] \
+  && grep -Fq 'run-k: 2' "$candidate" \
+  && grep -Fq 'promote: yes' "$candidate" \
+  && grep -Fq 'run-sessions: 2' "$ws/loop/promotions/ledger.md"; then
+  pass '[263-6] production intake-eviction headers without session ids use per-block pseudo-sessions'
+else
+  fail_case '[263-6] production intake-eviction headers without session ids use per-block pseudo-sessions' "rc=$rc candidate=$(cat "$candidate" 2>/dev/null)"
+fi
+
+ws=$(new_ws sessions-same-week)
+seed_same_week_sessions "$ws" session-alpha session-beta
+write_conf "$ws" producer-model "fixture $SAME_WEEK"
+"$RAW_REVIEW" --workspace "$ws" --week 2026-W33 >/dev/null 2>"$TMP_ROOT/sessions-same-week.err"
+rc=$?
+candidate=$(latest_candidate "$ws")
+if [[ "$rc" -eq 0 && -f "$candidate" ]] \
+  && grep -Fq 'run-k: 2' "$candidate" \
+  && grep -Fq 'promote: yes' "$candidate" \
+  && ! grep -Fq 'run-sessions:' "$candidate" \
+  && grep -Fq 'run-sessions: 2' "$ws/loop/promotions/ledger.md"; then
+  pass '[263-1] default sessions mode promotes two distinct sessions in one ISO week'
+else
+  fail_case '[263-1] default sessions mode promotes two distinct sessions in one ISO week' "rc=$rc candidate=$(cat "$candidate" 2>/dev/null)"
+fi
+
+ws=$(new_ws sessions-same-id)
+seed_same_week_sessions "$ws" session-shared session-shared
+write_conf "$ws" producer-model "fixture $SAME_WEEK"
+"$RAW_REVIEW" --workspace "$ws" --week 2026-W33 >/dev/null 2>"$TMP_ROOT/sessions-same-id.err"
+rc=$?
+candidate=$(latest_candidate "$ws")
+if [[ "$rc" -eq 0 && -f "$candidate" ]] \
+  && grep -Fq 'run-k: 1' "$candidate" \
+  && grep -Fq 'promote: not-yet' "$candidate" \
+  && grep -Fq 'run-sessions: 1' "$ws/loop/promotions/ledger.md"; then
+  pass '[263-2] default sessions mode does not count two members from one session twice'
+else
+  fail_case '[263-2] default sessions mode does not count two members from one session twice' "rc=$rc candidate=$(cat "$candidate" 2>/dev/null)"
+fi
+
+ws=$(new_ws weeks-same-week)
+seed_same_week_sessions "$ws" session-alpha session-beta
+write_conf "$ws" producer-model "fixture $SAME_WEEK"
+printf '%s\n' 'recurrence_unit=weeks' >>"$ws/loop/review.conf"
+"$RAW_REVIEW" --workspace "$ws" --week 2026-W33 >/dev/null 2>"$TMP_ROOT/weeks-same-week.err"
+same_week_rc=$?
+same_week_candidate=$(latest_candidate "$ws")
+ws_cross_week=$(new_ws weeks-cross-week)
+seed_two_weeks "$ws_cross_week"
+write_conf "$ws_cross_week" producer-model "fixture $GOOD"
+printf '%s\n' 'recurrence_unit=weeks' >>"$ws_cross_week/loop/review.conf"
+"$RAW_REVIEW" --workspace "$ws_cross_week" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/weeks-cross-week.err"
+cross_week_rc=$?
+cross_week_candidate=$(latest_candidate "$ws_cross_week")
+if [[ "$same_week_rc" -eq 0 && "$cross_week_rc" -eq 0 ]] \
+  && grep -Fq 'run-weeks: 2026-W33' "$same_week_candidate" \
+  && grep -Fq 'run-k: 1' "$same_week_candidate" \
+  && grep -Fq 'promote: not-yet' "$same_week_candidate" \
+  && grep -Fq 'run-weeks: 2026-W33,2026-W34' "$cross_week_candidate" \
+  && grep -Fq 'run-k: 2' "$cross_week_candidate" \
+  && grep -Fq 'promote: yes' "$cross_week_candidate" \
+  && ! grep -Fq 'run-sessions:' "$same_week_candidate" \
+  && ! grep -Fq 'run-sessions:' "$cross_week_candidate"; then
+  pass '[263-3] weeks mode preserves same-week downgrade and cross-week promotion semantics'
+else
+  fail_case '[263-3] weeks mode preserves same-week downgrade and cross-week promotion semantics' "rcs=$same_week_rc/$cross_week_rc"
+fi
+
+ws=$(new_ws sessions-min-weeks)
+seed_same_week_sessions "$ws" session-alpha session-beta
+write_conf "$ws" producer-model "fixture $SAME_WEEK"
+printf '%s\n' 'promote_min_weeks=2' >>"$ws/loop/review.conf"
+"$RAW_REVIEW" --workspace "$ws" --week 2026-W33 >/dev/null 2>"$TMP_ROOT/sessions-min-weeks.err"
+rc=$?
+candidate=$(latest_candidate "$ws")
+if [[ "$rc" -eq 0 && -f "$candidate" ]] \
+  && grep -Fq 'run-k: 2' "$candidate" \
+  && grep -Fq 'promote: not-yet' "$candidate"; then
+  pass '[263-4] sessions mode also enforces a configured minimum ISO-week spread'
+else
+  fail_case '[263-4] sessions mode also enforces a configured minimum ISO-week spread' "rc=$rc candidate=$(cat "$candidate" 2>/dev/null)"
+fi
+
+invalid_config_rcs=
+invalid_config_receipts=1
+for invalid_config in 'recurrence_unit=days' 'promote_min_k=0' 'promote_min_weeks=-1'; do
+  invalid_name=${invalid_config%%=*}
+  ws=$(new_ws "invalid-$invalid_name")
+  seed_two_weeks "$ws"
+  write_conf "$ws" producer-model "fixture $GOOD"
+  printf '%s\n' "$invalid_config" >>"$ws/loop/review.conf"
+  "$RAW_REVIEW" --workspace "$ws" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/invalid-$invalid_name.err"
+  invalid_rc=$?
+  invalid_config_rcs="$invalid_config_rcs/$invalid_rc"
+  [[ "$invalid_rc" -eq 2 \
+    && "$(tail -n 1 "$ws/loop/promotions/runs.log")" == *' error=config' ]] \
+    || invalid_config_receipts=0
+done
+if [[ "$invalid_config_receipts" -eq 1 ]]; then
+  pass '[263-5] invalid recurrence unit and promotion thresholds fail closed as config errors'
+else
+  fail_case '[263-5] invalid recurrence unit and promotion thresholds fail closed as config errors' "rcs=$invalid_config_rcs"
+fi
+
+receipt=$(tail -n 1 "$promote_ws/loop/promotions/runs.log")
 actual_bytes=$(wc -c <"$capture" | tr -d '[:space:]')
 recorded_bytes=$(printf '%s\n' "$receipt" | sed -n 's/.* prompt_bytes=\([0-9][0-9]*\) .*/\1/p')
-if [[ "$recorded_bytes" == "$actual_bytes" && "$receipt" == *' mode=retro '* && "$receipt" == *' error=none' ]] \
+if [[ "$recorded_bytes" == "$actual_bytes" && "$receipt" == *' mode=retro unit=sessions '* && "$receipt" == *' error=none' ]] \
   && grep -Fq 'Emit no more than 30 THEME blocks' "$capture" \
   && grep -Fq 'at most five MEMBERS citations per theme' "$capture" \
   && grep -Fq 'conservative machine tags' "$capture" \
   && grep -Fq 'paired emphasis markers' "$capture" \
-  && grep -Fq 'meaningful lone `*` token' "$capture"; then
+  && grep -Fq 'meaningful lone `*` token' "$capture" \
+  && grep -Fq 'configured unit (distinct sessions or ISO weeks)' "$capture" \
+  && grep -Fq 'trying to infer which recurrence unit is active' "$capture" \
+  && ! grep -Fq 'default unit' "$capture"; then
   pass '[2] prompt bytes, output budget, and retro receipt fields are pinned'
 else
   fail_case '[2] prompt bytes, output budget, and retro receipt fields are pinned' "actual=$actual_bytes receipt=$receipt"
@@ -1268,7 +1432,7 @@ fi
 
 ws=$(new_ws indented-crlf)
 seed_two_weeks "$ws"
-printf '  producer=producer-model\r\n  reviewer fixture %s\r\n  review_window_weeks=2\r\n  reviewer_timeout_s=10\r\n  fabricated_floor=2\r\n  zero_streak_threshold=2\r\n  prompt_max_bytes=2000000\r\n' \
+printf '  producer=producer-model\r\n  reviewer fixture %s\r\n  review_window_weeks=2\r\n  recurrence_unit=sessions\r\n  promote_min_k=2\r\n  promote_min_weeks=0\r\n  reviewer_timeout_s=10\r\n  fabricated_floor=2\r\n  zero_streak_threshold=2\r\n  prompt_max_bytes=2000000\r\n' \
   "$GOOD" >"$ws/loop/review.conf"
 "$RAW_REVIEW" --workspace "$ws" --week 2026-W34 >/dev/null 2>"$TMP_ROOT/indented-crlf.err"
 indented_crlf_rc=$?

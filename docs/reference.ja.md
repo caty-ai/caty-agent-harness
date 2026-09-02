@@ -91,6 +91,22 @@ THEME block 間の空行は許容しますが、block 内の空行は不正で�
 `fabricated_pct` の既定値は 50、許容範囲は 1〜100 です。`loop/review.conf` の数値は 10 進として解釈するため、
 `08` と `0100` は 8 と 100 を意味します。
 
+promotion recurrence の既定は `recurrence_unit=sessions`、`promote_min_k=2` です。
+検証済み member は、それを囲む flush header の `session=` 値ごとに数え、同じ session の
+複数 member は 1 回だけ数えます。intake-eviction block は session を持たないため、source file と
+block index を key にした pseudo-session を各 block に割り当てます。旧形式の headerless block も
+同じ fallback を使います。task-runner rig では、fresh-context の各 step は別 session です。
+以前の release と同様に `run-k` を異なる ISO 週の数にするには `recurrence_unit=weeks` を指定します。
+`promote_min_weeks` の既定は `0`（calendar requirement なし）で、正の値なら recurrence unit に
+かかわらず、`promote_min_k` に加えてその数の異なる ISO 週を必須にします。`promote_min_k` は 1 以上、
+`promote_min_weeks` は 0 以上の整数でなければなりません。
+
+candidate file は apply consumer との互換性のため、既存の `run-weeks` / `run-k` / `weeks` field を
+維持します。apply は sessions mode では範囲検証済みの host-emitted `run-k`、weeks mode では
+独自に数え直した distinct `weeks` を使い、さらに `promote_min_weeks` を独立して強制します。
+append-only の promotions ledger は情報用の `run-sessions` を記録し、raw-review の run receipt は
+設定済み `unit` を記録します。
+
 reviewer route には約 30 個の THEME block を返せる output token 数を設定してください。
 claude CLI で wrap した chain では `CLAUDE_CODE_MAX_OUTPUT_TOKENS` も十分な値にします。
 output cap に達した route が fence 外の `API Error: ...` 1 行だけを出すと、その call は
@@ -110,6 +126,28 @@ runtime-neutral scheduler に登録してください。macOS で reviewer comma
 `review-config`、未消費の
 review notification、48時間を超える沈黙、設定 threshold 以上の zero-candidate streak を
 報告します。
+
+## Promotion apply consumer
+
+```text
+scripts/apply-promotions.sh --workspace <path> [--auto-capability-facts]
+  [--approve <theme-id>]... [--approve-file <manifest>]...
+scripts/apply-promotions.sh --workspace <path> --rollback <theme-id> --reason <ref>
+```
+
+consumer は `loop/review.conf` の `recurrence_unit` / `promote_min_k` /
+`promote_min_weeks` を raw-review と同じ既定値・validation で読みます。sessions mode の
+`run-k` は ASCII の非負整数で member 数以下でなければならず、違反 block は `hygiene` です。
+weeks mode では従来どおり apply 自身が distinct week 数を数え直します。recurrence 不足は
+既存の terminal token `k-below-2`、calendar spread 不足は `weeks-below-min` です。不正設定は
+exit 2 で fail closed し、`apply.log` に `reason=config` summary を残します。theme ごとの
+decision receipt と durable provenance は effective `k` と `unit` を記録します。
+
+consumer は anchored な `candidates-<UTC-runid>-<pid>.md` のみを受理し、`.rejects.md` は
+読みません。bare run は `STATE.md` を変更せず pending decision を報告し、draft skill stub を
+作ります。named fact/rule は explicit approval で、capability-fact は
+`--auto-capability-facts` で別枠の上限内に限り promote できます。`apply-index.tsv` が
+idempotency authority、append-only の `apply.log` が run-start / transition / summary receipt です。
 
 ## task-runner の実行境界
 

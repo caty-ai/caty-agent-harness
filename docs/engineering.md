@@ -43,7 +43,7 @@ The **completion rail** means work managed by `scripts/task-runner.sh`. It gives
 ### Across jobs: carry forward only proven learning
 
 1. A successful check can save a method first as a lesson.
-2. Turn that lesson into reusable guidance or a known fact only after the same lesson passes independent verification checks in two different jobs, or when a human explicitly promotes it.
+2. Turn that lesson into reusable guidance or a known fact only after a theme recurs in at least two distinct sessions, or when a human explicitly promotes it. The raw-review configuration can instead require distinct ISO weeks or add a calendar-spread minimum.
 3. At the next similar job, read the confirmed record before acting.
 
 This reduces repeated failures and reuses verified solutions. It does **not** mean "never fail again" or "always succeed."
@@ -122,7 +122,12 @@ approval. The consumer holds an apply-exclusive lock, performs every `STATE.md`
 mutation under the shared state lock through one atomic publish, and publishes the
 anti-resurrection `apply-index.tsv` in the same lock hold. `apply.log` records the
 run start, per-theme transitions, and run summary; caps refuse new entries rather
-than evicting existing durable content.
+than evicting existing durable content. Apply reads the same recurrence unit and
+thresholds as raw-review: sessions mode uses the host-emitted, member-bounded `run-k`,
+weeks mode independently recounts distinct ISO weeks, and both enforce the configured
+minimum week spread. In the task-runner rig, each fresh-context step is a separate
+session only when its flush header carries that step's distinct runtime session id;
+the session count is recurrence evidence, not proof of independent authorship.
 
 **Quickstart is not the whole installation.** It creates the workspace scaffold and the managed bootstrap. End-of-session checkpoint reminders and deeper automation require the per-runtime wiring in the next section (user-level hook/cron registration); until that is done, only the start-of-task discipline from the bootstrap block is active.
 

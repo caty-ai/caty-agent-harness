@@ -60,8 +60,8 @@ Host-script seams, same as its siblings: `--workspace <dir>` argument resolved v
   no interaction with the nightly review job.
 - **Promotions lock** `loop/promotions/.lock` (same constants as raw-review's inline
   `take_review_lock`: 3 attempts / 1800 s stale / distinct pid label
-  `apply-promotions`; the constants are pinned here and duplicated — raw-review.sh is
-  not edited in this lane) — held only for candidate-set snapshot and receipt appends.
+  `apply-promotions`; the lock constants remain pinned here and duplicated) — held only
+  for candidate-set snapshot and receipt appends.
 - **State lock** via `take_state_lock "$workspace" apply-promotions <attempts> <sleep>`
   with **bounded attempts** (default 30 × 1 s, mirroring flush-intake; never
   `max_attempts=0`) — held only for the STATE.md publish.
@@ -156,7 +156,7 @@ rule; violation → `skipped reason=hygiene` for the whole theme:
 | theme-id | must match `^theme-[0-9]{8}T[0-9]{6}Z-[0-9]+-[0-9]{3}$` **and** its runid must equal the runid token of the candidates filename it came from (cross-file spoof block) |
 | theme text | single line, non-empty, ≤ 240 bytes, no control characters, must not start with `#`, `-`, or whitespace, and must not contain any of the literal tokens: `source:`, `reviewer:`, `weeks:`, `k=`, `approver:`, `invalidated-by:`, `confirmations:`, `dedup_key:`, `mech_check:`, `<!--`, `-->` |
 | reviewer | `^[A-Za-z0-9._+-]+$` |
-| weeks / union-k | `weeks:` must match the ISO-week list grammar raw-review validates (`^[0-9]{4}-W[0-9]{2}(,[0-9]{4}-W[0-9]{2})*$`); **k is recounted by apply as the number of distinct weeks** — the file's `union-k:` integer and `promote:` field are never trusted as the gate (v1 mis-stated the producer gate; apply's own fail-closed check is recounted k ≥ 2) |
+| run-k / weeks / union-k | `run-k:` must be an ASCII non-negative integer no greater than the number of members; `weeks:` must match the ISO-week list grammar raw-review validates (`^[0-9]{4}-W[0-9]{2}(,[0-9]{4}-W[0-9]{2})*$`). With `recurrence_unit=sessions`, the bounded host-emitted `run-k:` is effective; with `recurrence_unit=weeks`, apply independently recounts distinct `weeks:` exactly as before. The file's `union-k:` integer and `promote:` field are advisory and never open the gate. |
 | class | closed enum; NOTE: the class value is **model-chosen** upstream — see §4 residual |
 | members / evidence | must be non-empty (raw-review guarantees this at generation; apply re-checks because the file is untrusted at consumption time) |
 | skill slug | derived **only from the validated theme-id** (never from theme text): `theme-<runid>-NNN` → slug `<runid>-NNN` (charset `[A-Za-z0-9-]`, fixed length); stub path is `skills/_staging/<slug>/` and the resolved path must stay inside `skills/_staging/` (no symlink traversal); creation uses exclusive `mkdir` |
@@ -166,6 +166,11 @@ Stub frontmatter values (description = theme text, source = theme-id + member li
 written with a conservative encoder (single-quoted YAML with `'` doubled, or JSON
 string encoding) — never raw interpolation into YAML. `status: draft` and `trigger:`
 are host constants, not candidate fields.
+
+Apply reads `recurrence_unit`, `promote_min_k`, and `promote_min_weeks` from
+`loop/review.conf` with the same defaults and decimal/enum validation as raw-review.
+Malformed values fail closed before candidate consumption, leave `STATE.md` unchanged,
+exit 2, and append a `reason=config` run summary to `apply.log`.
 
 ### 3.4 Per-theme resolution states
 
@@ -177,7 +182,8 @@ index writer refuses out-of-vocabulary decisions at write time):
 
 Terminal (never revisited): `promoted` (incl. `reason=stub-replay`), `rolled-back`,
 `duplicate-content`, `hygiene`, `parse`, `superseded` (assigned the moment its
-superseder promotes — same batch or cross-run, §5), `k-below-2` (terminal because
+superseder promotes — same batch or cross-run, §5), `k-below-2` and
+`weeks-below-min` (terminal because
 recurrence emits a **new** theme-id in a later run; a frozen id's k never changes —
 §9 has a fixture asserting the re-emitted id, not the frozen one, is what gets
 reconsidered), `stub-exists` (foreign/non-canonical stub dirs only — see §4),
@@ -190,7 +196,7 @@ Revisit (pending): `awaiting-approval`, `section-full`, `volume-guard`,
 promotes silently).
 
 Run-level or receipt-only, never a per-theme index decision: `input-untrusted`
-(per-file), `caps-read-failed`, `lock-busy`, `skipped-paused`, `rollback-refused`
+(per-file), `caps-read-failed`, `lock-busy`, `skipped-paused`, `config`, `rollback-refused`
 (operational rollback refusal), `stub-dirty` (rollback-operation outcome),
 `unknown-approval`, `already-applied`,
 `already-rolled-back` (the latter three are guard outcomes about an id whose index
@@ -227,7 +233,9 @@ routes the approval gate through a value the reviewed model chose):
 
 - **Default run: nothing is written to STATE.md.** The run reports pending themes
   (receipt + stdout) and materializes skill stubs only.
-- `--auto-capability-facts`: promotes hygiene-passing, recounted-k≥2 capability-facts
+- `--auto-capability-facts`: promotes hygiene-passing capability-facts whose effective
+  recurrence meets `promote_min_k` and whose recounted ISO-week spread meets
+  `promote_min_weeks`
   into `## Verified facts` without per-theme approval. This is the flag EV-007 arm C
   passes inside the loop. Auto-promoted lines carry `approver=auto` in the receipt and
   `approver: auto` in the provenance trailer — the entry-format block below is the
@@ -238,8 +246,8 @@ routes the approval gate through a value the reviewed model chose):
   Manifest grammar: UTF-8 text, one theme-id per line, `#` comments, blank lines
   ignored, must be a regular non-symlink file; unknown or non-pending ids →
   `skipped reason=unknown-approval` (never fail-open into promotion).
-  **Approval never overrides hygiene, the k recount, or caps** — an approved theme
-  failing those is skipped with the stronger reason.
+  **Approval never overrides hygiene, the configured recurrence/week gates, or caps** —
+  an approved theme failing those is skipped with the stronger reason.
 - Approver identity: `approver=alpha` is a receipt label (workspace-local host tool;
   whoever can run the script can approve — recorded, not authenticated).
 
@@ -264,14 +272,15 @@ CONSULT-loaded).
 Entry format written (matches the `templates/STATE.md` comment grammar):
 
 ```
-- 2026-08-27 <theme text> (source: theme-<runid>-NNN; reviewer: <reviewer>; weeks: <recounted list>; k=<recounted>; approver: <alpha|auto>)
+- 2026-08-27 <theme text> (source: theme-<runid>-NNN; reviewer: <reviewer>; weeks: <recounted list>; k=<effective>; unit=<sessions|weeks>; approver: <alpha|auto>)
 ```
 
 The `source:` stamp is the idempotency and rollback anchor; its regex (anchored to the
 trailer position, `\(source: theme-[0-9TZ-]+-[0-9]{3};` …) must match **exactly one**
 line for rollback/annotation — zero or multiple matches abort that operation
 (fail-closed; a theme text can no longer fake a second stamp because `source:` is a
-banned token in theme text, §3.3).
+banned token in theme text, §3.3). The reader also accepts the pre-#263 trailer without
+`unit=` so existing apply-stamped entries remain deduplicatable and rollbackable.
 
 ## 5. Idempotency and dedup
 
@@ -299,12 +308,13 @@ Guard order, pinned (first hit wins):
    dedup-match a re-entered identical theme — conservative by intent (misses some
    dupes, never false-positives; #149 owns legacy consolidation)
 5. supersedes resolution (table below)
-6. k recount → `k-below-2` (before the approval gate, so an unapproved k<2 theme
-   terminates instead of lingering as `awaiting-approval` forever)
-7. approval / auto gate (§4) → `awaiting-approval`
-8. caps headroom (§6) → `section-full`
-9. volume guard → `volume-guard`
-10. promote
+6. configured-unit effective k → `k-below-2` (before the approval gate, so an
+   under-threshold theme terminates instead of lingering as `awaiting-approval` forever)
+7. independent distinct-week recount → `weeks-below-min`
+8. approval / auto gate (§4) → `awaiting-approval`
+9. caps headroom (§6) → `section-full`
+10. volume guard → `volume-guard`
+11. promote
 
 Supersedes table (v1 left every non-happy path to the implementer):
 
@@ -351,7 +361,7 @@ resolution authority). Lines:
   guard-3 index self-heal emits one forced receipt when it re-adds a lost row (an
   index mutation must never be silent); a stale `--approve` of a non-pending id
   re-receipts `unknown-approval` per invocation (the operator passed the flag, the
-  operator gets the answer): `ts=<UTC> applyid=<id> theme=<theme-id> class=<class> decision=promoted|skipped|rolled-back reason=<token> note=<supersedes-unresolved|-> approver=<alpha|auto|-> target=<section|staging-path> line_sha=<sha256 of written line|->`
+  operator gets the answer): `ts=<UTC> applyid=<id> theme=<theme-id> class=<class> decision=promoted|skipped|rolled-back reason=<token> note=<supersedes-unresolved|-> k=<effective-k|-> unit=<sessions|weeks|-> approver=<alpha|auto|-> target=<section|staging-path> line_sha=<sha256 of written line|->`
 - `decision=run-summary` with counts promoted/skipped-by-reason/pending, always
   appended on every completed run (0-consumed stays operator-visible; a `run-start`
   with no `run-summary` marks a crashed run).
@@ -362,9 +372,9 @@ its original `hygiene` or `parse` token; the existing index is the only seen-set
 
 Reason-token set is closed: `hygiene parse rollback-refused input-untrusted already-applied
 duplicate-content superseded supersedes-not-owned
-supersedes-ambiguous awaiting-approval unknown-approval k-below-2 section-full
+supersedes-ambiguous awaiting-approval unknown-approval k-below-2 weeks-below-min section-full
 volume-guard stub-exists stub-replay stub-dirty caps-read-failed lock-busy
-skipped-paused already-rolled-back` — §9 requires a fixture per token.
+skipped-paused already-rolled-back config` — §9 requires a fixture per token.
 
 Rollback (`apply-promotions.sh --rollback <theme-id> --reason <ref>`):
 
@@ -391,11 +401,11 @@ Rollback (`apply-promotions.sh --rollback <theme-id> --reason <ref>`):
   2.68M→2.01M tokens/job; speculative rules doubled churn) — but **a prompt is a
   pre-filter, not a gate**. The binding quality gate for rules is the explicit
   approval flag; for auto-promoted capability-facts the binding gates are mechanical
-  only (hygiene + recounted k), and §11 records that residual honestly.
-- **D2 — no new conf keys**: constants + env overrides (`APPLY_MAX_PER_SECTION`,
-  `APPLY_MAX_AUTO`, lock attempt counts); no `loop/review.conf` additions; no
-  collision with the #196 conf-template lane (resolves the #201 UNKNOWN: no
-  serialization needed).
+  only (hygiene + configured-unit recurrence and calendar-spread gates), and §11
+  records that residual honestly.
+- **D2 — shared review configuration**: apply consumes the three raw-review recurrence
+  keys from `loop/review.conf`; apply-only caps and lock controls remain constants plus
+  env overrides (`APPLY_MAX_PER_SECTION`, `APPLY_MAX_AUTO`, lock attempt counts).
 - **D3 — invocation modes**: bare run = report + stubs only (writes nothing durable);
   EV-007 arm C invokes `--auto-capability-facts`; Alpha's approval sessions pass
   `--approve`/`--approve-file`. Arm C's loop cadence should size its timeout for the
@@ -407,8 +417,9 @@ Rollback (`apply-promotions.sh --rollback <theme-id> --reason <ref>`):
   beside real candidates (zero consumption); reviewer/weeks/theme-id injection;
   cross-file theme-id spoof (runid mismatch); slug traversal attempt via crafted
   theme-id; YAML breakout attempt in stub description; control chars / banned tokens /
-  oversize in theme text; lying `promote: yes` with recounted k < 2; `--approve`
-  attempting to override hygiene and k (must fail); unknown-approval manifest entries;
+  oversize in theme text; inflated or non-decimal `run-k`; sessions and weeks unit
+  gates; independent `promote_min_weeks`; lying `promote: yes` below threshold;
+  `--approve` attempting to override hygiene and recurrence (must fail); unknown-approval manifest entries;
   approval manifest as symlink (refused).
 - Idempotency: byte-identical STATE.md on immediate re-run; `already-applied` via
   index, via stamp, and via content dedup separately; index survives simulated cap
@@ -451,11 +462,10 @@ Rollback (`apply-promotions.sh --rollback <theme-id> --reason <ref>`):
   after phase 2 and asserts ledger/STATE agreement (v3.1, from the implementation
   review).
 
-## 10. Files to touch (implementation phase, to re-declare at WIP update)
+## 10. Files touched by the original #201 implementation phase
 
 - `scripts/apply-promotions.sh` (new; contains its own promotions-lock helper with
-  pinned constants and its own durable-section append/annotate awk — no edits to
-  `raw-review.sh` and no signature changes in `lib-state-fold.sh`; sourced reuse of
+  pinned constants and its own durable-section append/annotate awk; sourced reuse of
   `take_state_lock` / `release_state_lock` / `atomic_write_file` / cap constants only)
 - `loop/promotions/apply-index.tsv`, `loop/promotions/apply.log`,
   `loop/promotions/.apply.lock` (new runtime artifacts, created on first run)
@@ -467,7 +477,7 @@ Rollback (`apply-promotions.sh --rollback <theme-id> --reason <ref>`):
 
 | # | Failure mode | Mitigations (§) | Residual after v2 |
 |---|---|---|---|
-| 1 | Durable-tier poisoning / section flush | anchored input enum excl. rejects (3.1); allowlist encoding of every interpolated field + banned-token list + theme-id↔filename binding (3.3); no-eviction promotion — untrusted input cannot evict trusted lines (6); slug from validated id only + exclusive mkdir (3.3); stubs never CONSULT-loaded (4) | a well-cited, hygiene-passing but *maliciously worded* capability-fact recurring across 2 ISO weeks still auto-promotes under `--auto-capability-facts`: `class:` and theme wording are model-chosen, and k≥2 + citation authenticity ≠ benign intent. Bounded by `APPLY_MAX_AUTO`, the `approver: auto` provenance marker (sweepable), rollback, and #149. Accepted by owner decision; EV-007 measures the real-world rate. |
+| 1 | Durable-tier poisoning / section flush | anchored input enum excl. rejects (3.1); allowlist encoding of every interpolated field + banned-token list + theme-id↔filename binding (3.3); no-eviction promotion — untrusted input cannot evict trusted lines (6); slug from validated id only + exclusive mkdir (3.3); stubs never CONSULT-loaded (4) | a well-cited, hygiene-passing but *maliciously worded* capability-fact meeting the configured recurrence unit and thresholds still auto-promotes under `--auto-capability-facts`: `class:` and theme wording are model-chosen, and recurrence + citation authenticity ≠ benign intent. Bounded by `APPLY_MAX_AUTO`, the `approver: auto` provenance marker (sweepable), rollback, and #149. Accepted by owner decision; EV-007 measures the real-world rate. |
 | 2 | Broken idempotency / resurrection | apply-index written atomically in the same lock hold as STATE (5); guard order pinned (5); `rolled-back` terminal (7); stub frontmatter stamp + `stub-replay` (4) | index + STATE + log all lost simultaneously (full workspace loss) — unrecoverable by design anywhere; content dedup blocks a *new* theme-id with identical normalized wording even when legitimate (operators reword or use #149) |
 | 3 | Fail-open | closed reason-token set with terminal/revisit split (3.4); torn index aborts (3.4); approval cannot override gates (4); ambiguous supersedes stops (5); lock failure aborts before write (2.1) | none known at design level; §9 pins each with a fixture |
 | 4 | Lock/crash windows | apply-exclusive lock (2.1); fixed acquisition order, never promotions+state together (2.1); single atomic publish + same-hold index (2.2); run-start/run-summary crash detection (7) | #182's `cp` window inside `atomic_write_file` (inherited, adjacent); stale-lock steal at 1800 s against a live-but-slow holder (existing `take_state_lock` property, unchanged) |
