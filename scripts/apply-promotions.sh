@@ -74,6 +74,7 @@ parse terminal
 superseded terminal
 supersedes-not-owned terminal
 k-below-2 terminal
+weeks-below-min terminal
 stub-exists terminal
 awaiting-approval pending
 section-full pending
@@ -94,6 +95,7 @@ supersedes-ambiguous
 awaiting-approval
 unknown-approval
 k-below-2
+weeks-below-min
 section-full
 volume-guard
 stub-exists
@@ -103,6 +105,7 @@ caps-read-failed
 lock-busy
 skipped-paused
 already-rolled-back
+config
 EOF
 )
 
@@ -167,13 +170,16 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-parse_positive_decimal() {
-  local raw=${1-} parsed
+parse_decimal_config() {
+  local raw=${1-} minimum=$2 maximum=${3-} parsed
   case "$raw" in ''|*[!0-9]*) return 1 ;; esac
   parsed=$((10#$raw)) 2>/dev/null || return 1
-  (( parsed > 0 )) || return 1
+  (( parsed >= minimum )) || return 1
+  if [[ -n "$maximum" ]] && (( parsed > maximum )); then return 1; fi
   printf '%s\n' "$parsed"
 }
+
+parse_positive_decimal() { parse_decimal_config "${1-}" 1; }
 
 max_per_section=${APPLY_MAX_PER_SECTION:-20}
 max_auto=${APPLY_MAX_AUTO:-10}
@@ -296,6 +302,37 @@ EOF
 fi
 
 tmp_root=$(mktemp -d "$workspace/.apply-promotions.XXXXXX") || exit 1
+
+conf=$workspace/loop/review.conf
+recurrence_unit=sessions
+promote_min_k=2
+promote_min_weeks=0
+config_invalid=0
+carriage_return=$(printf '\r')
+if [[ ! -f "$conf" || -L "$conf" ]]; then
+  config_invalid=1
+else
+  while IFS= read -r config_line || [[ -n "$config_line" ]]; do
+    config_line=${config_line%"$carriage_return"}
+    config_line=${config_line#"${config_line%%[![:space:]]*}"}
+    case "$config_line" in
+      recurrence_unit=*) recurrence_unit=${config_line#recurrence_unit=} ;;
+      promote_min_k=*) promote_min_k=${config_line#promote_min_k=} ;;
+      promote_min_weeks=*) promote_min_weeks=${config_line#promote_min_weeks=} ;;
+    esac
+  done <"$conf"
+fi
+promote_min_k=$(parse_decimal_config "$promote_min_k" 1) || config_invalid=1
+promote_min_weeks=$(parse_decimal_config "$promote_min_weeks" 0) || config_invalid=1
+case "$recurrence_unit" in sessions|weeks) ;; *) config_invalid=1 ;; esac
+if [[ "$config_invalid" -ne 0 ]]; then
+  printf 'apply-promotions: invalid review configuration\n' >&2
+  results=$tmp_root/config-results
+  printf '%s\t%s\t%s\t%s\n' - - skipped config >"$results"
+  skipped_count=1
+  append_summary_line "$(summary_with_reason config)" 1
+  exit 2
+fi
 
 approval_file=$tmp_root/approvals
 : >"$approval_file"
@@ -460,7 +497,7 @@ for filename in (root / "trusted-inputs").read_text().splitlines():
         seq += 1
         raw_id = block[0][3:] if block and block[0].startswith("## ") else "-"
         vals = {"id": raw_id, "class":"-", "theme":"", "reviewer":"", "weeks":"",
-                "k":"0", "supersedes":"", "members":[], "evidence":[], "slug":""}
+                "k":"0", "week-k":"0", "supersedes":"", "members":[], "evidence":[], "slug":""}
         ok = header_ok and len(block) >= 13
         expected = ("theme: ", "class: ", "reviewer: ", "run-weeks: ", "run-k: ", "promote: ")
         if ok and all(block[i+1].startswith(prefix) for i, prefix in enumerate(expected)):
@@ -490,7 +527,7 @@ for filename in (root / "trusted-inputs").read_text().splitlines():
             evidence = [line[2:] for line in evidence]
             vals["members"], vals["evidence"] = members, evidence
             ok = ok and vals["class"] in {"capability-fact","rule","skill"}
-            ok = ok and promote in {"yes","not-yet"} and run_k.isdigit() and union_k.isdigit()
+            ok = ok and promote in {"yes","not-yet"} and union_k.isdigit()
             ok = ok and bool(week_re.fullmatch(run_weeks)) and bool(members) and bool(hashes) and bool(evidence)
         if not ok:
             write_record(seq, vals, "parse", filename); continue
@@ -510,9 +547,19 @@ for filename in (root / "trusted-inputs").read_text().splitlines():
         if not week_re.fullmatch(vals["weeks"]): hygienic = False
         if vals["supersedes"] and not theme_re.fullmatch(vals["supersedes"]): hygienic = False
         if any(not x for x in vals["members"]) or any(not x for x in vals["evidence"]): hygienic = False
+        normalized_run_k = "0"
+        if re.fullmatch(r"[0-9]+", run_k):
+            normalized_run_k = run_k.lstrip("0") or "0"
+            member_limit = str(len(vals["members"]))
+            if len(normalized_run_k) > len(member_limit) \
+               or (len(normalized_run_k) == len(member_limit) and normalized_run_k > member_limit):
+                hygienic = False
+        else:
+            hygienic = False
         distinct_weeks = sorted(set(vals["weeks"].split(','))) if vals["weeks"] else []
         vals["weeks"] = ",".join(distinct_weeks)
-        vals["k"] = str(len(distinct_weeks))
+        vals["k"] = normalized_run_k
+        vals["week-k"] = str(len(distinct_weeks))
         if m:
             vals["slug"] = m.group(1) + "-" + m.group(2)
         write_record(seq, vals, "ok" if hygienic else "hygiene", filename)
@@ -585,6 +632,8 @@ promoted_count=0
 rolled_back_count=0
 skipped_count=0
 pending_count=0
+decision_k=-
+decision_unit=-
 
 record_result() {
   local id=$1 class=$2 decision=$3 reason=$4 note=$5 approver=$6 target=$7 sha=$8 persist=${9:-1} force=${10:-0}
@@ -611,8 +660,9 @@ record_result() {
   if [[ "$decision" == promoted ]]; then promoted_count=$((promoted_count + 1)); else skipped_count=$((skipped_count + 1)); fi
   if pending_decision "$new_index_decision"; then pending_count=$((pending_count + 1)); fi
   if [[ "$transition" -eq 1 || "$force" -eq 1 ]]; then
-    printf 'ts=%s applyid=%s theme=%s class=%s decision=%s reason=%s note=%s approver=%s target=%s line_sha=%s\n' \
-      "$run_ts" "$apply_id" "$receipt_theme" "$receipt_class" "$decision" "$reason" "$note" "$approver" "$target" "$sha" >>"$receipts"
+    printf 'ts=%s applyid=%s theme=%s class=%s decision=%s reason=%s note=%s k=%s unit=%s approver=%s target=%s line_sha=%s\n' \
+      "$run_ts" "$apply_id" "$receipt_theme" "$receipt_class" "$decision" "$reason" "$note" \
+      "$decision_k" "$decision_unit" "$approver" "$target" "$sha" >>"$receipts"
   fi
 }
 
@@ -671,7 +721,7 @@ canonical_stamp_count() {
   local id=$1 heading=${2-}
   awk -v id="$id" -v wanted="$heading" '
     function canonical(line, pattern) {
-      pattern="^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] .* \\(source: " id "; reviewer: [A-Za-z0-9._+-]+; weeks: [0-9][0-9][0-9][0-9]-W[0-9][0-9](,[0-9][0-9][0-9][0-9]-W[0-9][0-9])*; k=[0-9]+; approver: (alpha|auto)\\)( invalidated-by: [A-Za-z0-9._+:#/-]+)*$"
+      pattern="^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] .* \\(source: " id "; reviewer: [A-Za-z0-9._+-]+; weeks: [0-9][0-9][0-9][0-9]-W[0-9][0-9](,[0-9][0-9][0-9][0-9]-W[0-9][0-9])*; k=[0-9]+(; unit=(sessions|weeks))?; approver: (alpha|auto)\\)( invalidated-by: [A-Za-z0-9._+:#/-]+)*$"
       return line ~ pattern
     }
     /^## / {inside=(wanted=="" || index($0,wanted)==1); next}
@@ -686,7 +736,7 @@ state_annotate_line() {
   local old_id=$1 new_id=$2 out=$tmp_root/state.next
   awk -v old_id="$old_id" -v new_id="$new_id" '
     function canonical(line, pattern) {
-      pattern="^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] .* \\(source: " old_id "; reviewer: [A-Za-z0-9._+-]+; weeks: [0-9][0-9][0-9][0-9]-W[0-9][0-9](,[0-9][0-9][0-9][0-9]-W[0-9][0-9])*; k=[0-9]+; approver: (alpha|auto)\\)( invalidated-by: [A-Za-z0-9._+:#/-]+)*$"
+      pattern="^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] .* \\(source: " old_id "; reviewer: [A-Za-z0-9._+-]+; weeks: [0-9][0-9][0-9][0-9]-W[0-9][0-9](,[0-9][0-9][0-9][0-9]-W[0-9][0-9])*; k=[0-9]+(; unit=(sessions|weeks))?; approver: (alpha|auto)\\)( invalidated-by: [A-Za-z0-9._+:#/-]+)*$"
       return line ~ pattern
     }
     canonical($0) {
@@ -703,7 +753,7 @@ state_normalized_content_exists() {
   python3 -B - "$state_tmp" "$1" "$2" <<'PY'
 import re, sys
 path, heading, wanted = sys.argv[1:]
-trailer = re.compile(r" \(source: theme-[0-9]{8}T[0-9]{6}Z-[0-9]+-[0-9]{3}; reviewer: [A-Za-z0-9._+-]+; weeks: [0-9]{4}-W[0-9]{2}(?:,[0-9]{4}-W[0-9]{2})*; k=[0-9]+; approver: (?:alpha|auto)\)(?: invalidated-by: [A-Za-z0-9._+:#/-]+)?$")
+trailer = re.compile(r" \(source: theme-[0-9]{8}T[0-9]{6}Z-[0-9]+-[0-9]{3}; reviewer: [A-Za-z0-9._+-]+; weeks: [0-9]{4}-W[0-9]{2}(?:,[0-9]{4}-W[0-9]{2})*; k=[0-9]+(?:; unit=(?:sessions|weeks))?; approver: (?:alpha|auto)\)(?: invalidated-by: [A-Za-z0-9._+:#/-]+)?$")
 def norm(s):
     s=re.sub(r"^- [0-9]{4}-[0-9]{2}-[0-9]{2} ","",s)
     s=trailer.sub("",s)
@@ -883,7 +933,7 @@ rollback_operation() {
     fi
     rm -f "$stub_file" && rmdir "$stub_dir" || return 1
     index_upsert "$rollback_id" "$class" rolled-back - || return 1
-    printf 'ts=%s applyid=%s theme=%s class=%s decision=rolled-back reason=- note=- approver=alpha target=%s line_sha=-\n' \
+    printf 'ts=%s applyid=%s theme=%s class=%s decision=rolled-back reason=- note=- k=- unit=- approver=alpha target=%s line_sha=-\n' \
       "$run_ts" "$apply_id" "$rollback_id" "$class" "$stub_dir" >>"$receipts"
     rolled_back_count=$((rolled_back_count + 1))
     return 0
@@ -901,7 +951,7 @@ rollback_operation() {
   out=$tmp_root/state.rollback
   awk -v id="$rollback_id" -v ref="$rollback_reason" -v date="$run_date" '
     function canonical(line, pattern) {
-      pattern="^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] .* \\(source: " id "; reviewer: [A-Za-z0-9._+-]+; weeks: [0-9][0-9][0-9][0-9]-W[0-9][0-9](,[0-9][0-9][0-9][0-9]-W[0-9][0-9])*; k=[0-9]+; approver: (alpha|auto)\\)( invalidated-by: [A-Za-z0-9._+:#/-]+)*$"
+      pattern="^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] .* \\(source: " id "; reviewer: [A-Za-z0-9._+-]+; weeks: [0-9][0-9][0-9][0-9]-W[0-9][0-9](,[0-9][0-9][0-9][0-9]-W[0-9][0-9])*; k=[0-9]+(; unit=(sessions|weeks))?; approver: (alpha|auto)\\)( invalidated-by: [A-Za-z0-9._+:#/-]+)*$"
       return line ~ pattern
     }
     function emit_failure() {
@@ -928,11 +978,11 @@ rollback_operation() {
   mv "$out" "$state_tmp" || { rm -f "$out"; return 1; }
   state_changed=1
   line=$(awk -v id="$rollback_id" '
-    {pattern="^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] .* \\(source: " id "; reviewer: [A-Za-z0-9._+-]+; weeks: [0-9][0-9][0-9][0-9]-W[0-9][0-9](,[0-9][0-9][0-9][0-9]-W[0-9][0-9])*; k=[0-9]+; approver: (alpha|auto)\\)( invalidated-by: [A-Za-z0-9._+:#/-]+)*$"; if ($0 ~ pattern) {print; exit}}
+    {pattern="^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] .* \\(source: " id "; reviewer: [A-Za-z0-9._+-]+; weeks: [0-9][0-9][0-9][0-9]-W[0-9][0-9](,[0-9][0-9][0-9][0-9]-W[0-9][0-9])*; k=[0-9]+(; unit=(sessions|weeks))?; approver: (alpha|auto)\\)( invalidated-by: [A-Za-z0-9._+:#/-]+)*$"; if ($0 ~ pattern) {print; exit}}
   ' "$state_tmp")
   current_sha=$(sha_line "$line") || return 1
   index_upsert "$rollback_id" "$class" rolled-back "$current_sha" || return 1
-  printf 'ts=%s applyid=%s theme=%s class=%s decision=rolled-back reason=- note=- approver=alpha target=STATE.md line_sha=%s\n' \
+  printf 'ts=%s applyid=%s theme=%s class=%s decision=rolled-back reason=- note=- k=- unit=- approver=alpha target=STATE.md line_sha=%s\n' \
     "$run_ts" "$apply_id" "$rollback_id" "$class" "$current_sha" >>"$receipts"
   rolled_back_count=$((rolled_back_count + 1))
 }
@@ -941,6 +991,7 @@ if [[ -n "$rollback_id" ]]; then
   if ! rollback_operation; then abort_under_state_lock rollback-refused; fi
 else
   build_graph_files || { release_state_lock; exit 1; }
+  decision_unit=$recurrence_unit
   section_verified_promotions=0
   section_rules_promotions=0
   auto_promotions=0
@@ -975,7 +1026,10 @@ else
     theme=$(sed -n '1p' "$block/theme")
     reviewer=$(sed -n '1p' "$block/reviewer")
     weeks=$(sed -n '1p' "$block/weeks")
-    k=$(sed -n '1p' "$block/k")
+    run_k=$(sed -n '1p' "$block/k")
+    week_k=$(sed -n '1p' "$block/week-k")
+    if [[ "$recurrence_unit" == sessions ]]; then k=$run_k; else k=$week_k; fi
+    decision_k=$k
     supersedes=$(sed -n '1p' "$block/supersedes")
     slug=$(sed -n '1p' "$block/slug")
     printf '%s\n' "$id" >>"$tmp_root/seen-ids"
@@ -1004,8 +1058,12 @@ else
     fi
 
     if [[ "$class" == skill ]]; then
-      if [[ "$k" -lt 2 ]]; then
+      if [[ "$k" -lt "$promote_min_k" ]]; then
         record_result "$id" "$class" skipped k-below-2 - - - - 1 || { release_state_lock; exit 1; }
+        continue
+      fi
+      if [[ "$week_k" -lt "$promote_min_weeks" ]]; then
+        record_result "$id" "$class" skipped weeks-below-min - - - - 1 || { release_state_lock; exit 1; }
         continue
       fi
       stub_dir=$staging_root/$slug
@@ -1065,7 +1123,7 @@ else
     if [[ "$stamp_count" -gt 1 ]]; then release_state_lock; printf 'apply-promotions: duplicate apply stamp for %s\n' "$id" >&2; exit 1; fi
     if [[ "$stamp_count" -eq 1 ]]; then
       existing_line=$(awk -v id="$id" '
-        {pattern="^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] .* \\(source: " id "; reviewer: [A-Za-z0-9._+-]+; weeks: [0-9][0-9][0-9][0-9]-W[0-9][0-9](,[0-9][0-9][0-9][0-9]-W[0-9][0-9])*; k=[0-9]+; approver: (alpha|auto)\\)( invalidated-by: [A-Za-z0-9._+:#/-]+)*$"; if ($0 ~ pattern) {print; exit}}
+        {pattern="^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] .* \\(source: " id "; reviewer: [A-Za-z0-9._+-]+; weeks: [0-9][0-9][0-9][0-9]-W[0-9][0-9](,[0-9][0-9][0-9][0-9]-W[0-9][0-9])*; k=[0-9]+(; unit=(sessions|weeks))?; approver: (alpha|auto)\\)( invalidated-by: [A-Za-z0-9._+:#/-]+)*$"; if ($0 ~ pattern) {print; exit}}
       ' "$state_tmp")
       existing_sha=$(sha_line "$existing_line") || { release_state_lock; exit 1; }
       index_upsert "$id" "$class" promoted "$existing_sha" || { release_state_lock; exit 1; }
@@ -1107,8 +1165,12 @@ else
         note='supersedes-unresolved'
       fi
     fi
-    if [[ "$k" -lt 2 ]]; then
+    if [[ "$k" -lt "$promote_min_k" ]]; then
       record_result "$id" "$class" skipped k-below-2 "$note" - "$target" - 1 || { release_state_lock; exit 1; }
+      continue
+    fi
+    if [[ "$week_k" -lt "$promote_min_weeks" ]]; then
+      record_result "$id" "$class" skipped weeks-below-min "$note" - "$target" - 1 || { release_state_lock; exit 1; }
       continue
     fi
     approver=-
@@ -1130,7 +1192,7 @@ else
       record_result "$id" "$class" skipped volume-guard "$note" "$approver" "$target" - 1 || { release_state_lock; exit 1; }
       continue
     fi
-    line="- $run_date $theme (source: $id; reviewer: $reviewer; weeks: $weeks; k=$k; approver: $approver)"
+    line="- $run_date $theme (source: $id; reviewer: $reviewer; weeks: $weeks; k=$k; unit=$recurrence_unit; approver: $approver)"
     state_append_line "$heading" "$line" || { release_state_lock; exit 1; }
     if [[ -n "$annotate_target" ]]; then state_annotate_line "$annotate_target" "$id" || { release_state_lock; exit 1; }; fi
     line_sha=$(sha_line "$line") || { release_state_lock; exit 1; }
@@ -1154,6 +1216,8 @@ else
     [[ -n "$approval" ]] || continue
     if ! grep -Fxq "$approval" "$tmp_root/seen-ids"; then
       class=$(index_class "$approval")
+      decision_k=-
+      decision_unit=-
       record_result "$approval" "$class" skipped unknown-approval - - - - 0 1 || { release_state_lock; exit 1; }
     fi
   done <"$approval_file"

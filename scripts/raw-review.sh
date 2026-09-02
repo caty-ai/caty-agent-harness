@@ -78,6 +78,7 @@ run_id=$(date -u '+%Y%m%dT%H%M%SZ')-$$
 mode=nightly
 [[ -n "$requested_week" ]] && mode=retro
 [[ "$dry_run" -eq 1 ]] && mode=dry
+recurrence_unit=sessions
 window=-
 file_count=0
 prompt_bytes=0
@@ -125,8 +126,10 @@ parse_decimal_config() {
 }
 
 receipt_line() {
-  printf 'ts=%s runid=%s mode=%s window=%s files=%s prompt_bytes=%s model_used=%s chain_pos=%s blocks=%s fabricated=%s rejected=%s candidates=%s self_review_refused=%s zero_streak=%s error=%s\n' \
-    "$run_ts" "$run_id" "$mode" "$window" "$file_count" "$prompt_bytes" \
+  local receipt_unit=$recurrence_unit
+  case "$receipt_unit" in sessions|weeks) ;; *) receipt_unit=- ;; esac
+  printf 'ts=%s runid=%s mode=%s unit=%s window=%s files=%s prompt_bytes=%s model_used=%s chain_pos=%s blocks=%s fabricated=%s rejected=%s candidates=%s self_review_refused=%s zero_streak=%s error=%s\n' \
+    "$run_ts" "$run_id" "$mode" "$receipt_unit" "$window" "$file_count" "$prompt_bytes" \
     "$(record_value "$model_used")" "$chain_pos" "$blocks" "$fabricated" \
     "$rejected" "$candidates" "$(record_value "$self_review_refused")" \
     "$zero_streak" "$1"
@@ -241,7 +244,6 @@ fabricated_floor=2
 fabricated_pct=50
 zero_streak_threshold=14
 prompt_max_bytes=2000000
-recurrence_unit=sessions
 promote_min_k=2
 promote_min_weeks=0
 reviewer_count=0

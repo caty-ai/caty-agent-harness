@@ -122,7 +122,12 @@ approval. The consumer holds an apply-exclusive lock, performs every `STATE.md`
 mutation under the shared state lock through one atomic publish, and publishes the
 anti-resurrection `apply-index.tsv` in the same lock hold. `apply.log` records the
 run start, per-theme transitions, and run summary; caps refuse new entries rather
-than evicting existing durable content.
+than evicting existing durable content. Apply reads the same recurrence unit and
+thresholds as raw-review: sessions mode uses the host-emitted, member-bounded `run-k`,
+weeks mode independently recounts distinct ISO weeks, and both enforce the configured
+minimum week spread. In the task-runner rig, each fresh-context step is a separate
+session only when its flush header carries that step's distinct runtime session id;
+the session count is recurrence evidence, not proof of independent authorship.
 
 **Quickstart is not the whole installation.** It creates the workspace scaffold and the managed bootstrap. End-of-session checkpoint reminders and deeper automation require the per-runtime wiring in the next section (user-level hook/cron registration); until that is done, only the start-of-task discipline from the bootstrap block is active.
 

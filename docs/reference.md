@@ -103,8 +103,10 @@ addition to `promote_min_k`, regardless of the recurrence unit. `promote_min_k` 
 an integer of at least 1, and `promote_min_weeks` an integer of at least 0.
 
 Candidate files retain the existing `run-weeks`, `run-k`, and `weeks` fields for the
-apply consumer. The append-only promotions ledger additionally records informational
-`run-sessions`; it does not change candidate parsing.
+apply consumer. Apply uses the bounded host-emitted `run-k` in sessions mode and its own
+distinct-`weeks` recount in weeks mode, then independently enforces `promote_min_weeks`.
+The append-only promotions ledger additionally records informational `run-sessions`.
+Raw-review run receipts include the configured `unit`.
 
 Configure the reviewer route with enough output tokens for about 30 THEME blocks; for
 claude-CLI-wrapped chains, size `CLAUDE_CODE_MAX_OUTPUT_TOKENS` accordingly. An output-capped
@@ -150,6 +152,15 @@ transition, and summary receipts. Rollback invalidates only an apply-stamped ent
 or an unchanged apply-generated staging stub. Exit codes are `0` for success or a
 paused skip, `1` for an operational refusal, and `2` for usage or invalid numeric
 configuration.
+
+The consumer reads `recurrence_unit`, `promote_min_k`, and `promote_min_weeks` from
+`loop/review.conf` using the same defaults and validation as raw-review. In sessions
+mode, `run-k` must be an ASCII non-negative integer no greater than the member count;
+otherwise the block is `hygiene`. In weeks mode, apply preserves the historical
+independent distinct-week recount. A recurrence miss remains the documented terminal
+`k-below-2` decision token; a calendar-spread miss is `weeks-below-min`. Malformed
+configuration exits 2 and appends a fail-closed `reason=config` summary. Per-theme
+decision receipts and durable provenance record effective `k` and `unit`.
 
 ## Task-runner execution boundary
 

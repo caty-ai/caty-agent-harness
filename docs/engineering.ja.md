@@ -103,6 +103,19 @@ ok: required layout and STATE.md headers present
 
 verifier availability や cron wiring など、optional learning-path row も表示します。required layout と required `STATE.md` header が健全でも optional row に `FAIL` が出ることがあります。この場合の exit code は `0` です。ただし `FAIL` は、その runtime で loop が fully operational ではないことを示します。利用前に対応する adapter の配線を完了してください。フラグの全一覧は[詳細仕様](reference.ja.md)へ。
 
+### Promotion apply consumer
+
+`scripts/apply-promotions.sh` は検証済みの `loop/promotions/candidates-<runid>.md` を
+deterministic に消費します。bare run は pending decision を報告して draft skill stub を作り、
+capability-fact は `--auto-capability-facts` または explicit `--approve`、rule は explicit approval を
+必要とします。consumer は apply-exclusive lock を保持し、共有 state lock 内の 1 回の atomic publish で
+`STATE.md` と anti-resurrection の `apply-index.tsv` を更新します。apply は raw-review と同じ recurrence
+unit と threshold を読みます。sessions mode は host-emitted かつ member 数以下に検証した `run-k`、
+weeks mode は apply 自身が数え直した distinct ISO week を使い、どちらも設定済み minimum week spread を
+強制します。task-runner rig の fresh-context step が別 session として数えられるのは、その step の flush
+header に runtime が別々の session id を記録した場合だけです。この session 数は recurrence evidence であり、
+独立した author の証明ではありません。
+
 **クイックスタートは導入の全部ではありません。** ここで作られるのは workspace の scaffold と managed bootstrap までです。作業終了時の checkpoint リマインダーや深い自動化には、次節の runtime 別配線（ユーザー階層の hook / cron 登録）が必要で、それまでは bootstrap block による作業開始時の規律だけが有効です。
 
 ---
