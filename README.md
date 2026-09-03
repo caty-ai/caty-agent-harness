@@ -193,7 +193,7 @@ The **overflow sentinel** ([design issue #159](https://github.com/caty-ai/caty-a
 
 A third sealed experiment, **P2-WIN**, characterized the jobs themselves on bare models — a measurement of completion outcomes across three job-size bands, not an intervention result: [tables & limitations](docs/benchmark.md#p2-win).
 
-A further sealed lane, **EV-007 / EV-007b**, measured the other half of the claim — the learning loop. It produced **no learning event and no main run**: the cross-model review fail-closed twice, and by the time a second instrument was built, harness + haiku solved every corpus we own at 19–20/20 — there was no repeat-mistake population left for the loop to act on. What the lane did produce is a product change shipped in v0.24.0 (promotion counts recurrence in distinct sessions, not ISO weeks): [what stopped, and why](docs/benchmark.md#ev-007).
+A further lane, **EV-007 / EV-007b**, measured the other half of the claim — the learning loop. It produced **no learning event and no main run**: the cross-model review fail-closed twice, and by the time a second instrument was built, harness + haiku scored 19–20/20 on every instrument tried — there was no repeat-mistake population left for the loop to act on. What the lane did produce is a product change shipped in v0.24.0 (promotion counts recurrence in distinct sessions, not ISO weeks): [what stopped, and why](docs/benchmark.md#ev-007).
 
 **Blind telemetry paths — do not switch these on unmeasured.** Through the current shim, glm / muse report all-zero per-turn usage, and kimi emits no usage at all. A runtime whose live telemetry cannot be seen must not run the sentinel default-on: there is no water level to watch.
 

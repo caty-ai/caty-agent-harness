@@ -26,10 +26,11 @@ new lanes are added as they are measured (tracking:
 5. **EV-007 / EV-007b — the learning loop.** Does "review, then promote" stop
    the same mistake coming back? Two lanes, and no learning-effect number in
    either: the review fail-closed twice, and by the time a second instrument was
-   built the harness solved every corpus we own. What the lane did produce is a
+   built the harness scored 19–20/20 on every instrument tried. What the lane did produce is a
    product change and a live wiring proof — see [EV-007](#ev-007).
 
-Everything here is sealed and pre-registered before any run, machine-scored,
+Every run here was sealed and pre-registered before it started (EV-007b's main run
+never started; its pre-registration stayed a draft), machine-scored,
 and reported with its limitations attached — including the places where the
 harness did not win.
 
@@ -714,9 +715,11 @@ else on this page: the runs that did not deliver a headline get written down too
 
 **Read this first.** Nothing below is evidence that the learning loop has no
 effect. It is an **instrument failure**, and the largest single cause is the
-product's own improvement between pins: on the 2026-08-19 pin the harness made
-13.6 wrong answers per job on the `p3-M` corpus, and on the pins used here the
-same corpus scores 20/20. The measuring stick dissolved because the thing being
+product's own improvement between pins: on the 2026-08-19 pin the harness averaged 13.6 wrong
+answers per job across the five `p3-M` instances (`p3-M-i1` itself: 14/20, 6 wrong,
+7 invalid quotes), on v0.21.1 EV-007's own before-block still made mistakes on it (B 73/80, C 72/80 —
+all in j1–j3b; j4–j7 were 20/20), and by the P0.7 pilot the same `p3-M-i1` scored 20/20
+in all four jobs (invalid quotes 0/0/0/5). The measuring stick dissolved because the thing being
 measured got better.
 
 ### What was measured
@@ -789,10 +792,10 @@ difficulty ladder; the pre-written qualification rule was **mistake(job) = wrong
 answer ∪ invalid quote, per question id; a level qualifies if both jobs have ≥2
 mistakes and ≥10/20 correct**.
 
-| stage | corpus | posture | correct (2 jobs) | mistakes per job | charge |
+| stage | corpus | posture | correct (2 jobs) | mistakes per job | charge (P0.7: per job; ladder: 2-job total) |
 |---|---|---|---|---|---|
 | P0.7 | `p3-M-i1` | sentinel active ×2 | 20/20, 20/20 | 0, 0 | 3.69M, 4.25M |
-| P0.7 | `p3-M-i1` | sentinel off ×2 | 20/20, 20/20 | 0, 0 | 4.12M, 4.16M |
+| P0.7 | `p3-M-i1` | sentinel off ×2 | 20/20, 20/20 | 0, 5 (Q06–Q10 invalid quotes) | 4.12M, 4.16M |
 | ladder r1 | `p3-S-i1` | active | 19/20, 20/20 | 1, 0 | 4,092,993 |
 | ladder r1 | `p2-L-i1` | active | 20/20, 19/20 | 0, 1 | 11,517,917 |
 | ladder r1 | `p3-L-i1` | active | 20/20, 19/20 | 0, 1 | 12,622,123 |
@@ -801,13 +804,14 @@ mistakes and ≥10/20 correct**.
 
 **No level qualifies** — not one reaches 2 mistakes in both jobs. P0.7 also
 falsified its own hypothesis: the overflow sentinel is not the scrubber (the
-`neither` decision), and neither is the retry loop (two of the four jobs
+`neither` decision), and neither is the attempt loop (two of the four jobs
 delivered in exactly the plan-step count, with no retries and no mistakes).
 
-The finding, stated as narrowly as the data allows: **harness + haiku on v0.24.0
-solves every corpus in the EV-006/EV-009 families at 19–20/20 up to ~2.4M-token
-corpora — the repeat-mistake population the claim needs does not exist on any
-existing instrument.** Per the owner's stop rule the run was not sealed and not
+The finding, stated as narrowly as the data allows: **harness + haiku scored 19–20/20 on every instrument tried — one instance each of
+`p3-M`, `p3-S`, `p2-L`, `p3-L` on v0.21.1 (P0.7, ladder r1) and the EV-009 `xxl` / `xxxl`
+calibration instances (~1.2M / ~2.4M tokens) on v0.24.0 (ladder r2) — so none of the
+instruments tried has the repeat-mistake population the claim needs.** That is a statement
+about the instances tried, not about every corpus in those families. Per the owner's stop rule the run was not sealed and not
 started; there was no fall-through to the next instrument option. For the
 overflow-band corpora themselves see [EV-009](#ev-009); those tables are not
 repeated here.
@@ -834,14 +838,14 @@ requirement `promote_min_weeks=0` (off by default). See the review section of
 **Live wiring re-check on v0.24.0 — PASS 6/6.** Run on the pin
 `90a602f`, in a fresh workspace seeded with real (re-dated) flush files, with
 receipts: intake drained to `files_scanned=0`; the review receipt carries the new
-`unit=sessions` field; apply promoted **16** themes, every one `unit=sessions`,
-including a theme whose two members sit in the *same day's* file under two
-distinct `session=` ids (`run-k: 2`, week count 1); the hold path was shown
+`unit=sessions` field; apply promoted **16** themes, every one `unit=sessions`; a further *rule* theme whose two
+members sit in the *same day's* file under two distinct `session=` ids cleared the k-gate
+at `run-k: 2` (week count 1) and sat `awaiting-approval` (rules need the approval pass); the hold path was shown
 counterfactually by re-applying the byte-identical candidates file with
 `recurrence_unit=weeks`, which held exactly the 7 single-week multi-session
 themes with the token `k-below-2`; a second apply promoted 0 with
-`skipped-already-applied=16` (idempotent); and all 14 STATE.md lines carry the
-full provenance trailer (`source: / reviewer: / weeks: / k= / unit=sessions /
+`skipped-already-applied=16` (idempotent); and all 14 STATE.md lines (16 promotions minus the 2 skill-class themes, which go to
+`skills/_staging/` rather than STATE.md) carry the full provenance trailer (`source: / reviewer: / weeks: / k= / unit=sessions /
 approver:`). `## General rules` received 0 lines — every `rule` theme stayed
 `awaiting-approval`, as designed.
 
@@ -859,8 +863,11 @@ was a wiring check and measures nothing about whether distillation helps.
    contrast anywhere in either lane. Do not read "the loop works" or "the loop is
    useless" out of this section; neither is supported.
 2. **The instrument died because the product improved.** On the 2026-08-19 pin the
-   harness averaged 13.6 wrong answers per job on `p3-M` (and 17.6 on `p3-L`); on
-   v0.21.1 / v0.24.0 the same corpora are 19–20/20. Difficulty scaling did not
+   harness averaged 13.6 wrong answers per job across the five `p3-M` instances (17.6
+   across `p3-L`); in the EV-007b pilots on v0.21.1 the tried instances `p3-M-i1`, `p3-S-i1`,
+   `p2-L-i1`, `p3-L-i1` scored 19–20/20 (EV-007's own before-block on the same pin
+   ranged 16–20/20 per job — the mistakes were already disappearing within that run),
+   and on v0.24.0 the two EV-009 instances scored 20/20. Difficulty scaling did not
    bring the mistakes back — even at ~2.4M tokens the two ladder levels produced
    0 and 1 mistakes across four jobs.
 3. **Judge variance sat on the fail-close boundary.** The two EV-007 review runs
@@ -884,8 +891,9 @@ was a wiring check and measures nothing about whether distillation helps.
    timeout on both rounds of a ~142 KB nightly prompt and Kimi K3 produced the
    output at chain position 2 — a chain that puts GLM first pays ~15 min of dead
    leg per turn; (b) `apply-promotions.sh` gates on `k ≥ promote_min_k` alone and
-   **ignores the reviewer's `promote: not-yet` field** — four such themes were
-   promoted, so the reviewer cannot veto a promotion (design question for the
+   **ignores the reviewer's `promote: not-yet` field** — four such themes passed the k-gate anyway (the two
+   capability-facts were promoted; the two rules sat `awaiting-approval`), so the
+   reviewer cannot veto a promotion (design question for the
    [#201](https://github.com/caty-ai/caty-agent-harness/issues/201) /
    [#268](https://github.com/caty-ai/caty-agent-harness/issues/268) follow-ups);
    (c) `flush-intake.sh` never archives the current UTC day's flush file, so
@@ -919,7 +927,8 @@ are excluded from every denominator and counted separately:
 EV-007b's recorded deviations, all pre-seal: the RUNPLAN stop rule (stop if no
 posture reaches ≥2 true-misquotes per job) was **superseded by the calibration
 ladder** rather than executed, recorded in #264 and confirmed by the owner on
-2026-09-03 together with the instrument choice (option 1, stop on failure); the first
+2026-09-03 together with the instrument choice (candidate 1, stop on failure) — owner
+decisions recorded in [#264](https://github.com/caty-ai/caty-agent-harness/issues/264#issuecomment-5530742823); the first
 ladder round-2 launch aborted at 6–7 of 33 stages because every slot profile had
 been re-linked to the user-global files (the D4 vector again) and was relaunched
 after normalization; and the first XXXL launch was refused at enqueue because the
@@ -938,13 +947,13 @@ plan-step count.
 | EV-007b pilots: P0.7 | 16.2M |
 | EV-007b pilots: ladder round 1 | ≈28.2M |
 | EV-007b pilots: ladder round 2 | 132.3M |
-| **EV-007b total, reported outside the 80M cap** | **≈176.7M** |
+| **EV-007b total, reported outside the 80M cap** | **176,756,410 (≈176.8M)** |
 
 The sealed EV-007 text caps "charge tokens total across all arms" and separately
 says infra failures count in no metric denominator; it does not say whether they
 count against the cap, so both readings are given. The cancelled after-block (9
-jobs) would have exceeded the cap under either. Per-job charge by ladder level is
-in the EV-007b table above; the two overflow-band levels are the expensive ones
+jobs) would have exceeded the cap under either. Charge by ladder level is in the EV-007b table above (2-job totals; P0.7 rows per job);
+the two overflow-band levels are the expensive ones
 (≈21–24M per XXL job, ≈42–46M per XXXL job).
 
 ### Reproduce / audit
