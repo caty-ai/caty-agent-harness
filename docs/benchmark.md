@@ -20,10 +20,9 @@ new lanes are added as they are measured (tracking:
 3. **P2-WIN — bare models only.** Where does completion stop as jobs outgrow
    the window, and what does failure look like — see [P2-WIN](#p2-win).
 4. **EV-009 — bare vs harness inside the overflow bands.** The intervention
-   arm P2-WIN deliberately left out: 8 sealed hold-out runs, reported in
-   [#235](https://github.com/caty-ai/caty-agent-harness/issues/235); the full
-   section lands on this page via its own reviewed lane
-   ([#254](https://github.com/caty-ai/caty-agent-harness/issues/254)).
+   arm P2-WIN deliberately left out: 8 sealed hold-out runs (including the
+   pre-registered honest-failure branch), zero deviations — see
+   [EV-009](#ev-009).
 
 Everything here is sealed and pre-registered before any run, machine-scored,
 and reported with its limitations attached — including the places where the
@@ -486,6 +485,17 @@ transfer**, and no band is named in prose either.
 | XXL | 0.905 / 0.161 | 0.181 / **1.000** |
 | XXXL | 0.294 / 0.139 | 0.041 / 0.024 |
 
+![Scatter plot of the 12 sealed P2-WIN hold-out runs. x-axis: share of corpus files read on attempt 1, log scale from 2% to 100%. y-axis: probe score out of 20 against the hidden answer key. The opus 2.4M-band points sit at 2–4% coverage yet score 20/20; one sonnet point scores 3/20 despite 90% read; five points sit at 100% coverage and 20/20, dodged horizontally for visibility.](../assets/readme/p2win-coverage-vs-score.svg)
+
+The picture the table compresses: **the probe score alone cannot tell whether
+the files were read.** The plotted opus ≈2.4M-band tickets read 2–4% of the
+files and still scored 20/20, while the deepest low-score outlier is a sonnet
+burn-through ticket that *had* read ~90% of the corpus. In these 12 runs, only
+the measured read coverage separated reading from scoring. (Sealed values
+only: coverage from the report's coverage_001 table above, scores from the
+per-run `score.json`. Descriptive — no intervention claim.) The follow-up
+experiment inside these two bands is [EV-009](#ev-009).
+
 ### Degradation bits (k/2 hold-out cells where the bit fired)
 
 | Band | sonnet repeat-gate / correct<20 | opus repeat-gate / correct<20 |
@@ -559,3 +569,126 @@ deviations ledger, the review records (3 first-round seats + delta reviews,
 one delta recovered by transcript, and the panel record), per-run telemetry
 and transcripts live with the rig and are retained offline, available on
 request — the same retention policy as EV-006. Anchor: https://github.com/caty-ai/caty-agent-harness/issues/129#issuecomment-5463745355.
+
+---
+
+<a id="ev-009"></a>
+
+## EV-009 — bare vs harness inside the overflow bands (2026-08)
+
+P2-WIN mapped where bare runs stop completing; it deliberately made no
+intervention claim. EV-009 is the missing intervention arm: the same corpus
+cells, inside the two overflow bands (**XXL ≈ 1.2M**, **XXXL ≈ 2.4M** tokens),
+run under the harness's staged decomposition. **Eight sealed runs** (sonnet /
+opus × XXL / XXXL × hold-out seeds 9103 / 9104), pre-registered and sealed
+before any run — the pre-registration went through a 3-seat blind review that
+converged on one CRITICAL (a results-path collision the pilot could not have
+caught) and was re-sealed as v2 — then executed same-day in series: **zero
+infra failures, zero deviations** (the deviations ledger stayed empty). The
+bare comparators are the sealed P2-WIN values, transcribed — not re-run.
+
+**Read this first — it is a regime comparison, not a controlled A/B.** The
+bare cells ran under P2-WIN's envelope (token budget 88M / 176M, up to 10
+cold-start attempts); the harness cells ran under a band-scaled envelope
+(token budget 100M / 200M, attempt caps 42 / 83, plan of 33–67 stages). Three
+of the four bare cells were budget-censored under their smaller envelope. The
+arm effect and the envelope effect are **not separated**; every statement
+below is a per-cell description, not a general law.
+
+"Verified completion" here is the **experiment gate** (`protocol_accept`:
+read-verification over the union of all stages, plus the final answers) — not
+the harness's own `delivered` status, which is roster-based and does not
+verify reading (the 9102 pilot demonstrated exactly that gap, which is why the
+endpoint was pinned to the gate in the pre-registration). It is also not the
+same bit as bare's single-attempt gate; comparisons hold within a
+corpus/seed cell only.
+
+### Primary — verified completion k/2 (terminal decomposition in parentheses)
+
+| Cell | bare (P2-WIN, sealed) | harness (EV-009) |
+|---|---|---|
+| sonnet XXL | 0/2 (token budget ×2) | 0/2 (delivered ×2 — gate refused on read-verification: honest failure ×2) |
+| opus XXL | 1/2 (one token budget) | **2/2** |
+| sonnet XXXL | 0/2 (token budget / attempts budget) | 0/2 (delivered ×2 — honest failure ×2) |
+| opus XXXL | 0/2 (attempts budget ×2; read coverage 0.02–0.04) | **2/2** |
+
+Because bare opus completed one XXL seed, "the cells bare could not complete"
+is not a grouping this table supports — read it cell by cell.
+
+### The honest-failure branch (sonnet) — a pre-registered outcome, not an accident
+
+In all four sonnet runs the harness **delivered**: 20/20 correct on the
+hidden key, every quote valid, zero unsupported answers. The experiment gate
+then refused verified completion in all four, listing the ~10–12% of corpus
+files that appeared in the processing roster without ever being read
+(targeted-search behaviour, same shape as the 9102 pilot). This branch was
+pre-registered as a publishable outcome, and it doubles as a negative control
+on the instrument: within these eight runs, the same gate passed 4 and
+refused 4 — it discriminated; it did not rubber-stamp.
+
+### Per-run detail (sealed formulas; unread = files in roster never read)
+
+| model | band | seed | unread / total | read rate | correct | attempts / plan | charge (tokens) | wall |
+|---|---|---|---|---|---|---|---|---|
+| sonnet | XXL | 9103 | 43/430 | 0.900 | 20/20 | 33/33 | 21,814,452 | 27 min |
+| sonnet | XXL | 9104 | 44/429 | 0.897 | 20/20 | 34/34 | 22,023,118 | 28 min |
+| opus | XXL | 9103 | **0/430** | **1.000** | 20/20 | 33/33 | 38,278,099 | 32 min |
+| opus | XXL | 9104 | **0/429** | **1.000** | 20/20 | 34/34 | 32,763,706 | 30 min |
+| sonnet | XXXL | 9103 | 108/879 | 0.877 | 20/20 | 68/67 | 55,908,895 | 60 min |
+| sonnet | XXXL | 9104 | 97/848 | 0.886 | 20/20 | 66/66 | 53,226,271 | 57 min |
+| opus | XXXL | 9103 | **0/879** | **1.000** | 20/20 | 67/67 | 83,751,901 | 65 min |
+| opus | XXXL | 9104 | **0/848** | **1.000** | 20/20 | 66/66 | 82,977,825 | 64 min |
+
+Across the 8 runs: **160/160 correct, zero unsupported answers.** The four
+opus runs read 100% of the corpus files with attempts exactly equal to plan
+stages (zero wasted attempts) — in P2-WIN the same model's XXXL tickets read
+2–4% of the files and kept submitting (the scatter figure in the
+[P2-WIN section](#p2-win) shows those bare runs). Coverage is computed on
+different planes across arms (bare: attempt-1 gate; harness: run-union
+telemetry) — a sealed, footnoted difference.
+
+### Cost and resources
+
+Total charge **390,744,267 tokens** — 32.6% of the pre-registered 1.2B cap
+(the stop rule never fired). Per band: XXL ≈ 22M (sonnet) / ≈ 35M (opus) per
+run; XXXL ≈ 55M (sonnet) / ≈ 83M (opus) per run. For reference, the heaviest
+bare runs in these bands charged up to 98.7M (XXL) and 327.4M (XXXL) — a
+regime-caveated reference only (different envelopes; the 327.4M maximum is a
+sonnet calibration run). **Per-cell, same-seed cost goes both ways**: opus
+XXXL 9103 — bare charged 104.9M and failed, harness charged 83.8M and
+completed; opus XXXL 9104 — bare was budget-censored at 28.8M and failed,
+harness charged 83.0M. No cost-ratio claim is made. Wall clock: 8 runs in
+series, ~6 h (27–65 min per run).
+
+### Calibration (9102) — shown for context, used in no judgement
+
+| model | band | terminal | gate | correct | charge |
+|---|---|---|---|---|---|
+| sonnet | XXL | delivered | refused (76/417 unread) | 20/20 | 21,081,555 |
+| opus | XXXL | delivered | **accepted** (868/868 read) | 20/20 | 92,601,550 |
+
+The pilot informed the design (band-scaled budgets, gate-pinned endpoint) and
+is disclosed in the pre-registration's data-informed-design section.
+
+### Read these before quoting (inseparable from the tables)
+
+1. **Regime comparison** — bare and harness ran under different budget
+   envelopes; arm and envelope effects are not separated.
+2. Hold-out n=2 per cell. Per-cell descriptions and k/2 only — no tests, no
+   effect sizes, no model-general laws, no claim that these bands generalize.
+3. `protocol_accept` is not the same bit across arms; coverage is computed on
+   different planes across arms.
+4. Band-scaled budgets and the gate-pinned endpoint came from the 9102 pilot
+   (data-informed design, fully disclosed pre-seal).
+5. The harness's own `delivered` does not verify reading — that is a finding,
+   not a footnote: it is why the endpoint is the experiment gate.
+
+### Reproduce / audit
+
+Pre-registration `PREREGISTRATION-EV009.md` v2 + seal `SEAL-EV009.txt`
+(28 files, SHA-256) · 3-seat blind review r1 + delta (`reviews-ev009/`,
+adjudication included) · run log `RUN-LOG.txt` · report `EV009-REPORT.md`
+(machine-computed from the sealed §2 formulas) · primary data
+`results/ev009/{sonnet,opus}/harness/*/` (ledger / gate / score / telemetry +
+attempt transcripts), private experiments tree, summarized in
+[#235](https://github.com/caty-ai/caty-agent-harness/issues/235).

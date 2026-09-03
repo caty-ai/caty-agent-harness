@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="474" viewBox="0 0 760 474" font-family="Helvetica, Arial, sans-serif">
+<rect width="760" height="474" fill="#fcfcfb"/>
+<text x="64" y="30" font-size="16" font-weight="bold" fill="#333330">Reading is not what the score measures — 12 sealed bare runs</text>
+<text x="64" y="50" font-size="12" fill="#66665f">12 sealed P2-WIN hold-out runs (no harness). x: share of corpus files read on attempt 1 (log). y: probe score, hidden answer key.</text>
+<circle cx="69" cy="64" r="5" fill="#2a78d6"/>
+<text x="78" y="68" font-size="12" fill="#333330">sonnet</text>
+<circle cx="139" cy="64" r="5" fill="#eb6834"/>
+<text x="148" y="68" font-size="12" fill="#333330">opus</text>
+<circle cx="227" cy="64" r="5" fill="none" stroke="#66665f" stroke-width="1.5"/>
+<text x="237" y="68" font-size="12" fill="#333330">~0.6M tokens</text>
+<rect x="330.5" y="59.5" width="9" height="9" rx="1.5" fill="none" stroke="#66665f" stroke-width="1.5"/>
+<text x="345" y="68" font-size="12" fill="#333330">~1.2M tokens</text>
+<polygon points="443,58.5 438,68 448,68" fill="none" stroke="#66665f" stroke-width="1.5"/>
+<text x="453" y="68" font-size="12" fill="#333330">~2.4M tokens</text>
+<line x1="64" y1="396.0" x2="736" y2="396.0" stroke="#e8e8e4" stroke-width="1"/>
+<text x="56" y="400.0" font-size="11" fill="#66665f" text-anchor="end">0</text>
+<line x1="64" y1="321.0" x2="736" y2="321.0" stroke="#e8e8e4" stroke-width="1"/>
+<text x="56" y="325.0" font-size="11" fill="#66665f" text-anchor="end">5</text>
+<line x1="64" y1="246.0" x2="736" y2="246.0" stroke="#e8e8e4" stroke-width="1"/>
+<text x="56" y="250.0" font-size="11" fill="#66665f" text-anchor="end">10</text>
+<line x1="64" y1="171.0" x2="736" y2="171.0" stroke="#e8e8e4" stroke-width="1"/>
+<text x="56" y="175.0" font-size="11" fill="#66665f" text-anchor="end">15</text>
+<line x1="64" y1="96.0" x2="736" y2="96.0" stroke="#e8e8e4" stroke-width="1"/>
+<text x="56" y="100.0" font-size="11" fill="#66665f" text-anchor="end">20</text>
+<line x1="64.0" y1="96" x2="64.0" y2="396" stroke="#e8e8e4" stroke-width="1"/>
+<text x="64.0" y="414" font-size="11" fill="#66665f" text-anchor="middle">2%</text>
+<line x1="221.4" y1="96" x2="221.4" y2="396" stroke="#e8e8e4" stroke-width="1"/>
+<text x="221.4" y="414" font-size="11" fill="#66665f" text-anchor="middle">5%</text>
+<line x1="340.5" y1="96" x2="340.5" y2="396" stroke="#e8e8e4" stroke-width="1"/>
+<text x="340.5" y="414" font-size="11" fill="#66665f" text-anchor="middle">10%</text>
+<line x1="459.5" y1="96" x2="459.5" y2="396" stroke="#e8e8e4" stroke-width="1"/>
+<text x="459.5" y="414" font-size="11" fill="#66665f" text-anchor="middle">20%</text>
+<line x1="616.9" y1="96" x2="616.9" y2="396" stroke="#e8e8e4" stroke-width="1"/>
+<text x="616.9" y="414" font-size="11" fill="#66665f" text-anchor="middle">50%</text>
+<line x1="736.0" y1="96" x2="736.0" y2="396" stroke="#e8e8e4" stroke-width="1"/>
+<text x="736.0" y="414" font-size="11" fill="#66665f" text-anchor="middle">100%</text>
+<text x="400" y="434" font-size="12" fill="#333330" text-anchor="middle">share of corpus files read on attempt 1 (coverage_001, log scale)</text>
+<text x="20" y="246" font-size="12" fill="#333330" transform="rotate(-90 20 246)" text-anchor="middle">probe score (of 20, hidden key)</text>
+<text x="139.3" y="122.0" font-size="11.5" fill="#333330">opus, 2.4M band: 2–4% of files read — still 20/20</text>
+<text x="704.9" y="355.0" font-size="11.5" fill="#333330" text-anchor="end">sonnet: 3/20 despite 90% read</text>
+<polygon points="95.3,89.5 89.3,101.0 101.3,101.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<polygon points="187.3,89.5 181.3,101.0 193.3,101.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<polygon points="397.0,89.5 391.0,101.0 403.0,101.0" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<rect x="416.8" y="90.5" width="11" height="11" rx="1.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<rect x="436.9" y="90.5" width="11" height="11" rx="1.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<polygon points="525.7,119.5 519.7,131.0 531.7,131.0" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<rect x="713.4" y="345.5" width="11" height="11" rx="1.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="726.0" cy="96.0" r="6" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="736.0" cy="96.0" r="6" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="696.0" cy="96.0" r="6" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="706.0" cy="96.0" r="6" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<rect x="710.5" y="90.5" width="11" height="11" rx="1.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<text x="64" y="450" font-size="10.5" fill="#66665f">Sealed values: coverage from P2WIN-REPORT §1, scores from per-run score.json. Descriptive only — no intervention claim.</text>
+<text x="64" y="464" font-size="10.5" fill="#66665f">The five identical points at (100%, 20) are dodged horizontally for visibility.</text>
+</svg>
