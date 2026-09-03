@@ -29,8 +29,9 @@ new lanes are added as they are measured (tracking:
    built the harness scored 19–20/20 on every instrument tried. What the lane did produce is a
    product change and a live wiring proof — see [EV-007](#ev-007).
 
-Every run here was sealed and pre-registered before it started (EV-007b's main run
-never started; its pre-registration stayed a draft), machine-scored,
+Every main run here was sealed and pre-registered before it started; the EV-007b
+calibration pilots ran pre-seal under a pre-written rule and its main run never started
+(its pre-registration stayed a draft). Everything is machine-scored,
 and reported with its limitations attached — including the places where the
 harness did not win.
 
@@ -718,7 +719,8 @@ effect. It is an **instrument failure**, and the largest single cause is the
 product's own improvement between pins: on the 2026-08-19 pin the harness averaged 13.6 wrong
 answers per job across the five `p3-M` instances (`p3-M-i1` itself: 14/20, 6 wrong,
 7 invalid quotes), on v0.21.1 EV-007's own before-block still made mistakes on it (B 73/80, C 72/80 —
-all in j1–j3b; j4–j7 were 20/20), and by the P0.7 pilot the same `p3-M-i1` scored 20/20
+all in j1–j3b; the scored feeder jobs j4–j7 were 20/20, with C-j4 excluded as an
+empty run), and by the P0.7 pilot the same `p3-M-i1` scored 20/20
 in all four jobs (invalid quotes 0/0/0/5). The measuring stick dissolved because the thing being
 measured got better.
 
