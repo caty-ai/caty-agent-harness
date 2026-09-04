@@ -7,7 +7,7 @@ places where the harness did **not** win. One benchmark lane exists per model;
 new lanes are added as they are measured (tracking:
 [#129](https://github.com/caty-ai/caty-agent-harness/issues/129)).
 
-## The four experiment families — how to read this page
+## The five experiment families — how to read this page
 
 1. **EV-006 — bare vs the shipped harness.** Does external machinery rescue
    completion? Main run on claude-haiku-4.5 (the headline 13%→43%); the **P1
@@ -23,8 +23,15 @@ new lanes are added as they are measured (tracking:
    arm P2-WIN deliberately left out: 8 sealed hold-out runs (including the
    pre-registered honest-failure branch), zero deviations — see
    [EV-009](#ev-009).
+5. **EV-007 / EV-007b — the learning loop.** Does "review, then promote" stop
+   the same mistake coming back? Two lanes, and no learning-effect number in
+   either: the review fail-closed twice, and by the time a second instrument was
+   built the harness scored 19–20/20 on every instrument tried. What the lane did produce is a
+   product change and a live wiring proof — see [EV-007](#ev-007).
 
-Everything here is sealed and pre-registered before any run, machine-scored,
+Every main run here was sealed and pre-registered before it started; the EV-007b
+calibration pilots ran pre-seal under a pre-written rule and its main run never started
+(its pre-registration stayed a draft). Everything is machine-scored,
 and reported with its limitations attached — including the places where the
 harness did not win.
 
@@ -692,3 +699,303 @@ adjudication included) · run log `RUN-LOG.txt` · report `EV009-REPORT.md`
 `results/ev009/{sonnet,opus}/harness/*/` (ledger / gate / score / telemetry +
 attempt transcripts), private experiments tree, summarized in
 [#235](https://github.com/caty-ai/caty-agent-harness/issues/235).
+
+---
+
+<a id="ev-007"></a>
+
+## EV-007 / EV-007b — the learning loop: does "review, then promote" stop repeated mistakes? (2026-08/09)
+
+The other half of the README claim is that the harness **learns from raw
+experience so the next job gets better**. Two lanes were run at it. Neither
+produced a learning-effect number: EV-007 terminated with **no learning event**,
+and EV-007b never started its main run because no instrument we own still
+produces mistakes for the loop to act on. This section publishes the stop, its
+causes, and the product change the lane produced — the same rule as everywhere
+else on this page: the runs that did not deliver a headline get written down too.
+
+**Read this first.** Nothing below is evidence that the learning loop has no
+effect. It is an **instrument failure**, and the largest single cause is the
+product's own improvement between pins: on the 2026-08-19 pin the harness averaged 13.6 wrong
+answers per job across the five `p3-M` instances (`p3-M-i1` itself: 14/20, 6 wrong,
+7 invalid quotes), on v0.21.1 EV-007's own before-block still made mistakes on it (B 73/80, C 72/80 —
+all in j1–j3b; the scored feeder jobs j4–j7 were 20/20, with C-j4 excluded as an
+empty run), and by the P0.7 pilot the same `p3-M-i1` scored 20/20
+in all four jobs (invalid quotes 0/0/0/5). The measuring stick dissolved because the thing being
+measured got better.
+
+### What was measured
+
+EV-007's pre-registration (sealed 2026-08-27, pin `v0.21.1`) states the claim as:
+*"This run measures whether the learning loop as shipped changes downstream task
+performance."* Owner design decision **C5** fixed the axis: *"the essential value
+of distillation is never repeating the same mistake across future jobs — an asset
+that compounds"*, so the primary analysis is **longitudinal** (repeat-mistake rate
+before vs after one promotion boundary), not an endpoint race between arms.
+
+Three arms, one task model (claude-haiku-4.5), one persistent workspace per
+harness arm:
+
+| arm | what it is |
+|---|---|
+| A `bare` | model without the harness; fresh workspace per job — the rig/scorer anchor, not a memory condition |
+| B `harness-no-learning` | full harness, lessons/rules channel off (no hooks, no intake, no review); episodic channel open by design |
+| C `harness-learning` | full harness + raw layer → cross-model review → apply, under the sealed rule-approval policy |
+
+**EV-007b** (successor, home issue
+[#264](https://github.com/caty-ai/caty-agent-harness/issues/264)) keeps C5's
+headline wording and changes the **count axis**: instead of a calendar boundary
+that needs two ISO weeks to promote anything, three same-day learning rounds —
+before = round 1, after = the final block — with B and C at 8 jobs each and A
+reduced to 2 anchor jobs. Its pre-registration is a **draft (v0.2, plus a v0.2.1
+status note) and was never sealed**.
+
+### Result matrix — EV-007: no learning event
+
+The run executed its sealed clauses to the terminal one:
+
+| sealed clause | event | date | outcome |
+|---|---|---|---|
+| §5 cannot-measure fallback | before-block j1–j3 yields <3 true-misquotes in the learning arm | 2026-08-28 | extension fired → j3b run in all arms |
+| §5 cannot-measure fallback (2nd) | extended before-block j1–j3b still <3 | 2026-08-29 | headline declared **inconclusive** (mechanical) |
+| §5 clobber probe | j6 and j7 blocks both in `loop/archive/` after intake | 2026-09-01 | **PASS** |
+| §4 review | nightly `raw-review.sh`, single reviewer chain | 2026-09-01 | **fail-closed** (`fabricated=2/4`; threshold `fabricated_floor=2`, `fabricated_pct=50`) |
+| §4 fail-close handling | one sealed retry after the next UTC rollover | 2026-09-02 | retry **fail-closed** (`fabricated=3/4`) |
+| §4 terminal clause | no learning event → headline unmeasurable → after-block j8–j10 cancelled → run terminates | 2026-09-02 | applied verbatim |
+
+Promotions = **0**, approved rules = **0**. Under the sealed attribution rule
+nothing in this run can be attributed to "review, then promote", in either
+direction, and there is no after-block in any arm.
+
+The before-block the headline would have been computed on (j1–j3b, 4 jobs and 80
+scored items per arm):
+
+| arm | correct | gate-level NG | true-misquotes | mean charge |
+|---|---|---|---|---|
+| A `bare` | 53/80 (0.662) | 14/80 (0.175) | 14 | 9,126,484 |
+| B `harness-no-learning` | 73/80 (0.912) | 0/80 | 0 | 1,806,126 |
+| C `harness-learning` | 72/80 (0.900) | 1/80 (0.013) | 1 | 3,531,493 |
+
+That last column of zeros is the finding, and it is why the denominator was
+degenerate. Score-level `quote_invalid` per job, in order j1, j2, j3, j3b, j4,
+j5, j6, j7: bare **8, 0, 6, 0, 0, 1, 6, 0**; both harness arms **0 in every
+job** (15/15 scored harness jobs at score level; 14/15 at gate level — the one
+exception is a correct answer with an invalid quote). The harness attempt loop
+plus gate feedback removes scorable quote mistakes **within** a job, so the trap
+instrument that generates mistake variance on the bare arm generates almost none
+under the harness. Arms B and C are indistinguishable on it, and B has the
+learning loop switched off — this says nothing about learning.
+
+### Result matrix — EV-007b: no main run
+
+EV-007b's job before sealing was to find an instrument on which harness + haiku
+still makes mistakes. It ran a localization pilot (P0.7) and a two-round
+difficulty ladder; the pre-written qualification rule was **mistake(job) = wrong
+answer ∪ invalid quote, per question id; a level qualifies if both jobs have ≥2
+mistakes and ≥10/20 correct**.
+
+| stage | corpus | posture | correct (2 jobs) | mistakes per job | charge (P0.7: per job; ladder: 2-job total) |
+|---|---|---|---|---|---|
+| P0.7 | `p3-M-i1` | sentinel active ×2 | 20/20, 20/20 | 0, 0 | 3.69M, 4.25M |
+| P0.7 | `p3-M-i1` | sentinel off ×2 | 20/20, 20/20 | 0, 5 (Q06–Q10 invalid quotes) | 4.12M, 4.16M |
+| ladder r1 | `p3-S-i1` | active | 19/20, 20/20 | 1, 0 | 4,092,993 |
+| ladder r1 | `p2-L-i1` | active | 20/20, 19/20 | 0, 1 | 11,517,917 |
+| ladder r1 | `p3-L-i1` | active | 20/20, 19/20 | 0, 1 | 12,622,123 |
+| ladder r2 | `p2xxl-L-i9102` (≈1.2M tokens, 33 stages) | active | 20/20, 20/20 | 0, 0 | 44,873,830 |
+| ladder r2 | `p2xxxl-L-i9102` (≈2.4M tokens, 66 stages) | active | 20/20, 20/20 | 1, 0 | 87,437,650 |
+
+**No level qualifies** — not one reaches 2 mistakes in both jobs. P0.7 also
+falsified its own hypothesis: the overflow sentinel is not the scrubber (the
+`neither` decision), and neither is the attempt loop (two of the four jobs
+delivered in exactly the plan-step count, with no retries and no mistakes).
+
+The finding, stated as narrowly as the data allows: **harness + haiku scored 19–20/20 on every instrument tried — one instance each of
+`p3-M`, `p3-S`, `p2-L`, `p3-L` on v0.21.1 (P0.7, ladder r1) and the EV-009 `xxl` / `xxxl`
+calibration instances (~1.2M / ~2.4M tokens) on v0.24.0 (ladder r2) — so none of the
+instruments tried has the repeat-mistake population the claim needs.** That is a statement
+about the instances tried, not about every corpus in those families. Per the owner's stop rule the run was not sealed and not
+started; there was no fall-through to the next instrument option. For the
+overflow-band corpora themselves see [EV-009](#ev-009); those tables are not
+repeated here.
+
+### The product change this lane produced
+
+The lane was not free of product results — it produced one, plus a live proof
+that the loop is wired.
+
+**[#263](https://github.com/caty-ai/caty-agent-harness/issues/263) →
+[#267](https://github.com/caty-ai/caty-agent-harness/pull/267), shipped in
+v0.24.0: the promotion recurrence unit is distinct sessions.** The gate for
+promoting a lesson to `General rules` / `Verified facts` was specified as
+recurrence across *different jobs* in `docs/engineering.md` but implemented as
+recurrence across *different ISO weeks* — the week was inherited from the weekly
+cut of the raw layer, not chosen. A lesson that recurred twice in one afternoon
+could not become a rule until a night after the next Monday; EV-007 needed a
+two-week calendar to reach its single learning event, and terminated with none.
+The unit is now configurable in `loop/review.conf`: `recurrence_unit=sessions`
+(default) or `weeks`, `promote_min_k=2`, and an optional calendar-spread
+requirement `promote_min_weeks=0` (off by default). See the review section of
+[the reference](reference.md).
+
+**Live wiring re-check on v0.24.0 — PASS 6/6.** Run on the pin
+`90a602f`, in a fresh workspace seeded with real (re-dated) flush files, with
+receipts: intake drained to `files_scanned=0`; the review receipt carries the new
+`unit=sessions` field; apply promoted **16** themes, every one `unit=sessions`; a further *rule* theme whose two
+members sit in the *same day's* file under two distinct `session=` ids cleared the k-gate
+at `run-k: 2` (week count 1) and sat `awaiting-approval` (rules need the approval pass); the hold path was shown
+counterfactually by re-applying the byte-identical candidates file with
+`recurrence_unit=weeks`, which held exactly the 7 single-week multi-session
+themes with the token `k-below-2`; a second apply promoted 0 with
+`skipped-already-applied=16` (idempotent); and all 14 STATE.md lines (16 promotions minus the 2 skill-class themes, which go to
+`skills/_staging/` rather than STATE.md) carry the full provenance trailer (`source: / reviewer: / weeks: / k= / unit=sessions /
+approver:`). `## General rules` received 0 lines — every `rule` theme stayed
+`awaiting-approval`, as designed.
+
+**P0's original wiring proof (2026-08).** Before any of this, P0 checked that the
+loop closes a full turn at all inside real task-runner jobs across a persistent
+workspace: generation fired 4/4 jobs, the fold passed 4/4, and the folded content
+appeared in the next job's prompt 4/4 — **PASS**. P0 also showed the moved content
+was near-worthless, which is what the "review, then promote" design replaced. P0
+was a wiring check and measures nothing about whether distillation helps.
+
+### Read these before quoting
+
+1. **This is not a null result.** No promotion happened, no rule was approved, no
+   after-block ran, and no main EV-007b run started. There is no before/after
+   contrast anywhere in either lane. Do not read "the loop works" or "the loop is
+   useless" out of this section; neither is supported.
+2. **The instrument died because the product improved.** On the 2026-08-19 pin the
+   harness averaged 13.6 wrong answers per job across the five `p3-M` instances (17.6
+   across `p3-L`); in the EV-007b pilots on v0.21.1 the tried instances `p3-M-i1`, `p3-S-i1`,
+   `p2-L-i1`, `p3-L-i1` scored 19–20/20 (EV-007's own before-block on the same pin
+   ranged 16–20/20 per job — the mistakes were already disappearing within that run),
+   and on v0.24.0 the two EV-009 instances scored 20/20. Difficulty scaling did not
+   bring the mistakes back — even at ~2.4M tokens the two ladder levels produced
+   0 and 1 mistakes across four jobs.
+3. **Judge variance sat on the fail-close boundary.** The two EV-007 review runs
+   consumed byte-identical prompts (`prompt_bytes=10437`, same three files, same
+   window) and returned different verdicts, 2/4 and 3/4 fabricated, against a
+   threshold of exactly 2 of 4. n=2 cannot separate reviewer non-determinism from
+   a threshold sitting on the boundary; no cause is adjudicated. Separately, the
+   fabrication check is mechanical (a citation-prefix check), and 4 of the 14
+   reviewed raw blocks came from infra-failed jobs whose contradictory corpus
+   claims made the input look fabricated. The guard firing is the shipped
+   fail-closed design behaving as specified; whether a clean raw layer would have
+   cleared review is **not determinable from this run**.
+4. **Posture note (D4).** P0.7 and ladder round 1 ran with **un-normalized slot
+   profiles**: the job slots had their `settings.json` / `CLAUDE.md` re-linked to
+   the operator's user-global files, so those sessions carried 6 user-global
+   SessionStart hooks and ≈67k tokens of injected baseline. This is recorded, not
+   re-run. Ladder round 2 ran normalized (0 user-global hooks, 45.8k baseline at
+   step 1). Read rounds 1 and 2 as measured under different postures.
+5. **Three product observations from the wiring re-check** — observations with
+   issue pointers, not claims: (a) GLM-5.3 consumed its full 900 s reviewer
+   timeout on both rounds of a ~142 KB nightly prompt and Kimi K3 produced the
+   output at chain position 2 — a chain that puts GLM first pays ~15 min of dead
+   leg per turn; (b) `apply-promotions.sh` gates on `k ≥ promote_min_k` alone and
+   **ignores the reviewer's `promote: not-yet` field** — four such themes passed the k-gate anyway (the two
+   capability-facts were promoted; the two rules sat `awaiting-approval`), so the
+   reviewer cannot veto a promotion (design question for the
+   [#201](https://github.com/caty-ai/caty-agent-harness/issues/201) /
+   [#268](https://github.com/caty-ai/caty-agent-harness/issues/268) follow-ups);
+   (c) `flush-intake.sh` never archives the current UTC day's flush file, so
+   seeded or same-day material must be dated strictly before the run day or intake
+   never drains.
+6. **Arm B did not do what its recipe promised.** B was designed to keep the
+   episodic channel (Last session + handoffs) open while turning off only the
+   lessons/rules channel; on disk it wrote 0 Last-session entries and 0 handoffs
+   in all 8 jobs, because the CHECKPOINT demand comes from the Stop hook B does
+   not have. The realized contrast is "no hooks" vs "hooks + raw layer".
+7. **Instrument gaps.** Harness-arm `telemetry.json` recorded `events_total=0` in
+   all 16 EV-007 harness jobs, so the gate's read-coverage check — and with it
+   `task_resolved` and the residue-access count — is unmeasured for the harness
+   arms; harness token usage had to be rebuilt from the attempt streams.
+
+### Deviations and correction ledger
+
+EV-007 carried seven ledgered deviations (D1–D7); 8 infra-failed run directories
+are excluded from every denominator and counted separately:
+
+| id | date | what | handling |
+|---|---|---|---|
+| D1 | 08-28 | Job-slot profiles carried the operator's user-global settings (39 hook entries, broken paths → Writes denied) and a ~117k-token injected baseline | profiles normalized; j1 rerun in all arms; first j1 ×3 excluded |
+| D2 | 08-28 | Scorer crashed on a malformed answer file and killed a run the gate had already rejected | scorer rejection treated as a failed unscored attempt; A-j1 rerun |
+| D3 | 08-28 | Runner wrote a before-snapshot into a directory the job reset; two snapshots lost | snapshots relocated; no denominator effect |
+| D4 | 08-29 | The account-switcher share feature re-links slot profiles to the live user-global files on every launch, silently reverting D1 | restored from backup, D1 made durable by a normalization tool |
+| D5 | 08-29 | Corpus copied only on first use → j4 ran against the previous job's corpus; both harness arms empty-ran | per-job corpus union merge; B/C j4 rerun; both first runs excluded |
+| D6 | 08-29 | The C-j4 rerun empty-ran while its injected state still carried the failed run's "corpus broken" claim | rig-confounded: C-j4 excluded from all quantitative denominators, descriptive record kept |
+| D7 | 08-31 | D5's union assumed disjoint file names; two corpus instances share all 60 names → j7 served stale content under new names | union now compares content; B/C j7 rerun (20/20 each); rerun attempt counts carry a stale-residue caveat |
+
+EV-007b's recorded deviations, all pre-seal: the RUNPLAN stop rule (stop if no
+posture reaches ≥2 true-misquotes per job) was **superseded by the calibration
+ladder** rather than executed, recorded in #264 and confirmed by the owner on
+2026-09-03 together with the instrument choice (candidate 1, stop on failure) — owner
+decisions recorded in [#264](https://github.com/caty-ai/caty-agent-harness/issues/264#issuecomment-5530742823); the first
+ladder round-2 launch aborted at 6–7 of 33 stages because every slot profile had
+been re-linked to the user-global files (the D4 vector again) and was relaunched
+after normalization; and the first XXXL launch was refused at enqueue because the
+previous band's attempt budget leaked into the next level inside the ladder
+runner (`plan-step count exceeds attempts_budget: value=66 attempts_budget=42`) —
+fixed, **zero spend**. `attempts_budget=1`, the fallback instrument plan, turned
+out not to be runnable at all: the task-runner rejects a budget below the
+plan-step count.
+
+### Cost
+
+| lane | charge tokens |
+|---|---|
+| EV-007, scored run directories (all arms) | **116,782,940** — 97.3 % of the sealed 120M cap |
+| EV-007, including the 8 infra-failed directories | 130,228,564 — 108.5 % of the cap |
+| EV-007b pilots: P0.7 | 16.2M |
+| EV-007b pilots: ladder round 1 | ≈28.2M |
+| EV-007b pilots: ladder round 2 | 132.3M |
+| **EV-007b total, reported outside the 80M cap** | **176,756,410 (≈176.8M)** |
+
+The sealed EV-007 text caps "charge tokens total across all arms" and separately
+says infra failures count in no metric denominator; it does not say whether they
+count against the cap, so both readings are given. The cancelled after-block (9
+jobs) would have exceeded the cap under either. Charge by ladder level is in the EV-007b table above (2-job totals; P0.7 rows per job);
+the two overflow-band levels are the expensive ones
+(≈21–24M per XXL job, ≈42–46M per XXXL job).
+
+### Reproduce / audit
+
+Issues: [#202](https://github.com/caty-ai/caty-agent-harness/issues/202) (EV-007
+run narrative and correction ledger D1–D7),
+[#264](https://github.com/caty-ai/caty-agent-harness/issues/264) (EV-007b: P0.7,
+both ladder rounds, rig facts, wiring re-check),
+[#263](https://github.com/caty-ai/caty-agent-harness/issues/263) /
+[#267](https://github.com/caty-ai/caty-agent-harness/pull/267) (the recurrence-unit
+change, released as v0.24.0),
+[#265](https://github.com/caty-ai/caty-agent-harness/issues/265) (the Sonnet/Opus
+ladder, not part of either run).
+
+Pins: EV-007 sealed on `v0.21.1` (`74b9fbc9…`); EV-007b's pilots after 2026-09-02
+19:43 UTC on `v0.24.0` (`90a602f`). The loop-layer diff between those two pins is
+**not** zero, which is why the wiring re-check was redone rather than carried.
+
+Records in the private experiments tree, cited as pointers:
+`PREREGISTRATION-MAIN-SEALED-20260827.md` (sealed 2026-08-27) ·
+`REPORT-MAIN.md` (every figure reproduced by `tmp/report-aggregate.py`) ·
+`PREREGISTRATION-P0.md` + `REPORT-P0.md` (the wiring proof) ·
+`PREREGISTRATION-B.md` (DRAFT v0.2 + v0.2.1 status note — never sealed),
+`EV007B-DESIGN-NOTE.md`, `EV007B-RUNPLAN.md` ·
+`results-main/` (per-job score / gate / ledger / attempt streams, loop-day
+receipts, run ledger) · `results-p07/`, `results-calib/` (pilots; ladder figures
+recomputed by `tools/calib_report.py`) ·
+`results-b/wiring/recheck-v0.24.0.md` (the v0.24.0 wiring re-check, with every
+receipt quoted verbatim).
+
+### Future work
+
+None of this is scheduled, and no dates are promised. The remaining routes to a
+haiku mistake population are the ones recorded in #264: a **trap-injected
+instrument** (near-duplicate or contradictory records, so that a specific
+extraction rule is required and the mistake class becomes "picked the decoy" —
+generator work plus a corpus re-seal), or a **weaker task model**, which measures
+the loop mechanism but not the product's model. The Sonnet/Opus ladder
+([#265](https://github.com/caty-ai/caty-agent-harness/issues/265)) would then
+start from a known-working instrument. The EV-007b pre-registration stays a
+draft; the rig built for it — count-axis rounds with a resumable ledger, the
+two-seat reviewer chain, the flush quarantine tool, the corpus resolver — is on
+disk and usable by any successor run.

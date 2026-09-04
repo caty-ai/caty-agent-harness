@@ -191,6 +191,8 @@ flowchart LR
 
 第三项密封实验 **P2-WIN**，在裸模型上刻画了任务本身的特性——这是对三个任务规模档位上完成结果的测量，而不是介入效果的结果：[表格与局限（英文）](docs/benchmark.md#p2-win)。
 
+另一条实验线 **EV-007 / EV-007b** 测量了主张的另一半——学习回路。结果是**没有学习事件，也没有正式运行**：跨模型评审两次 fail-close；等到第二套测量工具准备好时，harness + haiku 在我们尝试过的每一套测量工具上都做到了 19–20/20——已经没有可供回路学习的重复错误样本了。这条线真正产出的是随 v0.24.0 发布的产品改动（晋升的复现单位从 ISO 周改为不同的 session 数）：[停在哪里、为什么（英文）](docs/benchmark.md#ev-007)。
+
 **盲态遥测路径——未经实测前不要开启。** 通过目前的 shim，glm / muse 报告的每轮 usage 全部为零，kimi 则完全不输出 usage。看不到实时遥测的运行时，绝不能把 sentinel 设为 default-on：因为根本没有水位可看。
 
 **同一时间只能有一个水位管理者。** 如果宿主自身已有自动压缩（Hermes、OpenClaw、某个 agent CLI 内置的压缩……），那么管理上下文水位的只能是宿主**或** sentinel 二选一——绝不能两者都管。两个管理者同时存在，要么宿主先压缩、sentinel 变得形同虚设，要么两者同时介入同一次溢出。请二选一：当 sentinel 为 default-on 时关闭宿主的自动压缩，或者当宿主主导时把 sentinel 降级为仅记录。sentinel 的事件日志（在 EV-008 rig 上）已经把 `runtime_compaction` / `compaction_suspected`（在所有 EV-008 运行中均为 false）作为判定依据记录下来。
