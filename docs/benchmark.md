@@ -24,16 +24,21 @@ new lanes are added as they are measured (tracking:
    pre-registered honest-failure branch), zero deviations — see
    [EV-009](#ev-009).
 5. **EV-007 / EV-007b — the learning loop.** Does "review, then promote" stop
-   the same mistake coming back? Two lanes, and no learning-effect number in
-   either: the review fail-closed twice, and by the time a second instrument was
-   built the harness scored 19–20/20 on every instrument tried. What the lane did produce is a
-   product change and a live wiring proof — see [EV-007](#ev-007).
+   the same mistake coming back? Two lanes, two sealed runs, and **no
+   learning-effect number in either**: EV-007's review fail-closed twice and the
+   run terminated; EV-007b built a trap-injected instrument that finally *does*
+   produce repeat mistakes (in the learning arm, 8 of 8 mistake classes
+   recurring in every round) and ran its sealed main run on it — and all three of that run's review turns also
+   fail-closed, so nothing was ever promoted. What the lane did produce is a
+   product change, a live wiring proof, and a working instrument — see
+   [EV-007](#ev-007).
 
-Every main run here was sealed and pre-registered before it started; the EV-007b
-calibration pilots ran pre-seal under a pre-written rule and its main run never started
-(its pre-registration stayed a draft). Everything is machine-scored,
-and reported with its limitations attached — including the places where the
-harness did not win.
+Every main run here was sealed and pre-registered before it started, EV-007b's
+main run included (sealed 2026-09-04, pin `v0.24.0`); its calibration pilots and
+the instrument search ran pre-seal under a pre-written rule, and its three
+post-seal corrections are ledgered as superseding records. Everything is
+machine-scored, and reported with its limitations attached — including the
+places where the harness did not win.
 
 ---
 
@@ -709,20 +714,27 @@ attempt transcripts), private experiments tree, summarized in
 The other half of the README claim is that the harness **learns from raw
 experience so the next job gets better**. Two lanes were run at it. Neither
 produced a learning-effect number: EV-007 terminated with **no learning event**,
-and EV-007b never started its main run because no instrument we own still
-produces mistakes for the loop to act on. This section publishes the stop, its
-causes, and the product change the lane produced — the same rule as everywhere
-else on this page: the runs that did not deliver a headline get written down too.
+and EV-007b — which did seal its pre-registration and did run its main run, on a
+trap-injected instrument built for the purpose — reached the same terminal
+outcome, `unmeasurable-no-learning-event`, when all three of its loop turns
+fail-closed at the review step. This section publishes both stops, their causes,
+the instrument that finally worked, and the product changes the lane produced —
+the same rule as everywhere else on this page: the runs that did not deliver a
+headline get written down too.
 
 **Read this first.** Nothing below is evidence that the learning loop has no
-effect. It is an **instrument failure**, and the largest single cause is the
+effect, and nothing below is evidence that it has one. EV-007 stopped on an
+**instrument failure**, whose largest single cause is the
 product's own improvement between pins: on the 2026-08-19 pin the harness averaged 13.6 wrong
 answers per job across the five `p3-M` instances (`p3-M-i1` itself: 14/20, 6 wrong,
 7 invalid quotes), on v0.21.1 EV-007's own before-block still made mistakes on it (B 73/80, C 72/80 —
 all in j1–j3b; the scored feeder jobs j4–j7 were 20/20, with C-j4 excluded as an
 empty run), and by the P0.7 pilot the same `p3-M-i1` scored 20/20
 in all four jobs (invalid quotes 0/0/0/5). The measuring stick dissolved because the thing being
-measured got better.
+measured got better. EV-007b then **rebuilt the measuring stick** — a
+trap-injected corpus on which harness + haiku makes the same 8 mistake classes
+in every job of the learning arm — and stopped for a different reason: the review step could not
+cite the raw layer it was given, so the loop never promoted anything to measure.
 
 ### What was measured
 
@@ -747,8 +759,14 @@ harness arm:
 headline wording and changes the **count axis**: instead of a calendar boundary
 that needs two ISO weeks to promote anything, three same-day learning rounds —
 before = round 1, after = the final block — with B and C at 8 jobs each and A
-reduced to 2 anchor jobs. Its pre-registration is a **draft (v0.2, plus a v0.2.1
-status note) and was never sealed**.
+reduced to 2 anchor jobs. Its pre-registration **was sealed** at v0.3.4 on
+2026-09-04T11:36Z (sha256 `fff51f7d…be8811`), after a four-seat blind
+pre-registration review whose cumulative verdict was GO-WITH-MINOR, and pinned
+to `v0.24.0` (`90a602f`). Three post-seal changes were made, each as a
+**superseding record in the §7 correction ledger** on an owner decision — the
+sealed copy itself was never edited, and none of the three touched the pass/fail
+line, the mistake definition, the series or the outcome taxonomy (they are
+listed under *Deviations and correction ledger* below).
 
 ### Result matrix — EV-007: no learning event
 
@@ -786,10 +804,11 @@ instrument that generates mistake variance on the bare arm generates almost none
 under the harness. Arms B and C are indistinguishable on it, and B has the
 learning loop switched off — this says nothing about learning.
 
-### Result matrix — EV-007b: no main run
+### Result matrix — EV-007b instrument search: no level qualified (pre-seal)
 
-EV-007b's job before sealing was to find an instrument on which harness + haiku
-still makes mistakes. It ran a localization pilot (P0.7) and a two-round
+Everything in this subsection happened **before** the seal, while EV-007b was
+still looking for an instrument on which harness + haiku still makes mistakes.
+It ran a localization pilot (P0.7) and a two-round
 difficulty ladder; the pre-written qualification rule was **mistake(job) = wrong
 answer ∪ invalid quote, per question id; a level qualifies if both jobs have ≥2
 mistakes and ≥10/20 correct**.
@@ -813,10 +832,167 @@ The finding, stated as narrowly as the data allows: **harness + haiku scored 19�
 `p3-M`, `p3-S`, `p2-L`, `p3-L` on v0.21.1 (P0.7, ladder r1) and the EV-009 `xxl` / `xxxl`
 calibration instances (~1.2M / ~2.4M tokens) on v0.24.0 (ladder r2) — so none of the
 instruments tried has the repeat-mistake population the claim needs.** That is a statement
-about the instances tried, not about every corpus in those families. Per the owner's stop rule the run was not sealed and not
-started; there was no fall-through to the next instrument option. For the
+about the instances tried, not about every corpus in those families. Per the owner's stop rule the run was not sealed
+at that point; there was no automatic fall-through to the next instrument option. For the
 overflow-band corpora themselves see [EV-009](#ev-009); those tables are not
 repeated here.
+
+**A later option did qualify.** On the owner's 2026-09-04 decision the lane
+built option 2, a **trap-injected** instrument — `p3trap-M-i1` = the sealed
+`p3-M-i1` with rule-bearing contradictory records added (design
+`EV007B-TRAP-DESIGN.md` v0.2, 3-seat design review 3/3 GO-WITH-MINOR, corpus
+re-sealed before use; 48 of 51 ledger files byte-identical to the sealed
+`p3-M-i1`, plus the erratum file `addenda/ledger-addenda.csv`). Its 2-job pilot,
+run under the same pre-written rule, **qualified**: both jobs ≥2 mistakes
+(11, 7) and ≥10/20 correct (10, 13). That instrument is what the sealed main run
+below was executed on.
+
+### Result matrix — EV-007b main run: no learning event (2026-09-04, pin v0.24.0)
+
+The run executed the full sealed series — R1 → turn 1 → R2 → turn 2 → R3 →
+turn 3 → final block — 18 jobs, all of them, 11:37–17:20 UTC on 2026-09-04. The
+sealed §8 outcome taxonomy is first-match-wins:
+
+| # | outcome | this run |
+|---|---|---|
+| 1 | stopped-by-rig (preflight / probe / D4 / cap-breach / round-failure exit) | **no** — no rig exit fired; the ledger's terminal note is `run_rounds-end` at 17:20:10Z |
+| 2 | unmeasurable-by-budget (final block incomplete in a harness arm) | **no** — all four final-block harness jobs reached a terminal state |
+| 3 | inconclusive-adequacy (`r1-adequacy … verdict=inconclusive`) | **no** — `arm=C classes=8 verdict=ok` |
+| **4** | **unmeasurable-no-learning-event** (all three loop turns `learning_event=none`) | **YES** — R1, R2 and R3 review fail-closed on both attempts; promotions **0**, approved rules **0** |
+
+Under the sealed attribution rule **nothing in this run can be attributed to
+"review, then promote", in either direction.**
+
+**Per job** (mistake = `correct is False ∪ quote_valid is False` per question id,
+scorer fields, no classifier; T1 = the 5 erratum-file trap classes, T2 = the 3
+in-file supersession trap classes, plain = the other 12 items):
+
+| arm | job | correct | mistakes (T1\|T2\|plain) | invalid quotes | attempts | terminal | charge |
+|---|---|---|---|---|---|---|---|
+| A `bare` | r1a | 6/20 | 14 (5\|3\|6) | 1 | 9/10 | token_budget | 10,163,624 |
+| A | fin | 6/20 | 14 (5\|3\|6) | 0 | 7/10 | token_budget | 11,123,859 |
+| B `harness-no-learning` | r1j1 | 11/20 | 9 (5\|2\|2) | 0 | 5/16 | delivered | 1,685,858 |
+| B | r1j2 | 13/20 | 13 (5\|2\|6) | 11 | 4/16 | delivered | 1,946,874 |
+| B | r2j1 | 13/20 | 7 (5\|2\|0) | 0 | 5/16 | delivered | 4,244,223 |
+| B | r2j2 | 12/20 | 8 (5\|3\|0) | 0 | 4/16 | delivered | 3,123,192 |
+| B | r3j1 | 0/0 *(empty run)* | — | — | 6/16 | dlq / no-progress | 3,029,500 |
+| B | r3j2 | 11/20 | 9 (5\|1\|3) | 0 | 6/16 | delivered | 3,250,543 |
+| B | finj1 | 11/20 | 9 (5\|2\|2) | 1 | 4/16 | delivered | 1,674,649 |
+| B | finj2 | 0/0 *(empty run)* | — | — | 6/16 | dlq / no-progress | 2,228,851 |
+| C `harness-learning` | r1j1 | 12/20 | 8 (5\|3\|0) | 0 | 5/16 | delivered | 3,888,457 |
+| C | r1j2 | 12/20 | 8 (5\|3\|0) | 0 | 4/16 | delivered | 4,966,731 |
+| C | r2j1 | 9/20 | 11 (5\|3\|3) | 0 | 4/16 | delivered | 4,169,965 |
+| C | r2j2 | 12/20 | 8 (5\|3\|0) | 0 | 5/16 | delivered | 4,462,117 |
+| C | r3j1 | 9/20 | 11 (5\|3\|3) | 0 | 5/16 | delivered | 4,165,421 |
+| C | r3j2 | 12/20 | 8 (5\|3\|0) | 0 | 5/16 | delivered | 3,963,140 |
+| C | finj1 | 12/20 | 8 (5\|3\|0) | 0 | 5/16 | delivered | 4,897,058 |
+| C | finj2 | 12/20 | 11 (5\|3\|3) | 5 | 4/16 | delivered | 4,448,798 |
+
+**The instrument worked.** Every T1 class was a mistake in **all 14 scored
+harness jobs and both bare jobs** (14/14 + 2/2), and no arm ever applied an
+erratum; arm C made exactly the 8 trap classes in R1, R2, R3 and the final block
+— 8/8 recurring every time. So a learning event, had one happened, would have
+had a live population to act on. T2 varies only in arm B (Q04 and Q19 solved in
+some B jobs). The plain-item mistakes are invalid-quote episodes (B r1j2: 11
+invalid quotes; C finj2: 5), not wrong answers.
+
+**Headline contrast — descriptive only.** Outcome row 4 fired, so the sealed
+attribution rule forbids reading any of these numbers as a result about
+learning. They are printed for completeness — §5 reports the supporting and
+secondary figures beside the headline, and under row 4 the headline itself is
+descriptive only — never as a result. Block = union
+over the block's two jobs; `m(X)` = classes ÷ 20; before = R1, after = the final
+block:
+
+| arm | before classes | after classes | recurring | `m(before)` | `m(after)` | repeat rate |
+|---|---|---|---|---|---|---|
+| B `harness-no-learning` | 14 | 9 | 9 | 0.700 | 0.450 | 0.643 (9/14) |
+| C `harness-learning` | 8 (= the 8 trap classes exactly) | 11 | 8 | 0.400 | 0.550 | 1.000 (8/8) |
+
+`DiD = (0.550 − 0.400) − (0.450 − 0.700) = +0.400` (**+0.400**) (the sealed line required
+`< 0`); the ratio conjunct C 1.000 ≤ B/3 = 0.214 is not met. **Neither is a
+finding.** The contrast is unattributable, and its main driver is arithmetic:
+B's after-block is a single job, because the other one was an empty run. The
+no-harm guard (T = 10 pp correct-rate drop, X = 50 % abstain share) is intact in
+both arms — B 24/40 → 11/20, a 5.0 pp drop; C 24/40 → 24/40, 0.0 pp; abstains
+**0** in both.
+
+**Per-round curve** (R1 classes recurring in round *n* ÷ R1 classes):
+
+| arm | R1 classes | R2 | R3 | final |
+|---|---|---|---|---|
+| B | 14 | 0.571 | 0.643 | 0.643 |
+| C | 8 | **1.000** | **1.000** | **1.000** |
+
+**Loop health — three turns, six fail-closed reviewer calls, zero promotions:**
+
+| turn | intake | archive-dayfile | review attempt 1 (GLM-5.3 lead) | review attempt 2 (Kimi K3 lead) | apply |
+|---|---|---|---|---|---|
+| 1 | `runs=1 drained_by=steady-state-after-fold` | `move blocks=2 archive_blocks=2` | `blocks=2 fabricated=2 candidates=0 error=chain-exhausted` | `blocks=3 fabricated=3 candidates=0 chain-exhausted` | skipped (`review-fail-closed`) |
+| 2 | `runs=2` (2 folded) | `append blocks=2 archive_blocks=4` | `blocks=3 fabricated=3 candidates=0 chain-exhausted` | same | skipped |
+| 3 | `runs=2` (1 folded) | `append blocks=1 archive_blocks=5` | `blocks=3 fabricated=3 candidates=0 chain-exhausted` | same | skipped |
+
+Every receipt carries `model_used=- chain_pos=2`, i.e. **both** reviewers failed
+on **every** attempt: six reviewer calls, six `reason=fabrication-threshold`
+failures, `candidates=0` throughout.
+
+**Empty runs.** Two of the eight B jobs (r3j1, finj2) ended `dlq / no-progress`
+after 6 attempts with 16/20 answers and no recorded read coverage. Per the P0
+Decision 1 rule they are scored 0/0, excluded from every denominator, and
+counted here. C had **0** empty runs. This is why B's after-block is one job and
+C's is two.
+
+**The mechanism — this run's product finding.** The reviewers did read the
+lessons and grouped them into sensible themes; then **every member citation
+failed** `scripts/raw-review.sh`'s citation check. That check requires the quote
+to be a *prefix* of the canonicalized source line; canonicalization strips a
+leading `- `, a leading date and `[tag]`s, but **not** the
+`(2026-09-04, ev007b-C-r1j1) ` prefix that the pin's Stop hook writes on every
+flush line — and any quote longer than 200 characters is rejected outright. The
+reviewers quoted from the lesson text after that prefix, or quoted over 200
+characters, so 100 % of blocks came back "fabricated"; with `blocks > 0 &&
+candidates == 0` the reviewer fails regardless of the configured
+`fabricated_floor=4` / `fabricated_pct=75`. Separately, the other learning
+channel *was* live and moved nothing: intake folded **6** lines into arm C's
+`STATE.md` "Lessons learned" (3 after R1, 2 after R2, 1 after R3), and every
+later C job read them — but none of them is the trap bit, and the R1 lesson is
+the *wrong* bit for T2 ("query extraction must include all matching rows", which
+instructs the model to include the superseded row).
+
+**Post-seal corrections (superseding records, §7 ledger; the sealed copy was not
+edited):**
+
+| id | recorded | supersedes | superseding rule | why | decided |
+|---|---|---|---|---|---|
+| A | 15:16:15Z | "intake drains to `files_scanned=0`" | drained = `files_scanned=0` **or** a steady-state receipt (`folded=0 ∧ deduped=candidates`) after a `folded>0` receipt in the same phase | `flush-intake.sh` never archives the current UTC day's file, so `files_scanned` stays 1 all day and R1's turn was skipped although intake had folded everything | owner, 2026-09-04 |
+| B | 15:16:15Z | cap 45M | cap **75M** | 45M was sized from the arm-B pilot alone; R1 measured A 10.2M / B 1.8M / C 4.4M per job → 18 jobs ≈ 70M | owner, 2026-09-04 |
+| C | 15:37:28Z | "the reviewed set is everything *pending* inside the window" | loop turn = intake → **archive-dayfile** (the product's own next-day archive action, append-or-move, applied at the turn) → review → apply | `raw-week.sh` lists `loop/archive/` only, so on a same-day series the nightly review's input is empty at every turn (the R1 re-run saw `files=0`); scratch-proven before adoption | owner, 2026-09-04 |
+
+Also ledgered, and not corrections: an **orchestrator stop at 12:04:17Z** (the R2
+wave was killed 90 s in, both jobs retired, workspace leftovers relocated
+byte-exact, no denominator affected); an **orchestrator hold at 15:21:15Z**
+pending the owner's decision on correction C; and a rig-seal re-check
+(`shasum -c` over the sealed 114-file block) in which **exactly two** files
+differed — `runner/run_round.sh` and `runner/run_rounds.sh` — both recorded with
+before/after hashes in the ledger records, 112/114 unchanged.
+
+**Cost of the main run:**
+
+| line | charge tokens |
+|---|---|
+| A `bare` (2 jobs) | 21,287,483 |
+| B (8 jobs) | 21,183,690 |
+| C (8 jobs) | 34,961,687 |
+| retired (the R2 wave killed at 12:04Z, 2 dirs, in no denominator) | 485,015 |
+| **run total, inside the 75M cap (correction B)** | **77,917,875 — 103.9 % of the cap** |
+| pre-run spend, reported outside the cap | 191,696,045 (P0.7 16.2M · ladder r1 28.2M + r2 132.3M, plus the 11.1M aborted XXL attempt · trap pilot 3.9M) |
+
+The cap gate held exactly as sealed: it ran before every launch (`phase=cap-gate
+status=ok` ×5, the last at 54,029,675 before the final block) and no launch
+happened at or over 75M. The overshoot **is** the final block (24,373,215) —
+the sealed "worst-case overshoot is the round in flight". `tools/charge_sum.py`
+reports 78,402,890 because it double-counts one relocated stream copy
+(485,015); the single-counted figure above is the reportable one.
 
 ### The product change this lane produced
 
@@ -860,10 +1036,13 @@ was a wiring check and measures nothing about whether distillation helps.
 
 ### Read these before quoting
 
-1. **This is not a null result.** No promotion happened, no rule was approved, no
-   after-block ran, and no main EV-007b run started. There is no before/after
-   contrast anywhere in either lane. Do not read "the loop works" or "the loop is
-   useless" out of this section; neither is supported.
+1. **This is not a null result about learning.** Across both lanes: 0
+   promotions, 0 approved rules. EV-007 has no after-block at all; EV-007b has
+   one, but its three loop turns produced no learning event, so the sealed
+   attribution rule makes its C-vs-B contrast unattributable. The pipeline
+   sentence "review, then promote" is **untested here, not refuted**. Do not
+   read "the loop works" or "the loop is useless" out of this section; neither
+   is supported.
 2. **The instrument died because the product improved.** On the 2026-08-19 pin the
    harness averaged 13.6 wrong answers per job across the five `p3-M` instances (17.6
    across `p3-L`); in the EV-007b pilots on v0.21.1 the tried instances `p3-M-i1`, `p3-S-i1`,
@@ -888,7 +1067,8 @@ was a wiring check and measures nothing about whether distillation helps.
    SessionStart hooks and ≈67k tokens of injected baseline. This is recorded, not
    re-run. Ladder round 2 ran normalized (0 user-global hooks, 45.8k baseline at
    step 1). Read rounds 1 and 2 as measured under different postures.
-5. **Three product observations from the wiring re-check** — observations with
+5. **Eight product observations — from the wiring re-check and the EV-007b main
+   run** — observations with
    issue pointers, not claims: (a) GLM-5.3 consumed its full 900 s reviewer
    timeout on both rounds of a ~142 KB nightly prompt and Kimi K3 produced the
    output at chain position 2 — a chain that puts GLM first pays ~15 min of dead
@@ -900,8 +1080,22 @@ was a wiring check and measures nothing about whether distillation helps.
    [#268](https://github.com/caty-ai/caty-agent-harness/issues/268) follow-ups);
    (c) `flush-intake.sh` never archives the current UTC day's flush file, so
    seeded or same-day material must be dated strictly before the run day or intake
-   never drains.
-6. **Arm B did not do what its recipe promised.** B was designed to keep the
+   never drains; (d) and because `raw-week.sh` lists `loop/archive/` only, the
+   consequence of (c) is that **a same-day loop cannot review its own day** —
+   "nightly" means next-day (this is what correction C had to work around);
+   (e) `scripts/raw-review.sh`'s citation check is a prefix match after a
+   canonicalization that keeps the Stop hook's `(date, task-id)` prefix, and
+   rejects quotes over 200 characters, and `blocks > 0 && candidates == 0` fails
+   the reviewer regardless of floor/pct — on flush lines written by
+   `adapters/claude-code/checkpoint-stop-hook.sh`, both reviewers failed 6/6
+   calls; (f) `flush-intake.sh` folded step-progress notes ("Step 1 executed
+   successfully …") into "Lessons learned" — the fold has no
+   lesson-vs-progress filter; (g) in EV-007b, arm B (no hooks) nonetheless wrote
+   one handoff and one Last-session entry, i.e. the model wrote the CHECKPOINT
+   unprompted; (h) `tools/charge_sum.py` counts every
+   `attempts/*/stream.jsonl` under a result dir including relocated copies —
+   harmless for the gate (conservative), wrong for reporting.
+6. **Arm B did not do what its recipe promised (EV-007).** B was designed to keep the
    episodic channel (Last session + handoffs) open while turning off only the
    lessons/rules channel; on disk it wrote 0 Last-session entries and 0 handoffs
    in all 8 jobs, because the CHECKPOINT demand comes from the Stop hook B does
@@ -910,6 +1104,38 @@ was a wiring check and measures nothing about whether distillation helps.
    all 16 EV-007 harness jobs, so the gate's read-coverage check — and with it
    `task_resolved` and the residue-access count — is unmeasured for the harness
    arms; harness token usage had to be rebuilt from the attempt streams.
+8. **The EV-007b instrument works on this pin.** Unlike every earlier instance
+   (19–20/20), `p3trap-M-i1` produced the same 8 mistake classes in all 14
+   scored harness jobs and both bare jobs. The one-bit caveat is now measured
+   rather than assumed: the trap is one shared decision per class — every T1
+   class flipped together (never solved by anyone), and T2 flipped together in
+   arm B.
+9. **The headline DiD is not a result.** `+0.400` and the 1.000 / 0.643 repeat
+   rates are printed for completeness — §5 reports the supporting and secondary
+   figures beside the headline, and under outcome row 4 the headline itself is
+   descriptive only. They are never a result: row 4 forbids reading them as
+   evidence about learning in either direction, and B's one-job after-block is
+   their main driver.
+10. **The review's citation contract and the Stop hook's flush format do not fit
+    each other on v0.24.0.** This is the product finding of the EV-007b main run.
+    Whether a review that *could* cite those lines would have promoted anything
+    is **not determinable from this run**. It joins EV-007's "judge variance sat
+    on the fail-close boundary" observation, this time with a mechanism.
+11. **Same-day series need a host "night".** Two sealed sentences about
+    intake/review timing turned out to be wrong (corrections A and C). Under C,
+    arm C's loop turn contains one host step the shipped product performs only
+    at the next UTC day: archiving the day-file. What EV-007b measured is
+    therefore "review, then promote, **given that boundary**". Nothing in arm B
+    was touched.
+12. **The cap was exceeded by the round in flight (103.9 %).** As sealed, the
+    gate only prevents launches; the overshoot was the final block. Correction
+    B's projection was low by ≈3M.
+13. **Posture and limits of the main run.** All 18 jobs ran on D4-normalized
+    slots (`d4-verify ok` ×4); the sealed known limitation "SPARE = A-slot
+    overlap" materialized in the final block (arm B swapped to slot 6, the A
+    slot); no usage limit was hit. Carried limits: one bit per class, the H5
+    positional-recency / H6 lifecycle-wins residuals and A17, **no hold-out
+    instance** (`p3trap-M-i2` was not built), and n = 1 run.
 
 ### Deviations and correction ledger
 
@@ -940,30 +1166,54 @@ fixed, **zero spend**. `attempts_budget=1`, the fallback instrument plan, turned
 out not to be runnable at all: the task-runner rejects a budget below the
 plan-step count.
 
+**EV-007b's post-seal records (main run, 2026-09-04).** After the seal, EV-007b
+followed EV-007's discipline: the sealed file is never edited, and every change
+is a **superseding record** in its §7 correction ledger, taken on an owner
+decision. Three were recorded — **A** (the intake drain predicate, replaced by a
+steady-state rule), **B** (the budget cap, 45M → 75M), and **C** (the loop turn
+gains an `archive-dayfile` step) — with the full statement of each, its basis and
+its owner decision in the main-run subsection above. None of them touched the
+pass/fail line, the mistake definition, the series or the outcome taxonomy. Two
+further events are ledgered but are **not** corrections: the orchestrator stop at
+12:04:17Z (R2 wave killed 90 s in; both jobs retired into `*.orchestrator-stop-1`
+directories, leftovers relocated byte-exact, `STATE.md` byte-identical to the
+pre-wave snapshot, no denominator affected) and the orchestrator hold at
+15:21:15Z while the owner decided on correction C. The rig-seal re-check after
+the corrections found exactly two changed files, `runner/run_round.sh` and
+`runner/run_rounds.sh`, both listed with before/after hashes (112 of 114
+unchanged).
+
 ### Cost
 
 | lane | charge tokens |
 |---|---|
 | EV-007, scored run directories (all arms) | **116,782,940** — 97.3 % of the sealed 120M cap |
 | EV-007, including the 8 infra-failed directories | 130,228,564 — 108.5 % of the cap |
-| EV-007b pilots: P0.7 | 16.2M |
-| EV-007b pilots: ladder round 1 | ≈28.2M |
-| EV-007b pilots: ladder round 2 | 132.3M |
-| **EV-007b total, reported outside the 80M cap** | **176,756,410 (≈176.8M)** |
+| EV-007b pilots: P0.7 | 16,211,897 |
+| EV-007b pilots: ladder round 1 | 28,233,033 |
+| EV-007b pilots: ladder round 2 | 132,311,480 |
+| EV-007b pilots: ladder round 2, aborted first XXL attempt (retained streams, added by hand) | 11,059,320 |
+| EV-007b pilots: trap-instrument pilot | 3,880,315 |
+| **EV-007b pre-run total, reported outside the cap** | **191,696,045 (≈191.7M)** |
+| **EV-007b main run, inside the 75M cap (correction B)** | **77,917,875 — 103.9 % of the cap** |
 
 The sealed EV-007 text caps "charge tokens total across all arms" and separately
 says infra failures count in no metric denominator; it does not say whether they
 count against the cap, so both readings are given. The cancelled after-block (9
 jobs) would have exceeded the cap under either. Charge by ladder level is in the EV-007b table above (2-job totals; P0.7 rows per job);
 the two overflow-band levels are the expensive ones
-(≈21–24M per XXL job, ≈42–46M per XXXL job).
+(≈21–24M per XXL job, ≈42–46M per XXXL job). EV-007b's own cap is a separate,
+explicitly sealed number: the gate ran before every launch attempt and never let
+one start at or over 75M, and the 3.9 % overshoot is the final block — the
+round that was already in flight, exactly the bound the sealed text names.
 
 ### Reproduce / audit
 
 Issues: [#202](https://github.com/caty-ai/caty-agent-harness/issues/202) (EV-007
 run narrative and correction ledger D1–D7),
 [#264](https://github.com/caty-ai/caty-agent-harness/issues/264) (EV-007b: P0.7,
-both ladder rounds, rig facts, wiring re-check),
+both ladder rounds, the trap instrument, the seal, the §7 correction ledger, the
+main run and its rig facts, wiring re-check),
 [#263](https://github.com/caty-ai/caty-agent-harness/issues/263) /
 [#267](https://github.com/caty-ai/caty-agent-harness/pull/267) (the recurrence-unit
 change, released as v0.24.0),
@@ -971,31 +1221,50 @@ change, released as v0.24.0),
 ladder, not part of either run).
 
 Pins: EV-007 sealed on `v0.21.1` (`74b9fbc9…`); EV-007b's pilots after 2026-09-02
-19:43 UTC on `v0.24.0` (`90a602f`). The loop-layer diff between those two pins is
+19:43 UTC, and its sealed main run, on `v0.24.0` (`90a602f`, checked by tag and
+SHA before every launch). The loop-layer diff between those two pins is
 **not** zero, which is why the wiring re-check was redone rather than carried.
 
 Records in the private experiments tree, cited as pointers:
 `PREREGISTRATION-MAIN-SEALED-20260827.md` (sealed 2026-08-27) ·
 `REPORT-MAIN.md` (every figure reproduced by `tmp/report-aggregate.py`) ·
 `PREREGISTRATION-P0.md` + `REPORT-P0.md` (the wiring proof) ·
-`PREREGISTRATION-B.md` (DRAFT v0.2 + v0.2.1 status note — never sealed),
-`EV007B-DESIGN-NOTE.md`, `EV007B-RUNPLAN.md` ·
-`results-main/` (per-job score / gate / ledger / attempt streams, loop-day
-receipts, run ledger) · `results-p07/`, `results-calib/` (pilots; ladder figures
-recomputed by `tools/calib_report.py`) ·
+`PREREGISTRATION-B-SEALED-2026-09-04.md` (sealed 2026-09-04T11:36Z, sha256
+`fff51f7d…be8811`) with the §7 correction ledger (records A / B / C) in
+`PREREGISTRATION-B.md` · `REPORT-B.md`, the EV-007b main-run report — every
+figure in the subsection above is reproduced by `tmp/report-aggregate-b.py` ·
+`EV007B-TRAP-DESIGN.md` v0.2 + `PANEL-RECORD-TRAP.md` (the instrument design and
+its review panels) · `ev006/corpora/trap/SEAL-MANIFEST.txt` (the sealed trap
+corpus) · `EV007B-DESIGN-NOTE.md`, `EV007B-RUNPLAN.md` ·
+`results-main/` and `results-b/` (per-job score / gate / ledger and attempt
+streams, per-round receipts, run ledger) · `results-p07/`, `results-calib/`
+(pilots; ladder figures recomputed by `tools/calib_report.py`) ·
 `results-b/wiring/recheck-v0.24.0.md` (the v0.24.0 wiring re-check, with every
 receipt quoted verbatim).
 
 ### Future work
 
-None of this is scheduled, and no dates are promised. The remaining routes to a
-haiku mistake population are the ones recorded in #264: a **trap-injected
-instrument** (near-duplicate or contradictory records, so that a specific
-extraction rule is required and the mistake class becomes "picked the decoy" —
-generator work plus a corpus re-seal), or a **weaker task model**, which measures
-the loop mechanism but not the product's model. The Sonnet/Opus ladder
-([#265](https://github.com/caty-ai/caty-agent-harness/issues/265)) would then
-start from a known-working instrument. The EV-007b pre-registration stays a
-draft; the rig built for it — count-axis rounds with a resumable ledger, the
-two-seat reviewer chain, the flush quarantine tool, the corpus resolver — is on
-disk and usable by any successor run.
+None of this is scheduled, and no dates are promised. The instrument problem is
+solved: `p3trap-M-i1` exists, it is sealed, and on `v0.24.0` it produces repeat
+mistakes — its 5 erratum-file classes are a mistake in all 14 scored harness jobs
+and both bare jobs, and the learning arm made all 8 trap classes in every round.
+What is left is the review step.
+
+- **Make the review able to cite the raw layer it is given, then re-run the same
+  sealed series.** Two product-fix candidates are on the table as pointers, not
+  commitments: canonicalize away the Stop hook's `(date, task-id)` prefix in
+  `raw-review.sh`'s citation check, or raise its 200-character quote limit. Until
+  one of them lands, a same-day loop turn on this pin cannot produce a candidate,
+  and the headline stays unmeasured.
+- **The Sonnet/Opus ladder**
+  ([#265](https://github.com/caty-ai/caty-agent-harness/issues/265)) now has a
+  working instrument to start from, rather than the 19–20/20 corpora that stopped
+  the first search.
+- **A hold-out instance before any confirmatory claim.** `p3trap-M-i2` — the same
+  trap construction with renamed vocabulary — was named as a limitation at seal
+  and has not been built. n = 1 run, one bit per class, and no hold-out: nothing
+  here should be turned into a confirmatory result without it.
+
+The rig built for EV-007b — count-axis rounds with a resumable ledger, the
+two-seat reviewer chain, the flush quarantine tool, the corpus resolver, the
+trap generator and validator — is on disk and usable by any successor run.
