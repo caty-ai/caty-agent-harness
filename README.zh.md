@@ -37,7 +37,7 @@ Caty Agent Harness 用纯文本文件和真实的核查，把这些全都解决�
 
 </div>
 <!-- repo-state:begin (generated; do not edit) -->
-<p align="center"><sub>generation: <code>4661600</code> (2026-09-05T12:44:47Z) · verify: <a href="https://api.github.com/repos/caty-ai/caty-agent-harness/commits/main">API HEAD</a> · <a href="./status.json">status.json</a></sub></p>
+<p align="center"><sub>generation: <code>23ab781</code> (2026-09-05T16:05:21Z) · verify: <a href="https://api.github.com/repos/caty-ai/caty-agent-harness/commits/main">API HEAD</a> · <a href="./status.json">status.json</a></sub></p>
 <!-- repo-state:end -->
 
 - [这些情况是否似曾相识？](#problems)
