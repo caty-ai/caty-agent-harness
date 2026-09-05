@@ -1193,8 +1193,8 @@ reachable (DiD not < 0).
 chain_pos=1 error=none`; the Kimi K3 fallback was never invoked. Turn 1 rejected 1
 of 3 blocks as fabricated; turns 2 and 3 rejected nothing. Contrast EV-007b on
 v0.24.0: 6 calls, 6 fail-closes, 0 candidates. The #274 fix (the review's
-canonicalization now keeps the Stop hook's provenance stamp) is what changed
-between the two runs, and the wiring re-check had predicted it
+canonicalization now strips the Stop hook's provenance stamp for comparison) is
+what changed between the two runs, and the wiring re-check had predicted it
 (`results-c/wiring/recheck-v0.25.0.md`: `fabricated=0 candidates=3`).
 
 **What was promoted.** Promotions **6** (`decision=promoted` rows in
