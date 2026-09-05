@@ -1117,8 +1117,9 @@ two jobs; `m(X,β)` = classes ÷ 20; before = R1, after = the final block:
   it again in both final jobs**; C never solved a T1 class. The C after-block also
   picked up three mistakes it did not have before — Q05 (plain, wrong answer,
   finj1), Q06 and Q19 (invalid quotes, finj1) — which is why the recurring count of
-  6 sits on an after-block of 8. On the trap classes alone C went 8 → 6 and B went
-  8 → 8; the headline was decided by the non-trap movement.
+  6 sits on an after-block of 8. On the trap classes alone C went 7 → 7 (Q04 left,
+  Q11 stayed, Q19 entered; 6 of the 7 R1 trap classes recurring) and B went 8 → 8;
+  the headline was decided by the non-trap movement.
 - **Empty runs (P0 Decision 1):** none in either arm. B r2j2 delivered 20 answers
   but scored 5/20 with the gate listing missing read coverage on most corpus files
   — it is a scored job, in every denominator, and the reason B's R2 union is 15
@@ -1355,8 +1356,8 @@ was a wiring check and measures nothing about whether distillation helps.
    never drains; (d) and because `raw-week.sh` lists `loop/archive/` only, the
    consequence of (c) is that **a same-day loop cannot review its own day** —
    "nightly" means next-day (this is what correction C had to work around);
-   (e) `scripts/raw-review.sh`'s citation check is a prefix match after a
-   canonicalization that keeps the Stop hook's `(date, task-id)` prefix, and
+   (e) on v0.24.0, `scripts/raw-review.sh`'s citation check was a prefix match after a
+   canonicalization that kept the Stop hook's `(date, task-id)` prefix (fixed by #274 in v0.25.0), and
    rejects quotes over 200 characters, and `blocks > 0 && candidates == 0` fails
    the reviewer regardless of floor/pct — on flush lines written by
    `adapters/claude-code/checkpoint-stop-hook.sh`, both reviewers failed 6/6
@@ -1420,8 +1421,9 @@ list:
     +0.050 because B's before-block carried three plain-item mistakes (Q12 Q14
     Q16) that disappeared without any loop, while C's after-block acquired three
     new ones (Q05 wrong, Q06 and Q19 invalid quotes, all in finj1). **Neither
-    movement is a trap class.** On the trap classes alone C went 8 → 6 (Q04
-    solved, Q11 solved then lost, Q19 gained via a quote) and B went 8 → 8.
+    movement is a trap class.** On the trap classes alone C went 7 → 7 (Q04
+    solved, Q11 solved then lost, Q19 gained via a quote; 6 of the 7 R1 trap
+    classes recurring) and B went 8 → 8.
 15. **Where the learning is visible is the per-round curve, and it is one bit.**
     After the T2 rule was approved (turn 2), C's R3 jobs made **zero** T2
     mistakes — the only such harness jobs in EV-007b or EV-007c. In the final
