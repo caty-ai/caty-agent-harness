@@ -691,6 +691,314 @@ else
   fail_case '[R3-3] tag-only quotes still die after bracket stripping empties the canonicalized citation' "rc=$bracket_tags_empty_rc receipt=$(tail -n 1 "$ws_bracket_tags_empty/loop/promotions/runs.log") stderr=$(cat "$TMP_ROOT/bracket-tags-empty.err")"
 fi
 
+# Run one #274 citation against one provenance-stamped source line. The
+# production-shaped flush header keeps session attribution in the fixture.
+CASE_274_RESULTS=
+CASE_274_WS=
+CASE_274_CANDIDATE=
+CASE_274_REJECTS=
+run_274_single() {
+  local name=$1 source_line=$2 quote=$3 expected=$4
+  local reviewer output ws rc receipt candidate rejects matched=0
+  reviewer=$TMP_ROOT/274-$name-reviewer
+  output=$TMP_ROOT/274-$name-output
+  write_reviewer "$reviewer" 'cat >/dev/null
+cat "$1"'
+  {
+    printf '%s\n' RAW-REVIEW-OUTPUT-BEGIN
+    printf 'THEME: provenance fixture %s\n' "$name"
+    printf '%s\n' 'CLASS: rule' 'MEMBERS:'
+    printf -- '- flush-2026-09-04.md:%s\n' "$quote"
+    printf '%s\n' 'WEEKS: 2026-W36' 'EVIDENCE: The citation result pins the bounded provenance grammar.' 'PROMOTE: not-yet' RAW-REVIEW-OUTPUT-END
+  } >"$output"
+  ws=$(new_ws "274-$name")
+  printf '%s\n' \
+    "<!-- flush origin=stop-hook-demand session=session-$name ts=2026-09-04T01:00:00Z outcome=ok unverified=true -->" \
+    "$source_line" >"$ws/loop/archive/flush-2026-09-04.md"
+  write_conf "$ws" producer-model "fixture-$name $reviewer $output"
+  "$RAW_REVIEW" --workspace "$ws" --week 2026-W36 >/dev/null 2>"$TMP_ROOT/274-$name.err"
+  rc=$?
+  receipt=$(tail -n 1 "$ws/loop/promotions/runs.log")
+  candidate=$(latest_candidate "$ws")
+  rejects=$(find "$ws/loop/promotions" -type f -name 'candidates-*.rejects.md' | LC_ALL=C sort | tail -n 1)
+  CASE_274_RESULTS="$CASE_274_RESULTS$name:$receipt|"
+  CASE_274_WS=$ws
+  CASE_274_CANDIDATE=$candidate
+  CASE_274_REJECTS=$rejects
+  if [[ "$expected" == accepted ]]; then
+    if [[ "$rc" -eq 0 && "$receipt" == *' fabricated=0 '* && "$receipt" == *' candidates=1 '* \
+      && -f "$candidate" ]] && grep -Fq -- "- flush-2026-09-04.md:$quote" "$candidate"; then
+      matched=1
+    fi
+  elif [[ "$rc" -eq 1 && "$receipt" == *' fabricated=1 '* \
+    && "$receipt" == *' candidates=0 '* && "$receipt" == *' error=chain-exhausted' \
+    && -f "$rejects" ]] && grep -Fq -- "- flush-2026-09-04.md:$quote" "$rejects"; then
+    matched=1
+  fi
+  [[ "$matched" -eq 1 ]]
+}
+
+CASE_274_RESULTS=
+p1_ok=1
+run_274_single p1-comma \
+  '- (2026-09-04, ev007b-C-r1j1) Quote extraction for answer verification must use exact character-for-character substrings from source CSV rows.' \
+  'Quote extraction for answer verification must use exact character-for-character substrings from source CSV rows.' accepted || p1_ok=0
+run_274_single p1-semicolon \
+  '- (2026-09-04;r1j1) Semicolon provenance stamps use the same bounded task identifier grammar.' \
+  'Semicolon provenance stamps use the same bounded task identifier grammar.' accepted || p1_ok=0
+run_274_single p1-after-tag \
+  '- [tag-1] (2026-09-04, r1j1) Machine tags precede provenance stamps in the fixed canonicalization order.' \
+  'Machine tags precede provenance stamps in the fixed canonicalization order.' accepted || p1_ok=0
+if [[ "$p1_ok" -eq 1 ]]; then
+  pass '[274-P1] date-led provenance stamps authenticate content-only prefixes'
+else
+  fail_case '[274-P1] date-led provenance stamps authenticate content-only prefixes' "$CASE_274_RESULTS"
+fi
+
+CASE_274_RESULTS=
+if run_274_single p5-date-only \
+  '- (2026-09-04) Date-only provenance stamps are a deliberate supported extension.' \
+  'Date-only provenance stamps are a deliberate supported extension.' accepted; then
+  pass '[274-P5] date-only provenance stamps authenticate content-only prefixes'
+else
+  fail_case '[274-P5] date-only provenance stamps authenticate content-only prefixes' "$CASE_274_RESULTS"
+fi
+
+CASE_274_RESULTS=
+if run_274_single p3-inclusive \
+  '- (2026-09-04, ev007b-C-r1j1) Quote extraction for answer verification must use exact character-for-character substrings from source CSV rows.' \
+  '(2026-09-04, ev007b-C-r1j1) Quote extraction for answer verification must use exact character-for-character substrings from source CSV rows.' accepted; then
+  pass '[274-P3] a quote that includes the provenance stamp remains accepted symmetrically'
+else
+  fail_case '[274-P3] a quote that includes the provenance stamp remains accepted symmetrically' "$CASE_274_RESULTS"
+fi
+
+REPLAY_274=$TMP_ROOT/274-p4-replay-reviewer
+write_reviewer "$REPLAY_274" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: exact-substring CSV extraction fidelity
+CLASS: rule
+MEMBERS:
+- flush-2026-09-04.md:Quote extraction for answer verification must use exact character-for-character substrings from source CSV rows; the donecheck validation confirms this contract via substring matching
+- flush-2026-09-04.md:CSV ledger files contain multiple entries for same txn_id across different rows (e.g., TXN-04001 in 094-ledger-log.csv appears on line 3 with status PENDING and again on line 39 with status FAILED
+WEEKS: 2026-W36
+EVIDENCE: Two sessions independently require extraction fidelity to source CSV ledger rows: character-for-character substrings enforced by donecheck validation, plus inclusion of every row matching a txn_id because transactions recur with status updates.
+PROMOTE: not-yet
+
+THEME: non-overlapping corpus chunk partitioning
+CLASS: capability-fact
+MEMBERS:
+- flush-2026-09-04.md:Each corpus chunk step processes only its listed files; no overlap or file re-reading between steps. Step planning pre-partitions the 52 total ledger files into 4 fixed chunks of 13 files each,
+WEEKS: 2026-W36
+EVIDENCE: Step planning pre-partitions the 52 ledger files into 4 fixed chunks of 13; each step reads only its listed files so nothing is processed twice.
+PROMOTE: not-yet
+
+THEME: Faithful extraction of CSV source rows for validation
+CLASS: skill
+MEMBERS:
+- flush-2026-09-04.md:Quote extraction for answer verification must use exact character-for-character substrings from source CSV rows; the donecheck validation confirms this contract via substring matching, so truncation or refo
+- flush-2026-09-04.md:CSV ledger files contain multiple entries for same txn_id across different rows (e.g., TXN-04001 in 094-ledger-log.csv appears on line 3 with status PENDING and again on line 39 with status FAILED as a status update)
+WEEKS: 2026-W36
+EVIDENCE: Both lessons demand extraction that mirrors the source rows exactly — character-for-character substrings to pass substring-match validation, and inclusion of every matching row (status updates) so output reflects the data as recorded.
+PROMOTE: not-yet
+
+THEME: Pre-partition corpus chunks to avoid duplicate processing
+CLASS: rule
+MEMBERS:
+- flush-2026-09-04.md:Each corpus chunk step processes only its listed files; no overlap or file re-reading between steps. Step planning pre-partitions the 52 total ledger files into 4 fixed chunks of 13 files each, avoiding duplicate processing.
+WEEKS: 2026-W36
+EVIDENCE: Single lesson stating that step planning must pre-partition files into fixed disjoint chunks so no file is read twice.
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+ws_274_replay=$(new_ws 274-p4-replay)
+cat <<'EOF_RAW' >"$ws_274_replay/loop/archive/flush-2026-09-04.md"
+<!-- flush origin=stop-hook-demand session=ev007b-C-r1j1 ts=2026-09-04T01:00:00Z outcome=ok unverified=true -->
+- (2026-09-04, ev007b-C-r1j1) Quote extraction for answer verification must use exact character-for-character substrings from source CSV rows; the donecheck validation confirms this contract via substring matching, so truncation or reformatting will fail validation even if the semantic content is correct.
+- (2026-09-04, ev007b-C-r1j1) Each corpus chunk step processes only its listed files; no overlap or file re-reading between steps. Step planning pre-partitions the 52 total ledger files into 4 fixed chunks of 13 files each, avoiding duplicate processing.
+<!-- flush origin=stop-hook-demand session=ev007b-C-r1j2 ts=2026-09-04T02:00:00Z outcome=ok unverified=true -->
+- (2026-09-04, ev007b-C-r1j2) CSV ledger files contain multiple entries for same txn_id across different rows (e.g., TXN-04001 in 094-ledger-log.csv appears on line 3 with status PENDING and again on line 39 with status FAILED as a status update). Query extraction must include all matching rows to accurately reflect the data as recorded in source files.
+<!-- flush origin=stop-hook-demand session=ev007b-C-r2j2 ts=2026-09-04T03:00:00Z outcome=ok unverified=true -->
+- 2026-09-04 (ev007b-C-r2j2) Step 1 executed successfully: read all 13 specified corpus files (001, 002, 003, 005, 008, 010, 012, 013, 015, 018, 019, 020, 023-ledger-log.csv), extracted 26 transaction IDs across Q01-Q05 (6 + 7 + 7 + 6 + 6 txn_ids respectively).
+EOF_RAW
+{
+  printf '%s\n' 'producer=producer-model' "reviewer replay $REPLAY_274" \
+    'review_window_weeks=2' 'reviewer_timeout_s=10' \
+    'fabricated_floor=4' 'zero_streak_threshold=2' 'prompt_max_bytes=2000000'
+} >"$ws_274_replay/loop/review.conf"
+# Production uses fabricated_floor=4; with 4 blocks, max(4, ceil(4*50/100)) is 4.
+"$RAW_REVIEW" --workspace "$ws_274_replay" --week 2026-W36 >/dev/null 2>"$TMP_ROOT/274-p4-replay.err"
+replay_274_rc=$?
+replay_274_receipt=$(tail -n 1 "$ws_274_replay/loop/promotions/runs.log")
+replay_274_candidate=$(latest_candidate "$ws_274_replay")
+replay_274_rejects=$(find "$ws_274_replay/loop/promotions" -type f -name 'candidates-*.rejects.md' | LC_ALL=C sort | tail -n 1)
+if [[ "$replay_274_rc" -eq 0 && "$replay_274_receipt" == *' blocks=4 '* \
+  && "$replay_274_receipt" == *' fabricated=2 '* && "$replay_274_receipt" == *' candidates=2 '* \
+  && -f "$replay_274_candidate" && -f "$replay_274_rejects" \
+  && "$(grep -c '^- flush-2026-09-04.md:' "$replay_274_candidate")" -eq 3 ]] \
+  && grep -Fq 'flush-2026-09-04.md:Quote extraction for answer verification must use exact character-for-character substrings from source CSV rows; the donecheck validation confirms this contract via substring matching' "$replay_274_candidate" \
+  && grep -Fq 'flush-2026-09-04.md:CSV ledger files contain multiple entries for same txn_id across different rows (e.g., TXN-04001 in 094-ledger-log.csv appears on line 3 with status PENDING and again on line 39 with status FAILED' "$replay_274_candidate" \
+  && grep -Fq 'flush-2026-09-04.md:Each corpus chunk step processes only its listed files; no overlap or file re-reading between steps. Step planning pre-partitions the 52 total ledger files into 4 fixed chunks of 13 files each,' "$replay_274_candidate" \
+  && grep -Fq 'THEME: Faithful extraction of CSV source rows for validation' "$replay_274_rejects" \
+  && grep -Fq 'THEME: Pre-partition corpus chunks to avoid duplicate processing' "$replay_274_rejects"; then
+  pass '[274-P4-replay] real EV-007b data accepts exactly the three citations at or below 200 characters'
+else
+  fail_case '[274-P4-replay] real EV-007b data accepts exactly the three citations at or below 200 characters' "rc=$replay_274_rc receipt=$replay_274_receipt candidate=$(cat "$replay_274_candidate" 2>/dev/null)"
+fi
+
+I1_274=$TMP_ROOT/274-i1-reviewer
+write_reviewer "$I1_274" 'cat >/dev/null
+cat <<"OUT"
+RAW-REVIEW-OUTPUT-BEGIN
+THEME: duplicate spellings do not inflate recurrence
+CLASS: rule
+MEMBERS:
+- flush-2026-09-04.md:Quote extraction for answer verification must use exact character-for-character substrings from source CSV rows.
+- flush-2026-09-04.md:(2026-09-04, ev007b-C-r1j1) Quote extraction for answer verification must use exact character-for-character substrings from source CSV rows.
+WEEKS: 2026-W36
+EVIDENCE: Both spellings resolve to one source session.
+PROMOTE: not-yet
+RAW-REVIEW-OUTPUT-END
+OUT'
+ws_274_i1=$(new_ws 274-i1)
+printf '%s\n' \
+  '<!-- flush origin=stop-hook-demand session=ev007b-C-r1j1 ts=2026-09-04T01:00:00Z outcome=ok unverified=true -->' \
+  '- (2026-09-04, ev007b-C-r1j1) Quote extraction for answer verification must use exact character-for-character substrings from source CSV rows.' \
+  >"$ws_274_i1/loop/archive/flush-2026-09-04.md"
+write_conf "$ws_274_i1" producer-model "i1 $I1_274"
+"$RAW_REVIEW" --workspace "$ws_274_i1" --week 2026-W36 >/dev/null 2>"$TMP_ROOT/274-i1.err"
+i1_274_rc=$?
+i1_274_receipt=$(tail -n 1 "$ws_274_i1/loop/promotions/runs.log")
+i1_274_candidate=$(latest_candidate "$ws_274_i1")
+if [[ "$i1_274_rc" -eq 0 && "$i1_274_receipt" == *' fabricated=0 '* \
+  && "$i1_274_receipt" == *' candidates=1 '* && -f "$i1_274_candidate" \
+  && "$(grep -c '^run-k: 1$' "$i1_274_candidate")" -eq 1 \
+  && "$(grep -c '^run-sessions: 1$' "$ws_274_i1/loop/promotions/ledger.md")" -eq 1 ]]; then
+  pass '[274-I1] two citation spellings of one source line receive exactly one session of recurrence credit'
+else
+  fail_case '[274-I1] two citation spellings of one source line receive exactly one session of recurrence credit' "rc=$i1_274_rc receipt=$i1_274_receipt candidate=$(cat "$i1_274_candidate" 2>/dev/null)"
+fi
+
+# `(date, X)` is the STATE.md provenance slot and X is a valid task id under
+# is_safe_id; a digit-bearing X cannot be separated from a job id by grammar —
+# recorded equivalence, #274 design round 3 (one seat dissented; promotion
+# writes the THEME, never the member quote).
+CASE_274_RESULTS=
+c1_ok=1
+run_274_single c1-rule-content '- (2026-09-04, Rule-1) Do not push unreviewed migrations' \
+  'Do not push unreviewed migrations' accepted || c1_ok=0
+run_274_single c1-rule-inclusive '- (2026-09-04, Rule-1) Do not push unreviewed migrations' \
+  '(2026-09-04, Rule-1) Do not push unreviewed migrations' accepted || c1_ok=0
+run_274_single c1-unsafe-content '- (2026-09-04, unsafe-1) safe to deploy' \
+  'safe to deploy' accepted || c1_ok=0
+run_274_single c1-unsafe-inclusive '- (2026-09-04, unsafe-1) safe to deploy' \
+  '(2026-09-04, unsafe-1) safe to deploy' accepted || c1_ok=0
+if [[ "$c1_ok" -eq 1 ]]; then
+  pass '[274-C1] digit-bearing task ids in the date-led provenance slot share the recorded equivalence'
+else
+  fail_case '[274-C1] digit-bearing task ids in the date-led provenance slot share the recorded equivalence' "$CASE_274_RESULTS"
+fi
+
+CASE_274_RESULTS=
+if run_274_single n1-absent \
+  '- (2026-09-04, ev007b-C-r1j1) Quote extraction for answer verification must use exact character-for-character substrings from source CSV rows.' \
+  'This plausible provenance citation does not exist in the selected source file.' rejected; then
+  pass '[274-N1] a plausible provenance stamp cannot authenticate a line that does not exist'
+else
+  fail_case '[274-N1] a plausible provenance stamp cannot authenticate a line that does not exist' "$CASE_274_RESULTS"
+fi
+
+CASE_274_RESULTS=
+if run_274_single n2-midline \
+  '- (2026-09-04, ev007b-C-r1j1) Quote extraction for answer verification must use exact character-for-character substrings from source CSV rows.' \
+  'must use exact character-for-character substrings from source CSV rows.' rejected; then
+  pass '[274-N2] provenance stripping does not relax prefix anchoring for mid-line fragments'
+else
+  fail_case '[274-N2] provenance stripping does not relax prefix anchoring for mid-line fragments' "$CASE_274_RESULTS"
+fi
+
+CASE_274_RESULTS=
+if run_274_single n3-over-cap \
+  '- (2026-09-04, ev007b-C-r1j2) CSV ledger files contain multiple entries for same txn_id across different rows (e.g., TXN-04001 in 094-ledger-log.csv appears on line 3 with status PENDING and again on line 39 with status FAILED as a status update). Query extraction must include all matching rows to accurately reflect the data as recorded in source files.' \
+  'CSV ledger files contain multiple entries for same txn_id across different rows (e.g., TXN-04001 in 094-ledger-log.csv appears on line 3 with status PENDING and again on line 39 with status FAILED as a status update)' rejected; then
+  pass '[274-N3] the real 216-character citation remains rejected by the unchanged cap'
+else
+  fail_case '[274-N3] the real 216-character citation remains rejected by the unchanged cap' "$CASE_274_RESULTS"
+fi
+
+CASE_274_RESULTS=
+n4_ok=1
+run_274_single n4-unverified-content '- (2026-09-04, unverified) safe to deploy' 'safe to deploy' rejected || n4_ok=0
+run_274_single n4-unverified-inclusive '- (2026-09-04, unverified) safe to deploy' '(2026-09-04, unverified) safe to deploy' accepted || n4_ok=0
+run_274_single n4-date-delete-content '- (2026-09-04, DO-NOT-DELETE) keep the warm spare out of rotation' 'keep the warm spare out of rotation' rejected || n4_ok=0
+run_274_single n4-date-delete-inclusive '- (2026-09-04, DO-NOT-DELETE) keep the warm spare out of rotation' '(2026-09-04, DO-NOT-DELETE) keep the warm spare out of rotation' accepted || n4_ok=0
+run_274_single n4-date-important-content '- (2026-09-04, IMPORTANT) preserve the operator warning' 'preserve the operator warning' rejected || n4_ok=0
+run_274_single n4-date-important-inclusive '- (2026-09-04, IMPORTANT) preserve the operator warning' '(2026-09-04, IMPORTANT) preserve the operator warning' accepted || n4_ok=0
+run_274_single n4-delete-content '- (DO-NOT-DELETE) retain this exception file' 'retain this exception file' rejected || n4_ok=0
+run_274_single n4-delete-inclusive '- (DO-NOT-DELETE) retain this exception file' '(DO-NOT-DELETE) retain this exception file' accepted || n4_ok=0
+run_274_single n4-rule-content '- (Rule 1) never rewrite sealed records' 'never rewrite sealed records' rejected || n4_ok=0
+run_274_single n4-rule-inclusive '- (Rule 1) never rewrite sealed records' '(Rule 1) never rewrite sealed records' accepted || n4_ok=0
+run_274_single n4-priority-content '- (high-priority) flush memtable on exit' 'flush memtable on exit' rejected || n4_ok=0
+run_274_single n4-priority-inclusive '- (high-priority) flush memtable on exit' '(high-priority) flush memtable on exit' accepted || n4_ok=0
+run_274_single n4-v2-content '- (v2) preserve the version qualifier' 'preserve the version qualifier' rejected || n4_ok=0
+run_274_single n4-v2-inclusive '- (v2) preserve the version qualifier' '(v2) preserve the version qualifier' accepted || n4_ok=0
+run_274_single n4-cve-content '- (CVE-2024-1111) buffer overflow in parser' 'buffer overflow in parser' rejected || n4_ok=0
+run_274_single n4-cve-inclusive '- (CVE-2024-1111) buffer overflow in parser' '(CVE-2024-1111) buffer overflow in parser' accepted || n4_ok=0
+run_274_single n4-dated-cve-content '- 2026-09-04 (CVE-2024-1111) rotated the exposed API token' 'rotated the exposed API token' rejected || n4_ok=0
+run_274_single n4-dated-cve-inclusive '- 2026-09-04 (CVE-2024-1111) rotated the exposed API token' '(CVE-2024-1111) rotated the exposed API token' accepted || n4_ok=0
+run_274_single n4-cve-mismatch '- (CVE-2024-1111) buffer overflow in parser' '(CVE-2024-2222) buffer overflow in parser' rejected || n4_ok=0
+run_274_single n4-dated-cve-mismatch '- 2026-09-04 (CVE-2024-1111) rotated the exposed API token' '2026-09-04 (CVE-2024-2222) rotated the exposed API token' rejected || n4_ok=0
+if [[ "$n4_ok" -eq 1 ]]; then
+  pass '[274-N4] content parentheticals remain significant, including dated warnings and CVEs'
+else
+  fail_case '[274-N4] content parentheticals remain significant, including dated warnings and CVEs' "$CASE_274_RESULTS"
+fi
+
+identifier_61=a123456789012345678901234567890123456789012345678901234567890
+CASE_274_RESULTS=
+n5_ok=1
+run_274_single n5-words-content '- (2026-09-04, two words) bounded grammar text' 'bounded grammar text' rejected || n5_ok=0
+run_274_single n5-words-inclusive '- (2026-09-04, two words) bounded grammar text' '(2026-09-04, two words) bounded grammar text' accepted || n5_ok=0
+run_274_single n5-nested-content '- ((2026-09-04) id) nested grammar text' 'nested grammar text' rejected || n5_ok=0
+run_274_single n5-nested-inclusive '- ((2026-09-04) id) nested grammar text' '((2026-09-04) id) nested grammar text' accepted || n5_ok=0
+run_274_single n5-long-content "- (2026-09-04, $identifier_61) overlong identifier text" 'overlong identifier text' rejected || n5_ok=0
+run_274_single n5-long-inclusive "- (2026-09-04, $identifier_61) overlong identifier text" "(2026-09-04, $identifier_61) overlong identifier text" accepted || n5_ok=0
+run_274_single n5-colon-content '- (2026-09-04, job:7) colon identifier text' 'colon identifier text' rejected || n5_ok=0
+run_274_single n5-colon-inclusive '- (2026-09-04, job:7) colon identifier text' '(2026-09-04, job:7) colon identifier text' accepted || n5_ok=0
+run_274_single n5-slash-content '- (2026-09-04, job/7) slash identifier text' 'slash identifier text' rejected || n5_ok=0
+run_274_single n5-slash-inclusive '- (2026-09-04, job/7) slash identifier text' '(2026-09-04, job/7) slash identifier text' accepted || n5_ok=0
+run_274_single n5-fused-content '- (2026-09-04, r1j1)text without delimiter' 'text without delimiter' rejected || n5_ok=0
+run_274_single n5-fused-inclusive '- (2026-09-04, r1j1)text without delimiter' '(2026-09-04, r1j1)text without delimiter' accepted || n5_ok=0
+run_274_single n5-emphasis-content '- **(2026-09-04, r1j1)** emphasized stamp text' 'emphasized stamp text' rejected || n5_ok=0
+run_274_single n5-emphasis-inclusive '- **(2026-09-04, r1j1)** emphasized stamp text' '**(2026-09-04, r1j1)** emphasized stamp text' accepted || n5_ok=0
+run_274_single n5-second-content '- (2026-09-04, r1j1) (2026-09-04, r2j2) second stamp text' 'second stamp text' rejected || n5_ok=0
+run_274_single n5-second-inclusive '- (2026-09-04, r1j1) (2026-09-04, r2j2) second stamp text' '(2026-09-04, r1j1) (2026-09-04, r2j2) second stamp text' accepted || n5_ok=0
+if [[ "$n5_ok" -eq 1 && "${#identifier_61}" -eq 61 ]]; then
+  pass '[274-N5] provenance grammar stays bounded and strips at most one stamp before emphasis'
+else
+  fail_case '[274-N5] provenance grammar stays bounded and strips at most one stamp before emphasis' "id_len=${#identifier_61} $CASE_274_RESULTS"
+fi
+
+CASE_274_RESULTS=
+n6_ok=1
+run_274_single n6-bare-content '- (id-7) [tag-9] text remains ordered' 'text remains ordered' rejected || n6_ok=0
+run_274_single n6-bare-tag '- (id-7) [tag-9] text remains ordered' '[tag-9] text remains ordered' rejected || n6_ok=0
+run_274_single n6-bare-inclusive '- (id-7) [tag-9] text remains ordered' '(id-7) [tag-9] text remains ordered' accepted || n6_ok=0
+run_274_single n6-stamp-content '- (2026-09-04, id-7) [tag-9] text remains ordered' 'text remains ordered' rejected || n6_ok=0
+# Fixed-order characterization: the source keeps [tag-9] after stripping the
+# stamp, while a quote beginning at [tag-9] has that tag stripped by step 3.
+# The context-free canonicalizer therefore rejects it fail-closed.
+run_274_single n6-stamp-tag '- (2026-09-04, id-7) [tag-9] text remains ordered' '[tag-9] text remains ordered' rejected || n6_ok=0
+run_274_single n6-stamp-inclusive '- (2026-09-04, id-7) [tag-9] text remains ordered' '(2026-09-04, id-7) [tag-9] text remains ordered' accepted || n6_ok=0
+run_274_single n6-form-b-content '- 2026-09-04 (ev007b-C-r2j2) Step 1 executed successfully with all corpus files.' 'Step 1 executed successfully with all corpus files.' rejected || n6_ok=0
+run_274_single n6-form-b-inclusive '- 2026-09-04 (ev007b-C-r2j2) Step 1 executed successfully with all corpus files.' '(ev007b-C-r2j2) Step 1 executed successfully with all corpus files.' accepted || n6_ok=0
+if [[ "$n6_ok" -eq 1 ]]; then
+  pass '[274-N6] fixed order preserves bare ids, post-stamp tags, and removed form B fail-closed'
+else
+  fail_case '[274-N6] fixed order preserves bare ids, post-stamp tags, and removed form B fail-closed' "$CASE_274_RESULTS"
+fi
+
 CANONICAL_RESIDUE=$TMP_ROOT/canonical-residue-reviewer
 write_reviewer "$CANONICAL_RESIDUE" 'cat >/dev/null
 cat <<"OUT"

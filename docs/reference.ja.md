@@ -82,10 +82,19 @@ fail-closed）のいずれかです。
 THEME block 間の空行は許容しますが、block 内の空行は不正です。各 member citation は
 比較時に先頭の indentation、1 個の bullet marker、ISO date prefix、`[session-806]` /
 `[2026-07-20]` のように内部 whitespace を含まず、ASCII digit または `-` を少なくとも 1 つ含み、
-閉じ `]` の直後に space または tab が続く保守的な machine tag、`**bold**` / word-adjacent な
+閉じ `]` の直後に space または tab が続く保守的な machine tag、最大 1 個の日付で始まる
+provenance stamp（`(YYYY-MM-DD)` または数字を含む job id を伴う `(YYYY-MM-DD, job-id)`、
+例: `(2026-09-04, ev007b-C-r1j1)`）、`**bold**` / word-adjacent な
 `*bold*` のような paired emphasis marker を除いたうえで、正規化後 8〜200 文字で、
 正規化済み source line の先頭に一致する必要があります。
 `[IMPORTANT]` / `[NEVER]` のような human warning tag と、意味を持つ lone/glob `*` token は保持されます。
+stamp を引用に含めても常に構いません。stamp の区切りは `,` または `;`、その直後の space/tab は任意で、
+job id は `[A-Za-z0-9][A-Za-z0-9._-]{0,59}` に一致する 1〜60 文字の ASCII task id かつ
+ASCII 数字を含むものに限ります。それ以外の括弧内 whitespace は認めず、`)` の直後には space/tab が必要です。
+source と quote の両方で除去順序は bullet → date → 最大 2 個の tags → stamp → emphasis に固定され、
+`(date, id) [tag]` の tag は保持されます。他の括弧書き（例: `(IMPORTANT)`、`(DO-NOT-DELETE)`、
+`(Rule 1)`、`(2026-09-04, unverified)`、日付の後の単独の `(job-id)`）は内容なので省略しないでください。
+引用は 200 文字以内にしてください。
 短すぎる citation、行途中だけの一致、fabrication は block 全体を reject します。fabricated block 数が
 `max(fabricated_floor, ceil(block 数の fabricated_pct%))` に達すると reviewer call 全体を fail にします。
 `fabricated_pct` の既定値は 50、許容範囲は 1〜100 です。`loop/review.conf` の数値は 10 進として解釈するため、

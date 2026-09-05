@@ -429,6 +429,11 @@ def canonicalize(value):
         if not re.search(r"[0-9-]", match.group(1)):
             break
         value = value[match.end():]
+    # The identifier charset mirrors is_safe_id in scripts/tr-enqueue, bounded
+    # here to 60 characters; digit-free parentheticals remain content.
+    stamp = re.match(r"^\(([0-9]{4}-[0-9]{2}-[0-9]{2})(?:[,;][ \t]*([A-Za-z0-9][A-Za-z0-9._-]{0,59}))?\)[ \t]+", value)
+    if stamp and (stamp.group(2) is None or re.search(r"[0-9]", stamp.group(2))):
+        value = value[stamp.end():]
     previous = None
     while value != previous:
         previous = value

@@ -83,9 +83,18 @@ THEME blocks may be separated by blank lines, but blank lines inside a block are
 Each member citation must normalize to 8–200 characters and match the start of a normalized
 source line after leading indentation, one bullet marker, an ISO date prefix, conservative
 machine tags with no internal whitespace that contain at least one ASCII digit or `-` and are
-followed by space or tab, and paired emphasis markers such as `**bold**` / word-adjacent
+followed by space or tab, at most one date-led provenance stamp of the form `(YYYY-MM-DD)`
+or `(YYYY-MM-DD, job-id)` where the job id contains a digit — e.g. `(2026-09-04, ev007b-C-r1j1)` —
+and paired emphasis markers such as `**bold**` / word-adjacent
 `*bold*` are stripped for comparison. Human warning tags such as `[IMPORTANT]` or `[NEVER]`,
-and meaningful lone/glob `*` tokens, remain significant. Shorter, mid-line-only,
+and meaningful lone/glob `*` tokens, remain significant. Quoting the stamp as part of the citation
+is always acceptable. The stamp permits `,` or `;`, optional space/tab after the separator, and
+a 1–60 character ASCII task id matching `[A-Za-z0-9][A-Za-z0-9._-]{0,59}` with an ASCII digit;
+no other internal whitespace is allowed, and `)` must be followed by space/tab.
+The fixed order on both source and quote is bullet → date → up to two tags → stamp → emphasis;
+`(date, id) [tag]` keeps the tag. Do not omit any other parenthetical (for example `(IMPORTANT)`,
+`(DO-NOT-DELETE)`, `(Rule 1)`, `(2026-09-04, unverified)`, or a bare `(job-id)` after a date);
+they are content. Keep the quote at 200 characters or fewer. Shorter, mid-line-only,
 or fabricated citations reject the complete block. The whole reviewer call fails when fabricated
 blocks reach `max(fabricated_floor, ceil(fabricated_pct% of blocks))`; `fabricated_pct`
 defaults to 50 and accepts values from 1 through 100. Numeric `loop/review.conf` values are
