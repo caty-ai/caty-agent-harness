@@ -31,8 +31,8 @@ optional space/tab after the separator, and a 1–60 character ASCII task id mat
 `[A-Za-z0-9][A-Za-z0-9._-]{0,59}` with an ASCII digit; no other internal whitespace is allowed,
 and `)` must be followed by space/tab. At most one stamp is stripped. The fixed order is
 bullet → date → up to two tags → stamp → emphasis; `(date, id) [tag]` keeps the tag.
-The same rule applies to source and quote. Paired emphasis markers such as `**bold**` or
-word-adjacent `*bold*` are also stripped for comparison.
+The same rule applies to source and quote; for comparison, paired emphasis markers such as
+`**bold**` or word-adjacent `*bold*` are also stripped.
 Do not skip human warning tags such as `[IMPORTANT]` / `[NEVER]`, and do not
 omit a meaningful lone `*` token. Do not omit any other parenthetical (for example
 `(IMPORTANT)`, `(DO-NOT-DELETE)`, `(Rule 1)`, `(2026-09-04, unverified)`, or a bare
