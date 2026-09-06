@@ -185,7 +185,13 @@ The rules there apply in addition to the Hermes-specific wiring below.
 
    For the API-backed shape, Anthropic remains the default: set an Anthropic key in
    `VERIFIER_API_KEY`, optionally set `VERIFIER_MODEL`, and leave
-   `VERIFIER_API_BASE` unset to use `https://api.anthropic.com`.
+   `VERIFIER_API_BASE` unset to use `https://api.anthropic.com`. Credential attachment
+   is restricted to an allowlist of hosts that defaults to `api.anthropic.com`; any
+   other base requires explicitly opting its host in through
+   `VERIFIER_API_ALLOWED_HOSTS`. The allowlist constrains only the host; the port and
+   path follow `VERIFIER_API_BASE`. Entries are bare lowercase hostnames. Setting
+   `VERIFIER_API_ALLOWED_HOSTS` replaces the default list, so include
+   `api.anthropic.com` if the Anthropic host is also needed.
 
    **Z.ai GLM 5.2 configuration.** Set these values through the job's protected
    `SECRETS_ENV`:
@@ -194,20 +200,26 @@ The rules there apply in addition to the Hermes-specific wiring below.
    VERIFIER_API_KEY=<Z.ai member key>
    VERIFIER_MODEL=glm-5.2
    VERIFIER_API_BASE=https://api.z.ai/api/anthropic
+   VERIFIER_API_ALLOWED_HOSTS=api.z.ai
    ```
 
-   `SECRETS_ENV` is an additive overlay. When switching vendors, remove or overwrite
-   the old key line: a leftover key for vendor A will be sent to vendor B. Prefer
+   The allowlist line is the explicit opt-in that authorizes sending
+   `VERIFIER_API_KEY` to the non-default `api.z.ai` host.
+
+   `SECRETS_ENV` is an additive overlay. When switching vendors, update or remove
+   `VERIFIER_API_BASE` and `VERIFIER_API_ALLOWED_HOSTS` together with the old key line.
+   A leftover key for vendor A will be sent to vendor B; a leftover allowlist for vendor
+   A hard-stops vendor B. That failure is fail-closed, but avoidable. Prefer
    `VERIFIER_API_KEY` for both vendors; `ANTHROPIC_API_KEY` is accepted only as a
    backward-compatible fallback when the preferred variable is unset or empty.
 
    The conformance gate pins the staged wrapper, provider, and probe files by SHA-256,
    plus the TTL and recorded behavioral flags. It does not pin the API key,
-   `VERIFIER_API_BASE`, or live `VERIFIER_MODEL`; `provider_version` is only the model
-   label present at attestation time, not the model actually served. Re-attesting after
-   a vendor, model, or endpoint change is therefore an operator duty the gate cannot
-   enforce today; a follow-up issue tracks gating the endpoint and served model in the
-   evidence record.
+   `VERIFIER_API_BASE`, `VERIFIER_API_ALLOWED_HOSTS`, or live `VERIFIER_MODEL`;
+   `provider_version` is only the model label present at attestation time, not the model
+   actually served. Re-attesting after a vendor, model, or endpoint change is therefore
+   an operator duty the gate cannot enforce today; a follow-up issue tracks gating the
+   endpoint and served model in the evidence record.
 
    Operational contract: the example providers and wrapper forward only the validated
    verdict and reason lines. Line 1 must be exactly `VERDICT: <allowed-provider-value>`

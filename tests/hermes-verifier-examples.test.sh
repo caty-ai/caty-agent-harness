@@ -17,6 +17,9 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 mkdir -p "$TMP_ROOT"
 
+# Prevent ambient operator configuration from leaking into test cases.
+unset VERIFIER_API_BASE VERIFIER_API_ALLOWED_HOSTS
+
 pass() {
   PASS_COUNT=$((PASS_COUNT + 1))
   printf 'PASS %s\n' "$1"
@@ -299,6 +302,7 @@ if grep -Fq '"$FABLE_CONFORMING_PROVIDER_PATH" "$bundle"' "$CANONICAL_WRAPPER" \
   && grep -Fq 'os.environ.get("ANTHROPIC_API_KEY"' "$PROVIDER" \
   && grep -Fq 'os.environ.get("VERIFIER_MODEL", "claude-sonnet-5")' "$PROVIDER" \
   && grep -Fq 'os.environ.get("VERIFIER_API_BASE"' "$PROVIDER" \
+  && grep -Fq 'VERIFIER_API_ALLOWED_HOSTS' "$PROVIDER" \
   && grep -Fq 'f"{api_base}/v1/messages"' "$PROVIDER" \
   && grep -Fq 'urllib.parse.urlsplit(api_base)' "$PROVIDER" \
   && grep -Fq 'urllib.request.build_opener(NoRedirectHandler())' "$PROVIDER" \
@@ -648,6 +652,7 @@ zai_base=https://api.z.ai/api/anthropic
 rm -f "$request_url_marker"
 set +e
 zai_base_output=$(VERIFIER_API_KEY=fixture VERIFIER_API_BASE="$zai_base" \
+  VERIFIER_API_ALLOWED_HOSTS=api.z.ai \
   REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
   REQUEST_COUNT_MARKER="$request_count_marker" \
   python3 "$opener_stub" "$PROVIDER" "$bundle")
@@ -664,6 +669,7 @@ fi
 rm -f "$request_url_marker"
 set +e
 trailing_slash_output=$(VERIFIER_API_KEY=fixture VERIFIER_API_BASE="$zai_base/" \
+  VERIFIER_API_ALLOWED_HOSTS=api.z.ai \
   REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
   REQUEST_COUNT_MARKER="$request_count_marker" \
   python3 "$opener_stub" "$PROVIDER" "$bundle")
@@ -680,6 +686,7 @@ fi
 rm -f "$request_url_marker"
 set +e
 double_slash_output=$(VERIFIER_API_KEY=fixture VERIFIER_API_BASE="$zai_base//" \
+  VERIFIER_API_ALLOWED_HOSTS=api.z.ai \
   REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
   REQUEST_COUNT_MARKER="$request_count_marker" \
   python3 "$opener_stub" "$PROVIDER" "$bundle")
@@ -699,6 +706,7 @@ for bare_delimiter in '#' '?'; do
   set +e
   bare_delimiter_output=$(VERIFIER_API_KEY=fixture \
     VERIFIER_API_BASE="$zai_base$bare_delimiter" \
+    VERIFIER_API_ALLOWED_HOSTS=api.z.ai \
     REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
     REQUEST_COUNT_MARKER="$request_count_marker" \
     python3 "$opener_stub" "$PROVIDER" "$bundle")
@@ -742,6 +750,7 @@ fi
 
 set +e
 redirect_output=$(VERIFIER_API_KEY=redirect-secret VERIFIER_API_BASE="$zai_base" \
+  VERIFIER_API_ALLOWED_HOSTS=api.z.ai \
   STUB_RESPONSE_MODE=redirect REQUEST_URL_MARKER="$request_url_marker" \
   REQUEST_KEY_MARKER="$request_key_marker" REQUEST_COUNT_MARKER="$request_count_marker" \
   python3 "$opener_stub" "$PROVIDER" "$bundle" 2>"$TMP_ROOT/redirect.err")
@@ -804,6 +813,110 @@ if [ "$credential_guard_ok" -eq 1 ]; then
 else
   fail_case '[17] provider prefers VERIFIER_API_KEY, preserves the legacy fallback, and fails without either key' \
     "both=$both_keys_rc legacy=$legacy_key_rc missing=$missing_key_rc"
+fi
+
+host_rejection_guard_ok=1
+for host_rejection_case in \
+  'default-rejects-attacker||https://attacker.example.test' \
+  'set-empty-rejects-attacker|@EMPTY@|https://attacker.example.test' \
+  'explicit-replaces-default|api.z.ai|https://api.anthropic.com'; do
+  host_rejection_name=${host_rejection_case%%|*}
+  host_rejection_rest=${host_rejection_case#*|}
+  host_rejection_allowlist=${host_rejection_rest%%|*}
+  host_rejection_base=${host_rejection_rest#*|}
+  rm -f "$request_count_marker"
+  set +e
+  if [ "$host_rejection_allowlist" = '@EMPTY@' ]; then
+    host_rejection_output=$(VERIFIER_API_KEY=fixture \
+      VERIFIER_API_BASE="$host_rejection_base" \
+      VERIFIER_API_ALLOWED_HOSTS= \
+      REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+      REQUEST_COUNT_MARKER="$request_count_marker" \
+      python3 "$opener_stub" "$PROVIDER" "$bundle" \
+      2>"$TMP_ROOT/host-rejection-$host_rejection_name.err")
+  elif [ -n "$host_rejection_allowlist" ]; then
+    host_rejection_output=$(VERIFIER_API_KEY=fixture \
+      VERIFIER_API_BASE="$host_rejection_base" \
+      VERIFIER_API_ALLOWED_HOSTS="$host_rejection_allowlist" \
+      REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+      REQUEST_COUNT_MARKER="$request_count_marker" \
+      python3 "$opener_stub" "$PROVIDER" "$bundle" \
+      2>"$TMP_ROOT/host-rejection-$host_rejection_name.err")
+  else
+    host_rejection_output=$(env -u VERIFIER_API_ALLOWED_HOSTS \
+      VERIFIER_API_KEY=fixture VERIFIER_API_BASE="$host_rejection_base" \
+      REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+      REQUEST_COUNT_MARKER="$request_count_marker" \
+      python3 "$opener_stub" "$PROVIDER" "$bundle" \
+      2>"$TMP_ROOT/host-rejection-$host_rejection_name.err")
+  fi
+  host_rejection_rc=$?
+  set -e
+  if [ "$host_rejection_rc" -ne 1 ] || [ -n "$host_rejection_output" ] \
+    || ! grep -Fqx 'provider API base host is not allowlisted' \
+      "$TMP_ROOT/host-rejection-$host_rejection_name.err" \
+    || [ -e "$request_count_marker" ]; then
+    host_rejection_guard_ok=0
+  fi
+done
+if [ "$host_rejection_guard_ok" -eq 1 ]; then
+  pass '[18] provider rejects non-allowlisted hosts before attempting a credentialed request'
+else
+  fail_case '[18] provider rejects non-allowlisted hosts before attempting a credentialed request' \
+    'a default or explicitly excluded host reached the request path'
+fi
+
+allowlist_validation_guard_ok=1
+for invalid_allowlist in \
+  '   ' \
+  'https://api.z.ai' \
+  'api.z.ai/' \
+  'api.z.ai,,' \
+  'api.z.ai:443' \
+  'api.z%2e.ai' \
+  '*'; do
+  rm -f "$request_count_marker"
+  set +e
+  invalid_allowlist_output=$(VERIFIER_API_KEY=fixture VERIFIER_API_BASE="$zai_base" \
+    VERIFIER_API_ALLOWED_HOSTS="$invalid_allowlist" \
+    REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+    REQUEST_COUNT_MARKER="$request_count_marker" \
+    python3 "$opener_stub" "$PROVIDER" "$bundle" \
+    2>"$TMP_ROOT/invalid-allowlist.err")
+  invalid_allowlist_rc=$?
+  set -e
+  if [ "$invalid_allowlist_rc" -ne 1 ] || [ -n "$invalid_allowlist_output" ] \
+    || ! grep -Fqx 'provider host allowlist is invalid' \
+      "$TMP_ROOT/invalid-allowlist.err" \
+    || [ -e "$request_count_marker" ]; then
+    allowlist_validation_guard_ok=0
+  fi
+done
+if [ "$allowlist_validation_guard_ok" -eq 1 ]; then
+  pass '[19] provider fails closed on malformed or empty host allowlist entries before request I/O'
+else
+  fail_case '[19] provider fails closed on malformed or empty host allowlist entries before request I/O' \
+    'one or more invalid allowlists escaped validation or reached the request path'
+fi
+
+rm -f "$request_url_marker" "$request_count_marker"
+set +e
+case_insensitive_output=$(VERIFIER_API_KEY=fixture VERIFIER_API_BASE="$zai_base" \
+  VERIFIER_API_ALLOWED_HOSTS=API.Z.AI \
+  REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+  REQUEST_COUNT_MARKER="$request_count_marker" \
+  python3 "$opener_stub" "$PROVIDER" "$bundle")
+case_insensitive_rc=$?
+set -e
+if [ "$case_insensitive_rc" -eq 0 ] \
+  && [ "$case_insensitive_output" = 'VERDICT: pass
+stub accepted the request URL' ] \
+  && [ "$(cat "$request_url_marker")" = "$zai_base/v1/messages" ] \
+  && [ "$(cat "$request_count_marker")" -eq 1 ]; then
+  pass '[20] provider matches explicitly allowed API hostnames case-insensitively'
+else
+  fail_case '[20] provider matches explicitly allowed API hostnames case-insensitively' \
+    "rc=$case_insensitive_rc output=$case_insensitive_output"
 fi
 
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
