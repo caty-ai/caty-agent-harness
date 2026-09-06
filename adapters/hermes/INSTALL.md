@@ -44,7 +44,9 @@ The rules there apply in addition to the Hermes-specific wiring below.
    `hermes profile list`, create the profile first with `hermes profile create <name>`
    if it does not exist, then re-run the discovery. For the `default` profile,
    the resolved home is `~/.hermes` itself; for named profiles it is
-   `~/.hermes/profiles/<name>`.
+   `~/.hermes/profiles/<name>`. The harness workspace stays at
+   `~/.hermes/profiles/<profile>/workspace` for every profile, including `default`;
+   only `SOUL.md` lives in the resolved profile home.
 
    The existing file is preserved and its path is registered under the workspace.
    Pause and resume without deleting state, learning records, queue, or artifacts:

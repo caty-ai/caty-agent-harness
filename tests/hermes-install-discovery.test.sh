@@ -21,8 +21,8 @@ assert_eq() {
   fi
 }
 
-for required in 'hermes profile show' "sed -n 's/^Path:[[:space:]]*//p'" '[ -f "$SOUL" ]'; do
-  if grep -Fq "$required" "$DOC"; then
+for required in 'hermes profile show' "sed -n 's/^Path:[[:space:]]*//p'" '[ -f "$SOUL" ]' '--bootstrap-runtime hermes --append-bootstrap "$SOUL"'; do
+  if grep -Fq -- "$required" "$DOC"; then
     pass "INSTALL.md contains $required"
   else
     fail_case "INSTALL.md contains $required" 'required guidance missing'
