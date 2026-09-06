@@ -32,6 +32,7 @@ case "$(json_get stop_hook_active)" in
 esac
 
 session_id=$(json_get session_id)
+session_id=$(printf '%s' "$session_id" | tr -cd 'A-Za-z0-9._-')
 cwd=$(json_get cwd)
 [[ -n "$cwd" && -d "$cwd" ]] || exit 0
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -68,8 +69,7 @@ touch "$guard" 2>/dev/null || exit 0
 mkdir -p "$cwd/loop/pending" 2>/dev/null || true
 flush_file="$cwd/loop/pending/flush-$(date -u +%F).md"
 flush_stamp_ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-stamp_sid=$(printf '%s' "$session_id" | tr -cd 'A-Za-z0-9._-')
-[[ -n "$stamp_sid" ]] || stamp_sid="cwd-$(printf '%s' "$cwd" | cksum | cut -d' ' -f1)"
+stamp_sid=$session_id
 cat >&2 <<EOF
 caty-agent-harness CHECKPOINT: workspace files changed after STATE.md was last written (e.g. ${newer#"$cwd"/}).
 Before ending the session, write 'loop/handoffs/<UTC-date>-<task-slug>.md'; insert a new entry 1 under '## Last session' with the UTC date, task id, next action, blockers, last verified artifact path, and handoff pointer; push every previous entry down verbatim; never delete, summarize, or collapse existing entries. Fold any new observations into the right sections. If this turn genuinely produced nothing checkpoint-worthy, state that explicitly and continue — this reminder fires at most once per session.
