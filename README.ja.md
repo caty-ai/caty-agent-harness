@@ -37,7 +37,7 @@ Caty Agent Harness は、その全部をただのテキストファイルと確�
 
 </div>
 <!-- repo-state:begin (generated; do not edit) -->
-<p align="center"><sub>generation: <code>4077ee3</code> (2026-09-06T20:07:33Z) · verify: <a href="https://api.github.com/repos/caty-ai/caty-agent-harness/commits/main">API HEAD</a> · <a href="./status.json">status.json</a></sub></p>
+<p align="center"><sub>generation: <code>de413bf</code> (2026-09-06T21:42:45Z) · verify: <a href="https://api.github.com/repos/caty-ai/caty-agent-harness/commits/main">API HEAD</a> · <a href="./status.json">status.json</a></sub></p>
 <!-- repo-state:end -->
 
 - [こんな経験はありませんか？](#problems)
