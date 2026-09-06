@@ -25,14 +25,26 @@ The rules there apply in addition to the Hermes-specific wiring below.
 
 3. Append the marker-aware block with the managed installer.
 
-   For Cero, use the profile's absolute system-instruction/bootstrap path:
+   The target is the profile's `SOUL.md`, Hermes' identity slot, loaded into the
+   system prompt of that profile. The command below resolves its absolute path
+   from `hermes profile show`:
 
    ```sh
    HARNESS=/absolute/path/to/caty-agent-harness
+   PROFILE=<profile>                       # as listed by: hermes profile list
    WS=/absolute/path/to/.hermes/profiles/<profile>/workspace
-   "$HARNESS/install.sh" --workspace "$WS" --bootstrap-runtime hermes \
-     --append-bootstrap /absolute/path/to/profile-system-instructions.md
+   PROFILE_HOME=$(hermes profile show "$PROFILE" | sed -n 's/^Path:[[:space:]]*//p')
+   SOUL="$PROFILE_HOME/SOUL.md"
+   [ -n "$PROFILE_HOME" ] && [ -f "$SOUL" ] || { echo "stop: cannot resolve SOUL.md for profile '$PROFILE'" >&2; exit 1; }
+   "$HARNESS/install.sh" --workspace "$WS" --bootstrap-runtime hermes --append-bootstrap "$SOUL"
    ```
+
+   If `hermes profile show` errors or prints no `Path:` line, or `SOUL.md` does
+   not exist, STOP. Do not guess among files or create `SOUL.md` by hand. Check
+   `hermes profile list`, create the profile first with `hermes profile create <name>`
+   if it does not exist, then re-run the discovery. For the `default` profile,
+   the resolved home is `~/.hermes` itself; for named profiles it is
+   `~/.hermes/profiles/<name>`.
 
    The existing file is preserved and its path is registered under the workspace.
    Pause and resume without deleting state, learning records, queue, or artifacts:
