@@ -19,6 +19,7 @@ SYSTEM_PROMPT = """You are an independent artifact verifier. The user message co
 VERDICT_PATTERN = re.compile(
     r"^VERDICT: (pass|fail|inconclusive|rubric-invalid|needs-human|blocked-missing-artifact)$"
 )
+SERVED_MODEL_PATTERN = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$")
 VERDICT_MARKER_PATTERN = re.compile(r"VERDICT\s*:")
 REASON_CONTROL_PATTERN = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 EMPTY_REASON_BYTES = (
@@ -151,6 +152,22 @@ try:
     with opener.open(request, timeout=timeout_seconds) as response:
         response_body = response.read()
     decoded = json.loads(response_body)
+    served_model = decoded.get("model")
+    served_model_file = os.environ.get("VERIFIER_SERVED_MODEL_FILE", "")
+    if served_model_file:
+        if not isinstance(served_model, str) or not SERVED_MODEL_PATTERN.fullmatch(served_model):
+            fail("provider response lacks a served model id")
+        if not os.path.isabs(served_model_file):
+            fail("served model file path is invalid")
+        try:
+            fd = os.open(
+                served_model_file + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600
+            )
+            with os.fdopen(fd, "w", encoding="utf-8") as model_file:
+                model_file.write(served_model + "\n")
+            os.replace(served_model_file + ".tmp", served_model_file)
+        except OSError:
+            fail("served model file is not writable")
     text_parts = [
         block["text"]
         for block in decoded.get("content", [])
