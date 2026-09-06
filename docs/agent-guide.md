@@ -39,7 +39,7 @@ Pick the row that matches the tool **you** are running in right now:
 | Claude Code | `claude-code` | `<workspace>/CLAUDE.md` |
 | Codex CLI | `codex` | `<workspace>/AGENTS.md` |
 | Kimi Code CLI | `kimi` | `<workspace>/AGENTS.md` |
-| Hermes Agent | `hermes` | profile system-instructions file — follow [adapters/hermes/INSTALL.md](../adapters/hermes/INSTALL.md) for the exact invocation |
+| Hermes Agent | `hermes` | profile system-instructions file (the profile's SOUL.md; step 3 of [adapters/hermes/INSTALL.md](../adapters/hermes/INSTALL.md) resolves its path) — follow that document for the exact invocation |
 | OpenClaw | `openclaw` | `<workspace>/AGENTS.md` — follow [adapters/openclaw/INSTALL.md](../adapters/openclaw/INSTALL.md) for the exact invocation |
 
 If you are none of these, stop and tell the human this tool is not yet supported (the list is exact; do not improvise).
