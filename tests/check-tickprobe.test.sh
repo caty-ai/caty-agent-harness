@@ -228,7 +228,7 @@ assert_route_status "codex reuses the flush intake fold route" "$probe_output" c
 assert_route_status "hermes CONSULT injection passes" "$probe_output" hermes "CONSULT injection" PASS
 assert_route_status "hermes candidate generation passes" "$probe_output" hermes "candidate generation" PASS
 assert_route_status "hermes verifier availability passes" "$probe_output" hermes "verifier available" PASS
-assert_route_status "hermes distiller cron fails explicitly" "$probe_output" hermes "distiller cron" FAIL
+assert_route_status "hermes flush intake fold route passes" "$probe_output" hermes "distiller cron" PASS
 assert_route_status "hermes verifier conformance fails explicitly when unset" "$probe_output" hermes "verifier conformance" FAIL
 
 assert_route_status "kimi CONSULT injection passes" "$probe_output" kimi "CONSULT injection" PASS
@@ -245,6 +245,7 @@ assert_route_status "openclaw distiller conformance fails explicitly when unset"
 broken_harness=$TMP_ROOT/broken-harness
 copy_harness "$broken_harness"
 chmod -x "$broken_harness/adapters/hermes/verify-job.sh"
+chmod -x "$broken_harness/adapters/hermes/flush-intake.sh"
 broken_ws=$TMP_ROOT/ws-broken-learning-path
 "$broken_harness/install.sh" --workspace "$broken_ws" >/dev/null 2>&1
 seed_dates "$broken_ws"
@@ -253,15 +254,21 @@ broken_rc=$?
 broken_routes=$(printf '%s\n' "$broken_output" | grep -F "$LEARNING_PATH_PREFIX" || true)
 broken_route_count=$(printf '%s\n' "$broken_routes" | grep -c '^learning path:' || true)
 expected_broken_routes=$(printf '%s\n' "$route_lines" | sed \
-  's/learning path: adapter=hermes | route=verifier available | PASS/learning path: adapter=hermes | route=verifier available | FAIL/')
+  -e 's/learning path: adapter=hermes | route=verifier available | PASS/learning path: adapter=hermes | route=verifier available | FAIL/' \
+  -e 's/learning path: adapter=hermes | route=distiller cron | PASS/learning path: adapter=hermes | route=distiller cron | FAIL/')
 if [ "$broken_rc" -eq 0 ] \
   && [ "$broken_route_count" -eq 22 ] \
   && printf '%s\n' "$broken_routes" | grep -Fqx 'learning path: adapter=hermes | route=verifier available | FAIL' \
   && [ "$broken_routes" = "$expected_broken_routes" ]; then
-  pass "breaking only Hermes verifier flips exactly one route to FAIL"
+  pass "breaking Hermes verifier and intake entries flips exactly two routes to FAIL"
 else
-  fail_case "breaking only Hermes verifier flips exactly one route to FAIL" "rc=$broken_rc output=$broken_routes"
+  fail_case "breaking Hermes verifier and intake entries flips exactly two routes to FAIL" "rc=$broken_rc output=$broken_routes"
 fi
+
+assert_route_status "broken hermes intake entry makes distiller cron FAIL" "$broken_output" hermes "distiller cron" FAIL
+assert_route_status "broken hermes intake entry keeps claude-code distiller cron PASS" "$broken_output" claude-code "distiller cron" PASS
+assert_route_status "broken hermes intake entry keeps codex distiller cron PASS" "$broken_output" codex "distiller cron" PASS
+assert_route_status "broken hermes intake entry keeps kimi distiller cron PASS" "$broken_output" kimi "distiller cron" PASS
 
 broken_candidate_harness=$TMP_ROOT/broken-candidate-harness
 copy_harness "$broken_candidate_harness"
