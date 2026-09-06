@@ -1,2 +1,5 @@
 .omx/
 .omc/
+# Ignore Python bytecode (#233).
+__pycache__/
+*.pyc
