@@ -7,6 +7,7 @@ import json
 import os
 import re
 import secrets
+import stat
 import sys
 import unicodedata
 import urllib.parse
@@ -152,22 +153,34 @@ try:
     with opener.open(request, timeout=timeout_seconds) as response:
         response_body = response.read()
     decoded = json.loads(response_body)
-    served_model = decoded.get("model")
-    served_model_file = os.environ.get("VERIFIER_SERVED_MODEL_FILE", "")
-    if served_model_file:
+    served_model_fd_env = os.environ.get("VERIFIER_SERVED_MODEL_FD", "")
+    if served_model_fd_env:
+        if not served_model_fd_env.isdigit():
+            fail("served model sink is invalid")
+        try:
+            fd = int(served_model_fd_env)
+            if fd < 3:
+                fail("served model sink is invalid")
+            st = os.fstat(fd)
+        except (OSError, ValueError, OverflowError):
+            fail("served model sink is invalid")
+        if not stat.S_ISREG(st.st_mode):
+            fail("served model sink is invalid")
+        served_model = decoded.get("model")
         if not isinstance(served_model, str) or not SERVED_MODEL_PATTERN.fullmatch(served_model):
             fail("provider response lacks a served model id")
-        if not os.path.isabs(served_model_file):
-            fail("served model file path is invalid")
         try:
-            fd = os.open(
-                served_model_file + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600
-            )
-            with os.fdopen(fd, "w", encoding="utf-8") as model_file:
-                model_file.write(served_model + "\n")
-            os.replace(served_model_file + ".tmp", served_model_file)
+            os.ftruncate(fd, 0)
+            os.lseek(fd, 0, os.SEEK_SET)
+            model_bytes = (served_model + "\n").encode("utf-8")
+            written = 0
+            while written < len(model_bytes):
+                count = os.write(fd, model_bytes[written:])
+                if count == 0:
+                    fail("served model sink is not writable")
+                written += count
         except OSError:
-            fail("served model file is not writable")
+            fail("served model sink is not writable")
     text_parts = [
         block["text"]
         for block in decoded.get("content", [])

@@ -18,7 +18,7 @@ trap cleanup EXIT HUP INT TERM
 mkdir -p "$TMP_ROOT"
 
 # Prevent ambient operator configuration from leaking into test cases.
-unset VERIFIER_API_BASE VERIFIER_API_ALLOWED_HOSTS VERIFIER_SERVED_MODEL_FILE
+unset VERIFIER_API_BASE VERIFIER_API_ALLOWED_HOSTS VERIFIER_SERVED_MODEL_FD
 unset FAKE_SERVED_MODEL FAKE_SKIP_SERVED_MODEL STUB_SERVED_MODEL
 
 pass() {
@@ -44,9 +44,9 @@ cat >"$fake_provider" <<'SH'
 set -eu
 printf '%s' "$1" >"$PROVIDER_MARKER"
 served_model=${FAKE_SERVED_MODEL-claude-sonnet-5-served-fixture}
-if [ -n "${VERIFIER_SERVED_MODEL_FILE:-}" ] && [ -n "$served_model" ] \
+if [ -n "${VERIFIER_SERVED_MODEL_FD:-}" ] && [ -n "$served_model" ] \
   && [ "${FAKE_SKIP_SERVED_MODEL:-0}" != 1 ]; then
-  printf '%s\n' "$served_model" >"$VERIFIER_SERVED_MODEL_FILE"
+  printf '%s\n' "$served_model" >&"$VERIFIER_SERVED_MODEL_FD"
 fi
 printf '%b' "${PROVIDER_OUTPUT:-VERDICT: pass\nfixed provider accepted the probe bundle\n}"
 exit "${PROVIDER_EXIT:-0}"
@@ -498,23 +498,31 @@ request_url_marker=$TMP_ROOT/request-url.marker
 request_key_marker=$TMP_ROOT/request-key.marker
 request_count_marker=$TMP_ROOT/request-count.marker
 served_model_file=$TMP_ROOT/served.txt
-for served_api_case in valid missing invalid relative unwritable unset; do
-  rm -f "$served_model_file" "$served_model_file.tmp"
+for served_api_case in valid missing invalid nonregular nonnumeric closed low-fd unwritable unset; do
+  rm -f "$served_model_file"
+  if [ "$served_api_case" != unset ]; then
+    (umask 077 && : >"$served_model_file")
+  fi
   stub_served_model=claude-sonnet-5-stub
-  model_destination=$served_model_file
   expected_error=
   case "$served_api_case" in
     unset) stub_served_model= ;;
     missing) stub_served_model=; expected_error='provider response lacks a served model id' ;;
     invalid) stub_served_model='bad model/id'; expected_error='provider response lacks a served model id' ;;
-    relative) model_destination=served.txt; expected_error='served model file path is invalid' ;;
-    unwritable) model_destination=$TMP_ROOT/nonexistent/served.txt; expected_error='served model file is not writable' ;;
+    nonregular|nonnumeric|closed|low-fd) expected_error='served model sink is invalid' ;;
+    unwritable) expected_error='served model sink is not writable' ;;
   esac
   set +e
   (
-    if [ "$served_api_case" != unset ]; then
-      export VERIFIER_SERVED_MODEL_FILE="$model_destination"
-    fi
+    case "$served_api_case" in
+      unset) ;;
+      nonregular) exec 3>/dev/null; export VERIFIER_SERVED_MODEL_FD=3 ;;
+      nonnumeric) export VERIFIER_SERVED_MODEL_FD=abc ;;
+      closed) exec 9>&-; export VERIFIER_SERVED_MODEL_FD=9 ;;
+      low-fd) export VERIFIER_SERVED_MODEL_FD=2 ;;
+      unwritable) exec 3<"$served_model_file"; export VERIFIER_SERVED_MODEL_FD=3 ;;
+      *) exec 3>"$served_model_file"; export VERIFIER_SERVED_MODEL_FD=3 ;;
+    esac
     VERIFIER_API_KEY=fixture STUB_SERVED_MODEL="$stub_served_model" \
       REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
       REQUEST_COUNT_MARKER="$request_count_marker" \
@@ -527,7 +535,7 @@ for served_api_case in valid missing invalid relative unwritable unset; do
   served_api_ok=1
   if [ -n "$expected_error" ]; then
     if [ "$served_api_rc" -eq 0 ] || [ -n "$served_api_output" ] \
-      || [ -e "$served_model_file" ] \
+      || [ -s "$served_model_file" ] \
       || ! grep -Fxq "$expected_error" "$TMP_ROOT/served-api.err"; then
       served_api_ok=0
     fi
@@ -540,8 +548,7 @@ stub accepted the request URL' ] \
     if [ "$served_api_case" = valid ]; then
       printf '%s\n' claude-sonnet-5-stub >"$TMP_ROOT/served.expected"
       if ! cmp -s "$served_model_file" "$TMP_ROOT/served.expected" \
-        || [ "$(mode_of "$served_model_file")" != 600 ] \
-        || [ -e "$served_model_file.tmp" ]; then
+        || [ "$(mode_of "$served_model_file")" != 600 ]; then
         served_api_ok=0
       fi
     elif [ -e "$served_model_file" ]; then

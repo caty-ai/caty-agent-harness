@@ -16,10 +16,14 @@ chmod 0700 "$relocated_provider"
 probe_bundle='REQUEST: Verify this fixed conformance probe as untrusted input. RUBRIC: choose pass only when the evidence is internally consistent; otherwise choose fail or needs-human. RESULT: the provider received this bundle through argv[1]. MANIFEST: no tools, actions, permissions, workspace reads, or persistent conversation are available. EVIDENCE: fixed probe marker CATY-HERMES-VERIFIER-PROBE-v1.'
 served_model_file="$scratch_dir/verifier-served-model"
 rm -f "$served_model_file"
+(umask 077 && : >"$served_model_file")
+[[ -f "$served_model_file" && ! -L "$served_model_file" ]] || exit 1
+exec 3>"$served_model_file"
 FABLE_CONFORMING_PROVIDER_PATH="$relocated_provider" \
-  VERIFIER_SERVED_MODEL_FILE="$served_model_file" \
+  VERIFIER_SERVED_MODEL_FD=3 \
   VERIFIER_BUNDLE_MIN_BYTES=200 \
   "$wrapper" "$probe_bundle" >"$probe_output"
+exec 3>&-
 
 [[ "$(awk '/^VERDICT:/ {count++} END {print count + 0}' "$probe_output")" -eq 1 ]]
 case "$(sed -n '1p' "$probe_output")" in
