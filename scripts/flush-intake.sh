@@ -162,10 +162,15 @@ consider_candidate() {
   fi
   if [[ "$target" == lessons ]]; then
     # Remove one model-written prefix; a second date belongs to the lesson.
-    text=$(printf '%s\n' "$text" | LC_ALL=C awk '
+    if ! text=$(printf '%s\n' "$text" | LC_ALL=C awk '
       {
-        sub(/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][[:space:]]+/, "")
-        if (match($0, /^(\|[[:space:]]+)?[A-Za-z0-9][A-Za-z0-9._-]*[[:space:]]+\|([[:space:]]+|$)/)) {
+        # Inspect the original bullet before removing any metadata.
+        fields = ($0 ~ /\|[[:space:]]+next:/) + ($0 ~ /\|[[:space:]]+blockers:/) + \
+                 ($0 ~ /\|[[:space:]]+artifact:/) + ($0 ~ /\|[[:space:]]+handoff:/)
+        if (($0 ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]([[:space:]]|$)/ && fields >= 2) ||
+            $0 ~ /^next:.*[[:space:]]\|[[:space:]]+/) exit 1
+        dated = sub(/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][[:space:]]+/, "")
+        if (dated && match($0, /^(\|[[:space:]]+)?[A-Za-z0-9][A-Za-z0-9._-]*[[:space:]]+\|([[:space:]]+|$)/)) {
           prefix_length = RLENGTH
           token = substr($0, 1, prefix_length)
           sub(/^\|[[:space:]]+/, "", token)
@@ -177,17 +182,14 @@ consider_candidate() {
         sub(/^[[:space:]]+/, "")
         print
       }
-    ')
+    '); then
+      rejected=$((rejected + 1))
+      return 0
+    fi
     if [[ -z "$text" ]]; then
       rejected=$((rejected + 1))
       return 0
     fi
-  fi
-  # Keep fields visible even when their preceding token was stripped as an id.
-  if [[ "$target" == lessons ]] && printf '%s\n' "$text" "$2" | \
-    LC_ALL=C grep -Eq '(^next:|\|[[:space:]]+(next|blockers|artifact|handoff):)'; then
-    rejected=$((rejected + 1))
-    return 0
   fi
   if (( budget_used >= max_fold )); then
     deferred=$((deferred + 1))

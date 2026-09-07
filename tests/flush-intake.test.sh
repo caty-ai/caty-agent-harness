@@ -637,6 +637,10 @@ done <<'CASES'
 - 2026-09-05 | id-1 | text (source: flush-intake)~text
 - 2026-09-05 id-1 | text (source: flush-intake)~text
 - 2026-09-05 text (source: flush-intake)~text
+- 2026-09-07 2026-09-06 outage window (source: flush-intake)~2026-09-06 outage window
+- 2026-09-05 2026-11-30 is the cutover date (source: flush-intake)~2026-11-30 is the cutover date
+- 2026-09-05 2026-09-06 | text (source: flush-intake)~2026-09-06 | text
+- Railway | deploy needs an explicit migrate step. (source: flush-intake)~- Railway | deploy needs an explicit migrate step.
 - 2026-09-05 text (source: distill-audit) [mech_check: no]~text
 - 2026-09-05 text (some note)~text (some note)
 - undated text (source: flush-intake)~- undated text
@@ -646,10 +650,10 @@ done <<'CASES'
 - 2026-09-05 a123456789012345678901234567890123456789012345678901234567890123 | text (source: flush-intake)~text
 CASES
 if [ "$normalizer_ok" -eq 1 ]; then
-  printf '%s\n' '  PASS [26/normalizer] normalizer removes repeated dates and one bounded job id, preserving other text'
+  printf '%s\n' '  PASS [26/normalizer] normalizer removes one fold date and an optional legacy date with a bounded job id, preserving other text'
 else
   prefix_regressions_ok=0
-  printf '%s\n' '  FAIL [26/normalizer] normalizer removes repeated dates and one bounded job id, preserving other text' 'normalization mismatch'
+  printf '%s\n' '  FAIL [26/normalizer] normalizer removes one fold date and an optional legacy date with a bounded job id, preserving other text' 'normalization mismatch'
 fi
 
 ws=$(new_ws case-42-legacy-prefix-dedup)
@@ -672,19 +676,36 @@ else
     "receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
 fi
 
+ws=$(new_ws case-26-content-date-collision)
+{
+  printf '%s\n' '## Verified facts' '## General rules' '## Open failures' '## Lessons learned' \
+    "- $TODAY 2026-09-06 outage window: rotate the key. (source: flush-intake)" \
+    '## Last session'
+} >"$ws/STATE.md"
+write_block "$ws/loop/pending/flush-$TODAY.md" "$TODAY" \
+  '2026-09-05 | job-2 | 2026-09-08 outage window: rotate the key.'
+run_intake "$ws"
+if grep -Fqx -- "- $TODAY 2026-09-08 outage window: rotate the key. (source: flush-intake)" "$ws/STATE.md" \
+  && grep -Fqx -- "- $TODAY 2026-09-06 outage window: rotate the key. (source: flush-intake)" "$ws/STATE.md" \
+  && [ "$(receipt_value "$ws" folded)" -eq 1 ] \
+  && [ "$(receipt_value "$ws" deduped)" -eq 0 ]; then
+  printf '%s\n' '  PASS [26/date-collision] distinct content dates fold as distinct lessons'
+else
+  prefix_regressions_ok=0
+  printf '%s\n' '  FAIL [26/date-collision] distinct content dates fold as distinct lessons' \
+    "receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+fi
+
 ws=$(new_ws case-43-last-session-rejected)
 cp "$ws/STATE.md" "$TMP_ROOT/last-session.before"
 printf '%s\n' \
   "<!-- flush origin=stop-hook-demand session=test ts=${TODAY}T01:02:03Z outcome=ok unverified=true -->" \
   '- 2026-09-05 | ev007b-C-r3j1 | next: distribute | blockers: none | artifact: files | handoff: loop/handoffs/x.md' \
-  '- Lesson | next: distribute' \
-  '- Lesson | blockers: none' \
-  '- Lesson | artifact: files' \
-  '- Lesson | handoff: loop/handoffs/x.md' \
-  '- next: distribute' >"$ws/loop/pending/flush-$TODAY.md"
+  '- 2026-09-05 | ev007b-C-r3j1 | next: distribute | handoff: loop/handoffs/x.md' \
+  '- next: distribute | blockers: none' >"$ws/loop/pending/flush-$TODAY.md"
 run_intake "$ws"
 if cmp -s "$TMP_ROOT/last-session.before" "$ws/STATE.md" \
-  && [ "$(receipt_value "$ws" rejected)" -eq 6 ] \
+  && [ "$(receipt_value "$ws" rejected)" -eq 3 ] \
   && [ "$(receipt_value "$ws" folded)" -eq 0 ]; then
   printf '%s\n' '  PASS [26/session-fields] Last-session fields are rejected with exact accounting and unchanged STATE'
 else
@@ -725,7 +746,13 @@ done <<'CASES'
 2026-09-05 | ev007b-C-r3j1 | 2026-09-05 is the cutover date: keep it~2026-09-05 is the cutover date: keep it
 2026-09-05 ev007b-C-r3j1 | A space-separated id is metadata.~A space-separated id is metadata.
 2026-09-05 A date-only prefix is metadata.~A date-only prefix is metadata.
-id-1 | An id-only prefix is metadata.~An id-only prefix is metadata.
+id-1 | An id-only prefix is metadata.~id-1 | An id-only prefix is metadata.
+2026-09-05 id-1 | An id prefix after a date is metadata.~An id prefix after a date is metadata.
+Railway | deploy needs an explicit migrate step.~Railway | deploy needs an explicit migrate step.
+README | artifact: naming is inconsistent.~README | artifact: naming is inconsistent.
+Explain next: in prose.~Explain next: in prose.
+next: distribute~next: distribute
+id-1 |~id-1 |
 2026-09-05 | id-1 | id-2 | A second id remains content.~id-2 | A second id remains content.
 2026-09-05 2026-09-06 is another content date.~2026-09-06 is another content date.
 2026-09-05 2026-09-06 | A second date is not a job id.~2026-09-06 | A second date is not a job id.
@@ -746,7 +773,7 @@ cp "$ws/STATE.md" "$TMP_ROOT/empty-prefix.before"
 printf '%s\n' \
   "<!-- flush origin=stop-hook-demand session=test ts=${TODAY}T01:02:03Z outcome=ok unverified=true -->" \
   '- 2026-09-05 | id-1 | ' \
-  '- id-1 | ' >"$ws/loop/pending/flush-$TODAY.md"
+  '- 2026-09-05 id-1 | ' >"$ws/loop/pending/flush-$TODAY.md"
 run_intake "$ws"
 if cmp -s "$TMP_ROOT/empty-prefix.before" "$ws/STATE.md" \
   && [ "$(receipt_value "$ws" rejected)" -eq 2 ] \
