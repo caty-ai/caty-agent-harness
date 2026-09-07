@@ -229,11 +229,17 @@ The rules there apply in addition to the Hermes-specific wiring below.
 
    The conformance gate pins the staged wrapper, provider, and probe files by SHA-256,
    plus the TTL and recorded behavioral flags. It does not pin the API key,
-   `VERIFIER_API_BASE`, `VERIFIER_API_ALLOWED_HOSTS`, or live `VERIFIER_MODEL`;
-   `provider_version` is only the model label present at attestation time, not the model
-   actually served. Re-attesting after a vendor, model, or endpoint change is therefore
-   an operator duty the gate cannot enforce today; a follow-up issue tracks gating the
-   endpoint and served model in the evidence record.
+   `VERIFIER_API_BASE`, or `VERIFIER_API_ALLOWED_HOSTS`. For the API-backed shape,
+   `provider_version` is the model id the API actually served for the probe request:
+   the probe opens a private file under its scratch directory and passes the descriptor
+   as `VERIFIER_SERVED_MODEL_FD` for the attestation run only, and the example provider
+   writes the response's `model` field through that descriptor (the probe fails closed
+   with no attestation when it is absent or invalid). Do not set
+   `VERIFIER_SERVED_MODEL_FD` in `SECRETS_ENV` or the runtime environment. The CLI shape
+   keeps the environment-derived label it already documents. Live `VERIFIER_MODEL` at
+   runtime is still not pinned, so re-attesting after a vendor, model, or endpoint change
+   remains an operator duty; a follow-up issue tracks gating the endpoint in the
+   evidence record.
 
    Operational contract: the example providers and wrapper forward only the validated
    verdict and reason lines. Line 1 must be exactly `VERDICT: <allowed-provider-value>`
