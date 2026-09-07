@@ -8,7 +8,8 @@ permissions: {contents: read}
 concurrency: {group: 'test-lint-${{ github.event.pull_request.number }}', cancel-in-progress: true}
 jobs:
   test-lint:
-    uses: caty-ai/family-dev-handbook/.github/workflows/reusable-test-lint.yml@0e8eceee64b2c5a25e47d15fb4ffbead491e0479 # ci-v1
+    uses: caty-ai/family-dev-handbook/.github/workflows/reusable-test-lint.yml@2157a80b243bc2f47c5d7203ebd1d6369eaa5abc # ci-v1 (handbook v0.29.0, #160)
     permissions: {contents: read}
     with:
       run_macos: true
+      test_timeout_minutes: 45  # #261: the macOS leg runs 28-30 min on main and hit the 30-min ceiling 5x in one day; handbook#160 input
