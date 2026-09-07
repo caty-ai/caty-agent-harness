@@ -305,6 +305,98 @@ else
   fail_case "snapshot terms inside ordinary conversation filenames are not over-filtered" "rc=$rc output=$output"
 fi
 
+# #151: external candidate metadata must fail closed in both find branches.
+metadata_bin=$TMP_ROOT/metadata-bin
+mkdir -p "$metadata_bin"
+cat >"$metadata_bin/wc" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == -c ]] && python3 -c '
+import os, sys
+candidate = os.stat(sys.argv[1])
+stdin = os.fstat(0)
+sys.exit(0 if (candidate.st_dev, candidate.st_ino) == (stdin.st_dev, stdin.st_ino) else 1)
+' "$ISSUE151_PATH"; then
+  case "$ISSUE151_MODE" in
+    empty-size) exit 1 ;;
+    invalid-size) printf 'not-a-number\n'; exit 0 ;;
+  esac
+fi
+if [[ "${1:-}" == -m && "$ISSUE151_MODE" == advisory ]]; then
+  printf 'called\n' >>"$ISSUE151_WC_LOG"
+  exit 1
+fi
+exec /usr/bin/wc "$@"
+SH
+cat >"$metadata_bin/stat" <<'SH'
+#!/usr/bin/env bash
+if [[ "${3:-}" == "$ISSUE151_PATH" ]]; then
+  case "$ISSUE151_MODE" in
+    empty-mtime) exit 0 ;;
+    invalid-mtime) printf 'not-a-number\n'; exit 0 ;;
+    leading-zero-mtime) printf '0123\n'; exit 0 ;;
+  esac
+fi
+exec /usr/bin/stat "$@"
+SH
+chmod +x "$metadata_bin/wc" "$metadata_bin/stat"
+for branch in fresh incremental; do
+  for mode in empty-size invalid-size empty-mtime invalid-mtime leading-zero-mtime extra-field; do
+    ws=$(make_ws "metadata-$branch-$mode")
+    candidate=$ws/input/session.log
+    if [[ "$mode" == extra-field ]]; then
+      mv "$candidate" "$ws/input/"$'extra\tfield.log'
+      candidate="$ws/input/"$'extra\tfield.log'
+    fi
+    # Pre-fix, an empty size coerced to 0 under-counted the awk budget, then the truncation
+    # comparison aborted with a bash arithmetic error (rc=1, no prompt). Non-numeric or
+    # leading-zero mtime and an extra tab field silently passed (rc=0, prompt written, marker advanced).
+    write_chars "$candidate" 120000 x
+    if [[ "$branch" == incremental ]]; then
+      printf 'existing marker\n' >"$ws/loop/.distill-last-run"
+      touch -t 202001010000 "$ws/loop/.distill-last-run"
+      cp -p "$ws/loop/.distill-last-run" "$ws/marker-before"
+    fi
+    prompt_dump=$TMP_ROOT/metadata-$branch-$mode-prompt.md
+    output=$(PATH="$metadata_bin:$PATH" ISSUE151_PATH="$candidate" ISSUE151_MODE="$mode" \
+      PROMPT_DUMP="$prompt_dump" DISTILLER_CMD="$distiller" \
+      bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+    rc=$?
+    expected='candidate enumeration failed (size/mtime unreadable)'
+    case "$mode" in leading-zero-mtime|extra-field) expected='invalid candidate row:' ;; esac
+    marker_unchanged=0
+    if [[ "$branch" == fresh ]]; then
+      [[ ! -e "$ws/loop/.distill-last-run" ]] && marker_unchanged=1
+    elif cmp -s "$ws/marker-before" "$ws/loop/.distill-last-run" \
+      && [[ ! "$ws/loop/.distill-last-run" -nt "$ws/marker-before" ]]; then
+      marker_unchanged=1
+    fi
+    if [[ "$rc" -eq 3 && "$marker_unchanged" -eq 1 && ! -e "$prompt_dump" ]] \
+      && printf '%s\n' "$output" | grep -Fq "distill-audit infra error: $expected" \
+      && ! find "$ws/loop/pending" -name 'distill-*.md' -print | grep -q .; then
+      pass "candidate metadata $branch $mode fails closed before prompt or marker"
+    else
+      prompt_bytes=0
+      [[ ! -f "$prompt_dump" ]] || prompt_bytes=$(/usr/bin/wc -c <"$prompt_dump")
+      fail_case "candidate metadata $branch $mode fails closed before prompt or marker" \
+        "rc=$rc prompt_bytes=$prompt_bytes marker_unchanged=$marker_unchanged output=$output"
+    fi
+  done
+done
+
+ws=$(make_ws advisory-character-count)
+prompt_dump=$TMP_ROOT/advisory-character-count-prompt.md
+wc_log=$TMP_ROOT/advisory-wc.log
+output=$(PATH="$metadata_bin:$PATH" ISSUE151_PATH="$ws/input/session.log" ISSUE151_MODE=advisory \
+  ISSUE151_WC_LOG="$wc_log" PROMPT_DUMP="$prompt_dump" DISTILLER_CMD="$distiller" \
+  bash "$SCRIPT" --workspace "$ws" --input "$ws/input" 2>&1)
+rc=$?
+if [[ "$rc" -eq 0 && -s "$wc_log" && -s "$prompt_dump" && -e "$ws/loop/.distill-last-run" ]] \
+  && ! printf '%s\n' "$output" | grep -Eq 'WARNING: STATE.md|VIOLATION: STATE.md'; then
+  pass "advisory wc -m failure falls back to zero without aborting"
+else
+  fail_case "advisory wc -m failure falls back to zero without aborting" "rc=$rc output=$output"
+fi
+
 ws=$(make_ws cap)
 distiller=$TMP_ROOT/fake-distiller.sh
 write_distiller "$distiller"
