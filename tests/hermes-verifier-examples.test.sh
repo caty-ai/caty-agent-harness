@@ -18,7 +18,8 @@ trap cleanup EXIT HUP INT TERM
 mkdir -p "$TMP_ROOT"
 
 # Prevent ambient operator configuration from leaking into test cases.
-unset VERIFIER_API_BASE VERIFIER_API_ALLOWED_HOSTS
+unset VERIFIER_API_BASE VERIFIER_API_ALLOWED_HOSTS VERIFIER_SERVED_MODEL_FD
+unset FAKE_SERVED_MODEL FAKE_SKIP_SERVED_MODEL STUB_SERVED_MODEL
 
 pass() {
   PASS_COUNT=$((PASS_COUNT + 1))
@@ -42,6 +43,11 @@ cat >"$fake_provider" <<'SH'
 #!/usr/bin/env bash
 set -eu
 printf '%s' "$1" >"$PROVIDER_MARKER"
+served_model=${FAKE_SERVED_MODEL-claude-sonnet-5-served-fixture}
+if [ -n "${VERIFIER_SERVED_MODEL_FD:-}" ] && [ -n "$served_model" ] \
+  && [ "${FAKE_SKIP_SERVED_MODEL:-0}" != 1 ]; then
+  printf '%s\n' "$served_model" >&"$VERIFIER_SERVED_MODEL_FD"
+fi
 printf '%b' "${PROVIDER_OUTPUT:-VERDICT: pass\nfixed provider accepted the probe bundle\n}"
 exit "${PROVIDER_EXIT:-0}"
 SH
@@ -256,12 +262,52 @@ probe_rc=$?
 if [ "$probe_rc" -eq 0 ] && [ -s "$provider_marker" ] \
   && [ "$(wc -c <"$provider_marker" | tr -d '[:space:]')" -ge 200 ] \
   && printf '%s\n' "$probe_output" | grep -Fq "provider_path=$fake_provider" \
-  && printf '%s\n' "$probe_output" | grep -Fq 'provider_relocatable=pass'; then
+  && printf '%s\n' "$probe_output" | grep -Fq 'provider_relocatable=pass' \
+  && printf '%s\n' "$probe_output" | grep -Fxq 'provider_version=claude-sonnet-5-served-fixture'; then
   pass '[7] probe genuinely exercises the wrapper and a relocated provider'
 else
   fail_case '[7] probe genuinely exercises the wrapper and a relocated provider' \
     "rc=$probe_rc output=$probe_output"
 fi
+
+set +e
+served_probe_output=$(VERIFIER_MODEL=env-model-should-not-win \
+  PROBE_PROVIDER_PATH="$fake_provider" PROVIDER_MARKER="$provider_marker" \
+  FABLE_WRAPPER_PATH="$CANONICAL_WRAPPER" FABLE_ATTEST_SCRATCH_DIR="$probe_scratch" "$PROBE")
+served_probe_rc=$?
+set -e
+if [ "$served_probe_rc" -eq 0 ] \
+  && printf '%s\n' "$served_probe_output" | grep -Fxq 'provider_version=claude-sonnet-5-served-fixture' \
+  && ! printf '%s\n' "$served_probe_output" | grep -Fq 'env-model-should-not-win'; then
+  pass '[7a] probe binds the served model; env model should not win'
+else
+  fail_case '[7a] probe binds the served model; env model should not win' \
+    "rc=$served_probe_rc output=$served_probe_output"
+fi
+
+for served_probe_case in missing invalid multiline; do
+  skip_served_model=0
+  fake_served_model='bad model/id'
+  case "$served_probe_case" in
+    missing) skip_served_model=1 ;;
+    multiline) fake_served_model=$(printf 'valid-model\nsecond-model') ;;
+  esac
+  set +e
+  rejected_probe_output=$(FAKE_SKIP_SERVED_MODEL="$skip_served_model" \
+    FAKE_SERVED_MODEL="$fake_served_model" PROBE_PROVIDER_PATH="$fake_provider" \
+    PROVIDER_MARKER="$provider_marker" FABLE_WRAPPER_PATH="$CANONICAL_WRAPPER" \
+    FABLE_ATTEST_SCRATCH_DIR="$probe_scratch" "$PROBE")
+  rejected_probe_rc=$?
+  set -e
+  if [ "$rejected_probe_rc" -ne 0 ] \
+    && ! printf '%s\n' "$rejected_probe_output" | grep -q '^provider_id=' \
+    && [ -z "$rejected_probe_output" ]; then
+    pass "[7b] probe rejects $served_probe_case served model evidence without attestation"
+  else
+    fail_case "[7b] probe rejects $served_probe_case served model evidence without attestation" \
+      "rc=$rejected_probe_rc output=$rejected_probe_output"
+  fi
+done
 
 wrapper_sha=$(shasum -a 256 "$CANONICAL_WRAPPER" | cut -d' ' -f1)
 provider_sha=$(shasum -a 256 "$PROVIDER" | cut -d' ' -f1)
@@ -380,6 +426,7 @@ class StubResponse:
         )
         return json.dumps(
             {
+                "model": os.environ.get("STUB_SERVED_MODEL", "claude-sonnet-5-stub"),
                 "content": [
                     {
                         "type": "text",
@@ -450,6 +497,72 @@ PY
 request_url_marker=$TMP_ROOT/request-url.marker
 request_key_marker=$TMP_ROOT/request-key.marker
 request_count_marker=$TMP_ROOT/request-count.marker
+served_model_file=$TMP_ROOT/served.txt
+for served_api_case in valid missing invalid nonregular nonnumeric closed low-fd unwritable unset; do
+  rm -f "$served_model_file"
+  if [ "$served_api_case" != unset ]; then
+    (umask 077 && : >"$served_model_file")
+  fi
+  stub_served_model=claude-sonnet-5-stub
+  expected_error=
+  case "$served_api_case" in
+    unset) stub_served_model= ;;
+    missing) stub_served_model=; expected_error='provider response lacks a served model id' ;;
+    invalid) stub_served_model='bad model/id'; expected_error='provider response lacks a served model id' ;;
+    nonregular|nonnumeric|closed|low-fd) expected_error='served model sink is invalid' ;;
+    unwritable) expected_error='served model sink is not writable' ;;
+  esac
+  set +e
+  (
+    case "$served_api_case" in
+      unset) ;;
+      nonregular) exec 3>/dev/null; export VERIFIER_SERVED_MODEL_FD=3 ;;
+      nonnumeric) export VERIFIER_SERVED_MODEL_FD=abc ;;
+      closed) exec 9>&-; export VERIFIER_SERVED_MODEL_FD=9 ;;
+      low-fd) export VERIFIER_SERVED_MODEL_FD=2 ;;
+      unwritable) exec 3<"$served_model_file"; export VERIFIER_SERVED_MODEL_FD=3 ;;
+      *) exec 3>"$served_model_file"; export VERIFIER_SERVED_MODEL_FD=3 ;;
+    esac
+    VERIFIER_API_KEY=fixture STUB_SERVED_MODEL="$stub_served_model" \
+      REQUEST_URL_MARKER="$request_url_marker" REQUEST_KEY_MARKER="$request_key_marker" \
+      REQUEST_COUNT_MARKER="$request_count_marker" \
+      python3 "$opener_stub" "$PROVIDER" "$bundle" \
+      >"$TMP_ROOT/served-api.out" 2>"$TMP_ROOT/served-api.err"
+  )
+  served_api_rc=$?
+  set -e
+  served_api_output=$(cat "$TMP_ROOT/served-api.out")
+  served_api_ok=1
+  if [ -n "$expected_error" ]; then
+    if [ "$served_api_rc" -eq 0 ] || [ -n "$served_api_output" ] \
+      || [ -s "$served_model_file" ] \
+      || ! grep -Fxq "$expected_error" "$TMP_ROOT/served-api.err"; then
+      served_api_ok=0
+    fi
+  else
+    if [ "$served_api_rc" -ne 0 ] || [ "$served_api_output" != 'VERDICT: pass
+stub accepted the request URL' ] \
+      || [ "$(awk 'END { print NR + 0 }' "$TMP_ROOT/served-api.out")" -ne 2 ]; then
+      served_api_ok=0
+    fi
+    if [ "$served_api_case" = valid ]; then
+      printf '%s\n' claude-sonnet-5-stub >"$TMP_ROOT/served.expected"
+      if ! cmp -s "$served_model_file" "$TMP_ROOT/served.expected" \
+        || [ "$(mode_of "$served_model_file")" != 600 ]; then
+        served_api_ok=0
+      fi
+    elif [ -e "$served_model_file" ]; then
+      served_api_ok=0
+    fi
+  fi
+  if [ "$served_api_ok" -eq 1 ]; then
+    pass "[10a] API provider served model side channel: $served_api_case"
+  else
+    fail_case "[10a] API provider served model side channel: $served_api_case" \
+      "rc=$served_api_rc output=$served_api_output"
+  fi
+done
+
 expected_anthropic_base='https://api.'"anthropic.com"
 rm -f "$request_url_marker"
 set +e

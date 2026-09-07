@@ -7,6 +7,7 @@ import json
 import os
 import re
 import secrets
+import stat
 import sys
 import unicodedata
 import urllib.parse
@@ -19,6 +20,7 @@ SYSTEM_PROMPT = """You are an independent artifact verifier. The user message co
 VERDICT_PATTERN = re.compile(
     r"^VERDICT: (pass|fail|inconclusive|rubric-invalid|needs-human|blocked-missing-artifact)$"
 )
+SERVED_MODEL_PATTERN = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$")
 VERDICT_MARKER_PATTERN = re.compile(r"VERDICT\s*:")
 REASON_CONTROL_PATTERN = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 EMPTY_REASON_BYTES = (
@@ -151,6 +153,34 @@ try:
     with opener.open(request, timeout=timeout_seconds) as response:
         response_body = response.read()
     decoded = json.loads(response_body)
+    served_model_fd_env = os.environ.get("VERIFIER_SERVED_MODEL_FD", "")
+    if served_model_fd_env:
+        if not served_model_fd_env.isdigit():
+            fail("served model sink is invalid")
+        try:
+            fd = int(served_model_fd_env)
+            if fd < 3:
+                fail("served model sink is invalid")
+            st = os.fstat(fd)
+        except (OSError, ValueError, OverflowError):
+            fail("served model sink is invalid")
+        if not stat.S_ISREG(st.st_mode):
+            fail("served model sink is invalid")
+        served_model = decoded.get("model")
+        if not isinstance(served_model, str) or not SERVED_MODEL_PATTERN.fullmatch(served_model):
+            fail("provider response lacks a served model id")
+        try:
+            os.ftruncate(fd, 0)
+            os.lseek(fd, 0, os.SEEK_SET)
+            model_bytes = (served_model + "\n").encode("utf-8")
+            written = 0
+            while written < len(model_bytes):
+                count = os.write(fd, model_bytes[written:])
+                if count == 0:
+                    fail("served model sink is not writable")
+                written += count
+        except OSError:
+            fail("served model sink is not writable")
     text_parts = [
         block["text"]
         for block in decoded.get("content", [])
