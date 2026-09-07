@@ -1257,5 +1257,86 @@ else
     "seed_ok=$headerless_seed_ok rc=$headerless_retry_rc receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log") archive=$(tr '\n' ' ' <"$eviction_archive_path")"
 fi
 
+ws=$(new_ws case-41-eviction-archive-failure)
+{
+  printf '%s\n' '## Verified facts' '## General rules' '## Open failures' '## Lessons learned'
+  i=1
+  while [ "$i" -le 60 ]; do
+    printf -- '- 2026-06-01 capped lesson %02d (source: distill-audit)\n' "$i"
+    i=$((i + 1))
+  done
+  printf '%s\n' '## Last session'
+} >"$ws/STATE.md"
+cp "$ws/STATE.md" "$TMP_ROOT/state-before-eviction-archive-failure"
+write_block "$ws/loop/pending/flush-2026-07-31.md" 2026-07-31 \
+  'A failed eviction archive must leave the flush untouched.'
+eviction_archive_path="$ws/loop/archive/intake-evictions-$TODAY.md"
+mkdir "$eviction_archive_path"
+set +e
+run_intake "$ws"
+eviction_archive_failure_rc=$?
+set -e
+if [ "$eviction_archive_failure_rc" -eq 1 ] \
+  && [ "$(receipt_value "$ws" error)" = eviction-archive ] \
+  && cmp -s "$TMP_ROOT/state-before-eviction-archive-failure" "$ws/STATE.md" \
+  && [ -f "$ws/loop/pending/flush-2026-07-31.md" ] \
+  && ! find "$ws/loop/pending" -maxdepth 1 -name 'intake-*.md' -print | grep -q . \
+  && [ ! -e "$ws/loop/archive/flush-2026-07-31.md" ] \
+  && [ ! -e "$ws/loop/.deadman/distill.marker" ] \
+  && [ "$(receipt_value "$ws" folded)" -eq 0 ] \
+  && [ "$(receipt_value "$ws" marker)" = untouched ] \
+  && [ -d "$eviction_archive_path" ]; then
+  pass '[41] a failed eviction-archive append refuses the flush and leaves STATE and the pending flush untouched'
+else
+  fail_case '[41] a failed eviction-archive append refuses the flush and leaves STATE and the pending flush untouched' \
+    "rc=$eviction_archive_failure_rc receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+fi
+
+ws=$(new_ws case-42-nul-archive-dedup)
+{
+  printf '%s\n' '## Verified facts' '## General rules' '## Open failures' '## Lessons learned'
+  i=1
+  while [ "$i" -le 60 ]; do
+    printf -- '- 2026-06-01 capped lesson %02d (source: distill-audit)\n' "$i"
+    i=$((i + 1))
+  done
+  printf '%s\n' '## Last session'
+} >"$ws/STATE.md"
+write_block "$ws/loop/pending/flush-2026-08-01.md" 2026-08-01 \
+  'A binary archive must still deduplicate the latest eviction.'
+eviction_archive_path="$ws/loop/archive/intake-evictions-$TODAY.md"
+{
+  printf '<!-- intake eviction adapter=x ts=%sT00:00:00Z -->\n' "$TODAY"
+  printf 'stale \0 record\n'
+  printf '<!-- intake eviction adapter=x ts=%sT00:00:01Z -->\n' "$TODAY"
+  printf '%s\n' '- 2026-06-01 capped lesson 01 (source: distill-audit)'
+} >"$eviction_archive_path"
+if tr -d '\0' <"$eviction_archive_path" | cmp -s - "$eviction_archive_path"; then
+  nul_seed_ok=0
+elif [ "$?" -eq 1 ]; then
+  nul_seed_ok=1
+else
+  nul_seed_ok=0
+fi
+printf '%s\n' 'scan=prior error=state-publish' >"$ws/loop/pending/intake-runs.log"
+set +e
+run_intake "$ws"
+nul_archive_retry_rc=$?
+tr -d '\0' <"$eviction_archive_path" | cmp -s - "$eviction_archive_path"
+nul_archive_cmp_rc=$?
+set -e
+if [ "$nul_seed_ok" -eq 1 ] \
+  && [ "$nul_archive_retry_rc" -eq 0 ] \
+  && [ "$(receipt_value "$ws" error)" = none ] \
+  && [ "$(grep -a -c '^<!-- intake eviction adapter=' "$eviction_archive_path")" -eq 2 ] \
+  && [ "$(grep -a -Fc 'capped lesson 01' "$eviction_archive_path")" -eq 1 ] \
+  && [ "$(receipt_value "$ws" evicted_by_cap)" -eq 1 ] \
+  && [ "$nul_archive_cmp_rc" -eq 1 ]; then
+  pass '[42] a NUL byte in the eviction archive does not disable same-day dedup on a refused-publish retry'
+else
+  fail_case '[42] a NUL byte in the eviction archive does not disable same-day dedup on a refused-publish retry' \
+    "seed_ok=$nul_seed_ok rc=$nul_archive_retry_rc evicted=$(receipt_value "$ws" evicted_by_cap) nul_cmp_rc=$nul_archive_cmp_rc headers=$(grep -a -c '^<!-- intake eviction adapter=' "$eviction_archive_path") payloads=$(grep -a -Fc 'capped lesson 01' "$eviction_archive_path") receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+fi
+
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
 [ "$FAIL_COUNT" -eq 0 ]
