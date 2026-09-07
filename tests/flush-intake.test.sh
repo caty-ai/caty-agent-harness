@@ -1311,6 +1311,13 @@ eviction_archive_path="$ws/loop/archive/intake-evictions-$TODAY.md"
   printf '<!-- intake eviction adapter=x ts=%sT00:00:01Z -->\n' "$TODAY"
   printf '%s\n' '- 2026-06-01 capped lesson 01 (source: distill-audit)'
 } >"$eviction_archive_path"
+if tr -d '\0' <"$eviction_archive_path" | cmp -s - "$eviction_archive_path"; then
+  nul_seed_ok=0
+elif [ "$?" -eq 1 ]; then
+  nul_seed_ok=1
+else
+  nul_seed_ok=0
+fi
 printf '%s\n' 'scan=prior error=state-publish' >"$ws/loop/pending/intake-runs.log"
 set +e
 run_intake "$ws"
@@ -1318,15 +1325,17 @@ nul_archive_retry_rc=$?
 tr -d '\0' <"$eviction_archive_path" | cmp -s - "$eviction_archive_path"
 nul_archive_cmp_rc=$?
 set -e
-if [ "$nul_archive_retry_rc" -eq 0 ] \
+if [ "$nul_seed_ok" -eq 1 ] \
+  && [ "$nul_archive_retry_rc" -eq 0 ] \
   && [ "$(receipt_value "$ws" error)" = none ] \
   && [ "$(grep -a -c '^<!-- intake eviction adapter=' "$eviction_archive_path")" -eq 2 ] \
   && [ "$(grep -a -Fc 'capped lesson 01' "$eviction_archive_path")" -eq 1 ] \
+  && [ "$(receipt_value "$ws" evicted_by_cap)" -eq 1 ] \
   && [ "$nul_archive_cmp_rc" -eq 1 ]; then
   pass '[42] a NUL byte in the eviction archive does not disable same-day dedup on a refused-publish retry'
 else
   fail_case '[42] a NUL byte in the eviction archive does not disable same-day dedup on a refused-publish retry' \
-    "rc=$nul_archive_retry_rc nul_cmp_rc=$nul_archive_cmp_rc headers=$(grep -a -c '^<!-- intake eviction adapter=' "$eviction_archive_path") payloads=$(grep -a -Fc 'capped lesson 01' "$eviction_archive_path") receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+    "seed_ok=$nul_seed_ok rc=$nul_archive_retry_rc evicted=$(receipt_value "$ws" evicted_by_cap) nul_cmp_rc=$nul_archive_cmp_rc headers=$(grep -a -c '^<!-- intake eviction adapter=' "$eviction_archive_path") payloads=$(grep -a -Fc 'capped lesson 01' "$eviction_archive_path") receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
 fi
 
 printf 'Summary: %s PASS, %s FAIL\n' "$PASS_COUNT" "$FAIL_COUNT"
