@@ -231,6 +231,49 @@ case_recurrence_config_lockstep() {
   return 0
 }
 
+case_not_yet_lifecycle() {
+  local class=$1 ws runid id before out replay approved_out transitions
+  ws=$(fixture_new_workspace "not-yet-$class"); runid=20260907T010001Z-278
+  id=theme-$runid-001
+  out=$APPLY_FIXTURE_TMP/not-yet-$class.out
+  replay=$APPLY_FIXTURE_TMP/not-yet-$class-replay.out
+  approved_out=$APPLY_FIXTURE_TMP/not-yet-$class-yes.out
+  fixture_candidate_begin "$ws" "$runid"
+  fixture_session_candidate_block "$runid" 1 "$class" "Reviewer holds this $class candidate." '2026-W33,2026-W34' 2
+  sed -i.bak 's/^promote: yes$/promote: not-yet/' "$FIXTURE_CANDIDATE" && rm -f "$FIXTURE_CANDIDATE.bak"
+  before=$(state_sha "$ws")
+  # Grant the class-specific permission so only the reviewer field holds it.
+  if [[ "$class" == rule ]]; then set -- --approve "$id"
+  elif [[ "$class" == capability-fact ]]; then set -- --auto-capability-facts
+  else set --; fi
+  fixture_run_apply "$ws" "$@" >"$out" || return 1
+  note_second_run "$ws" 0
+  assert_file_contains "$out" "theme=$id decision=skipped reason=not-yet" \
+    && assert_file_contains "$ws/loop/promotions/apply.log" "theme=$id class=$class decision=skipped reason=not-yet" \
+    && assert_file_contains "$ws/loop/promotions/apply-index.tsv" "$id"$'\t'"$class"$'\tnot-yet\t' \
+    && tail -n 1 "$ws/loop/promotions/apply.log" | grep -Fq 'promoted=0 rolled-back=0 skipped=1 pending=1' \
+    && [[ "$before" == "$(state_sha "$ws")" && ! -e "$ws/skills/_staging/$runid-001" ]] || return 1
+  transitions=$(grep -c "theme=$id class=$class decision=skipped reason=not-yet" "$ws/loop/promotions/apply.log")
+  assert_second_run "$ws" 0 "$replay" "$@" \
+    && assert_file_contains "$replay" "theme=$id decision=skipped reason=not-yet" \
+    && tail -n 1 "$ws/loop/promotions/apply.log" | grep -Fq 'promoted=0 rolled-back=0 skipped=1 pending=1' \
+    && assert_file_contains "$ws/loop/promotions/apply-index.tsv" "$id"$'\t'"$class"$'\tnot-yet\t' \
+    && [[ "$transitions" -eq "$(grep -c "theme=$id class=$class decision=skipped reason=not-yet" "$ws/loop/promotions/apply.log")" ]] \
+    && [[ "$before" == "$(state_sha "$ws")" && ! -e "$ws/skills/_staging/$runid-001" ]] || return 1
+  # Re-emit the same ID at its required filename to exercise pending -> promoted.
+  fixture_candidate_begin "$ws" "$runid"
+  fixture_session_candidate_block "$runid" 1 "$class" "Reviewer holds this $class candidate." '2026-W33,2026-W34' 2
+  fixture_run_apply "$ws" "$@" >"$approved_out" || return 1
+  assert_file_contains "$approved_out" "theme=$id decision=promoted" \
+    && assert_file_contains "$ws/loop/promotions/apply-index.tsv" "$id"$'\t'"$class"$'\tpromoted\t' \
+    && tail -n 1 "$ws/loop/promotions/apply.log" | grep -Fq 'promoted=1 rolled-back=0 skipped=0 pending=0' || return 1
+  if [[ "$class" == skill ]]; then
+    [[ -f "$ws/skills/_staging/$runid-001/SKILL.md" && "$before" == "$(state_sha "$ws")" ]]
+  else
+    [[ "$before" != "$(state_sha "$ws")" ]] && assert_file_contains "$ws/STATE.md" "source: $id"
+  fi
+}
+
 case_poisoned_rejects() {
   local ws runid
   ws=$(fixture_new_workspace poisoned-rejects); runid=20260827T010007Z-107
@@ -925,6 +968,9 @@ run_case '[reason:k-below-2 + unknown-approval] approval cannot override k and r
 run_case '[263/sessions] effective run-k promotes facts, leaves rules pending, and bounds host counts' case_recurrence_unit_sessions
 run_case '[263/weeks-min] sessions mode independently enforces calendar spread' case_sessions_min_weeks
 run_case '[263/config-lockstep] raw review and apply reject the same invalid recurrence settings' case_recurrence_config_lockstep
+run_case '[278/not-yet/skill] hold without staging, replay, then same-id yes promotes' case_not_yet_lifecycle skill
+run_case '[278/not-yet/rule] approval cannot override hold, replay, then same-id yes promotes' case_not_yet_lifecycle rule
+run_case '[278/not-yet/capability-fact] auto cannot override hold, replay, then same-id yes promotes' case_not_yet_lifecycle capability-fact
 run_case '[poisoned-rejects] anchored enumeration excludes model-raw rejects' case_poisoned_rejects
 run_case '[provenance-spoof] reviewer weeks theme-id control oversize and banned source token fail hygiene' case_hygiene_injections
 run_case '[slug-traversal + yaml-breakout] validated-id slug and JSON frontmatter encoding contain input' case_theme_slug_and_yaml

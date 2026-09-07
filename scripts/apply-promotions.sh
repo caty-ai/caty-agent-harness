@@ -77,6 +77,7 @@ k-below-2 terminal
 weeks-below-min terminal
 stub-exists terminal
 awaiting-approval pending
+not-yet pending
 section-full pending
 volume-guard pending
 supersedes-ambiguous pending
@@ -93,6 +94,7 @@ superseded
 supersedes-not-owned
 supersedes-ambiguous
 awaiting-approval
+not-yet
 unknown-approval
 k-below-2
 weeks-below-min
@@ -531,6 +533,7 @@ for filename in (root / "trusted-inputs").read_text().splitlines():
             ok = ok and bool(week_re.fullmatch(run_weeks)) and bool(members) and bool(hashes) and bool(evidence)
         if not ok:
             write_record(seq, vals, "parse", filename); continue
+        vals["promote"] = promote
         hygienic = True
         m = theme_re.fullmatch(raw_id)
         if not m or m.group(1) != file_runid: hygienic = False
@@ -1027,6 +1030,7 @@ else
     reviewer=$(sed -n '1p' "$block/reviewer")
     weeks=$(sed -n '1p' "$block/weeks")
     run_k=$(sed -n '1p' "$block/k")
+    promote=$(sed -n '1p' "$block/promote" 2>/dev/null)
     week_k=$(sed -n '1p' "$block/week-k")
     if [[ "$recurrence_unit" == sessions ]]; then k=$run_k; else k=$week_k; fi
     decision_k=$k
@@ -1043,6 +1047,10 @@ else
     fi
     if [[ -n "$old_decision" ]] && terminal_decision "$old_decision"; then
       record_result "$id" "$class" skipped already-applied - - - "$(index_sha "$id")" 0 || { release_state_lock; exit 1; }
+      continue
+    fi
+    if [[ "$promote" == not-yet ]]; then
+      record_result "$id" "$class" skipped not-yet - - - - 1 || { release_state_lock; exit 1; }
       continue
     fi
     if [[ "$class" == skill ]]; then
