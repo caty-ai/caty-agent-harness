@@ -123,6 +123,7 @@ injection_size_check() {
       continue
     fi
 
+    # #151: advisory monitoring, not a gate; unreadable counts fall back to zero.
     chars=$(wc -m <"$file" 2>/dev/null) || chars=0
     chars=${chars//[[:space:]]/}
     if [[ ! "$chars" =~ ^[0-9]+$ ]]; then
@@ -484,9 +485,11 @@ if [[ -e "$marker_file" ]]; then
         esac
         mtime=$(stat -c "%Y" "$path" 2>/dev/null || stat -f "%m" "$path")
         size=$(wc -c <"$path" | tr -d "[:space:]")
+        case "$size" in ""|*[!0-9]*) printf "distill-audit: unreadable size for %s\n" "$path" >&2; exit 1 ;; esac
+        case "$mtime" in ""|*[!0-9]*) printf "distill-audit: unreadable mtime for %s\n" "$path" >&2; exit 1 ;; esac
         printf "%s\t%s\t%s\n" "$mtime" "$size" "$path"
       done
-    ' sh {} + >>"$candidate_list"
+    ' sh {} + >>"$candidate_list" || infra_fail "candidate enumeration failed (size/mtime unreadable)"
   done
 else
   for input_dir in "${input_dirs[@]}"; do
@@ -499,11 +502,28 @@ else
         esac
         mtime=$(stat -c "%Y" "$path" 2>/dev/null || stat -f "%m" "$path")
         size=$(wc -c <"$path" | tr -d "[:space:]")
+        case "$size" in ""|*[!0-9]*) printf "distill-audit: unreadable size for %s\n" "$path" >&2; exit 1 ;; esac
+        case "$mtime" in ""|*[!0-9]*) printf "distill-audit: unreadable mtime for %s\n" "$path" >&2; exit 1 ;; esac
         printf "%s\t%s\t%s\n" "$mtime" "$size" "$path"
       done
-    ' sh {} + >>"$candidate_list"
+    ' sh {} + >>"$candidate_list" || infra_fail "candidate enumeration failed (size/mtime unreadable)"
   done
 fi
+
+# Preserve empty fields: tab-delimited read would collapse adjacent tabs.
+while IFS= read -r row || [[ -n "$row" ]]; do
+  [[ "$row" == *$'\t'* ]] || infra_fail "invalid candidate row: $row"
+  mtime=${row%%$'\t'*}
+  remainder=${row#*$'\t'}
+  [[ "$remainder" == *$'\t'* ]] || infra_fail "invalid candidate row: $row"
+  size=${remainder%%$'\t'*}
+  path=${remainder#*$'\t'}
+  if [[ -z "$path" || "$path" == *$'\t'* ]] \
+    || ! _classify_is_nonnegative_integer "$mtime" \
+    || ! _classify_is_nonnegative_integer "$size"; then
+    infra_fail "invalid candidate row: $row"
+  fi
+done <"$candidate_list"
 
 LC_ALL=C sort -n "$candidate_list" >"$work_dir/candidates.sorted.tsv"
 mv "$work_dir/candidates.sorted.tsv" "$candidate_list"
