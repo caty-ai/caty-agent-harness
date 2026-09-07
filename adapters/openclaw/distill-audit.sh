@@ -489,7 +489,7 @@ if [[ -e "$marker_file" ]]; then
         case "$mtime" in ""|*[!0-9]*) printf "distill-audit: unreadable mtime for %s\n" "$path" >&2; exit 1 ;; esac
         printf "%s\t%s\t%s\n" "$mtime" "$size" "$path"
       done
-    ' sh {} + >>"$candidate_list" || infra_fail "candidate enumeration failed (size/mtime unreadable)"
+    ' sh {} + >>"$candidate_list" || infra_fail "candidate enumeration failed (size/mtime unreadable) — rename or remove the offending input file, or rerun if it was transient"
   done
 else
   for input_dir in "${input_dirs[@]}"; do
@@ -506,22 +506,22 @@ else
         case "$mtime" in ""|*[!0-9]*) printf "distill-audit: unreadable mtime for %s\n" "$path" >&2; exit 1 ;; esac
         printf "%s\t%s\t%s\n" "$mtime" "$size" "$path"
       done
-    ' sh {} + >>"$candidate_list" || infra_fail "candidate enumeration failed (size/mtime unreadable)"
+    ' sh {} + >>"$candidate_list" || infra_fail "candidate enumeration failed (size/mtime unreadable) — rename or remove the offending input file, or rerun if it was transient"
   done
 fi
 
 # Preserve empty fields: tab-delimited read would collapse adjacent tabs.
 while IFS= read -r row || [[ -n "$row" ]]; do
-  [[ "$row" == *$'\t'* ]] || infra_fail "invalid candidate row: $row"
+  [[ "$row" == *$'\t'* ]] || infra_fail "invalid candidate row: $row — rename or remove the offending input file, or rerun if it was transient"
   mtime=${row%%$'\t'*}
   remainder=${row#*$'\t'}
-  [[ "$remainder" == *$'\t'* ]] || infra_fail "invalid candidate row: $row"
+  [[ "$remainder" == *$'\t'* ]] || infra_fail "invalid candidate row: $row — rename or remove the offending input file, or rerun if it was transient"
   size=${remainder%%$'\t'*}
   path=${remainder#*$'\t'}
   if [[ -z "$path" || "$path" == *$'\t'* ]] \
-    || ! _classify_is_nonnegative_integer "$mtime" \
-    || ! _classify_is_nonnegative_integer "$size"; then
-    infra_fail "invalid candidate row: $row"
+    || ! is_nonnegative_integer "$mtime" \
+    || ! is_nonnegative_integer "$size"; then
+    infra_fail "invalid candidate row: $row — rename or remove the offending input file, or rerun if it was transient"
   fi
 done <"$candidate_list"
 

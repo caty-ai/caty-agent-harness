@@ -347,7 +347,9 @@ for branch in fresh incremental; do
       mv "$candidate" "$ws/input/"$'extra\tfield.log'
       candidate="$ws/input/"$'extra\tfield.log'
     fi
-    # A missing size used to count this oversized transcript as zero and skip truncation.
+    # Pre-fix, an empty size coerced to 0 under-counted the awk budget, then the truncation
+    # comparison aborted with a bash arithmetic error (rc=1, no prompt). Non-numeric or
+    # leading-zero mtime and an extra tab field silently passed (rc=0, prompt written, marker advanced).
     write_chars "$candidate" 120000 x
     if [[ "$branch" == incremental ]]; then
       printf 'existing marker\n' >"$ws/loop/.distill-last-run"
