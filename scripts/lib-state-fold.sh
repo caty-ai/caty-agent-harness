@@ -121,7 +121,19 @@ normalize_state_candidate() {
   printf '%s\n' "$1" | awk '
     {
       $1 = $1
-      sub(/^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] /, "")
+      # Strip one fold date; a second date is metadata only with a valid job id.
+      if (sub(/^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] /, "")) {
+        body = $0
+        sub(/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] /, "", body)
+        if (match(body, /^(\| )?[A-Za-z0-9][A-Za-z0-9._-]* \| /)) {
+          prefix_length = RLENGTH
+          token = substr(body, 1, prefix_length)
+          sub(/^\| /, "", token)
+          sub(/ \| $/, "", token)
+          if (length(token) <= 64 && token !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/)
+            $0 = substr(body, prefix_length + 1)
+        }
+      }
       sub(/[[:space:]]+\[mech_check: (yes|no)\]$/, "")
       sub(/[[:space:]]+\(source: [a-z-]+\)$/, "")
       $1 = $1

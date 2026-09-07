@@ -160,6 +160,37 @@ consider_candidate() {
     rejected=$((rejected + 1))
     return 0
   fi
+  if [[ "$target" == lessons ]]; then
+    # Remove one model-written prefix; a second date belongs to the lesson.
+    if ! text=$(printf '%s\n' "$text" | LC_ALL=C awk '
+      {
+        # Inspect the original bullet before removing any metadata.
+        fields = ($0 ~ /\|[[:space:]]+next:/) + ($0 ~ /\|[[:space:]]+blockers:/) + \
+                 ($0 ~ /\|[[:space:]]+artifact:/) + ($0 ~ /\|[[:space:]]+handoff:/)
+        if (($0 ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]([[:space:]]|$)/ && fields >= 2) ||
+            $0 ~ /^next:.*[[:space:]]\|[[:space:]]+/) exit 1
+        dated = sub(/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][[:space:]]+/, "")
+        if (dated && match($0, /^(\|[[:space:]]+)?[A-Za-z0-9][A-Za-z0-9._-]*[[:space:]]+\|([[:space:]]+|$)/)) {
+          prefix_length = RLENGTH
+          token = substr($0, 1, prefix_length)
+          sub(/^\|[[:space:]]+/, "", token)
+          sub(/[[:space:]]+\|[[:space:]]*$/, "", token)
+          # The parser has already trimmed trailing whitespace from empty bodies.
+          if (length(token) <= 64 && token !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/)
+            $0 = substr($0, prefix_length + 1)
+        }
+        sub(/^[[:space:]]+/, "")
+        print
+      }
+    '); then
+      rejected=$((rejected + 1))
+      return 0
+    fi
+    if [[ -z "$text" ]]; then
+      rejected=$((rejected + 1))
+      return 0
+    fi
+  fi
   if (( budget_used >= max_fold )); then
     deferred=$((deferred + 1))
     return 1
