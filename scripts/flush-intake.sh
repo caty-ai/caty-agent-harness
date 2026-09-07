@@ -160,6 +160,35 @@ consider_candidate() {
     rejected=$((rejected + 1))
     return 0
   fi
+  if [[ "$target" == lessons ]]; then
+    # Remove one model-written prefix; a second date belongs to the lesson.
+    text=$(printf '%s\n' "$text" | LC_ALL=C awk '
+      {
+        sub(/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][[:space:]]+/, "")
+        if (match($0, /^(\|[[:space:]]+)?[A-Za-z0-9][A-Za-z0-9._-]*[[:space:]]+\|([[:space:]]+|$)/)) {
+          prefix_length = RLENGTH
+          token = substr($0, 1, prefix_length)
+          sub(/^\|[[:space:]]+/, "", token)
+          sub(/[[:space:]]+\|[[:space:]]*$/, "", token)
+          # The parser has already trimmed trailing whitespace from empty bodies.
+          if (length(token) <= 64 && token !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/)
+            $0 = substr($0, prefix_length + 1)
+        }
+        sub(/^[[:space:]]+/, "")
+        print
+      }
+    ')
+    if [[ -z "$text" ]]; then
+      rejected=$((rejected + 1))
+      return 0
+    fi
+  fi
+  # Keep fields visible even when their preceding token was stripped as an id.
+  if [[ "$target" == lessons ]] && printf '%s\n' "$text" "$2" | \
+    LC_ALL=C grep -Eq '(^next:|\|[[:space:]]+(next|blockers|artifact|handoff):)'; then
+    rejected=$((rejected + 1))
+    return 0
+  fi
   if (( budget_used >= max_fold )); then
     deferred=$((deferred + 1))
     return 1

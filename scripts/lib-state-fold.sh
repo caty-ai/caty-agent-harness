@@ -121,7 +121,14 @@ normalize_state_candidate() {
   printf '%s\n' "$1" | awk '
     {
       $1 = $1
-      sub(/^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] /, "")
+      # Old intake lines can carry both the fold date and a model-written prefix.
+      if (sub(/^- ([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] )+/, "")) {
+        if (match($0, /^(\| )?[A-Za-z0-9][A-Za-z0-9._-]* \| /)) {
+          prefix = substr($0, 1, RLENGTH)
+          sub(/^\| /, "", prefix)
+          if (length(prefix) - 3 <= 64) $0 = substr($0, RLENGTH + 1)
+        }
+      }
       sub(/[[:space:]]+\[mech_check: (yes|no)\]$/, "")
       sub(/[[:space:]]+\(source: [a-z-]+\)$/, "")
       $1 = $1

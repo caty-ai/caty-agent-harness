@@ -621,7 +621,145 @@ bash -c '
 ' _ "$ROOT/scripts/lib-state-fold.sh" "$mech_normalized_input" >"$mech_normalized"
 hash_plain=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$ROOT/scripts/lib-state-fold.sh" '- 2026-07-14 Keep a repeated route identity. (source: distill-audit)')
 hash_mech=$(bash -c 'source "$1"; candidate_lesson_hash "$2"' _ "$ROOT/scripts/lib-state-fold.sh" '- 2026-07-14 Keep a repeated route identity. (source: distill-audit) [mech_check: no]')
-if [ "$(grep -Fc 'Keep literal provenance' "$anchor_ws/STATE.md")" -eq 2 ] \
+# Keep these regression checks inside case 26: the Hermes suite pins 41 cases.
+prefix_regressions_ok=1
+# Legacy STATE prefixes must hash like clean lessons without changing suffix rules.
+normalizer_ok=1
+while IFS='~' read -r input expected; do
+  actual=$(bash -c 'source "$1"; normalize_state_candidate "$2"' _ \
+    "$ROOT/scripts/lib-state-fold.sh" "$input")
+  if [ "$actual" != "$expected" ]; then
+    normalizer_ok=0
+    printf 'normalizer input=%s expected=%s actual=%s\n' "$input" "$expected" "$actual"
+  fi
+done <<'CASES'
+- 2026-09-05 2026-09-05 | id-1 | text (source: flush-intake)~text
+- 2026-09-05 | id-1 | text (source: flush-intake)~text
+- 2026-09-05 id-1 | text (source: flush-intake)~text
+- 2026-09-05 text (source: flush-intake)~text
+- 2026-09-05 text (source: distill-audit) [mech_check: no]~text
+- 2026-09-05 text (some note)~text (some note)
+- undated text (source: flush-intake)~- undated text
+- 2026-09-05 two words | text (source: flush-intake)~two words | text
+- 2026-09-05 | /path | text (source: flush-intake)~| /path | text
+- 2026-09-05 a1234567890123456789012345678901234567890123456789012345678901234 | text (source: flush-intake)~a1234567890123456789012345678901234567890123456789012345678901234 | text
+- 2026-09-05 a123456789012345678901234567890123456789012345678901234567890123 | text (source: flush-intake)~text
+CASES
+if [ "$normalizer_ok" -eq 1 ]; then
+  printf '%s\n' '  PASS [26/normalizer] normalizer removes repeated dates and one bounded job id, preserving other text'
+else
+  prefix_regressions_ok=0
+  printf '%s\n' '  FAIL [26/normalizer] normalizer removes repeated dates and one bounded job id, preserving other text' 'normalization mismatch'
+fi
+
+ws=$(new_ws case-42-legacy-prefix-dedup)
+{
+  printf '%s\n' '## Verified facts' '## General rules' '## Open failures' '## Lessons learned' \
+    '- 2026-09-05 2026-09-05 | ev007b-C-r3j1 | Step 1 file distribution (001-023): preserve ownership. (source: flush-intake)' \
+    '## Last session'
+} >"$ws/STATE.md"
+cp "$ws/STATE.md" "$TMP_ROOT/legacy-prefix.before"
+write_block "$ws/loop/pending/flush-$TODAY.md" "$TODAY" \
+  'Step 1 file distribution (001-023): preserve ownership.'
+run_intake "$ws"
+if cmp -s "$TMP_ROOT/legacy-prefix.before" "$ws/STATE.md" \
+  && [ "$(receipt_value "$ws" deduped)" -eq 1 ] \
+  && [ "$(receipt_value "$ws" folded)" -eq 0 ]; then
+  printf '%s\n' '  PASS [26/legacy-dedup] a clean flush lesson dedups against doubled-date STATE with a job id'
+else
+  prefix_regressions_ok=0
+  printf '%s\n' '  FAIL [26/legacy-dedup] a clean flush lesson dedups against doubled-date STATE with a job id' \
+    "receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+fi
+
+ws=$(new_ws case-43-last-session-rejected)
+cp "$ws/STATE.md" "$TMP_ROOT/last-session.before"
+printf '%s\n' \
+  "<!-- flush origin=stop-hook-demand session=test ts=${TODAY}T01:02:03Z outcome=ok unverified=true -->" \
+  '- 2026-09-05 | ev007b-C-r3j1 | next: distribute | blockers: none | artifact: files | handoff: loop/handoffs/x.md' \
+  '- Lesson | next: distribute' \
+  '- Lesson | blockers: none' \
+  '- Lesson | artifact: files' \
+  '- Lesson | handoff: loop/handoffs/x.md' \
+  '- next: distribute' >"$ws/loop/pending/flush-$TODAY.md"
+run_intake "$ws"
+if cmp -s "$TMP_ROOT/last-session.before" "$ws/STATE.md" \
+  && [ "$(receipt_value "$ws" rejected)" -eq 6 ] \
+  && [ "$(receipt_value "$ws" folded)" -eq 0 ]; then
+  printf '%s\n' '  PASS [26/session-fields] Last-session fields are rejected with exact accounting and unchanged STATE'
+else
+  prefix_regressions_ok=0
+  printf '%s\n' '  FAIL [26/session-fields] Last-session fields are rejected with exact accounting and unchanged STATE' \
+    "receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+fi
+
+ws=$(new_ws case-44-next-prose)
+write_block "$ws/loop/pending/flush-$TODAY.md" "$TODAY" \
+  'Explain next: in prose and keep 2026-09-05 as the cutover date.'
+run_intake "$ws"
+if grep -Fqx -- "- $TODAY Explain next: in prose and keep 2026-09-05 as the cutover date. (source: flush-intake)" "$ws/STATE.md" \
+  && [ "$(receipt_value "$ws" folded)" -eq 1 ] \
+  && [ "$(receipt_value "$ws" rejected)" -eq 0 ]; then
+  printf '%s\n' '  PASS [26/prose] next: in prose and an embedded content date remain lessons'
+else
+  prefix_regressions_ok=0
+  printf '%s\n' '  FAIL [26/prose] next: in prose and an embedded content date remain lessons' \
+    "receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+fi
+
+ws=$(new_ws case-45-model-prefix)
+prefix_ok=1
+prefix_case=0
+while IFS='~' read -r input expected; do
+  prefix_case=$((prefix_case + 1))
+  write_block "$ws/loop/pending/flush-$TODAY.md" "$TODAY" "$input"
+  run_intake "$ws"
+  if ! grep -Fqx -- "- $TODAY $expected (source: flush-intake)" "$ws/STATE.md" \
+    || [ "$(receipt_value "$ws" folded)" -ne 1 ]; then
+    prefix_ok=0
+    printf 'prefix case=%s input=%s expected=%s\n' "$prefix_case" "$input" "$expected"
+    cat "$ws/STATE.md"
+  fi
+done <<'CASES'
+2026-09-05 | ev007b-C-r3j1 | Step 1 file distribution (001-023): preserve ownership.~Step 1 file distribution (001-023): preserve ownership.
+2026-09-05 | ev007b-C-r3j1 | 2026-09-05 is the cutover date: keep it~2026-09-05 is the cutover date: keep it
+2026-09-05 ev007b-C-r3j1 | A space-separated id is metadata.~A space-separated id is metadata.
+2026-09-05 A date-only prefix is metadata.~A date-only prefix is metadata.
+id-1 | An id-only prefix is metadata.~An id-only prefix is metadata.
+2026-09-05 | id-1 | id-2 | A second id remains content.~id-2 | A second id remains content.
+2026-09-05 2026-09-06 is another content date.~2026-09-06 is another content date.
+2026-09-05 2026-09-06 | A second date is not a job id.~2026-09-06 | A second date is not a job id.
+2026-09-05 | id-1 |    Leading whitespace is removed.~Leading whitespace is removed.
+2026-09-05 two words | This is not a job id.~two words | This is not a job id.
+2026-09-05 a1234567890123456789012345678901234567890123456789012345678901234 | Too long is content.~a1234567890123456789012345678901234567890123456789012345678901234 | Too long is content.
+2026-09-05 a123456789012345678901234567890123456789012345678901234567890123 | A 64-byte id is metadata.~A 64-byte id is metadata.
+CASES
+if [ "$prefix_ok" -eq 1 ]; then
+  printf '%s\n' '  PASS [26/prefix] fold removes exactly one date and bounded id while preserving content prefixes'
+else
+  prefix_regressions_ok=0
+  printf '%s\n' '  FAIL [26/prefix] fold removes exactly one date and bounded id while preserving content prefixes' 'folded prefix mismatch'
+fi
+
+ws=$(new_ws case-46-empty-prefix)
+cp "$ws/STATE.md" "$TMP_ROOT/empty-prefix.before"
+printf '%s\n' \
+  "<!-- flush origin=stop-hook-demand session=test ts=${TODAY}T01:02:03Z outcome=ok unverified=true -->" \
+  '- 2026-09-05 | id-1 | ' \
+  '- id-1 | ' >"$ws/loop/pending/flush-$TODAY.md"
+run_intake "$ws"
+if cmp -s "$TMP_ROOT/empty-prefix.before" "$ws/STATE.md" \
+  && [ "$(receipt_value "$ws" rejected)" -eq 2 ] \
+  && [ "$(receipt_value "$ws" folded)" -eq 0 ]; then
+  printf '%s\n' '  PASS [26/empty] empty bodies after prefix stripping are rejected without STATE mutation'
+else
+  prefix_regressions_ok=0
+  printf '%s\n' '  FAIL [26/empty] empty bodies after prefix stripping are rejected without STATE mutation' \
+    "receipt=$(tail -n1 "$ws/loop/pending/intake-runs.log")"
+fi
+
+if [ "$prefix_regressions_ok" -eq 1 ] \
+  && [ "$(grep -Fc 'Keep literal provenance' "$anchor_ws/STATE.md")" -eq 2 ] \
   && grep -Fqx -- 'Keep a distinct local annotation. (some note)' "$parenthetical_normalized" \
   && [ "$(LC_ALL=C sort -u "$parenthetical_normalized" | wc -l | tr -d '[:space:]')" -eq 2 ] \
   && [ "$(LC_ALL=C sort -u "$mech_normalized" | wc -l | tr -d '[:space:]')" -eq 1 ] \
