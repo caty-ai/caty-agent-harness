@@ -118,7 +118,9 @@ than a `missing path:` contract failure.
 `loop/promotions/candidates-<runid>.md` files. A bare run reports pending decisions and
 materializes draft skill stubs; capability facts require
 `--auto-capability-facts` or an explicit `--approve`, and rules require explicit
-approval. The consumer holds an apply-exclusive lock, performs every `STATE.md`
+approval. The reviewer's `promote: not-yet` holds a candidate of any class out of
+promotion/staging (`decision=skipped reason=not-yet`, non-terminal; a later
+`promote: yes` for the same theme can promote it). The consumer holds an apply-exclusive lock, performs every `STATE.md`
 mutation under the shared state lock through one atomic publish, and publishes the
 anti-resurrection `apply-index.tsv` in the same lock hold. `apply.log` records the
 run start, per-theme transitions, and run summary; caps refuse new entries rather

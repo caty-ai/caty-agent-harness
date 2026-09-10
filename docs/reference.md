@@ -167,7 +167,11 @@ The consumer reads `recurrence_unit`, `promote_min_k`, and `promote_min_weeks` f
 mode, `run-k` must be an ASCII non-negative integer no greater than the member count;
 otherwise the block is `hygiene`. In weeks mode, apply preserves the historical
 independent distinct-week recount. A recurrence miss remains the documented terminal
-`k-below-2` decision token; a calendar-spread miss is `weeks-below-min`. Malformed
+`k-below-2` decision token; a calendar-spread miss is `weeks-below-min`. The reviewer's
+`promote: not-yet` yields `decision=skipped reason=not-yet` for every class before
+class-specific gates, without promotion or staging. This non-terminal index decision
+counts as both skipped and pending, like `awaiting-approval`; a later `promote: yes`
+for the same theme can promote it. Malformed
 configuration exits 2 and appends a fail-closed `reason=config` summary. Per-theme
 decision receipts and durable provenance record effective `k` and `unit`.
 
