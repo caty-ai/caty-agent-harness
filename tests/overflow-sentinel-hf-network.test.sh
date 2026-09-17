@@ -152,6 +152,10 @@ assert not cache_dir.exists()
 run_python_case "network URL uses the exact resolve endpoint" '
 assert lib._hf_network_url("org/model", REV) == f"https://huggingface.co/org/model/resolve/{REV}/config.json"
 assert lib._hf_network_url("org.with.dots/model_name", REV) == f"https://huggingface.co/org.with.dots/model_name/resolve/{REV}/config.json"
+assert lib._hf_network_url("org/model", None) == "https://huggingface.co/org/model/resolve/main/config.json"
+from unittest import TestCase
+with TestCase().assertRaisesRegex(ValueError, "HF revision must be a 40-hex commit SHA"):
+    lib._hf_network_url("org/model", "main")
 '
 
 run_python_case "invalid cache content plus fetch failure warns once per failure path and falls through" '
@@ -593,13 +597,18 @@ assert "HF network fetch exceeded hard timeout" in stderr.getvalue()
 '
 
 run_python_case "revision pin match binds URL fetcher and v2 cache payload" '
+from types import MappingProxyType
+class PinDict(dict):
+    pass
 cache_dir = Path(os.environ["TMP_ROOT"]) / "revision-pin"
 calls = []
 def fetcher(model_id, revision):
     calls.append((model_id, revision))
     return RAW
-assert resolve_ctx_window(None, None, " org/model ", hf_network=True, hf_pins=PINS,
-    hf_cache_dir=str(cache_dir), hf_fetcher=fetcher) == (131072, "hf-network-cached")
+for pins in (MappingProxyType({"org/model": PinDict(revision=REV)}),
+             {"org/model": MappingProxyType({"revision": REV})}):
+    assert resolve_ctx_window(None, None, " org/model ", hf_network=True, hf_pins=pins,
+        hf_cache_dir=str(cache_dir), hf_fetcher=fetcher) == (131072, "hf-network-cached")
 assert calls == [("org/model", REV)]
 assert lib._hf_network_url("org/model", REV) == f"https://huggingface.co/org/model/resolve/{REV}/config.json"
 entry = json.loads(lib._hf_cache_file(cache_dir, "org/model").read_text())
@@ -695,6 +704,32 @@ for raw, fragment in cases:
     assert result == (200000, "default")
     assert "OVF_HF_PINS rejected" in stderr.getvalue() and fragment in stderr.getvalue()
 assert not cache_dir.exists()
+'
+
+run_python_case "injected pin tables with non-string keys or non-mapping values are rejected" '
+cache_dir = Path(os.environ["TMP_ROOT"]) / "invalid-injected-pins"
+calls = []
+def must_not_be_called(*args):
+    calls.append(args)
+    raise AssertionError("unexpected fetch or cache access")
+lib.prepare_hf_cache_dir = must_not_be_called
+lib._read_hf_network_cache = must_not_be_called
+for pins in (
+    {123: {"revision": REV}},
+    {"org/model": "abc"},
+    {123: {"revision": REV}, "org/model": {"revision": REV}},
+    {"org/model": [("revision", REV)]},
+    {"org/model": {123: REV}},
+    {"org/model": {"revision": 123}},
+):
+    stderr = io.StringIO()
+    with contextlib.redirect_stderr(stderr):
+        result = resolve_ctx_window(None, None, "org/model", hf_network=True,
+            hf_cache_dir=str(cache_dir), hf_fetcher=must_not_be_called, hf_pins=pins)
+    assert result[1] in ("default", "catalog"), result
+    assert "OVF_HF_PINS rejected" in stderr.getvalue(), stderr.getvalue()
+    assert calls == [], calls
+    assert not cache_dir.exists()
 '
 
 run_python_case "pin parser preserves model case normalizes hex and accepts empty surface" '

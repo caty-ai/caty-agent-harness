@@ -16,8 +16,9 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
 SCHEMA_VERSION = 1
@@ -848,6 +849,8 @@ def _write_hf_network_cache(
 
 
 def _hf_network_url(model_id: str, revision: Optional[str]) -> str:
+    if revision is not None and re.fullmatch(r"[0-9a-f]{40}", revision) is None:
+        raise ValueError("HF revision must be a 40-hex commit SHA")
     segments = [urllib.parse.quote(part, safe="._-") for part in model_id.split("/")]
     return "https://huggingface.co/{}/resolve/{}/config.json".format("/".join(segments), revision or "main")
 
@@ -895,8 +898,17 @@ def _resolve_hf_network_ctx_window(
     hf_pins: Optional[Mapping[str, Mapping[str, str]]] = None,
 ) -> Optional[Tuple[int, str]]:
     try:
-        # Validate injected tables too: an empty or malformed entry is not a pin.
         try:
+            if hf_pins is not None:
+                for model, pin in hf_pins.items():
+                    if not isinstance(model, str) or not isinstance(pin, Mapping):
+                        raise ValueError("HF pins keys must be strings and values must be mappings")
+                    if any(not isinstance(key, str) or not isinstance(value, str)
+                           for key, value in pin.items()):
+                        raise ValueError("HF pin fields and values must be strings")
+            # Round-trip injected tables through JSON to share the environment
+            # validation path. Check types first so JSON cannot coerce bad keys
+            # or dict() turn non-mapping values into valid pin entries.
             pins = parse_hf_pins(
                 os.environ.get("OVF_HF_PINS") if hf_pins is None else json.dumps(
                     {model: dict(pin) for model, pin in hf_pins.items()}
