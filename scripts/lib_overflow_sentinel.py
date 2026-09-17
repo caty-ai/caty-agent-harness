@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import hashlib
 import json
 import os
@@ -29,9 +31,10 @@ DEFAULT_CTX_WINDOW = 200000
 DEFAULT_N_DRIFT = 5
 DEFAULT_THETA_DRIFT = 0.10
 DRIFT_REFERENCE_RANK = {"none": 0, "derived": 1, "independent": 2}
-HF_CACHE_SCHEMA_VERSION = 1
+HF_CACHE_SCHEMA_VERSION = 2
 HF_NETWORK_TIMEOUT_S = 5
 HF_NETWORK_MAX_BYTES = 1024 * 1024
+HF_CACHE_MAX_BYTES = HF_NETWORK_MAX_BYTES * 4 // 3 + 4096
 HF_MODEL_ID_RE = re.compile(r"^(?:[A-Za-z0-9][A-Za-z0-9._-]*/)?[A-Za-z0-9][A-Za-z0-9._-]*$")
 HF_CTX_WINDOW_KEYS = ("max_position_embeddings", "n_positions", "max_seq_len", "model_max_length")
 
@@ -710,6 +713,42 @@ def validate_hf_model_id(model_id: str) -> str:
     return normalized
 
 
+def parse_hf_pins(raw: Optional[str]) -> Dict[str, Dict[str, str]]:
+    """Parse per-repository pins, preserving case-sensitive HF model ids."""
+    if raw is None or not str(raw).strip():
+        return {}
+    try:
+        payload = json.loads(raw, object_pairs_hook=_JsonObjectPairs)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("HF pins must be valid JSON") from exc
+    if not isinstance(payload, _JsonObjectPairs):
+        raise ValueError("HF pins must be a JSON object")
+    pins: Dict[str, Dict[str, str]] = {}
+    for key, value in payload:
+        try:
+            model_id = validate_hf_model_id(key)
+        except ValueError as exc:
+            raise ValueError(f"HF pin {key!r} model id: {exc}") from exc
+        if model_id in pins:
+            raise ValueError(f"HF pin {model_id}: duplicate model id after normalization")
+        if not isinstance(value, _JsonObjectPairs):
+            raise ValueError(f"HF pin {model_id}: revision/sha256 fields must be a JSON object")
+        if not value:
+            raise ValueError(f"HF pin {model_id}: at least one revision or sha256 field is required")
+        pin: Dict[str, str] = {}
+        for field, digest in value:
+            if field not in ("revision", "sha256"):
+                raise ValueError(f"HF pin {model_id}: unknown field {field}")
+            if field in pin:
+                raise ValueError(f"HF pin {model_id}: duplicate field {field}")
+            length = 40 if field == "revision" else 64
+            if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{%d}" % length, digest.lower()) is None:
+                raise ValueError(f"HF pin {model_id}: {field} must be {length}-hex")
+            pin[field] = digest.lower()
+        pins[model_id] = pin
+    return pins
+
+
 def _validate_non_symlink_leaf(path: Path, label: str) -> None:
     if path.is_symlink():
         raise ValueError(f"{label} must not be a symlink: {path}")
@@ -739,7 +778,7 @@ def _hf_cache_file(cache_dir: Path, model_id: str) -> Path:
     return cache_dir / f"{digest}.json"
 
 
-def _read_hf_network_cache(cache_path: Path, model_id: str) -> int:
+def _read_hf_network_cache(cache_path: Path, model_id: str, pin: Mapping[str, str]) -> int:
     if not cache_path.exists():
         raise ValueError("cache miss")
     if cache_path.is_symlink() or not cache_path.is_file():
@@ -751,10 +790,10 @@ def _read_hf_network_cache(cache_path: Path, model_id: str) -> int:
         raise ValueError("cache dir must be mode 0700")
     try:
         with cache_path.open("rb") as handle:
-            raw_payload = handle.read(HF_NETWORK_MAX_BYTES + 1)
+            raw_payload = handle.read(HF_CACHE_MAX_BYTES + 1)
     except (OSError, ValueError, TypeError) as exc:
         raise ValueError("cache entry is not readable JSON") from exc
-    if len(raw_payload) > HF_NETWORK_MAX_BYTES:
+    if len(raw_payload) > HF_CACHE_MAX_BYTES:
         raise ValueError("cache entry exceeds size limit")
     try:
         payload = json.loads(raw_payload)
@@ -764,52 +803,75 @@ def _read_hf_network_cache(cache_path: Path, model_id: str) -> int:
         raise ValueError("cache entry schema mismatch")
     if payload.get("model_id") != model_id:
         raise ValueError("cache entry model mismatch")
-    return _window_from_payload(payload, "HF network cache")
-
-
-def _read_cached_hf_window(cache_path: Path, model_id: str) -> Optional[int]:
+    if payload.get("revision") != pin.get("revision"):
+        raise ValueError("cache entry revision mismatch")
     try:
-        return _read_hf_network_cache(cache_path, model_id)
+        encoded = payload["payload_b64"]
+        if not isinstance(encoded, str):
+            raise ValueError("base64 payload must be a string")
+        raw = base64.b64decode(encoded, validate=True)
+    except (KeyError, ValueError, TypeError, binascii.Error) as exc:
+        raise ValueError("cache entry payload unreadable") from exc
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != payload.get("payload_sha256"):
+        raise ValueError("cache entry checksum mismatch")
+    if "sha256" in pin and digest != pin["sha256"]:
+        raise ValueError("cache entry checksum does not match OVF_HF_PINS")
+    if len(raw) > HF_NETWORK_MAX_BYTES:
+        raise ValueError("HF network cache payload exceeds size limit")
+    parsed = json.loads(raw.decode("utf-8"))
+    return _window_from_payload(parsed, "HF network cache")
+
+
+def _read_cached_hf_window(cache_path: Path, model_id: str, pin: Mapping[str, str]) -> Optional[int]:
+    try:
+        return _read_hf_network_cache(cache_path, model_id, pin)
     except Exception as exc:
         if str(exc) != "cache miss":
             raise
         return None
 
 
-def _write_hf_network_cache(cache_path: Path, model_id: str, ctx_window: int) -> None:
+def _write_hf_network_cache(
+    cache_path: Path, model_id: str, ctx_window: int, pin: Mapping[str, str], raw: bytes,
+) -> None:
     payload = {
         "schema_version": HF_CACHE_SCHEMA_VERSION,
         "model_id": model_id,
         "fetched_at": time.time(),
+        "revision": pin.get("revision"),
+        "payload_sha256": hashlib.sha256(raw).hexdigest(),
+        "payload_b64": base64.b64encode(raw).decode("ascii"),
         "max_position_embeddings": ctx_window,
     }
     atomic_write_private_json(cache_path, payload)
 
 
-def _hf_network_url(model_id: str) -> str:
+def _hf_network_url(model_id: str, revision: Optional[str]) -> str:
     segments = [urllib.parse.quote(part, safe="._-") for part in model_id.split("/")]
-    return "https://huggingface.co/{}/resolve/main/config.json".format("/".join(segments))
+    return "https://huggingface.co/{}/resolve/{}/config.json".format("/".join(segments), revision or "main")
 
 
-def _fetch_hf_window(model_id: str) -> int:
+def _fetch_hf_config_bytes(model_id: str, revision: Optional[str]) -> bytes:
     request = urllib.request.Request(
-        _hf_network_url(model_id),
+        _hf_network_url(model_id, revision),
         headers={"Accept": "application/json", "User-Agent": "caty-overflow-sentinel/1"},
     )
     with urllib.request.urlopen(request, timeout=HF_NETWORK_TIMEOUT_S) as response:
         raw_payload = response.read(HF_NETWORK_MAX_BYTES + 1)
     if len(raw_payload) > HF_NETWORK_MAX_BYTES:
         raise ValueError("HF network config exceeds size limit")
-    payload = json.loads(raw_payload)
-    return _window_from_payload(payload, "HF network config")
+    return raw_payload
 
 
-def _fetch_hf_window_with_deadline(model_id: str, fetcher: Any, timeout_s: float) -> int:
+def _fetch_hf_window_with_deadline(
+    model_id: str, revision: Optional[str], fetcher: Any, timeout_s: float,
+) -> bytes:
     result_queue: "queue.Queue[Tuple[bool, Any]]" = queue.Queue(maxsize=1)
 
     def run_fetch() -> None:
         try:
-            result_queue.put((True, fetcher(model_id)))
+            result_queue.put((True, fetcher(model_id, revision)))
         except Exception as exc:
             result_queue.put((False, exc))
 
@@ -829,27 +891,57 @@ def _resolve_hf_network_ctx_window(
     hf_cache_dir: str,
     fetcher: Any = None,
     fetch_timeout_s: float = HF_NETWORK_TIMEOUT_S,
+    *,
+    hf_pins: Optional[Mapping[str, Mapping[str, str]]] = None,
 ) -> Optional[Tuple[int, str]]:
     try:
+        # Validate injected tables too: an empty or malformed entry is not a pin.
         try:
-            model_id = validate_hf_model_id(hf_model_id)
+            pins = parse_hf_pins(
+                os.environ.get("OVF_HF_PINS") if hf_pins is None else json.dumps(
+                    {model: dict(pin) for model, pin in hf_pins.items()}
+                )
+            )
+        except (TypeError, ValueError) as exc:
+            warn_ctx_window_fallback(f"OVF_HF_PINS rejected: {exc}")
+            return None
+        model_id = validate_hf_model_id(hf_model_id)
+        pin = pins.get(model_id)
+        if pin is None:
+            warn_ctx_window_fallback(
+                f"unpinned HF network resolution refused for {model_id}: no OVF_HF_PINS entry "
+                "(add a revision and/or sha256 pin); falling back to the catalog/default ladder"
+            )
+            return None
+        try:
             cache_dir = prepare_hf_cache_dir(hf_cache_dir)
             cache_path = _hf_cache_file(cache_dir, model_id)
         except Exception as exc:
             warn_ctx_window_fallback(str(exc) or exc.__class__.__name__)
             return None
         try:
-            cached_window = _read_cached_hf_window(cache_path, model_id)
+            cached_window = _read_cached_hf_window(cache_path, model_id, pin)
         except Exception as exc:
             warn_ctx_window_fallback(str(exc) or exc.__class__.__name__)
             cached_window = None
         if cached_window is not None:
             return cached_window, "hf-network-cached"
-        fetch = _fetch_hf_window if fetcher is None else fetcher
+        fetch = _fetch_hf_config_bytes if fetcher is None else fetcher
         try:
-            ctx_window = _fetch_hf_window_with_deadline(model_id, fetch, fetch_timeout_s)
-            _write_hf_network_cache(cache_path, model_id, ctx_window)
-            cached_window = _read_hf_network_cache(cache_path, model_id)
+            raw = _fetch_hf_window_with_deadline(model_id, pin.get("revision"), fetch, fetch_timeout_s)
+            if len(raw) > HF_NETWORK_MAX_BYTES:
+                raise ValueError("HF network config exceeds size limit")
+            digest = hashlib.sha256(raw).hexdigest()
+            if "sha256" in pin and digest != pin["sha256"]:
+                pinned = pin["sha256"]
+                warn_ctx_window_fallback(
+                    f"HF config checksum mismatch for {model_id}: pinned {pinned[:12]}…, fetched {digest[:12]}…"
+                )
+                return None
+            payload = json.loads(raw.decode("utf-8"))
+            ctx_window = _window_from_payload(payload, "HF network config")
+            _write_hf_network_cache(cache_path, model_id, ctx_window, pin, raw)
+            cached_window = _read_hf_network_cache(cache_path, model_id, pin)
         except Exception as exc:
             warn_ctx_window_fallback(str(exc) or exc.__class__.__name__)
             return None
@@ -867,6 +959,8 @@ def resolve_ctx_window(
     hf_cache_dir: Optional[str] = None,
     hf_fetcher: Any = None,
     hf_fetch_timeout_s: float = HF_NETWORK_TIMEOUT_S,
+    *,
+    hf_pins: Optional[Mapping[str, Mapping[str, str]]] = None,
 ) -> Tuple[int, str]:
     if configured is not None:
         if configured < 1:
@@ -880,6 +974,7 @@ def resolve_ctx_window(
             hf_cache_dir or "",
             fetcher=hf_fetcher,
             fetch_timeout_s=hf_fetch_timeout_s,
+            hf_pins=hf_pins,
         )
         if network_window is not None:
             return network_window
@@ -930,6 +1025,8 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
     evaluate.add_argument("--ctx", type=int, default=DEFAULT_CTX_WINDOW)
     validate_hf = sub.add_parser("validate-hf")
     validate_hf.add_argument("path")
+    validate_pins = sub.add_parser("validate-hf-pins")
+    validate_pins.add_argument("pins")
     validate_aliases = sub.add_parser("validate-aliases")
     validate_aliases.add_argument("aliases")
     validate_thresholds = sub.add_parser("validate-thresholds")
@@ -944,6 +1041,13 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
     if args.command == "prepare-hf-cache":
         try:
             print(prepare_hf_cache_dir(args.path))
+        except ValueError as exc:
+            print(str(exc), file=os.sys.stderr)
+            return 2
+        return 0
+    if args.command == "validate-hf-pins":
+        try:
+            print(json.dumps(parse_hf_pins(args.pins), sort_keys=True))
         except ValueError as exc:
             print(str(exc), file=os.sys.stderr)
             return 2
