@@ -4,14 +4,14 @@
   "generator_version": "repo-state-gen v1",
   "repo": "caty-ai/caty-agent-harness",
   "stamp_mode": "auto",
-  "generated_at": "2026-09-07T15:22:22Z",
-  "describes_commit": "22bbe4aa48b39e117589fe820f62761422b15b12",
-  "describes_commit_date": "2026-09-07T15:22:22Z",
+  "generated_at": "2026-09-17T19:27:24Z",
+  "describes_commit": "a4807765044aa8eb26ef984e3b632b542a3ba5ee",
+  "describes_commit_date": "2026-09-17T19:27:24Z",
   "branch": "main",
   "latest_tag": "v0.26.3",
   "latest_release_url": "https://github.com/caty-ai/caty-agent-harness/releases/tag/v0.26.3",
   "agents_entry": "AGENTS.md",
   "canonical_api": "https://api.github.com/repos/caty-ai/caty-agent-harness/commits/main",
-  "canonical_raw": "https://raw.githubusercontent.com/caty-ai/caty-agent-harness/22bbe4aa48b39e117589fe820f62761422b15b12/status.json",
+  "canonical_raw": "https://raw.githubusercontent.com/caty-ai/caty-agent-harness/a4807765044aa8eb26ef984e3b632b542a3ba5ee/status.json",
   "freshness_contract": "SHA comparison only; dates may only ever trigger distrust. Protocol: docs/repo-state/spec.md, section 'Reader protocol'."
 }
