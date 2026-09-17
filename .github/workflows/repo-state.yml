@@ -18,9 +18,13 @@ concurrency:
   group: repo-state-${{ github.ref }}
   cancel-in-progress: false
 
+# Both refs pin the same peeled commit SHA of family-os; trailing comments track the tag.
+# The uses ref and generator_ref must always move together.
+# Roll procedure: docs/engineering.md ("Rolling the family-os repo-state pin")
+# and docs/engineering.ja.md ("family-os repo-state の pin 更新").
 jobs:
   repo-state:
-    uses: caty-ai/family-os/.github/workflows/repo-state.yml@v0.19.0
+    uses: caty-ai/family-os/.github/workflows/repo-state.yml@91704ff40f905f516b7f54466fb353f5d36837ef # v0.19.0
     secrets: inherit
     with:
-      generator_ref: v0.19.0
+      generator_ref: 91704ff40f905f516b7f54466fb353f5d36837ef # v0.19.0

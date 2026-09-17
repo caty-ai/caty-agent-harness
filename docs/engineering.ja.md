@@ -338,7 +338,7 @@ plugin は `tr-enqueue`、pinned template、read-only artifact consumption を�
 
 ## CI reusable workflow の pin 更新
 
-6 つの caller workflow は、`caty-ai/family-dev-handbook` の reusable workflow を commit SHA で pin しています。required merge gate の境界で可変な `ci-v1` tag を使うと、この repository で review 済みの CI コードを review なしで変更できるため、SHA pin でその supply-chain / review-bypass 経路を閉じます。この repository の workflow 内の `actions/*` step はすでに SHA pin 済みです。一方、`repo-state.yml` と `external-input-caller.yml` は caty-ai の reusable workflow を tag / branch で参照しており、別途追跡されています。
+6 つの caller workflow は、`caty-ai/family-dev-handbook` の reusable workflow を commit SHA で pin しています。required merge gate の境界で可変な `ci-v1` tag を使うと、この repository で review 済みの CI コードを review なしで変更できるため、SHA pin でその supply-chain / review-bypass 経路を閉じます。この repository の workflow 内の `actions/*` step はすでに SHA pin 済みです。`repo-state.yml` は `caty-ai/family-os` の reusable workflow とその `generator_ref` input を同じ peeled commit SHA で pin しています（追跡 tag `v0.19.0` は末尾のコメントに残しています。更新手順は後述します）。一方、`external-input-caller.yml` は、同ファイル内に記載された明示的な accepted-posture record のもとで、`caty-ai/.github` を `@main` で参照しています。
 
 handbook が `ci-v1` を更新したときは、次の手順で pin を進めます。
 
@@ -350,6 +350,16 @@ handbook が `ci-v1` を更新したときは、次の手順で pin を進めま
 6. その pull request の CI が green になってから merge します。`release-sync` は `v*` tag push（`on.push.tags`）でのみ実行されるため、merge 後の次回 `v*` tag で `release-sync` の成功と GitHub Release の存在を確認します。
 
 pin roll は handbook の release note、または時折行う `git ls-remote` の比較で手動検知します。`ci-v1` の移動を監視する automation はありません。
+
+### family-os repo-state の pin 更新
+
+1. 追跡 tag に対して `git ls-remote https://github.com/caty-ai/family-os.git 'refs/tags/vX.Y.Z*'` を実行します。annotated tag の場合は、正確に `refs/tags/vX.Y.Z^{}` と表示された行の SHA をコピーします。`ci-v1` と同様、`refs/tags/vX.Y.Z` の行は tag object です。その SHA を `uses:` に指定すると reusable workflow の解決に失敗します。
+2. `.github/workflows/repo-state.yml` と `tools/repo-state-gen.sh` がその SHA に存在することを確認し（例: `gh api 'repos/caty-ai/family-os/contents/.github/workflows/repo-state.yml?ref=<sha>'` と `gh api 'repos/caty-ai/family-os/contents/tools/repo-state-gen.sh?ref=<sha>'`）、family-os の旧 SHA から新 SHA までの差分を review します。
+3. permission の必要量は変わり得るため、reusable workflow の `permissions:` block を caller の `contents: write` grant と照合し直します。
+4. 1 つの pull request で、`.github/workflows/repo-state.yml` の `uses:` ref と `generator_ref` の両方を同じ新しい peeled commit SHA に更新し、両行の末尾に追跡コメント `# vX.Y.Z` を残します。reusable workflow は curl で `https://raw.githubusercontent.com/caty-ai/family-os/$GENERATOR_REF/tools/repo-state-gen.sh` を取得するため、`generator_ref` を tag のままにすると generator script は可変な ref に残ります。reusable workflow の input description と validation error は今も "pinned tag" と書かれています（`invalid generator_ref; use a pinned tag`）。この文言は SHA pin より前のものなので、それに関わらず 40 桁 hex の commit SHA を渡し、`generator_ref` を tag に戻さないでください。
+5. この pull request は `.github/workflows/*` に触れるため、roster human が `risk-reviewed` を付けるまで `risk-review-gate` は red のままです。この red は process gate であり、workflow code の破損を示すものではありません。pull request 自身の `repo-state / check repository state contract` job が新しい SHA で reusable workflow を解決し generator を取得するため、誤った pin は merge 前に失敗します。
+6. pull request の CI が green になってから、`ci(repo-state):` で始まる subject で merge します。`chore(repo-state):` は使いません。push された head commit message が `chore(repo-state):` で始まると reusable workflow の loop guard が update job を skip するため、その merge 後の push run では roll を検証できません。
+7. merge 後、次の `repository state` push run が green であり、生成された stamp が更新されたことを確認します。
 
 ---
 
