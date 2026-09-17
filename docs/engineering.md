@@ -358,7 +358,7 @@ What this project owns, and what it deliberately does not.
 
 ## Updating CI reusable-workflow pins
 
-The six caller workflows pin `caty-ai/family-dev-handbook` reusable workflows to a commit SHA. A mutable `ci-v1` tag at the required merge-gate boundary could change reviewed CI code without a review in this repository; the SHA pins close that supply-chain and review-bypass path. The `actions/*` steps in this repository's workflows were already SHA-pinned; `repo-state.yml` and `external-input-caller.yml` reference caty-ai reusable workflows by tag/branch and are tracked separately.
+The six caller workflows pin `caty-ai/family-dev-handbook` reusable workflows to a commit SHA. A mutable `ci-v1` tag at the required merge-gate boundary could change reviewed CI code without a review in this repository; the SHA pins close that supply-chain and review-bypass path. The `actions/*` steps in this repository's workflows were already SHA-pinned; `repo-state.yml` pins the `caty-ai/family-os` reusable workflow and its `generator_ref` input to the same peeled commit SHA (tracking tag `v0.19.0` kept in a trailing comment; see the roll procedure below), while `external-input-caller.yml` references `caty-ai/.github` at `@main` under the explicit accepted-posture record written in that file.
 
 When the handbook rolls `ci-v1`:
 
@@ -370,6 +370,16 @@ When the handbook rolls `ci-v1`:
 6. Merge only after that pull request's CI is green. `release-sync` runs only for `v*` tag pushes (`on.push.tags`), so after the merge, verify at the next `v*` tag that `release-sync` succeeds and the GitHub Release exists.
 
 Pin rolls are noticed manually through handbook release notes or an occasional `git ls-remote` comparison; no automation watches `ci-v1` movement.
+
+### Rolling the family-os repo-state pin
+
+1. Run `git ls-remote https://github.com/caty-ai/family-os.git 'refs/tags/vX.Y.Z*'` for the tracking tag. For an annotated tag, copy the SHA from the exact `refs/tags/vX.Y.Z^{}` line. As with `ci-v1`, the plain `refs/tags/vX.Y.Z` line is the tag object; using that SHA in `uses:` breaks reusable-workflow resolution.
+2. Confirm that `.github/workflows/repo-state.yml` and `tools/repo-state-gen.sh` exist at that SHA (for example, `gh api 'repos/caty-ai/family-os/contents/.github/workflows/repo-state.yml?ref=<sha>'` and `gh api 'repos/caty-ai/family-os/contents/tools/repo-state-gen.sh?ref=<sha>'`) and review the family-os diff from the old SHA to the new SHA.
+3. Re-check the reusable workflow's `permissions:` block against the caller's `contents: write` grant because permission needs can change.
+4. In one pull request, update BOTH the `uses:` ref and `generator_ref` in `.github/workflows/repo-state.yml` to the same new peeled commit SHA, retaining the trailing `# vX.Y.Z` tracking comment on both lines. The reusable workflow uses curl to fetch `https://raw.githubusercontent.com/caty-ai/family-os/$GENERATOR_REF/tools/repo-state-gen.sh`; leaving `generator_ref` on a tag would leave the generator script on a mutable ref.
+5. Because the pull request touches `.github/workflows/*`, `risk-review-gate` remains red until a roster human applies `risk-reviewed`. That red is a process gate, not evidence of broken workflow code.
+6. Merge only after the pull request's CI is green, with a `ci(repo-state):` subject, never `chore(repo-state):`. The reusable workflow's loop guard skips its update job when the pushed head commit message starts with `chore(repo-state):`, so that post-merge push run would not prove the roll.
+7. After merge, verify that the next `repository state` push run is green and the generated stamp has updated.
 
 ---
 
