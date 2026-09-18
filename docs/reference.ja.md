@@ -215,6 +215,7 @@ sentinel の動作も無効です。CLI は `prompt.md` を stdin から直接�
 | `OVF_CTX_WINDOW` | optional の 1 以上の整数。context-window 梯子の第 1 段 |
 | `OVF_HF_CONFIG` | optional の local・non-symlink HF `config.json` path（またはその directory）。network lookup なし |
 | `OVF_HF_NETWORK` | unset/空/`0` = 無効、`1` = best-effort の HF network rung を有効化 |
+| `OVF_HF_PINS` | optional の JSON object。HF model id ごとに `revision`（40-hex commit SHA）と `sha256`（生の `config.json` bytes の 64-hex SHA-256）の一方または両方を指定。network rung を使う全 model に entry が必要。entry がなければ明示的な warning で拒否し、表が不正なら warning を出して rung を無効化 |
 | `OVF_HF_CACHE_DIR` | `OVF_HF_NETWORK=1` のとき必須。leaf path 自体は symlink でない writable cache dir で、cache-entry file の leaf も symlink 不可（ancestor の symlink は許容）。作成時/再利用時に mode `0700` を強制 |
 | `OVF_COMPACTION_OWNER` | `sentinel` または `host`。unset は warning 後 `sentinel`、`host` は `disabled-host` を記録 |
 | `OVF_STEP_CMD` | whitespace 分割の CLI argv。既定 `claude -p --output-format stream-json --verbose` |
@@ -223,16 +224,61 @@ sentinel の動作も無効です。CLI は `prompt.md` を stdin から直接�
 
 context-window は config、検証済み local HF config、opt-in の HF network cache rung、
 Claude-family prefix catalog、200k 既定の順で解決します。network rung は `CLAUDE_MODEL` を
-plain な HF repo id として検証し、stdlib `urllib` で
-`https://huggingface.co/<model>/resolve/main/config.json` を hard 5 秒 timeout で 1 回だけ取得し、
-`OVF_HF_CACHE_DIR` 配下の flat な `sha256(model).json` cache entry へ atomic に書いてから、
-その cache entry を同じ 1 MiB 制限で再読込して採用します。cache directory の leaf と
-cache-entry file の leaf はどちらも symlink 不可で、ancestor の symlink は許容します。
-network payload と cached entry はどちらもその上限ちょうどまでは受け入れ、1 byte でも大きければ reject します。採用 source は `config`、`hf-config`、
-`hf-network-cached`、`catalog`、`default` のいずれかで記録します。placeholder の
-`claude-unknown` は catalog lookup 前に `default` へ short-circuit されます。HF id の検証、cache の検証、cache I/O、
-fetch の失敗は stderr へ warning を 1 行出したうえで、model-step の exit status を変えずに
-catalog/default へ fall through します。
+plain な HF repo id として検証し、継承された環境変数から model ごとの `OVF_HF_PINS` 表を
+読みます。model id は前後の空白を除去しますが、大文字と小文字を区別します。pin の
+大文字の16進数は小文字へ正規化します。各 entry には `revision` と `sha256` の一方または
+両方が必要です。空白除去後の model id 重複、field 重複、未知 field、空 entry、不正な pin は
+拒否します。不正な表は `OVF_HF_PINS rejected` を出して network rung をスキップします。
+entry のない model は model id と `OVF_HF_PINS` を含む
+`unpinned HF network resolution refused` を出し、fetch も cache 読込も行いません。
+これは動作変更です。pin なしで `OVF_HF_NETWORK=1` を有効にしていた環境では、pin を
+記録するまで毎回この拒否 warning が出て、catalog/default の順で解決します。
+
+pin のある model は検証済み cache entry を再利用し、それがなければ stdlib `urllib` で
+`https://huggingface.co/<model>/resolve/<pinned revision>/config.json` を1回取得します。
+`sha256` だけを指定した場合は `https://huggingface.co/<model>/resolve/main/config.json` を
+使います。hard timeout は5秒、payload 上限は1 MiB（`HF_NETWORK_MAX_BYTES`）です。
+`sha256` を指定した場合、生の response bytes の SHA-256 が一致した後にのみ UTF-8 JSON を
+parse・cache します。不一致では model id を含む `HF config checksum mismatch` を出し、
+その response を cache・採用せず catalog/default へ進みます。
+`sha256` のみの pin は `resolve/main` を取得するため、upstream の `main` が異なる
+`config.json` bytes へ進むと、新しい fetch では解決できず catalog/default へ fallback します。
+これを避けるには `revision` を pin してください（有効な cache は引き続き再利用します）。
+
+`OVF_HF_CACHE_DIR` 配下の flat な `sha256(model).json` entry は atomic に書き、再読込して
+から採用します。cache schema v2 は `schema_version`、`model_id`、`fetched_at`、
+`revision`（pin の commit または null）、`payload_sha256`、`payload_b64`（生 bytes の base64）、
+可読性用の `max_position_embeddings` を保存します。cache reader は model id と現在の
+revision pin を照合し、`payload_b64` を decode して SHA-256 を再計算し、`payload_sha256` と
+指定された `sha256` pin に照合します。window は検証済み UTF-8 JSON payload から導出し、
+単独の `max_position_embeddings` field は信用しません。cache entry の読込上限は
+`HF_CACHE_MAX_BYTES = HF_NETWORK_MAX_BYTES * 4 // 3 + 4096` で、base64 と metadata の増加分を
+許容します。decode 後の payload は引き続き1 MiB 上限です。各上限ちょうどまでは受け入れ、
+それを超えるものは拒否します。schema v1 entry と古い entry（revision が現在の pin と
+異なるもの）は常に warning 付きで拒否して再取得します。payload の改ざんを確実に
+検出できるのは `sha256` pin と照合する場合だけです。保存された digest だけでは、攻撃者が
+payload と digest の両方を書き換えると検出できません。revision のみの pin では、mode
+`0700` の cache directory が保存 bytes の信頼境界です。保存時の改ざん検知が必要な運用では
+`sha256` も pin してください。区別できるメッセージは `cache entry revision mismatch`、
+`cache entry checksum mismatch`、`cache entry checksum does not match OVF_HF_PINS` です。
+再取得に成功すれば拒否した entry を置換し、再読込時にも検証します。
+
+cache directory の leaf と cache-entry file の leaf はどちらも symlink 不可で、ancestor の
+symlink は許容し、directory は mode `0700` を強制します。採用 source は `config`、
+`hf-config`、`hf-network-cached`、`catalog`、`default` のいずれかで記録します。
+`claude-unknown` は catalog lookup 前に `default` へ short-circuit します。HF id の検証、
+cache の検証、cache I/O、fetch の失敗は stderr に warning を出します。検証済み network/cache
+値が得られなければ、model-step の exit status を変えずに catalog/default へ進みます。
+
+pin を記録するには `git ls-remote https://huggingface.co/<model> HEAD`、または model の
+Files tab に表示された commit から `revision` を取得します。その revision の生 bytes から
+`curl -sL https://huggingface.co/<model>/resolve/<revision>/config.json | shasum -a 256`
+で `sha256` を取得します。一方または両方を `OVF_HF_PINS` に記録します。例は
+`{"org/model":{"revision":"0123456789abcdef0123456789abcdef01234567"}}`
+です（例の値は model の実際の commit に置き換えてください）。
+`python3 -B scripts/lib_overflow_sentinel.py validate-hf-pins '<json>'` で表を検証できます。
+正しければ sorted JSON を出して exit 0、不正なら stderr に error を出して exit 2 です。
+runtime での拒否は network rung をスキップするだけです。
 
 TTFB は run start から最初の `assistant` stream line までです。token tier は 90 秒、前 attempt の
 last injected MA が厳密に 50k 超なら 150 秒、厳密に 100k 超なら 240 秒です。prior state がない場合と
