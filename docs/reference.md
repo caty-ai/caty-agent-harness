@@ -236,6 +236,7 @@ is created.
 | `OVF_CTX_WINDOW` | optional integer >= 1; first context-window ladder rung |
 | `OVF_HF_CONFIG` | optional local non-symlink HF `config.json` path (or its directory); no network lookup |
 | `OVF_HF_NETWORK` | unset/empty/`0` = disabled; `1` enables one best-effort HF network rung |
+| `OVF_HF_PINS` | optional JSON object mapping each HF model id to `revision` (40-hex commit SHA) and/or `sha256` (64-hex SHA-256 of raw `config.json` bytes); an entry is required for every model using the network rung; missing entries are refused with an explicit warning, and an invalid table disables the rung with a warning |
 | `OVF_HF_CACHE_DIR` | required when `OVF_HF_NETWORK=1`; writable cache dir whose leaf path is not a symlink, with a non-symlink cache-entry file leaf as well (symlinked ancestors allowed), created/forced as mode `0700` |
 | `OVF_COMPACTION_OWNER` | `sentinel` or `host`; unset warns and selects `sentinel`; `host` records `disabled-host` |
 | `OVF_STEP_CMD` | whitespace-split CLI argv; default `claude -p --output-format stream-json --verbose` |
@@ -244,21 +245,70 @@ is created.
 
 Context-window resolution is config, validated local HF config, an opt-in HF
 network cache rung, a Claude-family prefix catalog, then the 200k default. The
-network rung validates `CLAUDE_MODEL` as a plain HF repo id, performs one
-stdlib `urllib` fetch against
-`https://huggingface.co/<model>/resolve/main/config.json` with a hard 5-second
-timeout, writes a flat `sha256(model).json` cache entry under `OVF_HF_CACHE_DIR`,
-then re-reads that cache entry with the same 1 MiB limit before accepting it.
-Both the cache directory leaf and the cache entry file leaf must not be
-symlinks, while symlinked ancestors are accepted. Both the network payload and
-cached entry accept bytes up to that exact limit and reject anything larger. The
-selected source is
-logged as `config`, `hf-config`, `hf-network-cached`, `catalog`, or `default`;
-the `claude-unknown` placeholder is short-circuited to `default` before catalog
-lookup. Any HF id validation, cache validation, cache I/O, or fetch failure emits
-one warning to stderr and
-falls through to the catalog/default ladder without changing the model-step exit
-status.
+network rung validates `CLAUDE_MODEL` as a plain HF repo id and reads the per-model
+`OVF_HF_PINS` table from the inherited environment. Model ids are trimmed but
+remain case-sensitive; uppercase hexadecimal pins are normalized to lowercase.
+Each entry must contain `revision` and/or `sha256`; duplicate model ids after
+trimming, duplicate fields, unknown fields, empty entries, and malformed pins
+are rejected. Invalid tables emit `OVF_HF_PINS rejected` and skip the network
+rung. A model without an entry emits `unpinned HF network resolution refused`
+with its model id and `OVF_HF_PINS`, without fetching or reading its cache.
+This is a behaviour change: deployments that enabled `OVF_HF_NETWORK=1` without
+pins now see the refusal warning on every run and resolve through the
+catalog/default ladder until pins are recorded.
+
+For a pinned model, a valid cache entry is reused; otherwise one stdlib `urllib`
+fetch uses `https://huggingface.co/<model>/resolve/<pinned revision>/config.json`
+(or `https://huggingface.co/<model>/resolve/main/config.json` when only `sha256`
+is pinned), with a hard 5-second timeout and a 1 MiB payload limit
+(`HF_NETWORK_MAX_BYTES`). When `sha256` is pinned, the SHA-256 of the raw response
+bytes must match before the UTF-8 JSON is parsed or cached. A mismatch emits
+`HF config checksum mismatch` with the model id and uses the catalog/default
+ladder without caching or accepting that response.
+A `sha256`-only pin fetches `resolve/main`, so when upstream `main` moves to
+different `config.json` bytes, a new fetch stops resolving and falls back to the
+catalog/default ladder; pin `revision` to avoid that (a valid cache is still reused).
+
+The flat `sha256(model).json` entry under `OVF_HF_CACHE_DIR` is atomically written
+and re-read before acceptance. Cache schema v2 contains `schema_version`,
+`model_id`, `fetched_at`, `revision` (the pinned commit or null), `payload_sha256`,
+`payload_b64` (base64 of the raw bytes), and `max_position_embeddings` for
+readability. The cache reader verifies the model id and current revision pin,
+decodes `payload_b64`, recomputes its SHA-256 against `payload_sha256` and any
+`sha256` pin, and derives the window from the verified UTF-8 JSON payload; it
+never trusts the bare `max_position_embeddings` field. The cache-entry read cap
+is `HF_CACHE_MAX_BYTES = HF_NETWORK_MAX_BYTES * 4 // 3 + 4096`, allowing base64
+and metadata overhead. Decoded payloads retain the 1 MiB limit. Each size limit
+accepts its exact boundary and rejects larger content. Schema v1 entries and
+stale entries (whose revision differs from the current pin) are always rejected
+with a warning and refetched. Payload tampering is reliably detected only
+against a `sha256` pin: a stored digest alone cannot detect an attacker changing
+both the payload and digest. With a revision-only pin, the mode-`0700` cache
+directory is the trust boundary for the stored bytes; operators who need
+tamper-evidence at rest must pin `sha256` too. Distinct
+messages include `cache entry revision mismatch`, `cache entry checksum mismatch`,
+and `cache entry checksum does not match OVF_HF_PINS`. A successful refetch
+replaces the rejected entry and is verified again on re-read.
+
+Both the cache directory leaf and cache entry file leaf must not be symlinks;
+symlinked ancestors are accepted, and the directory is forced to mode `0700`.
+The selected source is logged as `config`, `hf-config`, `hf-network-cached`,
+`catalog`, or `default`; `claude-unknown` is short-circuited to `default` before
+catalog lookup. HF id validation, cache validation, cache I/O, and fetch failures
+emit warnings to stderr; if no verified network/cache value is available,
+resolution falls through to the catalog/default ladder without changing the
+model-step exit status.
+
+To record a pin, obtain `revision` with
+`git ls-remote https://huggingface.co/<model> HEAD` or copy the commit shown on
+the model's Files tab. Obtain `sha256` from that revision's raw bytes with
+`curl -sL https://huggingface.co/<model>/resolve/<revision>/config.json | shasum -a 256`.
+Record either or both values in `OVF_HF_PINS`, for example
+`{"org/model":{"revision":"0123456789abcdef0123456789abcdef01234567"}}`
+(replace the example with the model's actual commit). Validate a table with
+`python3 -B scripts/lib_overflow_sentinel.py validate-hf-pins '<json>'`;
+valid input prints sorted JSON and exits 0, invalid input reports an error on
+stderr and exits 2. Runtime rejection only skips the network rung.
 
 TTFB is run start to the first `assistant` stream line. The token tiers are 90s,
 150s when the prior attempt's last injected MA is strictly above 50k, and 240s
